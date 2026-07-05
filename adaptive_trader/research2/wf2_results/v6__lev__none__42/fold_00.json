@@ -1,0 +1,1 @@
+{"job": {"strategy": "v6", "mode": "lev", "method": "none", "window": 42, "fold_idx": 0, "n_samples": 350, "seed": 797107}, "status": "no_feasible", "elapsed": 0.018475055694580078}

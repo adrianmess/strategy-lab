@@ -1,0 +1,66 @@
+{
+ "symbol": "SOL_USDT",
+ "contract_size": 0.1,
+ "webhook_url": "http://127.0.0.1:5000/webhook",
+ "dry_run": true,
+ "poll_seconds": 10,
+ "equity_usdt": 1000.0,
+ "state_file": "trader_state_spot.json",
+ "log_file": "trader_spot.log",
+ "engine": "v6",
+ "mode": "spot",
+ "method": "vol3",
+ "candidate": {
+  "strategy": "v6",
+  "tv": 0,
+  "zL": [
+   -2.0034,
+   -1.9506,
+   -2.2186
+  ],
+  "zS": [
+   1.411,
+   1.7141,
+   1.4705
+  ],
+  "zXS": [
+   1.8148,
+   2.1506,
+   1.8529
+  ],
+  "zXLmax": [
+   -0.8737,
+   -0.7897,
+   -0.8298
+  ],
+  "ptScale": [
+   1.3792,
+   1.9726,
+   1.739
+  ],
+  "eS3": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "eXS": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "lev": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "sl": 0.08
+ },
+ "refit": {
+  "days": 28,
+  "procs": 4,
+  "hours": 1.0
+ },
+ "notes": {
+  "mode": "spot = long-only 1x with stop-losses ON. Use with the spot market, not futures."
+ }
+}

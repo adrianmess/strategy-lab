@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Optimize — SOL Strategy Lab</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif}
+header{padding:14px 28px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:18px}
+nav a{color:var(--dim);text-decoration:none;margin-left:18px;font-weight:600}
+nav a.here,nav a:hover{color:var(--blue)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;max-width:1900px;margin:0 auto;padding:22px 24px}
+@media(max-width:1100px){.layout{grid-template-columns:1fr}}
+h2{font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin:24px 0 10px}
+h2:first-child{margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+button{border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
+button.small{padding:3px 9px;font-size:12px}
+select,input{border-radius:6px;padding:6px 8px;font-size:13px}
+input{width:90px}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{color:var(--dim);font-size:12px;cursor:pointer}
+.field label:hover{color:var(--blue)}
+.field label::after{content:" ⓘ";font-size:10px;color:var(--blue);opacity:.7}
+.tablewrap{overflow-x:auto;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:780px}
+th,td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+th{color:var(--dim);cursor:pointer;user-select:none;position:sticky;top:0;background:var(--panel)}
+th:hover{color:var(--blue)}
+th .arrow{font-size:10px}
+.pos{color:var(--green)}.neg{color:var(--red)}.warn{color:var(--amber)}
+.kv{color:var(--dim)}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.b-green{background:rgba(63,185,80,.15);color:var(--green)}
+.b-red{background:rgba(248,81,73,.15);color:var(--red)}
+.b-amber{background:rgba(210,153,34,.15);color:var(--amber)}
+.b-blue{background:rgba(88,166,255,.15);color:var(--blue)}
+pre{border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11px;max-height:200px;overflow:auto}
+details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:6px 20px}
+.prow{display:flex;align-items:center;gap:6px;font-size:12px}
+.prow .nm{flex:1;cursor:pointer}
+.prow .nm:hover{color:var(--blue)}
+.prow input{width:70px;padding:3px 6px;font-size:12px}
+.sidebar{position:sticky;top:76px;align-self:start;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 96px);overflow-y:auto}
+.guide{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.guide h3{margin:0 0 8px;font-size:14px;color:var(--blue)}
+.guide .body{font-size:13px;color:var(--fg)}
+.guide .body b{color:var(--fg)}
+.guide dl{margin:8px 0}
+.guide dt{font-weight:600;margin-top:8px;font-size:12.5px}
+.guide dd{margin:1px 0 0 0;color:var(--dim);font-size:12.5px}
+.preview{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;display:none}
+.preview h3{margin:0 0 8px;font-size:14px;color:var(--blue)}
+.pstats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:12.5px;margin-top:8px}
+.pstats .kv b{color:var(--fg)}
+.mini{font-size:12px;color:var(--dim)}
+.steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.step{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:12.5px;color:var(--dim)}
+.step b{color:var(--blue)}
+</style>
+<link rel="stylesheet" href="assets/theme.css">
+<script src="assets/ui.js"></script>
+</head>
+<body>
+<header>
+  <h1>Optimize</h1>
+  <nav>
+    <a href="/">Control panel</a>
+    <a class="here" href="optimize.html">Optimize</a>
+    <a href="backtests.html">Backtests</a>
+    <a href="index.html">Research</a>
+    <a href="docs.html">Docs</a>
+  </nav>
+</header>
+<div class="layout">
+<div class="main">
+
+  <div class="steps">
+    <span class="step"><b>1</b> Launch a search</span>
+    <span class="step"><b>2</b> Check the holdout column</span>
+    <span class="step"><b>3</b> Backtest → preview appears here →</span>
+    <span class="step"><b>4</b> Adopt to trader</span>
+    <span class="step mini">click any label for help →</span>
+  </div>
+
+  <div id="resumeBanner" class="card" style="display:none;border-color:var(--blue)"></div>
+
+  <h2>Launch a search</h2>
+  <div class="card">
+    <div class="row" style="align-items:flex-end">
+      <div class="field"><label data-x="strategy">Strategy</label>
+        <select id="strat">
+          <option value="v7">V5 family · V7 full-param (recommended)</option>
+          <option value="scalpx">Scalp family · ScalpX (legacy)</option>
+          <option value="v6">V5 family · V6 (legacy)</option>
+        </select></div>
+      <div class="field"><label data-x="algorithm">Algorithm</label>
+        <select id="algo"><option>genetic</option><option>random</option><option>refine</option></select></div>
+      <div class="field"><label data-x="mode">Mode</label>
+        <select id="mode"><option>lev</option><option>spot</option></select></div>
+      <div class="field"><label data-x="regime">Regime</label>
+        <select id="method"><option>vol3</option><option>none</option><option>vol3_7d</option><option>volume3</option><option>trend3</option><option>volXtrend9</option></select></div>
+      <div class="field"><label data-x="perregime">Parameter sets</label>
+        <select id="perreg"><option value="">per-regime specialists</option><option value="1">single set</option></select></div>
+    </div>
+    <div class="row" style="align-items:flex-end;margin-top:10px">
+      <div class="field"><label data-x="processes">Processes</label><input id="procs" value="4"></div>
+      <div class="field"><label data-x="budget">Budget</label>
+        <span style="display:flex;gap:4px">
+        <select id="budgetType" style="width:110px"><option value="hours">hours</option><option value="total">evaluations</option></select>
+        <input id="budgetVal" value="2" style="width:70px"></span></div>
+      <div class="field"><label data-x="trainend">Train-end (holdout)</label><input id="trainEnd" value="2025-09-01" style="width:110px"></div>
+      <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px"></div>
+      <button class="primary" onclick="launch()" style="height:34px">Start search</button>
+      <span class="kv" id="launchMsg"></span>
+    </div>
+  </div>
+
+  <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span></h2>
+  <div class="card">
+    <div class="tablewrap">
+    <table id="runsT"><thead><tr>
+      <th data-k="name">run</th>
+      <th data-k="strategy">strategy</th>
+      <th data-k="mode">mode</th>
+      <th data-k="method">regime</th>
+      <th data-k="last_run">last run</th>
+      <th data-k="evaluated">evaluated</th>
+      <th data-k="best_score">score</th>
+      <th data-k="best_eq">train eq</th>
+      <th data-k="maxdd">DD</th>
+      <th data-k="_hg">holdout</th>
+      <th>actions</th>
+    </tr></thead><tbody></tbody></table>
+    </div>
+    <div class="mini" style="margin-top:6px"><span class="badge b-amber" id="aiBadge">AI advisor: checking…</span></div>
+  </div>
+
+  <h2>Jobs</h2>
+  <div class="card" id="jobs">no jobs yet</div>
+
+  <h2>Parameter space <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
+  <div class="card" id="spaceCard">
+    <details open><summary>Continuous parameters (min / max)</summary>
+      <div class="grid2" id="contGrid" style="margin-top:10px"></div>
+    </details>
+    <details><summary>Indicator variants & menus</summary>
+      <div id="menuGrid" style="margin-top:10px"></div>
+    </details>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="saveSpace()">Save parameter space</button>
+      <span class="kv" id="spaceMsg"></span>
+    </div>
+  </div>
+
+</div>
+<div class="sidebar">
+  <div class="guide" id="guide">
+    <h3 id="gTitle">Guide</h3>
+    <div class="body" id="gBody">Click any <span style="color:var(--blue)">label ⓘ</span>, column header, or action button name to see what it means and how to use it.<br><br>
+    <b>Quick start:</b> keep the defaults (V7 · genetic · lev · vol3 · per-regime, train-end 2025-09-01), set Processes to your CPU cores, pick hours, hit <b>Start search</b>. When it finishes, look at the <b>holdout</b> column — green means it made money on data it never saw. Then <b>Backtest</b> it (preview appears here) and <b>Adopt</b> it into the trader.</div>
+  </div>
+  <div class="preview" id="preview">
+    <h3>Backtest preview <span class="mini" id="pvName"></span></h3>
+    <canvas id="pvChart" height="150"></canvas>
+    <div class="pstats" id="pvStats"></div>
+    <div class="row" style="margin-top:10px">
+      <a href="backtests.html"><button class="small">Open full results →</button></a>
+      <span class="mini" id="pvState"></span>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+async function api(path, body){
+  const r = await fetch('/api/'+path, body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const j = await r.json();
+  if(!r.ok) alert(j.error||'error');
+  return j;
+}
+// ---------- explainer ----------
+const X = {
+ strategy: ["Strategy", `Which trading system to optimize — named by lineage so you always know the origin:<dl>
+  <dt>V5 family · V7 full-param</dt><dd>Your original V5 TradingView strategy (RSI+MACD+BB dip-buy + MACD-crossover systems), rebuilt so EVERY parameter is searchable — including RSI/MACD/BB/EMA lengths — per regime. Recommended.</dd>
+  <dt>V5 family · V6</dt><dd>Earlier version: thresholds searchable, indicator lengths fixed.</dd>
+  <dt>Scalp family · ScalpX</dt><dd>Your VRVP+CVD+EMA scalp strategy. Tested edge-less in every configuration — kept for reference.</dd></dl>`],
+ algorithm: ["Algorithm", `<dl><dt>genetic (recommended)</dt><dd>Evolves a population: best candidates breed, children mutate. Won the head-to-head study: +25%/mo on unseen holdout.</dd>
+  <dt>random</dt><dd>Uniform sampling. Unbiased first sweep; its best pick liquidated on holdout in the study.</dd>
+  <dt>refine</dt><dd>Small perturbations around the best found so far. Polishes a finished run; doesn't explore.</dd></dl>`],
+ mode: ["Mode", `<dl><dt>lev</dt><dd>Futures, your live style: leverage ≤10x, NO stop-loss, exits at profit targets only. Liquidation modeled per trade at (1/leverage − 0.8%). Search requires: never liquidated + mark-to-market drawdown ≤ 80%.</dd>
+  <dt>spot</dt><dd>Long-only, 1x, stop-losses ON, spot fees. Drawdown ≤ 50%.</dd></dl>`],
+ regime: ["Regime method", `Classifies every bar into market buckets using trailing percentiles (no lookahead). With one active, every parameter gets its own value per bucket.<dl>
+  <dt>vol3</dt><dd>Volatility terciles (1-day realized vol vs trailing 30 days) → low/mid/high. <b>Best in testing.</b></dd>
+  <dt>none</dt><dd>One parameter set everywhere. Fewest knobs, hardest to overfit.</dd>
+  <dt>vol3_7d</dt><dd>Volatility terciles with only 7-day memory — adapts faster, forgets faster.</dd>
+  <dt>volume3</dt><dd>Dollar-volume terciles (low/mid/high volume days).</dd>
+  <dt>trend3</dt><dd>Down / flat / up-trend, from price vs its 1-day EMA.</dd>
+  <dt>volXtrend9</dt><dd>3×3 volatility×trend grid = 9 buckets. Overfit badly in testing — huge train numbers, liquidated on holdout.</dd></dl>`],
+ perregime: ["Parameter sets", `<dl><dt>per-regime specialists</dt><dd>A full independent parameter set per regime bucket — different RSI/MACD/BB/EMA lengths, thresholds, targets and leverage in low vs mid vs high volatility. This is the approach that won (+25%/mo holdout).</dd>
+  <dt>single set</dt><dd>Same parameters in every bucket. Use with regime=none, or to reduce overfitting risk.</dd></dl>`],
+ processes: ["Processes", `Parallel worker processes evaluating candidates. Set to your CPU core count (or cores−1 to keep the machine responsive). More processes = proportionally faster search.`],
+ budget: ["Budget", `How long to search. <b>hours</b>: wall-clock time budget. <b>evaluations</b>: number of candidate backtests to run (each evaluation = one full backtest of one parameter set — a few milliseconds each; 10,000+ is a reasonable session). Runs checkpoint every generation and are resumable by launching again with the same name.`],
+ hours: ["Hours", `Time budget. Progress checkpoints every generation, so you can stop anytime and continue later by launching with the same run name. Overnight runs are fine and often worth it.`],
+ trainend: ["Train-end (holdout)", `The search only sees data BEFORE this date. Afterwards the best config is automatically tested on the data AFTER it — that's the <b>holdout</b> column. Leave blank to use all data (you get no evidence, only an in-sample fit). Recommended: keep ~10 months held out.`],
+ runname: ["Run name", `Names the run folder. Re-launching with the same name CONTINUES that run (resumable). Auto-generates if blank.`],
+ btn_backtest: ["Backtest (button)", `Runs the run's best config over ALL history (including training data) and publishes it to the Backtests page. A preview with the equity chart appears in this sidebar when it finishes. Note: this is an in-sample number — impressive by construction.`],
+ btn_holdout: ["Backtest holdout (button)", `Runs the best config ONLY on data after the train-end date (2025-09-01 by default) — data the search never saw. This is the honest performance estimate. Also publishes to the Backtests page with "_HOLDOUT" suffix and previews here.`],
+ btn_adopt: ["Adopt → trader (button)", `Copies the run's best parameters into the live trader's config.json (a timestamped backup of the old config is kept). The trader picks it up on next start from the Control panel. Adopt only configs whose holdout you've checked.`],
+ btn_ai: ["AI suggest (button)", `Sends the run's best/worst candidates + parameter ranges to Claude and asks for new candidate ideas. They're evaluated like any other candidate and only join the pool if they score. Needs ANTHROPIC_API_KEY in a .env file at the repo root. After it finishes, continue the run to exploit the ideas.`],
+ col_score: ["score (column)", `What the optimizer maximizes on TRAINING data: mean monthly log-growth minus 0.25× its month-to-month std (so one lucky month can't win). Compare within a run; don't trust it as a live estimate.`],
+ col_holdout: ["holdout (column)", `Monthly growth on data AFTER train-end — data the search never touched. Green = profitable out of sample; LIQUIDATED = the config died on unseen data. The single most important number on this page.`],
+ col_dd: ["DD (column)", `Worst mark-to-market drawdown on training data — open positions counted at current price. Lev mode caps this at 80%, spot at 50%.`],
+};
+function explain(key){
+  const e = X[key]; if(!e) return;
+  $('gTitle').textContent = e[0];
+  $('gBody').innerHTML = e[1];
+}
+document.addEventListener('click', ev=>{
+  const t = ev.target.closest('[data-x]');
+  if(t) explain(t.dataset.x);
+});
+// ---------- launch ----------
+async function launch(){
+  const strat = $('strat').value;
+  let r;
+  const bt_ = $('budgetType').value, bv_ = +$('budgetVal').value;
+  if(strat === 'v7'){
+    const d = {algo:$('algo').value, mode:$('mode').value, method:$('method').value,
+      procs:+$('procs').value,
+      train_end:$('trainEnd').value||undefined, name:$('name').value||undefined,
+      single_set: $('perreg').value==='1'};
+    if(bt_==='hours') d.hours = bv_; else d.total = bv_;
+    r = await api('jobs/optimize2', d);
+  } else {
+    r = await api('jobs/optimize', {strategy:strat, mode:$('mode').value, method:$('method').value,
+      procs:+$('procs').value, hours:(bt_==='hours'?bv_:1), name:$('name').value||undefined});
+  }
+  $('launchMsg').textContent = 'started job '+r.id;
+  refreshJobs(); setTimeout(refreshRuns, 3000);
+}
+// ---------- runs table ----------
+let RUNS=[], sortKey='last_run', sortDir=-1;
+function fpm(x){return (x>=0?'+':'')+(100*(Math.exp(x)-1)).toFixed(1)+'%/mo'}
+async function refreshRuns(){
+  RUNS = await api('runs2');
+  RUNS.forEach(r=>{r._hg = r.holdout ? (r.holdout.liq ? -99 : r.holdout.growth) : null;});
+  renderRuns();
+}
+function renderRuns(){
+  const rs = [...RUNS].sort((a,b)=>{
+    const va=a[sortKey], vb=b[sortKey];
+    if(typeof va==='string'||typeof vb==='string') return sortDir*String(va??'').localeCompare(String(vb??''));
+    return sortDir*(((va??-1e18))-((vb??-1e18)));
+  });
+  document.querySelector('#runsT tbody').innerHTML = rs.map(r=>{
+    const h = r.holdout;
+    const hcell = h ? (h.liq ? '<span class="badge b-red">LIQUIDATED</span>' :
+      `<span class="${h.growth>=0?'pos':'neg'}">${fpm(h.growth)}</span> <span class="kv">dd ${(100*h.maxdd).toFixed(0)}%</span>`)
+      : '<span class="kv">—</span>';
+    return `<tr><td><b>${r.name}</b></td>
+      <td>${stratName(r.strategy)}</td>
+      <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
+      <td>${r.method||''}</td>
+      <td class="kv">${r.last_run||''}</td>
+      <td>${(r.evaluated||0).toLocaleString()}</td>
+      <td>${r.best_score!=null?r.best_score.toFixed(3):''}</td>
+      <td>${r.best_eq?('$'+Math.round(r.best_eq).toLocaleString()):''}</td>
+      <td>${r.maxdd!=null?(100*r.maxdd).toFixed(0)+'%':''}</td>
+      <td>${hcell}</td>
+      <td>${r.best_config?`
+        <button class="small" data-x="btn_backtest" title="Backtest over all history and preview the result here" onclick="bt('${r.best_config}','${r.name}')">Backtest</button>
+        <button class="small" data-x="btn_holdout" title="Backtest ONLY on unseen data after the train-end date — the honest number" onclick="btH('${r.best_config}','${r.name}')">Backtest holdout</button>
+        <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
+        <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button></td></tr>`;
+  }).join('');
+}
+document.querySelectorAll('#runsT th[data-k]').forEach(th=>{
+  th.onclick = ()=>{
+    const k = th.dataset.k;
+    if(k==='best_score') explain('col_score');
+    if(k==='_hg') explain('col_holdout');
+    if(k==='maxdd') explain('col_dd');
+    sortDir = (sortKey===k)?-sortDir:-1; sortKey=k; renderRuns();
+  };
+});
+// ---------- actions with preview ----------
+async function runAndPreview(cfg, name, oos){
+  const body = {config:cfg, name:name};
+  if(oos) body.oos_start = oos;
+  const r = await api('jobs/backtest', body);
+  $('preview').style.display='block';
+  $('pvName').textContent = name;
+  $('pvState').textContent = 'running…';
+  $('pvStats').innerHTML=''; refreshJobs();
+  const t0 = Date.now();
+  while(Date.now()-t0 < 300000){
+    await new Promise(res=>setTimeout(res,3000));
+    const jobs = await api('jobs');
+    const j = jobs.find(x=>x.id===r.id);
+    if(j && j.status!=='running'){
+      if(!j.status.includes('(0)')){ $('pvState').textContent='failed — see Jobs log'; return; }
+      break;
+    }
+  }
+  // fetch published entry
+  const txt = await (await fetch('/dashboard/backtests.js?t='+Date.now())).text();
+  const entries = JSON.parse(txt.slice(txt.indexOf('=')+1).trim().replace(/;$/,''));
+  const e = entries.find(x=>x.name===name);
+  if(!e){ $('pvState').textContent='done, but entry not found'; return; }
+  drawPreview(e);
+}
+let pvChart=null;
+function drawPreview(e){
+  const s = e.stats;
+  $('pvState').textContent = 'done ✓';
+  if(pvChart) pvChart.destroy();
+  pvChart = new Chart($('pvChart'),{type:'line',
+    data:{datasets:[{data:(e.curve||[]).map(p=>({x:p.t.slice(0,10),y:Math.max(p.eq,0.01)})),
+      borderColor:s.liq?cssv('--red'):cssv('--green'),borderWidth:1.4,pointRadius:0}]},
+    options:{animation:false,scales:{
+      x:{type:'category',ticks:{maxTicksLimit:5,color:cssv('--chart-tick')},grid:{color:cssv('--chart-grid')}},
+      y:{type:'logarithmic',ticks:{color:cssv('--chart-tick')},grid:{color:cssv('--chart-grid')}}},
+      plugins:{legend:{display:false}}}});
+  const f=(x,d=2)=>x==null?'—':(+x).toFixed(d);
+  $('pvStats').innerHTML = `
+    <span class="kv">growth <b class="${s.monthly_growth_pct>=0?'pos':'neg'}">${f(s.monthly_growth_pct,1)}%/mo</b></span>
+    <span class="kv">total <b>${f(s.total_mult)}×</b></span>
+    <span class="kv">max DD <b>${f(100*s.maxdd_mtm,0)}%</b></span>
+    <span class="kv">liq <b class="${s.liq?'neg':'pos'}">${s.liq?'YES':'no'}</b></span>
+    <span class="kv">trades <b>${s.n}</b></span>
+    <span class="kv">win <b>${f(100*s.win,0)}%</b></span>
+    <span class="kv">stops <b>${s.sl_hits}</b></span>
+    <span class="kv">months <b>${f(s.months,1)}</b></span>`;
+}
+window.onThemeChange = ()=>{ if(pvChart){ pvChart.destroy(); pvChart=null; } };
+async function bt(cfg,name){ runAndPreview(cfg, name+'_full', null); }
+async function btH(cfg,name){ runAndPreview(cfg, name+'_HOLDOUT', $('trainEnd').value||'2025-09-01'); }
+async function adopt(cfg, mode){
+  const target = (mode==='spot') ? 'config_spot.json' : 'config.json';
+  if(!confirm(`Copy these parameters into the live trader's ${target}?\n(${mode==='spot'?'spot long-only trading':'leveraged futures trading'} — backup kept; restart trader to apply)`))return;
+  const r = await api('adopt',{source: cfg, target: target});
+  if(r.ok) alert('Adopted into '+target+'. On the Control panel, pick "'+target+'" and start the trader.');
+}
+async function ai(run){
+  const r = await api('jobs/ai_suggest',{run:run, train_end:$('trainEnd').value||undefined});
+  if(r.id) refreshJobs();
+}
+// ---------- jobs ----------
+async function refreshJobs(){
+  const jobs = await api('jobs');
+  $('jobs').innerHTML = jobs.length ? jobs.map(j=>`<div style="border-bottom:1px solid var(--border);padding:8px 0">
+    <div class="row" style="justify-content:space-between">
+      <span><b>${j.kind}</b> · ${j.name} · <span class="${j.status==='running'?'pos':'kv'}">${j.status}</span> <span class="kv">since ${j.started}</span></span>
+      ${j.status==='running'?`<button class="small" onclick="api('jobs/${j.id}/stop',{})">stop</button>`:''}
+    </div><pre>${(j.log||[]).join('\n')}</pre></div>`).join('') : 'no jobs yet';
+}
+// ---------- parameter space ----------
+let SPACE=null;
+async function loadSpace(){
+  SPACE = await api('param_space');
+  const sp = SPACE.v7;
+  const nm = (k,v)=>`${v.label||k} <span class="kv" style="font-size:10px">${k}</span>`;
+  $('contGrid').innerHTML = Object.entries(sp.continuous).map(([k,v])=>`
+    <div class="prow"><span class="nm" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${nm(k,v)}</span>
+      <input data-k="${k}" data-i="0" value="${v.range[0]}"><input data-k="${k}" data-i="1" value="${v.range[1]}"></div>`).join('');
+  $('menuGrid').innerHTML = Object.entries(sp.menus).map(([k,v])=>`
+    <div style="margin:6px 0"><b class="nm" style="cursor:pointer" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${v.label||k}</b> <span class="kv" style="font-size:10px">${k}</span>:
+      ${v.options.map((o,i)=>`<label style="margin-right:10px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}</div>`).join('');
+}
+async function saveSpace(){
+  const sp = SPACE.v7;
+  document.querySelectorAll('#contGrid input').forEach(inp=>{
+    sp.continuous[inp.dataset.k].range[+inp.dataset.i] = parseFloat(inp.value);
+  });
+  for(const k of Object.keys(sp.menus)){
+    const checked = [...document.querySelectorAll(`input[data-mk="${k}"]:checked`)].map(x=>parseFloat(x.dataset.mo));
+    if(checked.length){
+      const spec = sp.menus[k];
+      if(spec.labels) spec.labels = spec.options.map((o,i)=>checked.includes(o)?spec.labels[i]:null).filter(x=>x!==null);
+      spec.options = checked;
+    }
+  }
+  const r = await api('param_space', SPACE);
+  $('spaceMsg').textContent = r.ok?'saved ✓ (new runs use these ranges)':'error';
+}
+async function aiKey(){
+  const r = await api('ai_key_status');
+  const b = $('aiBadge');
+  b.textContent = 'AI advisor: ' + (r.configured?'key configured ✓':'no API key (add ANTHROPIC_API_KEY to repo .env)');
+  b.className = 'badge ' + (r.configured?'b-green':'b-amber');
+}
+// ---------- URL prefill (from Backtests page) ----------
+(function(){
+  const q = new URLSearchParams(location.search);
+  if(q.get('strategy')){ const v=q.get('strategy'); if([...$('strat').options].some(o=>o.value===v)) $('strat').value=v; }
+  if(q.get('mode')) $('mode').value=q.get('mode');
+  if(q.get('method')) $('method').value=q.get('method');
+  if(q.get('resume')){
+    $('name').value=q.get('resume');
+    $('resumeBanner').style.display='block';
+    $('resumeBanner').innerHTML=`Continuing run <b>${q.get('resume')}</b> — settings prefilled from the backtest you selected. Hit <b>Start search</b> to keep optimizing it (it resumes from its saved pool).`;
+  }
+})();
+$('strat').onchange = ()=>{
+  const legacy = $('strat').value !== 'v7';
+  document.getElementById('spaceCard').style.opacity = legacy ? .45 : 1;
+  document.getElementById('spaceNote').textContent = legacy ?
+    'This editor applies to V7 only. '+$('strat').selectedOptions[0].text+' uses its own fixed built-in ranges (thresholds only, random search).' : '';
+  $('algo').disabled = legacy; $('perreg').disabled = legacy;
+  if(legacy){ $('algo').value='random'; }
+  explain('strategy');
+};
+refreshRuns(); refreshJobs(); loadSpace(); aiKey();
+setInterval(refreshJobs, 4000); setInterval(refreshRuns, 15000);
+</script>
+</body>
+</html>

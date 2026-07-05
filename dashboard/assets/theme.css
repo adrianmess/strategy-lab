@@ -1,0 +1,29 @@
+/* Shared theme: dark (default) + light. Loaded AFTER each page's inline style
+   so these variables win. Toggle sets <html data-theme="light">. */
+:root{
+  --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --dim:#8b949e;
+  --green:#3fb950; --red:#f85149; --amber:#d29922; --blue:#58a6ff; --purple:#bc8cff;
+  --input-bg:#0d1117; --btn-bg:#21262d; --btn-hover:#30363d; --pre-bg:#0a0d12;
+  --hover:#1c2129; --sel:#1f3a5f; --chart-grid:#21262d; --chart-tick:#8b949e;
+  --shadow:0 4px 14px rgba(0,0,0,.4);
+}
+html[data-theme="light"]{
+  --bg:#f6f8fa; --panel:#ffffff; --border:#d0d7de; --fg:#1f2328; --dim:#57606a;
+  --green:#1a7f37; --red:#cf222e; --amber:#9a6700; --blue:#0969da; --purple:#8250df;
+  --input-bg:#f6f8fa; --btn-bg:#f3f4f6; --btn-hover:#e7e9ec; --pre-bg:#f6f8fa;
+  --hover:#eef1f4; --sel:#ddf4ff; --chart-grid:#d8dee4; --chart-tick:#57606a;
+  --shadow:0 4px 14px rgba(140,149,159,.2);
+}
+/* shared component polish (applies on top of page styles) */
+body{background:var(--bg);color:var(--fg)}
+button{background:var(--btn-bg)!important;color:var(--fg)!important;border:1px solid var(--border)!important}
+button:hover{background:var(--btn-hover)!important}
+button.primary{background:#1f6feb!important;border-color:#1f6feb!important;color:#fff!important}
+button.danger{background:#b62324!important;border-color:#b62324!important;color:#fff!important}
+select,input{background:var(--input-bg)!important;color:var(--fg)!important;border:1px solid var(--border)!important}
+pre{background:var(--pre-bg)!important}
+tr:hover td{background:var(--hover)!important}
+tr.sel td{background:var(--sel)!important}
+#themeToggle{margin-left:18px;cursor:pointer;background:none!important;border:1px solid var(--border)!important;
+  border-radius:14px;padding:3px 10px;font-size:12px;color:var(--dim)!important}
+#themeToggle:hover{color:var(--fg)!important}

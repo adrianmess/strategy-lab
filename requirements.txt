@@ -1,0 +1,7 @@
+requests>=2.31.0
+flask>=2.3.3
+playwright>=1.40.0
+quart>=0.18.4
+hypercorn>=0.17.0
+argparse>=1.4.0
+python-dotenv>=1.0.0

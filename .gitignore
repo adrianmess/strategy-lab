@@ -1,0 +1,24 @@
+# caches (auto-rebuilt from data parquets)
+*.pkl
+__pycache__/
+*.pyc
+
+# runtime state & logs
+*.log
+panel/jobs/
+adaptive_trader/trader_state*.json
+nohup.out
+
+# browser profile / cookies for the MEXC executor (contains session data)
+chrome_user_data/
+cache/
+
+# config backups
+*.bak
+*.bak.*
+
+# secrets
+.env
+
+# OS
+.DS_Store

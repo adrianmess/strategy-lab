@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trader Control Panel</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#e6edf3;--dim:#8b949e;
+--green:#3fb950;--red:#f85149;--amber:#d29922;--blue:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif}
+header{padding:14px 28px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:18px}
+nav a{color:var(--dim);text-decoration:none;margin-left:18px;font-weight:600}
+nav a.here,nav a:hover{color:var(--blue)}
+main{padding:22px 28px;max-width:1350px;margin:0 auto}
+h2{font-size:14px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin:26px 0 10px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.on{background:var(--green)} .off{background:var(--red)} .warn-dot{background:var(--amber)}
+button{background:#21262d;color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
+button:hover{background:#30363d}
+button.primary{background:#1f6feb;border-color:#1f6feb}
+button.danger{background:#8b1e1e;border-color:#a12}
+button.small{padding:3px 9px;font-size:12px}
+select,input{background:#0d1117;color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+input{width:90px} input.wide{width:330px} select.wide{width:330px}
+pre{background:#0a0d12;border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11px;max-height:240px;overflow:auto;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 9px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--dim)}
+.kv{color:var(--dim)} .kv b{color:var(--fg)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.job{border-bottom:1px solid var(--border);padding:8px 0}
+label{color:var(--dim);font-size:12px;margin-right:4px}
+.warnbox{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.4);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13px}
+.note{color:var(--dim);font-size:12px}
+</style>
+<link rel="stylesheet" href="/dashboard/assets/theme.css">
+<script src="/dashboard/assets/ui.js"></script>
+</head>
+<body>
+<header>
+  <h1>SOL Strategy Lab</h1>
+  <nav>
+    <a class="here" href="/">Control panel</a>
+    <a href="/dashboard/optimize.html">Optimize</a>
+    <a href="/dashboard/backtests.html">Backtests</a>
+    <a href="/dashboard/index.html">Research</a>
+    <a href="/dashboard/docs.html">Docs</a>
+  </nav>
+</header>
+<main>
+
+<div id="doctorBox" style="display:none" class="warnbox">
+  <b>Environment problems detected</b> — some features may fail until fixed:
+  <div id="doctorList" style="margin-top:6px;font-size:13px"></div>
+  <div class="row" style="margin-top:8px">
+    <button class="small" onclick="fixCaches()">Clear incompatible caches</button>
+    <button class="small" onclick="runDoctor()">Re-check</button>
+    <span class="note">full details: <code>python3 panel/doctor.py</code></span>
+  </div>
+</div>
+
+<h2>Live trader</h2>
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <div>
+      <span id="tdot" class="dot off"></span><b id="tstate">stopped</b>
+      <span class="kv" id="tinfo"></span>
+    </div>
+    <div class="row">
+      <label>config</label>
+      <select id="tcfg"><option>config.json</option><option>config_spot.json</option><option>config_legacy_stopON.json</option></select>
+      <button class="primary" onclick="startTrader(false)">Start dry-run</button>
+      <button class="danger" onclick="startTrader(true)">Start LIVE</button>
+      <button onclick="stopTrader()">Stop</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:6px"><span class="note" id="cfgSummary">…</span></div>
+  <div class="row" style="margin-top:4px"><span class="note"><b>Dry-run</b> = the trader runs the full strategy live (real prices, real signals, real position tracking) but only LOGS the orders it would place — nothing is sent to MEXC. Use it to watch a config behave before risking money. <b>LIVE</b> sends real orders through the MEXC executor below.</span></div>
+  <div id="posbox" class="row" style="margin-top:10px"></div>
+  <div class="warnbox" id="levwarn" style="display:none">
+    This config is <b>leveraged with NO stop loss</b>. A March-2024-style move liquidates the position.
+    Dry-run first; size only what you can lose entirely.
+  </div>
+  <pre id="tlog">–</pre>
+  <div class="row" style="margin-top:8px">
+    <span><span id="wdot" class="dot off"></span><b>MEXC executor</b> <span class="note">(Playwright webhook server — needed for live orders; log in to MEXC in its browser window)</span></span>
+    <button onclick="api('webhook/start',{port:5000}).then(()=>setTimeout(refresh,800))">Start executor</button>
+    <button onclick="api('webhook/stop',{}).then(()=>setTimeout(refresh,500))">Stop executor</button>
+    <span class="note">needs: <code>pip install playwright && playwright install chromium</code>, then log in to MEXC in the window it opens</span>
+  </div>
+  <pre id="wlog" style="display:none"></pre>
+</div>
+
+<h2>Trader settings <span class="note">(applies on next trader start)</span></h2>
+<div class="card row" id="settings">
+  <label>file</label><select id="sFile" onchange="loadSettings()"><option>config.json</option><option>config_spot.json</option></select>
+  <label>equity $</label><input id="sEquity">
+  <label>poll s</label><input id="sPoll">
+  <label>webhook</label><input class="wide" id="sHook">
+  <label>emergency exit at adverse % <span class="note">(blank = off)</span></label><input id="sEmerg">
+  <button class="primary" onclick="saveSettings()">Save</button>
+  <span class="note" id="sMsg"></span>
+</div>
+
+<h2>Configs & optimizer runs</h2>
+<div class="card">
+  <table id="cfgT"><thead><tr><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
+  <div class="note" style="margin-top:6px">“Backtest” publishes to the Backtests page. “Adopt” copies the parameters into the selected trader config (with automatic backup).
+  Adopt target: <select id="adoptTarget"><option>config.json</option><option>config_spot.json</option></select></div>
+</div>
+
+<h2>Run a backtest</h2>
+<div class="card">
+  <div class="row">
+    <label>config</label><select class="wide" id="btPick"></select>
+    <label>or path</label><input class="wide" id="btCfg" placeholder="(overrides picker)">
+    <label>name</label><input id="btName" placeholder="auto">
+    <label>from date</label><input id="btFrom" placeholder="(all)">
+    <button class="primary" onclick="runBacktest()">Run backtest</button>
+  </div>
+  <div class="note" style="margin-top:6px">Data gaps (CoinAPI holes) are <b>always skipped</b>: the simulation splits into
+  continuous segments at any gap &gt; 1000 minutes — no positions are held across a gap and no P&amp;L accrues inside one.
+  Each published backtest records the exact skipped ranges (see the “gaps” badge on the Backtests page).</div>
+</div>
+
+<h2>Optimization & maintenance</h2>
+<div class="card">
+  <div class="row">
+    <a href="/dashboard/optimize.html"><button class="primary">Open the Optimize page →</button></a>
+    <span class="note">full-parameter search (incl. indicator lengths), per-regime specialists, algorithm choice, editable ranges, AI advisor</span>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <span class="kv">quick actions (legacy V6 tools):</span>
+    <label>window</label><select id="wWin"><option>all</option><option>182</option><option>91</option><option>42</option></select>
+    <label>refit days</label><input id="wRefit" value="28">
+    <label>samples</label><input id="wSamples" value="500">
+    <label>processes</label><input id="oProcs" value="4">
+    <button onclick="runWF()">Walk-forward (v6)</button>
+    <button onclick="runRefit()">Refit trader params now</button>
+    <button onclick="updateData()">Refresh CoinAPI data</button>
+  </div>
+</div>
+
+<h2>Jobs</h2>
+<div class="card" id="jobs">no jobs yet</div>
+
+</main>
+<script>
+const $ = id => document.getElementById(id);
+async function api(path, body){
+  const r = await fetch('/api/'+path, body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const j = await r.json();
+  if(!r.ok) alert(j.error||'error');
+  return j;
+}
+async function refresh(){
+  const s = await api('status');
+  $('tdot').className = 'dot ' + (s.running ? (s.live?'warn-dot':'on') : 'off');
+  $('tstate').textContent = s.running ? (s.live?'RUNNING — LIVE':'running (dry-run)') : 'stopped';
+  $('tinfo').textContent = ` · ${s.config} · mode ${s.mode||'?'} · method ${s.method||'?'} · equity $${s.equity_usdt}` + (s.started?` · since ${s.started}`:'');
+  $('levwarn').style.display = (s.mode==='lev')?'block':'none';
+  const p = s.position;
+  $('posbox').innerHTML = p ? `<span>position: <b class="${p.dir>0?'pos':'neg'}">${p.dir>0?'LONG':'SHORT'}</b></span>
+    <span class="kv">entry <b>${(+p.entry_price).toFixed(3)}</b></span>
+    <span class="kv">qty <b>${p.qty}</b></span> <span class="kv">lev <b>${(+p.lev).toFixed(1)}×</b></span>
+    <span class="kv">system <b>${p.system===0?'3m':'cross'}</b></span>
+    <span class="kv">opened <b>${p.opened_at||''}</b></span>` : '<span class="kv">no open position</span>';
+  $('tlog').textContent = (s.log||[]).join('\n') || '–';
+  try{
+    const w = await api('webhook/status');
+    $('wdot').className='dot '+(w.running?'on':'off');
+    const failed = !w.running && (w.log||[]).length;
+    $('wlog').style.display = failed ? 'block' : 'none';
+    if(failed) $('wlog').textContent = 'executor last output (it is not running):\n'+w.log.join('\n');
+  }catch(e){}
+  try{
+    const tcs = await api('trader_configs');
+    const sel = $('tcfg');
+    const cur = sel.value;
+    sel.innerHTML = tcs.map(c=>`<option value="${c.file}">${c.file} — ${stratName(c.strategy)} · ${c.mode||'?'}</option>`).join('');
+    if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    const c = tcs.find(x=>x.file===sel.value);
+    if(c) $('cfgSummary').innerHTML = `Selected config: <b>${c.file}</b> runs <b>${stratName(c.strategy)}</b> in <b>${c.mode}</b> mode`+
+      `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}`+
+      `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}.`;
+  }catch(e){}
+  const jobs = await api('jobs');
+  $('jobs').innerHTML = jobs.length ? jobs.map(j=>`<div class="job">
+    <div class="row" style="justify-content:space-between">
+      <span><b>${j.kind}</b> · ${j.name} · <span class="${j.status==='running'?'pos':'kv'}">${j.status}</span> <span class="kv">since ${j.started}</span></span>
+      ${j.status==='running'?`<button class="small" onclick="api('jobs/${j.id}/stop',{})">stop</button>`:''}
+    </div>
+    <pre>${(j.log||[]).join('\n')}</pre></div>`).join('') : 'no jobs yet';
+}
+let CONFIGS=[];
+async function refreshConfigs(){
+  CONFIGS = await api('configs');
+  $('btPick').innerHTML = CONFIGS.map((c,i)=>`<option value="${i}">${c.label}</option>`).join('');
+  document.querySelector('#cfgT tbody').innerHTML = CONFIGS.map((c,i)=>`<tr>
+    <td>${c.label}</td><td>${stratName(c.strategy)}</td><td>${c.mode||''}</td><td>${c.method||''}</td>
+    <td>${c.eq?('$'+Math.round(c.eq).toLocaleString()):''}</td>
+    <td>${c.maxdd?((100*c.maxdd).toFixed(0)+'%'):''}</td><td>${c.n||''}</td>
+    <td><button class="small" onclick="btFromRow(${i})">Backtest</button>
+        <button class="small" onclick="adopt(${i})">Adopt → trader</button></td></tr>`).join('');
+}
+function btFromRow(i){ $('btPick').value=i; $('btCfg').value=''; runBacktest(); }
+async function adopt(i){
+  const t = $('adoptTarget').value;
+  if(!confirm(`Copy parameters from "${CONFIGS[i].label}" into ${t}? (backup is kept)`)) return;
+  const r = await api('adopt',{source:CONFIGS[i].path, target:t});
+  if(r.ok) alert('Adopted into '+r.target+'. Restart the trader to apply.');
+  loadSettings();
+}
+async function loadSettings(){
+  const c = await fetch('/api/trader_config?file='+$('sFile').value).then(r=>r.json());
+  $('sEquity').value = c.equity_usdt; $('sPoll').value = c.poll_seconds;
+  $('sHook').value = c.webhook_url; $('sEmerg').value = c.emergency_exit_adverse ? (100*c.emergency_exit_adverse) : '';
+}
+async function saveSettings(){
+  const em = $('sEmerg').value.trim();
+  const r = await fetch('/api/trader_config?file='+$('sFile').value, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({equity_usdt:+$('sEquity').value, poll_seconds:+$('sPoll').value,
+      webhook_url:$('sHook').value, emergency_exit_adverse: em?(+em/100):null})}).then(r=>r.json());
+  $('sMsg').textContent = r.ok ? 'saved ✓ (restart trader to apply)' : (r.error||'error');
+}
+async function startTrader(live){
+  if(live){
+    const c = prompt("This will place REAL orders via the Playwright webhook.\nType LIVE to confirm:");
+    if(c!=='LIVE') return;
+    await api('trader/start',{config:$('tcfg').value, live:true, confirm:'LIVE'});
+  } else {
+    await api('trader/start',{config:$('tcfg').value, live:false});
+  }
+  setTimeout(refresh,500);
+}
+async function stopTrader(){ await api('trader/stop',{}); setTimeout(refresh,500); }
+async function runBacktest(){
+  const cfg = $('btCfg').value.trim() || CONFIGS[+$('btPick').value]?.path;
+  if(!cfg) return alert('pick a config');
+  await api('jobs/backtest',{config:cfg, name:$('btName').value||undefined, oos_start:$('btFrom').value||undefined});
+  refresh();
+}
+async function runWF(){
+  await api('jobs/walkforward',{strategy:'v6', mode:'lev', method:'none',
+    window:$('wWin').value, refit_days:+$('wRefit').value, samples:+$('wSamples').value, procs:+$('oProcs').value});
+  refresh();
+}
+async function runRefit(){ await api('jobs/refit',{procs:+$('oProcs').value}); refresh(); }
+async function updateData(){ await api('jobs/update_data',{}); refresh(); }
+async function runDoctor(){
+  try{
+    const d = await api('doctor');
+    const bad = d.checks.filter(c=>!c.ok);
+    document.getElementById('doctorBox').style.display = bad.length?'block':'none';
+    document.getElementById('doctorList').innerHTML = bad.map(c=>
+      `<div>✗ <b>${c.check}</b>: ${c.note}</div>`).join('');
+  }catch(e){}
+}
+async function fixCaches(){
+  const r = await api('doctor/fix_caches',{});
+  alert('Removed:\n'+(r.removed.length?r.removed.join('\n'):'nothing needed removing'));
+  runDoctor();
+}
+refresh(); refreshConfigs(); loadSettings(); runDoctor();
+setInterval(refresh, 4000);
+setInterval(refreshConfigs, 20000);
+</script>
+</body>
+</html>

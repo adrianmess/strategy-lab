@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Run a full backtest of a config and publish it to the dashboard Backtests page.
+
+Two input kinds:
+  --config <best_config.json>   single parameter set -> continuous full-history run
+  --walkforward <run_dir>       walk-forward run dir -> uses its continuous resim
+
+Examples:
+  python3 backtest_cli.py --config runs/my_lev_run/best_config.json --name my_lev_run
+  python3 backtest_cli.py --walkforward runs/wf_lev --name wf_lev
+  python3 backtest_cli.py --config ../adaptive_trader/research2/final_config_v6_lev_none.json --name production_lev
+"""
+import _bootstrap as B
+import argparse, json, os
+import numpy as np
+import pandas as pd
+
+BACKTESTS_JS = os.path.join(B.DASHBOARD, "backtests.js")
+GAP_THRESHOLD_MIN = 1000   # data is split into continuous segments at gaps
+                           # larger than this; nothing is ever traded across
+                           # a gap and no P&L accrues inside one.
+
+
+def gap_info():
+    """Describe the gaps that segmentation skips (from the actual data)."""
+    from common import load_segments
+    segs = load_segments()
+    spans = [(str(g["t"].min())[:16], str(g["t"].max())[:16]) for g, _ in segs]
+    skipped = []
+    for (a, b), (c, d) in zip(spans[:-1], spans[1:]):
+        skipped.append(f"{b} -> {c}")
+    return dict(mode="skip_segments", threshold_min=GAP_THRESHOLD_MIN,
+                n_segments=len(segs), segments=spans, skipped_gaps=skipped)
+
+
+def run_single_v7(cfg, oos_start=None):
+    """Backtest a V7 (engine3, full-param) candidate."""
+    import optimizer2 as O
+    from engine3 import run3
+    from wf2 import mtm_curve
+    from adaptive import slice_pre
+    cand, method, mode = cfg["cand"], cfg["method"], cfg["cand"]["mode"]
+    G = O.load_g3()
+    regs_list, R = G["regimes"][method]
+    P = O.build_P3(cand)
+    if P.shape[0] != R:
+        import numpy as _np
+        P = _np.vstack([P[min(i, P.shape[0] - 1)] for i in range(R)])
+    eq = 1000.0; trades, curve = [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    warmup = 3000
+    for pre, reg in zip(G["pres"], regs_list):
+        t = pre["t"]
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        w0 = max(0, i0 - warmup)
+        sp = slice_pre(pre, w0, i1)
+        eq0 = eq
+        tr, eq, liq = run3(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
+                           initial_capital=eq,
+                           commission=0.0004 if mode == "lev" else 0.0005,
+                           use_sl=(mode == "spot"), dyn_liq=(mode == "lev"))
+        months += (i1 - i0) / (480 * 30.4)
+        if len(tr):
+            m, d = mtm_curve(tr, sp["c"], initial=eq0)
+            mdd = max(mdd, d)
+            step = max(1, len(m) // 500)
+            for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                if np.isfinite(v):
+                    curve.append(dict(t=str(x), eq=float(v)))
+            trades.append(tr)
+        if liq:
+            liq_any = True
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve,
+                       label_extra=dict(strategy="v7", mode=mode, method=method,
+                                        kind="full-history (in-sample fit)" if oos_start is None else f"from {oos_start}",
+                                        config=cand))
+
+
+def run_single(cfg_path, oos_start=None):
+    cfg = json.load(open(cfg_path))
+    cand = cfg["cand"]
+    if cfg.get("strategy") == "v7" or cand.get("strategy") == "v7":
+        return run_single_v7(cfg, oos_start)
+    strategy, mode, method = cfg["strategy"], cfg["mode"], cfg["method"]
+    from wf2 import (load_globals, build_P_v6, build_P_scalpx, mtm_curve,
+                     FUT_COMM, SPOT_COMM)
+    from fast_engine import run_fast
+    from scalp_engine import run_scalp
+    from adaptive import slice_pre
+    from regimes import DAY
+    G = load_globals((strategy,))
+    R = G["nreg"][method]
+    P = (build_P_v6 if strategy == "v6" else build_P_scalpx)(cand, R)
+    segs = G["v6"][cand.get("tv", 0)] if strategy == "v6" else G["scalp"]
+    regs = G["regimes_v6" if strategy == "v6" else "regimes_sc"][method]
+    warmup = 3000 if strategy == "v6" else 2500
+    eq = 1000.0
+    trades, curve = [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    for (pre, f), reg in zip(segs, regs):
+        t = pre["t"]
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        w0 = max(0, i0 - warmup)
+        sp = slice_pre(pre, w0, i1)
+        eq0 = eq
+        if strategy == "v6":
+            tr, eq, liq = run_fast(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
+                                   initial_capital=eq, use_sl=(mode == "spot"),
+                                   commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                   liq_threshold=-1.0 if mode == "lev" else 1e9)
+        else:
+            tr, eq, liq = run_scalp(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
+                                    initial_capital=eq,
+                                    commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                    liq_threshold=-1.0 if mode == "lev" else 1e9)
+        months += (i1 - i0) / (480 * 30.4)
+        if len(tr):
+            m, d = mtm_curve(tr, sp["c"], initial=eq0)
+            mdd = max(mdd, d)
+            step = max(1, len(m) // 500)
+            for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                if np.isfinite(v):
+                    curve.append(dict(t=str(x), eq=float(v)))
+            trades.append(tr)
+        if liq:
+            liq_any = True
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve,
+                       label_extra=dict(strategy=strategy, mode=mode, method=method,
+                                        kind="full-history (in-sample fit)" if oos_start is None else f"from {oos_start}",
+                                        config=cand))
+
+
+def build_entry(tr, eq, months, mdd, liq, curve, label_extra):
+    g = np.log(max(eq, 1e-9) / 1000.0) / max(months, 1e-9)
+    tl = []
+    if len(tr):
+        for _, r in tr.tail(2000).iterrows():
+            tl.append(dict(entry_t=str(r.get("entry_t", "")), exit_t=str(r.get("exit_t", "")),
+                           dir=("long" if r["dir"] > 0 else "short"),
+                           entry=float(r["entry"]), exit=float(r["exit"]),
+                           net=float(r["net"]), mae=float(r["mae"]),
+                           reason={0: "profit_target", 1: "stop_loss", 2: "LIQUIDATED"}.get(int(r["reason"]), "?"),
+                           lev=float(r.get("lev", 1.0))))
+        mo = (pd.to_datetime(tr["exit_t"]).dt.to_period("M").astype(str)
+              if "exit_t" in tr else None)
+        e = tr["net"].cumsum() + 1000.0
+        lg = np.log(np.maximum(e, 1e-9))
+        monthly = (pd.DataFrame(dict(mo=mo, lg=lg)).groupby("mo")["lg"].last().diff())
+        monthly.iloc[0] = np.log(np.maximum(e.iloc[0], 1e-9) / 1000) if len(monthly) else 0
+        monthly_tbl = [dict(month=k, ret_pct=float((np.exp(v) - 1) * 100))
+                       for k, v in monthly.items() if np.isfinite(v)]
+    else:
+        monthly_tbl = []
+    return dict(stats=dict(months=months, final_eq=float(eq), total_mult=eq / 1000.0,
+                           monthly_growth_pct=float((np.exp(g) - 1) * 100),
+                           liq=bool(liq), maxdd_mtm=mdd, n=int(len(tr)),
+                           tpm=len(tr) / max(months, 1e-9),
+                           sl_hits=int((tr["reason"] == 1).sum()) if len(tr) else 0,
+                           worst_mae=float(tr["mae"].min()) if len(tr) else 0.0,
+                           win=float((tr["net"] > 0).mean()) if len(tr) else 0.0),
+                curve=curve, trades=tl, monthly=monthly_tbl, **label_extra)
+
+
+def load_backtests():
+    if not os.path.exists(BACKTESTS_JS):
+        return []
+    txt = open(BACKTESTS_JS).read()
+    return json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
+
+
+def save_backtests(entries):
+    with open(BACKTESTS_JS, "w") as f:
+        f.write("window.BACKTESTS = ")
+        json.dump(entries, f, default=float)
+        f.write(";")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--config", help="best_config.json / final_config_*.json")
+    ap.add_argument("--walkforward", help="walk-forward run dir (uses resim.json)")
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--oos-start", default=None,
+                    help="only simulate from this date (single-config mode)")
+    args = ap.parse_args()
+
+    cwd0 = os.getcwd()
+    B.enter_run_dir("_backtest_tmp")
+    if args.config:
+        path = args.config if os.path.isabs(args.config) else os.path.join(cwd0, args.config)
+        entry = run_single(path, args.oos_start)
+    else:
+        wf_dir = args.walkforward if os.path.isabs(args.walkforward) else os.path.join(cwd0, args.walkforward)
+        r = json.load(open(os.path.join(wf_dir, "resim.json")))
+        entry = dict(stats={k: v for k, v in r.items() if k not in ("curve", "cid", "status")},
+                     curve=r.get("curve", []), trades=[], monthly=[],
+                     strategy=r["cid"].split("__")[0], mode=r["cid"].split("__")[1],
+                     method=r["cid"].split("__")[2], kind="walk-forward continuous OOS",
+                     config=None)
+    entry["name"] = args.name
+    entry["created"] = str(pd.Timestamp.now())[:16]
+    entry["gap_handling"] = gap_info()
+    entries = [e for e in load_backtests() if e["name"] != args.name]
+    entries.append(entry)
+    save_backtests(entries)
+    print(f"published '{args.name}' -> dashboard/backtests.html ({len(entries)} entries)")
+    print(json.dumps(entry["stats"], indent=1, default=float))
+
+
+if __name__ == "__main__":
+    main()

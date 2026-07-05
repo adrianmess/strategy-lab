@@ -1,0 +1,357 @@
+"""
+Generic parallel walk-forward framework for both strategies.
+
+Strategies:
+  v6   : V5-family, volatility-normalized (z-scored MACD), optional cross-long
+         re-enabled, optional trend-block on shorts.  (Tweaked => renamed V6.)
+  scalpx: Scalp-family with regime-adaptive thresholds/branches. (=> ScalpX.)
+
+Modes:
+  lev  : futures, NO stop loss, leverage<=10, liquidation modeled per-trade
+         (1/lev - 0.8% buffer). Constraint: never liquidated, maxDD<=80%.
+  spot : long-only, 1x, stop-loss ON, spot fees. Constraint: maxDD<=50%.
+
+Regime methods: none, vol3, vol3_7d, volume3, trend3, volXtrend9 (causal).
+Window study: training window in {42d, 91d, 182d, 'all'}, refit every 28d.
+"""
+import numpy as np
+import pandas as pd
+import json, os, pickle, time
+
+from engine import DEFAULT_PARAMS
+from fast_engine import params_to_vec, run_fast, PARAM_NAMES
+from scalp_engine import scalp_precompute, scalp_vec, run_scalp, SCALP_PARAM_NAMES
+from adaptive import make_adaptive_pre, slice_pre
+from regimes import regime_features, make_regimes, REGIME_METHODS, DAY
+from common import load_segments
+
+IDX = {k: i for i, k in enumerate(PARAM_NAMES)}
+SIDX = {k: i for i, k in enumerate(SCALP_PARAM_NAMES)}
+
+def mtm_curve(trades: pd.DataFrame, closes: np.ndarray, initial: float = 1000.0):
+    """Mark-to-market equity per bar from trade list; returns (curve, maxdd)."""
+    n = len(closes)
+    eq_closed = initial
+    mtm = np.empty(n)
+    last = 0
+    ei = trades["entry_idx"].to_numpy().astype(int)
+    xi = trades["exit_idx"].to_numpy().astype(int)
+    qty = trades["qty"].to_numpy()
+    ent = trades["entry"].to_numpy()
+    dr = trades["dir"].to_numpy()
+    net = trades["net"].to_numpy()
+    for k in range(len(ei)):
+        i0, i1 = ei[k], min(xi[k] + 1, n)
+        mtm[last:i0] = eq_closed
+        mtm[i0:i1] = eq_closed + qty[k] * (closes[i0:i1] - ent[k]) * dr[k]
+        eq_closed += net[k]
+        last = i1
+    mtm[last:] = eq_closed
+    cummax = np.maximum.accumulate(mtm)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        dd = (cummax - mtm) / np.maximum(cummax, 1e-12)
+    return mtm, (float(np.nanmax(dd)) if n else 0.0)
+
+RESULT_DIR = "wf2_results"
+FUT_COMM = 0.0004
+SPOT_COMM = 0.0005
+
+REFIT_DATES = pd.date_range("2024-11-15", "2026-06-05", freq="28D")
+TEST_DAYS = 28
+TREND_VARIANTS = [None, 2.0]
+
+# ---------------- global data (loaded once; fork-inherited) ----------------
+_G = {}
+
+def load_globals(need=("v6", "scalpx")):
+    segs = None
+    if "v6" in need and "v6" not in _G:
+        v6 = None
+        if os.path.exists("v6_variants.pkl"):
+            try:
+                v6 = pickle.load(open("v6_variants.pkl", "rb"))
+            except Exception as e:
+                print(f"v6_variants.pkl unreadable ({e}); rebuilding...")
+                try: os.remove("v6_variants.pkl")
+                except OSError: pass
+        if v6 is None:
+            segs = segs or load_segments()
+            from fast_engine import precompute
+            pres = [precompute(g, d1) for g, d1 in segs]
+            v6 = []
+            for tz in TREND_VARIANTS:
+                pa = [make_adaptive_pre(p, trend_block_z=tz) for p in pres]
+                v6.append(pa)  # list over segments of (q, f)
+            pickle.dump(v6, open("v6_variants.pkl", "wb"))
+        _G["v6"] = v6
+        _G["regimes_v6"] = {m: [make_regimes(f, m)[0] for _, f in v6[0]] for m in REGIME_METHODS}
+        _G["nreg"] = {m: make_regimes(v6[0][0][1], m)[1] for m in REGIME_METHODS}
+    if "scalpx" in need and "scalp" not in _G:
+        sc = None
+        if os.path.exists("scalp_pre.pkl"):
+            try:
+                sc = pickle.load(open("scalp_pre.pkl", "rb"))
+            except Exception as e:
+                print(f"scalp_pre.pkl unreadable ({e}); rebuilding...")
+                try: os.remove("scalp_pre.pkl")
+                except OSError: pass
+        if sc is None:
+            segs = segs or load_segments()
+            sc = []
+            for g, d1 in segs:
+                pre = scalp_precompute(g)
+                f = regime_features(pre)
+                sc.append((pre, f))
+            pickle.dump(sc, open("scalp_pre.pkl", "wb"))
+        _G["scalp"] = sc
+        _G["regimes_sc"] = {m: [make_regimes(f, m)[0] for _, f in sc] for m in REGIME_METHODS}
+        _G.setdefault("nreg", {m: make_regimes(sc[0][1], m)[1] for m in REGIME_METHODS})
+    return _G
+
+# ---------------- candidate samplers ----------------
+
+def _per_regime(rng, base_lo, base_hi, R, jitter=0.35):
+    base = rng.uniform(base_lo, base_hi)
+    return np.clip(base * rng.uniform(1 - jitter, 1 + jitter, R),
+                   min(base_lo, base_hi), max(base_lo, base_hi)).tolist()
+
+def sample_v6(rng, R, mode):
+    c = dict(
+        strategy="v6", tv=int(rng.integers(0, len(TREND_VARIANTS))),
+        zL=_per_regime(rng, -2.6, -0.9, R),
+        zS=_per_regime(rng, 0.9, 2.6, R),
+        zXS=_per_regime(rng, 1.1, 3.0, R),
+        zXLmax=(_per_regime(rng, -2.0, 0.3, R) if rng.random() < 0.5 else [-99.0] * R),
+        ptScale=_per_regime(rng, 0.5, 2.4, R),
+        eS3=[1.0] * R, eXS=[1.0] * R,
+    )
+    if mode == "lev":
+        c["lev"] = _per_regime(rng, 1.2, 10.0, R)
+        c["sl"] = 0.0
+        # occasionally disable short subsystems in some regimes
+        if rng.random() < 0.35:
+            c["eS3"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
+        if rng.random() < 0.35:
+            c["eXS"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
+    else:  # spot: long only
+        c["lev"] = [1.0] * R
+        c["sl"] = float(rng.choice([0.02, 0.03, 0.04, 0.06, 0.08, 0.10]))
+        c["eS3"] = [0.0] * R
+        c["eXS"] = [0.0] * R
+    return c
+
+def sample_scalpx(rng, R, mode):
+    c = dict(
+        strategy="scalpx",
+        tpL=_per_regime(rng, 0.002, 0.02, R),
+        tpS=_per_regime(rng, 0.002, 0.02, R),
+        rsiOB=_per_regime(rng, 50, 85, R),
+        rsiOS=_per_regime(rng, 15, 50, R),
+        useCvd=[1.0] * R, useEma=[1.0] * R,
+        eL=[1.0] * R, eS=[1.0] * R,
+    )
+    if rng.random() < 0.4:
+        c["useEma"] = rng.choice([0.0, 1.0], R, p=[0.4, 0.6]).tolist()
+    if mode == "lev":
+        c["lev"] = _per_regime(rng, 1.2, 10.0, R)
+        c["sl"] = 0.05
+        c["slOn"] = 0.0
+        if rng.random() < 0.4:
+            c["eS"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
+        if rng.random() < 0.4:
+            c["eL"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
+    else:
+        c["lev"] = [1.0] * R
+        c["sl"] = float(rng.choice([0.01, 0.02, 0.03, 0.05, 0.08]))
+        c["slOn"] = 1.0
+        c["eS"] = [0.0] * R
+    return c
+
+# ---------------- P-matrix builders ----------------
+
+def build_P_v6(c, R):
+    rows = []
+    for r in range(R):
+        ov = dict(
+            macdValPctLong=c["zL"][r], macdValPctShort=c["zS"][r],
+            xMacdMinShort=c["zXS"][r], xMacdMaxLong=c["zXLmax"][r],
+            leverage=c["lev"][r],
+            slLong=c["sl"] if c["sl"] > 0 else 0.10,
+            slShort=c["sl"] if c["sl"] > 0 else 0.10,
+            enableShort3m=c["eS3"][r], enableShortX=c["eXS"][r],
+            enableLong3m=1.0,
+            enableLongX=0.0 if c["zXLmax"][r] <= -90 else 1.0,
+        )
+        ps = c["ptScale"][r]
+        for k in ["ptLong", "apt1Long", "apt2Long", "ptShort", "apt1Short", "apt2Short",
+                  "xTpLong", "xApt1Long", "xApt2Long", "xTpShort", "xApt1Short", "xApt2Short"]:
+            ov[k] = DEFAULT_PARAMS[k] * ps
+        rows.append(params_to_vec(DEFAULT_PARAMS, ov))
+    return np.vstack(rows)
+
+def build_P_scalpx(c, R):
+    rows = []
+    for r in range(R):
+        rows.append(scalp_vec(dict(
+            tpLong=c["tpL"][r], tpShort=c["tpS"][r], sl=c["sl"],
+            rsiOB=c["rsiOB"][r], rsiOS=c["rsiOS"][r], leverage=c["lev"][r],
+            enableLong=c["eL"][r], enableShort=c["eS"][r],
+            useCvdBranch=c["useCvd"][r], useEmaBranch=c["useEma"][r],
+            slOn=c["slOn"] if "slOn" in c else 1.0)))
+    return np.vstack(rows)
+
+# ---------------- evaluation ----------------
+
+def _clip_indices(t_arr, t0, t1):
+    i0 = 0 if t0 is None else int(np.searchsorted(t_arr, np.datetime64(t0)))
+    i1 = len(t_arr) if t1 is None else int(np.searchsorted(t_arr, np.datetime64(t1)))
+    return i0, i1
+
+def eval_config(cand, method, mode, t0, t1, collect_trades=False):
+    G = load_globals((cand["strategy"],))
+    R = G["nreg"][method]
+    warmup = 3000
+    eq = 1000.0
+    all_tr = []
+    months = 0.0
+    liq_any = False
+    mtm_dd = 0.0
+    if cand["strategy"] == "v6":
+        P = build_P_v6(cand, R)
+        segs = G["v6"][cand["tv"]]
+        regs = G["regimes_v6"][method]
+        comm = FUT_COMM
+        use_sl = (mode == "spot")
+        for (pre, f), reg in zip(segs, regs):
+            i0, i1 = _clip_indices(pre["t"], t0, t1)
+            i0 = max(i0, warmup)   # never trade unconverged indicators
+            if i1 - i0 < 200: continue
+            w0 = max(0, i0 - warmup)
+            sp = slice_pre(pre, w0, i1)
+            eq_before = eq
+            tr, eq, liq = run_fast(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
+                                   initial_capital=eq, use_sl=use_sl,
+                                   commission=comm if mode == "lev" else SPOT_COMM,
+                                   liq_threshold=-1.0 if mode == "lev" else 1e9)
+            months += (i1 - i0) / (DAY * 30.4)
+            all_tr.append(tr)
+            if mode == "lev" and len(tr):
+                _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                mtm_dd = max(mtm_dd, dseg)
+            if liq: liq_any = True; break
+    else:
+        P = build_P_scalpx(cand, R)
+        comm = FUT_COMM if mode == "lev" else SPOT_COMM
+        warmup = 2500
+        for (pre, f), reg in zip(G["scalp"], G["regimes_sc"][method]):
+            i0, i1 = _clip_indices(pre["t"], t0, t1)
+            i0 = max(i0, warmup)   # never trade unconverged indicators
+            if i1 - i0 < 200: continue
+            w0 = max(0, i0 - warmup)
+            sp = slice_pre(pre, w0, i1)
+            eq_before = eq
+            tr, eq, liq = run_scalp(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
+                                    initial_capital=eq, commission=comm,
+                                    liq_threshold=-1.0 if mode == "lev" else 1e9)
+            months += (i1 - i0) / (DAY * 30.4)
+            all_tr.append(tr)
+            if mode == "lev" and len(tr):
+                _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                mtm_dd = max(mtm_dd, dseg)
+            if liq: liq_any = True; break
+    if months <= 0:
+        return None
+    tr = pd.concat(all_tr, ignore_index=True) if all_tr else pd.DataFrame()
+    if len(tr) == 0:
+        return None
+    e = tr["net"].cumsum() + 1000.0
+    dd = float(((e.cummax() - e) / e.cummax()).max())
+    if mode == "lev":
+        dd = max(dd, mtm_dd)
+    growth = np.log(max(eq, 1e-9) / 1000.0) / months
+    mo = pd.to_datetime(tr["exit_t"]).dt.to_period("M")
+    lg = np.log(np.maximum(e.to_numpy(), 1e-9))
+    gm = pd.DataFrame(dict(mo=mo, lg=lg)).groupby("mo")["lg"].last().diff().dropna()
+    g_mean = float(gm.mean()) if len(gm) >= 2 else growth
+    g_std = float(gm.std()) if len(gm) >= 2 else 0.0
+    out = dict(n=len(tr), months=months, eq=eq, growth=growth, liq=liq_any,
+               maxdd=dd, tpm=len(tr) / months,
+               sl_hits=int((tr["reason"] == 1).sum()),
+               worst_mae=float(tr["mae"].min()),
+               win=float((tr["net"] > 0).mean()),
+               score=g_mean - 0.25 * g_std)
+    if collect_trades:
+        out["trades"] = tr
+    return out
+
+def feasible(m, mode):
+    if m is None or m["liq"]:
+        return False
+    if m["n"] < 10 or m["tpm"] < 2:
+        return False
+    if mode == "lev" and m["maxdd"] > 0.80:
+        return False
+    if mode == "spot" and m["maxdd"] > 0.50:
+        return False
+    return True
+
+def average_cands(cands):
+    out = dict(strategy=cands[0]["strategy"])
+    keys = [k for k in cands[0] if k not in ("strategy",)]
+    for k in keys:
+        vals = [c[k] for c in cands]
+        if isinstance(vals[0], list):
+            arr = np.mean([v for v in vals], axis=0)
+            # binary flags: majority vote
+            if k in ("eS3", "eXS", "eL", "eS", "useCvd", "useEma"):
+                arr = (arr >= 0.5).astype(float)
+            out[k] = np.round(arr, 4).tolist()
+        elif k == "tv":
+            from collections import Counter
+            out[k] = Counter(vals).most_common(1)[0][0]
+        elif k == "slOn":
+            out[k] = vals[0]
+        else:
+            out[k] = float(np.median(vals))
+    # keep cross-long disabled if majority disabled
+    if "zXLmax" in out:
+        n_off = sum(1 for c in cands if c["zXLmax"][0] <= -90)
+        if n_off > len(cands) / 2:
+            out["zXLmax"] = [-99.0] * len(out["zXLmax"])
+    return out
+
+# ---------------- fold job ----------------
+
+def run_fold(job):
+    """job: dict(strategy, mode, method, window, fold_idx, n_samples, seed)"""
+    t_test0 = REFIT_DATES[job["fold_idx"]]
+    t_test1 = t_test0 + pd.Timedelta(days=TEST_DAYS)
+    if job["window"] == "all":
+        t_train0 = None
+    else:
+        t_train0 = t_test0 - pd.Timedelta(days=int(job["window"]))
+    G = load_globals((job["strategy"],))
+    R = G["nreg"][job["method"]]
+    rng = np.random.default_rng(job["seed"] + job["fold_idx"] * 7919)
+    sampler = sample_v6 if job["strategy"] == "v6" else sample_scalpx
+    feas = []
+    for _ in range(job["n_samples"]):
+        c = sampler(rng, R, job["mode"])
+        m = eval_config(c, job["method"], job["mode"], t_train0, t_test0)
+        if feasible(m, job["mode"]):
+            feas.append((m["score"], c, m))
+    if not feas:
+        return dict(job=job, status="no_feasible")
+    feas.sort(key=lambda x: -x[0])
+    top = [c for _, c, _ in feas[:5]]
+    avg = average_cands(top)
+    m_avg = eval_config(avg, job["method"], job["mode"], t_train0, t_test0)
+    if feasible(m_avg, job["mode"]):
+        chosen, chosen_m = avg, m_avg
+    else:
+        chosen, chosen_m = feas[0][1], feas[0][2]
+    oos = eval_config(chosen, job["method"], job["mode"],
+                      str(t_test0.date()), str(t_test1.date()))
+    return dict(job=job, status="ok", n_feasible=len(feas), cand=chosen,
+                train={k: v for k, v in chosen_m.items() if k != "trades"},
+                oos=None if oos is None else {k: v for k, v in oos.items() if k != "trades"})

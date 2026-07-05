@@ -1,0 +1,54 @@
+{
+ "symbol": "SOL_USDT",
+ "contract_size": 0.1,
+ "webhook_url": "http://127.0.0.1:5000/webhook",
+ "dry_run": true,
+ "poll_seconds": 10,
+ "equity_usdt": 1000.0,
+ "state_file": "trader_state.json",
+ "log_file": "trader.log",
+ "engine": "v6",
+ "mode": "lev",
+ "method": "none",
+ "candidate": {
+  "strategy": "v6",
+  "tv": 0,
+  "zL": [
+   -2.1665775296134813
+  ],
+  "zS": [
+   1.4988843445775208
+  ],
+  "zXS": [
+   2.2374681465900434
+  ],
+  "zXLmax": [
+   -0.09155392738907973
+  ],
+  "ptScale": [
+   1.319945533476542
+  ],
+  "eS3": [
+   0.0
+  ],
+  "eXS": [
+   0.0
+  ],
+  "lev": [
+   4.071559212186137
+  ],
+  "sl": 0.0
+ },
+ "emergency_exit_adverse": null,
+ "refit": {
+  "days": 28,
+  "procs": 4,
+  "hours": 1.0
+ },
+ "notes": {
+  "mode": "lev = futures, NO stop loss (your live style). Exits at profit targets only. Liquidation risk is real; see dashboard warnings.",
+  "emergency_exit_adverse": "set e.g. 0.10 to force-close any position 10% underwater. null = fully faithful to the backtested config (no safety net).",
+  "refit": "run refit.py every `days` days (or `python3 refit.py --loop`).",
+  "source": "research2/final_config_v6_lev_none.json; walk-forward OOS evidence: dashboard backtests 'walkforward_OOS_lev_survivor'."
+ }
+}

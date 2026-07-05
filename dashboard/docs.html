@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docs — SOL Strategy Lab</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#e6edf3;--dim:#8b949e;
+--green:#3fb950;--red:#f85149;--amber:#d29922;--blue:#58a6ff;--purple:#bc8cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,'Segoe UI',Roboto,sans-serif}
+header{padding:14px 28px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:18px}
+nav a{color:var(--dim);text-decoration:none;margin-left:18px;font-weight:600}
+nav a.here,nav a:hover{color:var(--blue)}
+main{padding:24px 28px;max-width:1000px;margin:0 auto}
+h2{font-size:19px;border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:38px;color:var(--blue)}
+h3{font-size:15px;margin:22px 0 6px;color:var(--fg)}
+dt{font-weight:600;margin-top:14px;color:var(--fg)}
+dd{margin:2px 0 0 0;color:var(--dim)}
+code{background:var(--hover);padding:1px 6px;border-radius:4px;font-size:12.5px;color:var(--fg)}
+.warn{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.35);border-radius:8px;padding:12px 16px;margin:14px 0;color:var(--fg)}
+.tip{background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.35);border-radius:8px;padding:12px 16px;margin:14px 0;color:var(--fg)}
+.toc{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 18px}
+.toc a{color:var(--blue);text-decoration:none;display:inline-block;margin:2px 14px 2px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--dim)}
+</style>
+<link rel="stylesheet" href="assets/theme.css">
+<script src="assets/ui.js"></script>
+</head>
+<body>
+<header>
+  <h1>Docs</h1>
+  <nav>
+    <a href="/">Control panel</a>
+    <a href="optimize.html">Optimize</a>
+    <a href="backtests.html">Backtests</a>
+    <a href="index.html">Research</a>
+    <a class="here" href="docs.html">Docs</a>
+  </nav>
+</header>
+<main>
+
+<div class="toc">
+  <b>Jump to:</b>
+  <a href="#workflow">Workflow</a><a href="#live">Running live</a><a href="#strategies">Strategies</a><a href="#modes">Modes</a>
+  <a href="#regimes">Regime methods</a><a href="#optimizers">Optimizers</a><a href="#params">Parameters</a>
+  <a href="#metrics">Metrics</a><a href="#gaps">Data & gaps</a><a href="#ai">AI advisor</a><a href="#risk">Risk & honesty</a>
+</div>
+
+<h2 id="workflow">The workflow (start here)</h2>
+<p>Everything follows one loop:</p>
+<table>
+<tr><th>step</th><th>where</th><th>what happens</th></tr>
+<tr><td>1. Optimize</td><td>Optimize page</td><td>Search parameters on training data. Use <code>train-end</code> to hold out recent months.</td></tr>
+<tr><td>2. Verify</td><td>Optimize page → run row</td><td>Check the <b>holdout</b> column: performance on data the search never saw. This is the number that matters.</td></tr>
+<tr><td>3. Backtest</td><td>Optimize page / Backtests</td><td>Publish full equity curve, trades, monthly returns to the Backtests page.</td></tr>
+<tr><td>4. Adopt</td><td>Control panel → Configs</td><td>Copy the winning parameters into the live trader's config (backup kept automatically).</td></tr>
+<tr><td>5. Dry-run → Live</td><td>Control panel</td><td>Watch it in dry-run first. Live requires typed confirmation.</td></tr>
+<tr><td>6. Refit monthly</td><td>Control panel</td><td>Re-run the search on fresh data every ~28 days. The out-of-sample evidence assumes you do this.</td></tr>
+</table>
+
+<h2 id="live">Running live (Control panel)</h2>
+<dl>
+<dt>Trader configs (config.json / config_spot.json)</dt><dd>A config file = one deployable setup: which strategy's parameters (shown in the dropdown, e.g. "V5 family · V7"), which mode (lev/spot), equity size, and operational settings. "Adopt" from the Optimize page writes a run's winning parameters into one of these files. <code>config.json</code> is the leveraged futures setup; <code>config_spot.json</code> is the spot long-only setup.</dd>
+<dt>Dry-run</dt><dd>The trader runs completely — live MEXC prices, real signal evaluation on every 3-minute bar close, position tracking, logs — but instead of sending orders it writes <code>[DRY RUN] would POST: …</code> to the log. Zero risk. Always dry-run a new config for days before going live; compare its logged trades to what you expect.</dd>
+<dt>LIVE</dt><dd>Same as dry-run except orders are actually sent to the MEXC executor. Requires typing LIVE to confirm, and the executor must be running and logged in.</dd>
+<dt>MEXC executor</dt><dd>The Playwright webhook server (<code>webhook_server.py</code>) that clicks the MEXC website to place orders (MEXC has no futures API). Requirements: <code>pip install playwright</code> then <code>playwright install chromium</code>, and you must log in to MEXC in the browser window it opens (cookies are cached afterwards). If it exits immediately, the panel shows its last output under the executor buttons — usually missing Playwright browsers or a login issue.</dd>
+<dt>Refit</dt><dd>Re-optimizes the trader's parameters on fresh data every ~28 days. The out-of-sample evidence assumes this cadence.</dd>
+</dl>
+
+<h2 id="strategies">Strategies</h2>
+<dl>
+<dt>V5 (original)</dt><dd>Your TradingView Pine strategy: RSI+MACD+BB%B dip-buy system + a MACD-crossover system, fixed thresholds. Validated bar-for-bar against your exports (325/351 exact).</dd>
+<dt>V6</dt><dd>V5 with volatility-normalized entries: the MACD thresholds are z-scored against their own trailing 3-day volatility, so trigger rates stay constant across quiet/wild markets. Fixes the "stops trading in low volume" problem.</dd>
+<dt>V7 (current)</dt><dd>Full-parameter generation: <b>everything</b> is searchable including indicator lengths (RSI length, MACD fast/slow, BB length/stddev, trend-EMA length, crossover-MACD lengths, histogram bars). With a regime method active, every parameter can differ per market regime — a genuinely different sub-strategy per low/mid/high bucket. Trend-EMA is a clean single length (not V5's ATR-switched pair).</dd>
+<dt>ScalpX</dt><dd>The VRVP+CVD+EMA scalp strategy, ported exactly. Verdict from testing: <b>no edge</b> — loses in every tested configuration, including its own TradingView export (−16%). Kept for reference.</dd>
+</dl>
+
+<h2 id="modes">Modes</h2>
+<dl>
+<dt>lev (futures, max-risk)</dt><dd>Your live style: leveraged (≤10x), NO stop loss — exits only at profit targets. Liquidation is modeled per trade at (1/leverage − 0.8%) adverse intrabar move. Search constraint: never liquidated in backtest AND mark-to-market drawdown ≤ 80%.</dd>
+<dt>spot</dt><dd>Long-only, 1x, stop-losses ON, 0.05%/side fees. Constraint: drawdown ≤ 50%. What you'd run on the spot market.</dd>
+</dl>
+
+<h2 id="regimes">Regime methods</h2>
+<p>A regime method classifies every bar into buckets using <b>only past data</b> (trailing percentiles — no lookahead). With a method active, the candidate carries one full parameter set per bucket and switches automatically bar-by-bar.</p>
+<dl>
+<dt>none</dt><dd>One parameter set everywhere. Fewest knobs, hardest to overfit.</dd>
+<dt>vol3</dt><dd>Volatility terciles: 1-day realized volatility ranked against the trailing 30 days → low/mid/high. <b>Best performer in testing.</b></dd>
+<dt>vol3_7d</dt><dd>Same but ranked against only 7 days — reacts faster, forgets faster.</dd>
+<dt>volume3</dt><dd>Dollar-volume terciles (1-day volume vs trailing 30 days).</dd>
+<dt>trend3</dt><dd>Down / flat / up, from price vs its 1-day EMA in volatility units.</dd>
+<dt>volXtrend9</dt><dd>3×3 grid of volatility × trend = 9 buckets. <b>Warning:</b> 9 full parameter sets overfit badly in testing (huge train numbers, liquidated on holdout).</dd>
+</dl>
+
+<h2 id="optimizers">Optimizer algorithms</h2>
+<dl>
+<dt>random</dt><dd>Uniform sampling of the whole space. Unbiased baseline; finds broad regions but wastes budget re-exploring. In the head-to-head study its best config scored 0.41 (train) vs genetic's 1.12 on identical budget — and its best pick liquidated on holdout.</dd>
+<dt>genetic (recommended)</dt><dd>Population evolution: the best ~24 candidates breed (uniform crossover), children get mutated (10% jitter on numbers, occasional menu re-rolls), one worker keeps sampling randomly to avoid inbreeding. Won the study decisively: its regime-specialist config made <b>+25%/month on 10 months of unseen holdout data</b>.</dd>
+<dt>refine</dt><dd>Hill-climbing: small perturbations around the best known candidates. Use it to polish a finished run (<code>--resume-from</code>), not to explore.</dd>
+<dt>walk-forward (evaluation, not search)</dt><dd>The honesty machine: re-optimizes at every refit date using only past data, tests on the next unseen window, then re-simulates continuously (positions carry across boundaries, drawdown measured mark-to-market). Slower, but its numbers are the ones to believe.</dd>
+</dl>
+<div class="tip"><b>Study result summary (9,680 evals each, train→holdout):</b> genetic + vol3 regime specialists = +25%/mo holdout ✓ · genetic single-set = +9%/mo holdout ✓ · random = liquidated on holdout ✗ · 9-bucket = liquidated on holdout ✗ · both spot studies ≈ flat/negative holdout.</div>
+
+<h2 id="params">Parameters (what the optimizer searches)</h2>
+<h3>Entries</h3>
+<dl>
+<dt>zL / zS</dt><dd>How extreme the z-scored entry-MACD must be to buy a dip (zL, negative) or short a rip (zS, positive). More extreme = fewer, deeper entries.</dd>
+<dt>rsiValLong / rsiValShort</dt><dd>RSI must be below (long) / above (short) these.</dd>
+<dt>bbValLong / bbValShort</dt><dd>Bollinger %B must be below/above these (0 = at lower band, 1 = at upper band).</dd>
+<dt>zXS / zXLmax</dt><dd>Crossover-system gates on the z-scored crossover-MACD.</dd>
+<dt>vRsi, vMacd, vBB, vEmaUp, vEmaDn, vX, vHistN</dt><dd><b>Indicator length variants</b> — e.g. RSI 2/3/4/6/9/14, MACD 3-7 … 12-26, BB 14–50 bars, trend EMA 20–270. These are the knobs that let each regime bucket use genuinely different indicators.</dd>
+<dt>trendBlockZ</dt><dd>Melt-up protection: block all shorts when price is this many vol-units above its 1-day EMA (99 = off).</dd>
+</dl>
+<h3>Exits</h3>
+<dl>
+<dt>ptLong/ptShort → apt1 → apt2 with dur1/dur2</dt><dd>Profit target starts at pt; after dur1 minutes it drops to apt1; after dur2 to apt2 ("take what you can get the longer it drags"). The x-prefixed set is the same for the crossover system.</dd>
+<dt>slLong/slShort</dt><dd>Stop-loss (spot mode only — lev mode deliberately has none, matching your live style).</dd>
+</dl>
+<h3>Risk & pacing</h3>
+<dl>
+<dt>leverage</dt><dd>Position size multiplier (≤10). In lev mode, liquidation distance ≈ 1/leverage.</dd>
+<dt>cdPct/cdPeriod (×4)</dt><dd>Cooldowns: after a sharp 1-minute (long side) or 3-minute (short side) move, block entries for N minutes.</dd>
+<dt>xMinBetween</dt><dd>Minimum spacing between crossover-system entries.</dd>
+<dt>eL3/eS3/eXL/eXS</dt><dd>On/off switches per subsystem. The optimizer often turns shorts off — that's usually what keeps leveraged configs alive.</dd>
+</dl>
+
+<h2 id="metrics">Metrics</h2>
+<dl>
+<dt>growth/mo</dt><dd>Compounded monthly growth of closed-trade equity. Excludes funding fees; assumes full-equity reinvestment.</dd>
+<dt>score</dt><dd>What the optimizer maximizes: mean monthly log-growth minus 0.25× its standard deviation, so one lucky month can't win. Feasibility gates must pass first.</dd>
+<dt>max DD (MTM)</dt><dd>Worst peak-to-trough of <b>mark-to-market</b> equity — open positions count at current price. The honest drawdown; closed-trade equity hides pain in no-stop mode.</dd>
+<dt>worst excursion (MAE)</dt><dd>The most any single trade went against you before it exited.</dd>
+<dt>liq</dt><dd>Whether the account was ever liquidated (adverse move past 1/leverage). One liquidation = total loss.</dd>
+<dt>holdout</dt><dd>Performance on data after <code>train-end</code>, which the search never touched. The single most trustworthy number a run produces.</dd>
+<dt>win rate</dt><dd>Careful: in no-stop lev mode every trade that closes is a winner by construction (losers either liquidate or are still open) — near-100% win rate is a property of the exit style, not proof of edge.</dd>
+</dl>
+
+<h2 id="gaps">Data & gap handling</h2>
+<p>Source: CoinAPI, MEXC SOL/USDT perp, 3-minute + 1-minute bars, Nov 2023 → now. Known holes: <b>Jun–Nov 2024</b> (~5 months), ~1 week Dec 2023, ~4 days Nov 2025.</p>
+<p><b>Gaps are always skipped</b>: the simulation splits into continuous segments at any gap &gt; 1000 minutes. No positions are held across a gap, no P&L accrues inside one, indicators re-warm after each gap, equity chains across segments. Every published backtest carries a "skipped ✓" badge listing the exact ranges (retro-tagged for entries made before this metadata existed).</p>
+
+<h2 id="ai">AI advisor</h2>
+<p>Optional: sends your run's best/worst candidates and the parameter space to Claude (Anthropic API) and asks for new candidate suggestions, which are then <b>evaluated like any other candidate</b> — they enter the pool only if they actually score. Useful for escaping local optima with reasoning about parameter interactions. Requires <code>ANTHROPIC_API_KEY</code> in your environment or a <code>.env</code> file at the repo root. Costs a few cents per call.</p>
+
+<h2 id="risk">Risk & honesty (read before going live)</h2>
+<div class="warn">
+<b>1. In-sample numbers are advertising; holdout/walk-forward numbers are evidence.</b> Full-history fits routinely show 1000x+; ignore them for decisions.<br><br>
+<b>2. No-stop leverage has irreducible ruin risk.</b> Your original config, run on real MEXC data, is liquidated on 2024-03-14. In the walk-forward study 35 of 36 no-stop configs died. Survivors survive because of moderate leverage and disabled shorts — not because the danger is gone. The holdout window (Sep 2025→Jul 2026) contains no March-2024-scale event.<br><br>
+<b>3. Selection bias compounds.</b> Every time you pick the best of N runs, the expected live performance of the winner drops below its backtest. Re-verify winners on walk-forward before adopting.<br><br>
+<b>4. Costs not modeled:</b> funding fees (±0.01%/8h typical), Playwright execution latency (seconds), partial fills. Compounding assumes full-equity reinvestment every trade.<br><br>
+<b>5. The refit loop is part of the system.</b> The out-of-sample evidence was generated by re-optimizing every 28 days. Deploy-and-forget is a different, untested system.
+</div>
+
+</main>
+</body>
+</html>

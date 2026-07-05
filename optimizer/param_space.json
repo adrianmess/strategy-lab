@@ -1,0 +1,478 @@
+{
+ "v7": {
+  "continuous": {
+   "apt1Long": {
+    "doc": "Profit target after dur1Long minutes in the trade.",
+    "label": "Profit target \u2014 longs (after step 1)",
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt1Short": {
+    "doc": "PT after dur1Short minutes.",
+    "label": "Profit target \u2014 shorts (after step 1)",
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt2Long": {
+    "doc": "Profit target after dur2Long minutes (give-up level).",
+    "label": "Profit target \u2014 longs (after step 2)",
+    "range": [
+     0.0,
+     0.015
+    ]
+   },
+   "apt2Short": {
+    "doc": "PT after dur2Short minutes.",
+    "label": "Profit target \u2014 shorts (after step 2)",
+    "range": [
+     0.0,
+     0.015
+    ]
+   },
+   "bbValLong": {
+    "doc": "Long entry requires Bollinger %B below this.",
+    "label": "Bollinger %B below \u2026 to buy",
+    "range": [
+     -0.35,
+     0.35
+    ]
+   },
+   "bbValShort": {
+    "doc": "Short entry requires Bollinger %B above this.",
+    "label": "Bollinger %B above \u2026 to short",
+    "range": [
+     0.6,
+     1.25
+    ]
+   },
+   "cdPctLong": {
+    "doc": "1-min move that triggers the long-side cooldown.",
+    "label": "Long cooldown trigger \u2014 1-min move %",
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPctShort": {
+    "doc": "3-min rise that triggers the short-side cooldown.",
+    "label": "Short cooldown trigger \u2014 3-min rise %",
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPeriodLong": {
+    "doc": "Long cooldown length, minutes.",
+    "label": "Long cooldown length (minutes)",
+    "range": [
+     10,
+     240
+    ]
+   },
+   "cdPeriodShort": {
+    "doc": "Short cooldown length, minutes.",
+    "label": "Short cooldown length (minutes)",
+    "range": [
+     10,
+     240
+    ]
+   },
+   "dur1Long": {
+    "doc": "Minutes until PT drops to apt1Long.",
+    "label": "Minutes until long PT step 1",
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur1Short": {
+    "doc": "Minutes until PT drops to apt1Short.",
+    "label": "Minutes until short PT step 1",
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur2Long": {
+    "doc": "Minutes until PT drops to apt2Long.",
+    "label": "Minutes until long PT step 2",
+    "range": [
+     10,
+     360
+    ]
+   },
+   "dur2Short": {
+    "doc": "Minutes until PT drops to apt2Short.",
+    "label": "Minutes until short PT step 2",
+    "range": [
+     10,
+     360
+    ]
+   },
+   "leverage": {
+    "doc": "Position leverage (capped at 10; lev mode only).",
+    "label": "Leverage",
+    "range": [
+     1.0,
+     10.0
+    ]
+   },
+   "ptLong": {
+    "doc": "Base profit target, longs (fraction: 0.012 = 1.2%).",
+    "label": "Profit target \u2014 longs (initial)",
+    "range": [
+     0.002,
+     0.03
+    ]
+   },
+   "ptShort": {
+    "doc": "Base profit target, shorts.",
+    "label": "Profit target \u2014 shorts (initial)",
+    "range": [
+     0.002,
+     0.03
+    ]
+   },
+   "rsiValLong": {
+    "doc": "Long entry requires RSI below this.",
+    "label": "RSI below \u2026 to buy",
+    "range": [
+     30,
+     85
+    ]
+   },
+   "rsiValShort": {
+    "doc": "Short entry requires RSI above this.",
+    "label": "RSI above \u2026 to short",
+    "range": [
+     50,
+     90
+    ]
+   },
+   "slLong": {
+    "doc": "Stop-loss %, longs (spot mode only; lev mode has no stop).",
+    "label": "Stop-loss % \u2014 longs (spot only)",
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "slShort": {
+    "doc": "Stop-loss %, shorts (spot mode only).",
+    "label": "Stop-loss % \u2014 shorts (spot only)",
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "xApt1Long": {
+    "doc": "Cross-system PT after xDur1Long min.",
+    "label": "Crossover PT \u2014 longs (after step 1)",
+    "range": [
+     0.0005,
+     0.015
+    ]
+   },
+   "xApt1Short": {
+    "doc": "Cross-system PT after xDur1Short min.",
+    "label": "Crossover PT \u2014 shorts (after step 1)",
+    "range": [
+     0.0005,
+     0.015
+    ]
+   },
+   "xApt2Long": {
+    "doc": "Cross-system PT after xDur2Long min.",
+    "label": "Crossover PT \u2014 longs (after step 2)",
+    "range": [
+     0.0,
+     0.01
+    ]
+   },
+   "xApt2Short": {
+    "doc": "Cross-system PT after xDur2Short min.",
+    "label": "Crossover PT \u2014 shorts (after step 2)",
+    "range": [
+     0.0,
+     0.01
+    ]
+   },
+   "xCdPctShort": {
+    "doc": "Cross-short cooldown trigger.",
+    "label": "Crossover-short cooldown trigger %",
+    "range": [
+     0.0002,
+     0.01
+    ]
+   },
+   "xCdPeriodShort": {
+    "doc": "Cross-short cooldown length, minutes.",
+    "label": "Crossover-short cooldown length (minutes)",
+    "range": [
+     3,
+     120
+    ]
+   },
+   "xDur1Long": {
+    "doc": "Cross-system minutes to PT step 1.",
+    "label": "Minutes until crossover long PT step 1",
+    "range": [
+     10,
+     240
+    ]
+   },
+   "xDur1Short": {
+    "doc": "Cross-system minutes to PT step 1.",
+    "label": "Minutes until crossover short PT step 1",
+    "range": [
+     10,
+     240
+    ]
+   },
+   "xDur2Long": {
+    "doc": "Cross-system minutes to PT step 2.",
+    "label": "Minutes until crossover long PT step 2",
+    "range": [
+     30,
+     720
+    ]
+   },
+   "xDur2Short": {
+    "doc": "Cross-system minutes to PT step 2.",
+    "label": "Minutes until crossover short PT step 2",
+    "range": [
+     30,
+     720
+    ]
+   },
+   "xMinBetween": {
+    "doc": "Min spacing between cross-system entries (x20 bars).",
+    "label": "Min spacing between crossover trades",
+    "range": [
+     1,
+     30
+    ]
+   },
+   "xTpLong": {
+    "doc": "Cross-system base PT, longs.",
+    "label": "Crossover profit target \u2014 longs (initial)",
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "xTpShort": {
+    "doc": "Cross-system base PT, shorts.",
+    "label": "Crossover profit target \u2014 shorts (initial)",
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "zL": {
+    "doc": "Long entry: z-scored entry-MACD must be BELOW this (how deep a dip to buy).",
+    "label": "Long entry trigger \u2014 dip depth (z-score)",
+    "range": [
+     -3.0,
+     -0.8
+    ]
+   },
+   "zS": {
+    "doc": "Short entry: z-scored entry-MACD must be ABOVE this.",
+    "label": "Short entry trigger \u2014 rip height (z-score)",
+    "range": [
+     0.8,
+     3.0
+    ]
+   },
+   "zXLmax": {
+    "doc": "Cross-system long: crossover only counts if z-MACD is below this.",
+    "label": "Crossover long ceiling (z-score)",
+    "range": [
+     -2.5,
+     0.5
+    ]
+   },
+   "zXS": {
+    "doc": "Cross-system short: z-scored crossover-MACD must exceed this at crossunder.",
+    "label": "Crossover short trigger (z-score)",
+    "range": [
+     1.0,
+     3.0
+    ]
+   }
+  },
+  "flags": {
+   "eL3": {
+    "doc": "Enable the RSI/MACD/BB dip-buy long system.",
+    "label": "Dip-buy long system on/off"
+   },
+   "eS3": {
+    "doc": "Enable the RSI/MACD/BB short system.",
+    "label": "Dip-sell short system on/off"
+   },
+   "eXL": {
+    "doc": "Enable the MACD-crossover long system.",
+    "label": "Crossover long system on/off"
+   },
+   "eXS": {
+    "doc": "Enable the MACD-crossover short system.",
+    "label": "Crossover short system on/off"
+   },
+   "requireHistPos": {
+    "doc": "Cross-longs need histogram > 0 at the crossover.",
+    "label": "Require histogram > 0 for crossover longs"
+   }
+  },
+  "menus": {
+   "trendBlockZ": {
+    "doc": "Block ALL shorts when price is this many daily-vol z-scores above its 1-day EMA (melt-up protection).",
+    "label": "Melt-up short blocker",
+    "labels": [
+     "block z>1",
+     "block z>1.5",
+     "block z>2",
+     "block z>3",
+     "off"
+    ],
+    "options": [
+     1.0,
+     1.5,
+     2.0,
+     3.0,
+     99.0
+    ]
+   },
+   "vBB": {
+    "doc": "Bollinger length/stddev.",
+    "label": "Bollinger Bands length / std-dev",
+    "labels": [
+     "BB 14/2.0",
+     "BB 21/2.0",
+     "BB 30/2.0",
+     "BB 21/2.5",
+     "BB 50/2.0"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "vEmaDn": {
+    "doc": "Trend EMA for short entries (must be falling).",
+    "label": "Trend EMA length \u2014 short entries",
+    "labels": [
+     "EMA 20",
+     "EMA 50",
+     "EMA 95",
+     "EMA 150",
+     "EMA 270"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "vEmaUp": {
+    "doc": "Trend EMA for long entries (must be rising).",
+    "label": "Trend EMA length \u2014 long entries",
+    "labels": [
+     "EMA 20",
+     "EMA 50",
+     "EMA 95",
+     "EMA 150",
+     "EMA 270"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "vHistN": {
+    "doc": "Histogram must rise for N bars before a cross-long.",
+    "label": "Histogram must rise for \u2026 bars",
+    "labels": [
+     "2 bars",
+     "4 bars",
+     "8 bars",
+     "12 bars"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ]
+   },
+   "vMacd": {
+    "doc": "Entry-MACD fast/slow lengths.",
+    "label": "Entry MACD lengths (fast/slow)",
+    "labels": [
+     "MACD 3/7",
+     "MACD 3/10",
+     "MACD 5/13",
+     "MACD 8/17",
+     "MACD 12/26"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "vRsi": {
+    "doc": "RSI length variant.",
+    "label": "RSI length",
+    "labels": [
+     "RSI 2",
+     "RSI 3",
+     "RSI 4",
+     "RSI 6",
+     "RSI 9",
+     "RSI 14"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "vX": {
+    "doc": "Crossover-MACD lengths.",
+    "label": "Crossover MACD lengths",
+    "labels": [
+     "X-MACD 12/26/9",
+     "X-MACD 12/26/8",
+     "X-MACD 8/17/9",
+     "X-MACD 5/35/5",
+     "X-MACD 20/50/9"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  }
+ }
+}

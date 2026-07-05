@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOL Strategy Lab — Backtests & Methods</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#e6edf3;--dim:#8b949e;
+--green:#3fb950;--red:#f85149;--amber:#d29922;--blue:#58a6ff;--purple:#bc8cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif}
+header{padding:24px 32px;border-bottom:1px solid var(--border);background:var(--panel)}
+h1{margin:0;font-size:22px} h1 small{color:var(--dim);font-weight:400;font-size:14px;margin-left:12px}
+main{padding:24px 32px;max-width:1400px;margin:0 auto}
+section{margin-bottom:36px}
+h2{font-size:17px;border-bottom:1px solid var(--border);padding-bottom:8px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px}
+.card .big{font-size:24px;font-weight:600;margin:4px 0}
+.card .lbl{color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.card .sub{color:var(--dim);font-size:12px}
+.pos{color:var(--green)}.neg{color:var(--red)}.warn{color:var(--amber)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
+th{color:var(--dim);cursor:pointer;user-select:none} th:first-child,td:first-child{text-align:left}
+tr:hover td{background:#1c2129}
+tr.sel td{background:#1f3a5f}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.pill.lev{background:rgba(248,81,73,.15);color:var(--red)}.pill.spot{background:rgba(63,185,80,.15);color:var(--green)}
+.pill.base{background:rgba(210,153,34,.15);color:var(--amber)}
+.warnbox{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.35);border-radius:8px;padding:14px 18px;margin:14px 0;color:var(--fg)}
+.infobox{background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.35);border-radius:8px;padding:14px 18px;margin:14px 0;color:var(--fg)}
+.flex{display:flex;gap:20px;flex-wrap:wrap}
+.chartbox{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;flex:1;min-width:500px}
+select,button{background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px}
+code{background:var(--hover);padding:1px 5px;border-radius:4px;font-size:12px}
+.filters{margin:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+code{background:var(--hover);padding:1px 5px;border-radius:4px;font-size:12px}
+details{margin:8px 0} summary{cursor:pointer;color:var(--blue)}
+.foot{color:var(--dim);font-size:12px;margin-top:40px;border-top:1px solid var(--border);padding-top:12px}
+</style>
+<link rel="stylesheet" href="assets/theme.css">
+<script src="assets/ui.js"></script>
+</head>
+<body>
+<header style="display:flex;justify-content:space-between;align-items:center">
+  <h1>SOL/USDT Strategy Lab <small id="meta"></small></h1>
+  <nav>
+    <a href="/" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Control panel</a>
+    <a href="optimize.html" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Optimize</a>
+    <a href="backtests.html" style="color:#58a6ff;text-decoration:none;margin-left:16px;font-weight:600">Backtests</a>
+    <a href="index.html" style="color:#e6edf3;text-decoration:none;margin-left:16px;font-weight:600">Research</a>
+    <a href="docs.html" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Docs</a>
+  </nav>
+</header>
+<main>
+
+<section>
+  <h2>Headline results — continuous out-of-sample (parameters never saw the test data)</h2>
+  <div class="cards" id="cards"></div>
+  <div class="warnbox"><b>Read this first.</b>
+    All "OOS" numbers below come from walk-forward testing: parameters are re-optimized every 28 days using only past data, then applied to the next unseen 28 days, simulated <i>continuously</i> (positions and equity carry across refits).
+    Numbers are inflated by full-equity compounding and exclude funding fees.
+    <b>35 of 36 leveraged no-stop configurations were liquidated at least once in 19 months of OOS testing.</b>
+    The one survivor is shown below — it survived stress tests (1-bar delay, 2.5x fees) but its OOS window contains no event like March 2024 (+34% adverse run), and as 1-of-36 it carries survivorship risk. There is no configuration of "high leverage + no stop" that history certifies as safe.
+  </div>
+</section>
+
+<section>
+  <h2>Leaderboard — every configuration tested (continuous OOS re-simulation)</h2>
+  <div class="filters">
+    <label>Strategy <select id="fStrat"><option value="">all</option><option>v6</option><option>scalpx</option><option>BASELINE</option></select></label>
+    <label>Mode <select id="fMode"><option value="">all</option><option>lev</option><option>spot</option></select></label>
+    <span style="color:var(--dim)">click a row to plot its equity curve · click headers to sort</span>
+  </div>
+  <table id="lb"><thead><tr>
+    <th>configuration</th><th>mode</th><th>growth/mo</th><th>total ×</th><th>liq?</th>
+    <th>max DD (MTM)</th><th>stop hits</th><th>trades/mo</th><th>worst excursion</th><th>win rate</th>
+  </tr></thead><tbody></tbody></table>
+</section>
+
+<section class="flex">
+  <div class="chartbox">
+    <h2 style="margin-top:0">Equity curve (mark-to-market, log scale)</h2>
+    <div id="curveTitle" style="color:var(--dim);margin-bottom:8px">click a leaderboard row</div>
+    <canvas id="curve" height="110"></canvas>
+  </div>
+  <div class="chartbox">
+    <h2 style="margin-top:0">Per-fold OOS drill-down</h2>
+    <div id="foldTitle" style="color:var(--dim);margin-bottom:8px"></div>
+    <table id="foldT"><thead><tr><th>fold</th><th>train g/mo</th><th>OOS g/mo</th><th>OOS trades</th><th>OOS DD</th><th>liq</th><th>stops</th><th>max lev</th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<section>
+  <h2>Methods tested</h2>
+  <div class="cards">
+    <div class="card"><div class="lbl">Signal normalization</div><div class="sub">
+      The original V5 entry thresholds are fixed price-%/absolute values, so trigger rates collapse ~10× in quiet markets.
+      <b>V6</b> z-scores the MACD signals against their own trailing 3-day volatility — trigger rates become regime-invariant. Also re-enables the dead cross-long subsystem and optionally blocks shorts in strong uptrends.</div></div>
+    <div class="card"><div class="lbl">Regime methods</div><div class="sub">
+      Per-bar market classification (causal, trailing percentiles): <code>none</code> (single set),
+      <code>vol3</code>/<code>vol3_7d</code> (volatility terciles, 30d/7d memory), <code>volume3</code> (dollar-volume terciles),
+      <code>trend3</code> (price vs 1-day EMA z-score), <code>volXtrend9</code> (3×3 grid). Every parameter can differ per regime.</div></div>
+    <div class="card"><div class="lbl">Window study</div><div class="sub">
+      Training window: 42d / 91d / 182d rolling vs expanding-all, refit every 28 days.
+      <b>Result: every rolling-window leveraged config died; expanding windows won for spot too.</b> Short-memory refits overfit the recent regime and get killed by the next one.</div></div>
+    <div class="card"><div class="lbl">Safety model</div><div class="sub">
+      Leveraged mode has NO stop-loss (your live style): exits only at profit targets; liquidation modeled per-trade at (1/leverage − 0.8%) adverse intrabar move; leverage capped at 10x; feasibility requires zero liquidations and mark-to-market drawdown ≤ 80% on training data. Spot mode: long-only, 1×, stops ON, 0.05% fees.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Stress tests — the leveraged survivor (v6 · lev · none · expanding)</h2>
+  <div class="cards" id="stressCards"></div>
+  <div class="infobox">
+    Also verified: robust to fee doubling (0.06%/side → 91×) and to 0.10%/side (→ 47×).
+    Median leverage the optimizer chose: <b>4.5×</b> (range 1.2–9.9) — the 80% drawdown cap binds before the 10× cap does.
+    Shorts were partially disabled by the optimizer in ~20% of folds (3m system) and ~57% (cross system).
+    <b>Untested:</b> the OOS span (Nov 2024→Jul 2026) contains no March-2024-scale melt-up; survival of such an event is not certified.
+  </div>
+</section>
+
+<section>
+  <h2>Production configurations (trained on full history)</h2>
+  <div id="finals" class="cards"></div>
+  <details><summary>raw JSON</summary><pre id="finalsRaw" style="font-size:11px;overflow:auto"></pre></details>
+</section>
+
+<section>
+  <h2>Findings & honest caveats</h2>
+  <div class="infobox">
+    <b>1. The Scalp strategy (VRVP+CVD+EMA) has no edge.</b> Its own TradingView export loses −16% over 4 years. All 6 leveraged variants liquidated OOS; all 6 spot variants lost money OOS (best: −1.2%/mo). Its CVD/POC signals are also hypersensitive to volume-feed noise (only 94% bar-direction agreement between feeds). Recommendation: do not trade it.<br><br>
+    <b>2. V6 leveraged/no-stop can print spectacular OOS numbers (126×/19mo) but survival is structural luck.</b> The same strategy family died in 35 of 36 tested configurations. What actually protected the survivor: moderate leverage (~4.5×) chosen by the drawdown constraint, and monthly re-fitting on expanding history.<br><br>
+    <b>3. V6 spot (long-only, 1×, stops on) is modest but real:</b> +1.2–1.4%/mo OOS (~17%/yr) with 19% max drawdown, using volatility-tercile regimes.<br><br>
+    <b>4. Longer training memory wins.</b> Weeks-scale windows overfit; expanding (years) windows survived. Re-fit cadence of 28 days was used throughout.<br><br>
+    <b>5. Baselines:</b> your original V5 config at 8× with the stop ON compounded absurdly in backtest but ran within 2.3% of liquidation twice; with the stop OFF (your live setting) it was liquidated on 2024-03-14 on real MEXC data. The Scalp original loses at 1×.
+  </div>
+</section>
+
+<div class="foot" id="foot"></div>
+</main>
+<script>
+const D = window.DASH_DATA;
+document.getElementById('meta').textContent = D.meta.data_span + ' · OOS: ' + D.meta.oos_span;
+document.getElementById('foot').textContent = 'Generated ' + D.meta.generated + ' · refit: ' + D.meta.refit + ' · data gaps: ' + D.meta.data_gaps.join('; ');
+
+const rows = [...D.resim.filter(r=>r.status==='ok'), ...D.baselines];
+function fmtPct(x){return (x>=0?'+':'')+x.toFixed(2)+'%'}
+function fmtMult(x){return x>=1000?x.toExponential(1):x.toFixed(2)}
+
+// headline cards
+const surv = rows.find(r=>r.cid==='v6__lev__none__all');
+const spot = rows.find(r=>r.cid==='v6__spot__vol3__all');
+const nliq = D.resim.filter(r=>r.status==='ok'&&r.cid.includes('__lev__')&&r.liq).length;
+const nlev = D.resim.filter(r=>r.status==='ok'&&r.cid.includes('__lev__')).length;
+document.getElementById('cards').innerHTML = `
+ <div class="card"><div class="lbl">Max-risk survivor (v6 lev)</div><div class="big pos">${fmtPct(surv.monthly_growth_pct)}/mo</div>
+   <div class="sub">${fmtMult(surv.total_mult)}× in 19.3 months OOS · MTM drawdown ${(100*surv.maxdd_mtm).toFixed(0)}% · no liquidation · no stop-loss</div></div>
+ <div class="card"><div class="lbl">Leveraged configs liquidated OOS</div><div class="big neg">${nliq} / ${nlev}</div>
+   <div class="sub">every other no-stop leveraged configuration died within 19 months</div></div>
+ <div class="card"><div class="lbl">Best spot (v6 · vol3 · 1×, stops on)</div><div class="big pos">${fmtPct(spot.monthly_growth_pct)}/mo</div>
+   <div class="sub">${fmtMult(spot.total_mult)}× OOS · max DD ${(100*spot.maxdd_mtm).toFixed(0)}% · ${spot.sl_hits} stop-outs in 19 months</div></div>
+ <div class="card"><div class="lbl">Scalp strategy verdict</div><div class="big neg">no edge</div>
+   <div class="sub">liquidates (lev) or loses (spot) in every configuration; original loses −16% in its own TV backtest</div></div>`;
+
+// leaderboard
+let sortKey='monthly_growth_pct', sortDir=-1, selected=null;
+const tb = document.querySelector('#lb tbody');
+function mode(r){return r.baseline?'base':(r.cid.includes('__lev__')?'lev':(r.cid.includes('__spot__')?'spot':''))}
+function render(){
+  const fs=document.getElementById('fStrat').value, fm=document.getElementById('fMode').value;
+  let rs = rows.filter(r=>(!fs||r.cid.startsWith(fs)||(fs==='BASELINE'&&r.baseline)) && (!fm||mode(r)===fm||(r.baseline&&!fm)));
+  rs.sort((a,b)=>sortDir*((a[sortKey]??-1e18)-(b[sortKey]??-1e18)));
+  tb.innerHTML = rs.map(r=>`<tr data-cid="${r.cid}" class="${selected===r.cid?'sel':''}">
+    <td>${r.baseline ? r.cid : stratName(r.cid.split('__')[0]) + ' · ' + r.cid.split('__').slice(1).join(' · ')}</td>
+    <td><span class="pill ${mode(r)}">${mode(r)}</span></td>
+    <td class="${r.monthly_growth_pct>=0?'pos':'neg'}">${fmtPct(r.monthly_growth_pct)}</td>
+    <td>${fmtMult(r.total_mult)}</td>
+    <td class="${r.liq?'neg':'pos'}">${r.liq?'LIQUIDATED':'no'}</td>
+    <td class="${r.maxdd_mtm>0.5?'warn':''}">${(100*(r.maxdd_mtm??0)).toFixed(1)}%</td>
+    <td>${r.sl_hits??0}</td>
+    <td>${(r.tpm??0).toFixed(1)}</td>
+    <td>${(100*(r.worst_mae??0)).toFixed(1)}%</td>
+    <td>${(100*(r.win??0)).toFixed(1)}%</td></tr>`).join('');
+  tb.querySelectorAll('tr').forEach(tr=>tr.onclick=()=>select(tr.dataset.cid));
+}
+document.querySelectorAll('#lb th').forEach((th,i)=>{
+  const keys=['cid','','monthly_growth_pct','total_mult','liq','maxdd_mtm','sl_hits','tpm','worst_mae','win'];
+  th.onclick=()=>{if(!keys[i])return; sortDir=(sortKey===keys[i])?-sortDir:-1; sortKey=keys[i]; render();};
+});
+document.getElementById('fStrat').onchange=render;
+document.getElementById('fMode').onchange=render;
+
+// curve chart
+let chart=null;
+function select(cid){
+  selected=cid; render();
+  const r = rows.find(x=>x.cid===cid);
+  if(!r||!r.curve||!r.curve.length){document.getElementById('curveTitle').textContent=cid+' — no curve data';return}
+  document.getElementById('curveTitle').textContent = cid.replaceAll('__',' · ');
+  const ds = r.curve.map(p=>({x:p.t.slice(0,16), y:Math.max(p.eq,0.01)}));
+  if(chart)chart.destroy();
+  chart = new Chart(document.getElementById('curve'),{type:'line',
+    data:{datasets:[{data:ds,borderColor:r.liq?cssv('--red'):cssv('--green'),borderWidth:1.4,pointRadius:0,fill:false}]},
+    options:{animation:false,parsing:true,scales:{
+      x:{type:'category',ticks:{maxTicksLimit:8,color:cssv('--chart-tick')},grid:{color:cssv('--chart-grid')}},
+      y:{type:'logarithmic',ticks:{color:cssv('--chart-tick')},grid:{color:cssv('--chart-grid')}}},
+      plugins:{legend:{display:false}}}});
+  window.onThemeChange = ()=>select(selected);
+  // fold table
+  const folds = D.folds[cid]||[];
+  document.getElementById('foldTitle').textContent = folds.length?cid.replaceAll('__',' · '):'no fold data (baseline)';
+  document.querySelector('#foldT tbody').innerHTML = folds.map(f=>{
+    const g=x=>x==null?'—':fmtPct(100*(Math.exp(x)-1));
+    return `<tr><td>${f.fold}</td><td>${g(f.train_growth)}</td>
+      <td class="${(f.oos_growth??0)>=0?'pos':'neg'}">${g(f.oos_growth)}</td>
+      <td>${f.oos_n??'—'}</td><td>${f.oos_dd!=null?(100*f.oos_dd).toFixed(1)+'%':'—'}</td>
+      <td class="${f.oos_liq?'neg':''}">${f.oos_liq?'YES':''}</td><td>${f.oos_sl??''}</td>
+      <td>${f.lev_max?f.lev_max.toFixed(1)+'×':''}</td></tr>`}).join('');
+}
+
+// stress cards
+const st = D.stress||{};
+if(st.baseline){
+  document.getElementById('stressCards').innerHTML = `
+   <div class="card"><div class="lbl">Baseline</div><div class="big">${fmtMult(st.baseline.total_mult)}×</div>
+     <div class="sub">${fmtPct(st.baseline.monthly_growth_pct)}/mo · DD ${(100*st.baseline.maxdd_mtm).toFixed(0)}%</div></div>
+   <div class="card"><div class="lbl">Signals delayed 1 bar (3 min)</div><div class="big">${fmtMult(st.shift1.total_mult)}×</div>
+     <div class="sub">${fmtPct(st.shift1.monthly_growth_pct)}/mo · DD ${(100*st.shift1.maxdd_mtm).toFixed(0)}% · still no liquidation</div></div>
+   <div class="card"><div class="lbl">Fees 0.06%/side (+50%)</div><div class="big">91×</div><div class="sub">+26.3%/mo · survives</div></div>
+   <div class="card"><div class="lbl">Fees 0.10%/side (2.5×)</div><div class="big">47×</div><div class="sub">+22.1%/mo · survives</div></div>`;
+}
+
+// finals
+const fin = D.finals||{};
+document.getElementById('finals').innerHTML = Object.entries(fin).map(([k,v])=>{
+  const m=v.metrics;
+  return `<div class="card"><div class="lbl">${k.replaceAll('_',' · ')}</div>
+    <div class="big">${fmtMult(m.eq/1000)}× <span style="font-size:13px;color:var(--dim)">full-history (in-sample)</span></div>
+    <div class="sub">DD ${(100*m.maxdd).toFixed(0)}% · ${m.sl_hits} stops · ${m.tpm.toFixed(1)} trades/mo · win ${(100*m.win).toFixed(0)}%</div></div>`;
+}).join('');
+document.getElementById('finalsRaw').textContent = JSON.stringify(fin,null,1);
+
+render();
+select('v6__lev__none__all');
+</script>
+</body>
+</html>
