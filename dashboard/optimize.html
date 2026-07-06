@@ -142,7 +142,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <div class="mini" style="margin-top:6px"><span class="badge b-amber" id="aiBadge">AI advisor: checking…</span></div>
   </div>
 
-  <h2>Jobs</h2>
+  <h2>Jobs <span class="mini" id="jobsTitle"></span></h2>
   <div class="card" id="jobs">no jobs yet</div>
 
   <h2>Parameter space <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
@@ -368,13 +368,29 @@ async function ai(run){
   if(r.id) refreshJobs();
 }
 // ---------- jobs ----------
+function fmtEta(s){
+  if(s==null) return '';
+  if(s<90) return Math.round(s)+' s';
+  if(s<5400) return Math.round(s/60)+' min';
+  return (s/3600).toFixed(1)+' h';
+}
 async function refreshJobs(){
   const jobs = await api('jobs');
-  $('jobs').innerHTML = jobs.length ? jobs.map(j=>`<div style="border-bottom:1px solid var(--border);padding:8px 0">
+  const running = jobs.filter(j=>j.status==='running' && j.progress);
+  $('jobsTitle').textContent = running.length
+    ? '— ' + running.map(j=>`${j.name}: ${Math.round(100*j.progress.pct)}% · ETA ${fmtEta(j.progress.eta_s)}`).join(' · ')
+    : '';
+  $('jobs').innerHTML = jobs.length ? jobs.map(j=>{
+    const p = j.progress;
+    const bar = p ? `<div style="margin:6px 0 2px;height:6px;border-radius:3px;background:var(--hover);overflow:hidden">
+        <div style="height:100%;width:${Math.round(100*p.pct)}%;background:var(--blue);transition:width .5s"></div></div>
+      <span class="kv">${Math.round(100*p.pct)}% of ${p.budget.toLocaleString()} ${p.budget_type} · ${p.evaluated_session.toLocaleString()} done · ETA ${fmtEta(p.eta_s)}</span>` : '';
+    return `<div style="border-bottom:1px solid var(--border);padding:8px 0">
     <div class="row" style="justify-content:space-between">
       <span><b>${j.kind}</b> · ${j.name} · <span class="${j.status==='running'?'pos':'kv'}">${j.status}</span> <span class="kv">since ${j.started}</span></span>
       ${j.status==='running'?`<button class="small" onclick="api('jobs/${j.id}/stop',{})">stop</button>`:''}
-    </div><pre>${(j.log||[]).join('\n')}</pre></div>`).join('') : 'no jobs yet';
+    </div>${bar}<pre>${(j.log||[]).join('\n')}</pre></div>`;
+  }).join('') : 'no jobs yet';
 }
 // ---------- parameter space ----------
 let SPACE=null;

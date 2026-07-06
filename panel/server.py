@@ -125,10 +125,19 @@ def jobs_list():
     out = []
     for jid, j in sorted(jobs.items(), reverse=True):
         rc = j["proc"].poll()
-        out.append(dict(id=jid, kind=j["kind"], name=j["name"], cmd=j["cmd"],
-                        started=j["started"],
-                        status="running" if rc is None else f"done ({rc})",
-                        log=tail(j["log"], 25)))
+        entry = dict(id=jid, kind=j["kind"], name=j["name"], cmd=j["cmd"],
+                     started=j["started"],
+                     status="running" if rc is None else f"done ({rc})",
+                     log=tail(j["log"], 25))
+        if rc is None and j["kind"].startswith("optimize"):
+            pp = os.path.join(OPT, "runs", j["name"], "progress.json")
+            try:
+                pr = json.load(open(pp))
+                if time.time() - pr.get("updated", 0) < 300:
+                    entry["progress"] = pr
+            except Exception:
+                pass
+        out.append(entry)
     return jsonify(out)
 
 @app.route("/api/jobs/backtest", methods=["POST"])

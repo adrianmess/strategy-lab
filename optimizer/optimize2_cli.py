@@ -118,6 +118,24 @@ def main():
     target = evaluated + (args.total or 10**12)
     gen = 0
     t_session = time.time()
+    evals_at_start = evaluated
+
+    def write_progress():
+        el = time.time() - t_session
+        if args.total:
+            done = evaluated - evals_at_start
+            pct = min(1.0, done / max(args.total, 1))
+            rate = done / max(el, 1e-9)
+            eta = (args.total - done) / max(rate, 1e-9)
+        else:
+            pct = min(1.0, el / (args.hours * 3600))
+            eta = max(0.0, args.hours * 3600 - el)
+        json.dump(dict(pct=pct, eta_s=eta, elapsed_s=el,
+                       evaluated_session=evaluated - evals_at_start,
+                       budget=(args.total or args.hours),
+                       budget_type=("evaluations" if args.total else "hours"),
+                       updated=time.time()),
+                  open("progress.json", "w"))
     with mp.Pool(args.procs) as p:
         while time.time() < t_end and evaluated < target:
             gen += 1
@@ -144,6 +162,7 @@ def main():
             json.dump(dict(pool=pool, evaluated=evaluated, seed_base=seed_base,
                            runtime_s=runtime_s + (time.time() - t_session)),
                       open("pool2.json", "w"), default=float)
+            write_progress()
             if pool:
                 b = pool[0][2]
                 print(f"gen {gen} | evaluated {evaluated} | feasible {len(pool)} | "
