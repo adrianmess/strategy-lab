@@ -1,63 +1,203 @@
 {
  "prime": {
   "continuous": {
+   "apt1Long": {
+    "doc": "Live: 0.007 (0.7%).",
+    "label": "Profit target \u2014 longs (after step 1)",
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt1Short": {
+    "doc": "Live: 0.009.",
+    "label": "Profit target \u2014 shorts (after step 1)",
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt2Long": {
+    "doc": "Live: 0.0035 (0.35%).",
+    "label": "Profit target \u2014 longs (after step 2)",
+    "range": [
+     0.0,
+     0.015
+    ]
+   },
+   "apt2Short": {
+    "doc": "Live: 0.003.",
+    "label": "Profit target \u2014 shorts (after step 2)",
+    "range": [
+     0.0,
+     0.015
+    ]
+   },
    "bbL": {
-    "doc": "Long entry needs %B below this.",
+    "doc": "Long entry needs %B below this. Live: -0.1.",
     "label": "Bollinger %B below \u2026 to buy",
     "range": [
-     -0.3,
-     0.2
+     -0.35,
+     0.25
     ]
    },
    "bbS": {
-    "doc": "Short entry needs %B above this. Your live value (1.65) makes shorts extremely rare.",
+    "doc": "Short entry needs %B above this. Live: 1.65 (makes shorts extremely rare).",
     "label": "Bollinger %B above \u2026 to short",
     "range": [
      0.6,
      1.7
     ]
    },
+   "cdPctLong": {
+    "doc": "Live: 0.00402.",
+    "label": "Long cooldown trigger \u2014 1-min move %",
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPctShort": {
+    "doc": "Live: 0.0031.",
+    "label": "Short cooldown trigger \u2014 3-min rise %",
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPeriodLong": {
+    "doc": "Live: 90.",
+    "label": "Long cooldown length (minutes)",
+    "range": [
+     10,
+     240
+    ]
+   },
+   "cdPeriodShort": {
+    "doc": "Live: 55.",
+    "label": "Short cooldown length (minutes)",
+    "range": [
+     10,
+     240
+    ]
+   },
+   "dur1Long": {
+    "doc": "Live: 0.6 min.",
+    "label": "Minutes until long PT step 1",
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur1Short": {
+    "doc": "Live: 14.4 min.",
+    "label": "Minutes until short PT step 1",
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur2Long": {
+    "doc": "Live: 43.2 min.",
+    "label": "Minutes until long PT step 2",
+    "range": [
+     10,
+     360
+    ]
+   },
+   "dur2Short": {
+    "doc": "Live: 38.4 min.",
+    "label": "Minutes until short PT step 2",
+    "range": [
+     10,
+     360
+    ]
+   },
    "leverage": {
-    "doc": "Position leverage (lev mode).",
+    "doc": "Position leverage (lev mode). Live: 8.",
     "label": "Leverage",
     "range": [
      1.2,
      10.0
     ]
    },
-   "ptScale": {
-    "doc": "One multiplier over your live PT structure (1.21%/0.7%/0.35% long, 1.0%/0.9%/0.3% short).",
-    "label": "Profit-target scale",
+   "ptLong": {
+    "doc": "Live: 0.0121 (1.21%).",
+    "label": "Profit target \u2014 longs (initial)",
     "range": [
-     0.5,
-     2.4
+     0.002,
+     0.03
+    ]
+   },
+   "ptShort": {
+    "doc": "Live: 0.01 (1.0%).",
+    "label": "Profit target \u2014 shorts (initial)",
+    "range": [
+     0.002,
+     0.03
+    ]
+   },
+   "rsiValLong": {
+    "doc": "Long entry requires RSI(3) below this. Live: 68.",
+    "label": "RSI below \u2026 to buy",
+    "range": [
+     30,
+     85
+    ]
+   },
+   "rsiValShort": {
+    "doc": "Short entry requires RSI(3) above this. Live: 68.",
+    "label": "RSI above \u2026 to short",
+    "range": [
+     50,
+     90
+    ]
+   },
+   "slLong": {
+    "doc": "Live: 0.10. In lev mode there is no stop (your live style).",
+    "label": "Stop-loss % \u2014 longs (spot only)",
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "slShort": {
+    "doc": "Live: 0.10.",
+    "label": "Stop-loss % \u2014 shorts (spot only)",
+    "range": [
+     0.02,
+     0.12
     ]
    },
    "zL": {
-    "doc": "Long entry: z-scored entry-MACD must be BELOW this.",
+    "doc": "Long entry: z-scored entry-MACD must be BELOW this. Your live value \u2248 -1.7 in z-units.",
     "label": "Long entry trigger \u2014 dip depth (z-score)",
     "range": [
-     -2.6,
-     -0.9
+     -2.8,
+     -0.8
     ]
    },
    "zS": {
     "doc": "Short entry: z-scored entry-MACD must be ABOVE this.",
     "label": "Short entry trigger \u2014 rip height (z-score)",
     "range": [
-     0.9,
-     2.6
+     0.8,
+     2.8
     ]
    }
   },
   "flags": {
+   "eL3": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Long system on/off"
+   },
    "eS3": {
     "doc": "Sampled on/off in lev mode.",
     "label": "Short system on/off"
    }
   },
   "menus": {},
-  "note": "Solana Prime = the RSI/MACD/BB dip system standalone (no crossover), ATR-switched EMA trend filter. Base parameters = your live xlsx values (validated 105/111 trades vs TradingView). Random search."
+  "note": "Solana Prime = the RSI/MACD/BB dip system standalone (no crossover), ATR-switched EMA trend filter. Every parameter searchable, per regime. Base = your live xlsx values (validated 105/111 trades). Random search."
  },
  "scalpx": {
   "continuous": {

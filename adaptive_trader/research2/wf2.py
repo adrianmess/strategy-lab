@@ -192,43 +192,79 @@ PRIME_BASE.update(dict(
 
 def sample_prime(rng, R, mode, space=None):
     s = space or {}
+    g = lambda k, d: _per_regime(rng, *_rng_range(s, k, d), R)
     c = dict(
         strategy="prime", tv=int(rng.integers(0, len(TREND_VARIANTS))),
-        zL=_per_regime(rng, *_rng_range(s, "zL", (-2.6, -0.9)), R),
-        zS=_per_regime(rng, *_rng_range(s, "zS", (0.9, 2.6)), R),
-        bbL=_per_regime(rng, *_rng_range(s, "bbL", (-0.3, 0.2)), R),
-        bbS=_per_regime(rng, *_rng_range(s, "bbS", (0.6, 1.7)), R),
-        ptScale=_per_regime(rng, *_rng_range(s, "ptScale", (0.5, 2.4)), R),
-        eS3=[1.0] * R,
+        zL=g("zL", (-2.8, -0.8)), zS=g("zS", (0.8, 2.8)),
+        rsiL=g("rsiValLong", (30, 85)), rsiS=g("rsiValShort", (50, 90)),
+        bbL=g("bbL", (-0.35, 0.25)), bbS=g("bbS", (0.6, 1.7)),
+        ptL=g("ptLong", (0.002, 0.03)), a1L=g("apt1Long", (0.001, 0.02)),
+        a2L=g("apt2Long", (0.0, 0.015)),
+        d1L=g("dur1Long", (0.6, 90)), d2L=g("dur2Long", (10, 360)),
+        ptS=g("ptShort", (0.002, 0.03)), a1S=g("apt1Short", (0.001, 0.02)),
+        a2S=g("apt2Short", (0.0, 0.015)),
+        d1S=g("dur1Short", (0.6, 90)), d2S=g("dur2Short", (10, 360)),
+        cdPL=g("cdPctLong", (0.0005, 0.012)), cdTL=g("cdPeriodLong", (10, 240)),
+        cdPS=g("cdPctShort", (0.0005, 0.012)), cdTS=g("cdPeriodShort", (10, 240)),
+        eL3=[1.0] * R, eS3=[1.0] * R,
     )
+    # orderings the strategy expects
+    for r in range(R):
+        if c["a1L"][r] > c["ptL"][r]: c["a1L"][r] = c["ptL"][r] * 0.7
+        if c["a2L"][r] > c["a1L"][r]: c["a2L"][r] = c["a1L"][r] * 0.6
+        if c["a1S"][r] > c["ptS"][r]: c["a1S"][r] = c["ptS"][r] * 0.7
+        if c["a2S"][r] > c["a1S"][r]: c["a2S"][r] = c["a1S"][r] * 0.6
+        if c["d2L"][r] < c["d1L"][r]: c["d1L"][r], c["d2L"][r] = c["d2L"][r], c["d1L"][r]
+        if c["d2S"][r] < c["d1S"][r]: c["d1S"][r], c["d2S"][r] = c["d2S"][r], c["d1S"][r]
     if mode == "lev":
-        c["lev"] = _per_regime(rng, *_rng_range(s, "leverage", (1.2, 10.0)), R)
+        c["lev"] = g("leverage", (1.2, 10.0))
         c["sl"] = 0.0
+        if rng.random() < 0.25:
+            c["eL3"] = rng.choice([0.0, 1.0], R, p=[0.2, 0.8]).tolist()
         if rng.random() < 0.35:
             c["eS3"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
     else:
         c["lev"] = [1.0] * R
-        c["sl"] = float(rng.choice([0.02, 0.03, 0.04, 0.06, 0.08, 0.10]))
+        c["sl"] = float(rng.uniform(*_rng_range(s, "slLong", (0.02, 0.12))))
         c["eS3"] = [0.0] * R
     return c
 
 def build_P_prime(c, R):
     rows = []
     for r in range(R):
+        def pick(key, base_key=None, default=None):
+            v = c.get(key)
+            if v is not None:
+                return v[r] if isinstance(v, list) else v
+            if key == "ptScale":  # legacy candidates
+                return None
+            return PRIME_BASE[base_key] if base_key else default
         ov = dict(
             macdValPctLong=c["zL"][r], macdValPctShort=c["zS"][r],
-            bbValLong=c["bbL"][r], bbValShort=c["bbS"][r],
+            rsiValLong=pick("rsiL", "rsiValLong"), rsiValShort=pick("rsiS", "rsiValShort"),
+            bbValLong=c["bbL"][r] if "bbL" in c else PRIME_BASE["bbValLong"],
+            bbValShort=c["bbS"][r] if "bbS" in c else PRIME_BASE["bbValShort"],
+            ptLong=pick("ptL", "ptLong"), apt1Long=pick("a1L", "apt1Long"),
+            apt2Long=pick("a2L", "apt2Long"),
+            dur1Long=pick("d1L", "dur1Long"), dur2Long=pick("d2L", "dur2Long"),
+            ptShort=pick("ptS", "ptShort"), apt1Short=pick("a1S", "apt1Short"),
+            apt2Short=pick("a2S", "apt2Short"),
+            dur1Short=pick("d1S", "dur1Short"), dur2Short=pick("d2S", "dur2Short"),
+            cdPctLong=pick("cdPL", "cdPctLong"), cdPeriodLong=pick("cdTL", "cdPeriodLong"),
+            cdPctShort=pick("cdPS", "cdPctShort"), cdPeriodShort=pick("cdTS", "cdPeriodShort"),
             leverage=c["lev"][r],
             slLong=c["sl"] if c["sl"] > 0 else 0.10,
             slShort=c["sl"] if c["sl"] > 0 else 0.10,
-            enableLong3m=1.0, enableShort3m=c["eS3"][r],
+            enableLong3m=(c.get("eL3", [1.0] * R))[r], enableShort3m=c["eS3"][r],
             enableLongX=0.0, enableShortX=0.0,
         )
-        ps = c["ptScale"][r]
-        for k in ["ptLong", "apt1Long", "apt2Long", "ptShort", "apt1Short", "apt2Short"]:
-            ov[k] = PRIME_BASE[k] * ps
+        if "ptScale" in c:  # legacy candidate format (scale over live PTs)
+            ps = c["ptScale"][r]
+            for k in ["ptLong", "apt1Long", "apt2Long", "ptShort", "apt1Short", "apt2Short"]:
+                ov[k] = PRIME_BASE[k] * ps
         rows.append(params_to_vec(PRIME_BASE, ov))
     return np.vstack(rows)
+
 
 # ---------------- P-matrix builders ----------------
 
