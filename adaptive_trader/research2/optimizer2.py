@@ -166,7 +166,7 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000):
                 win=float((tr["net"] > 0).mean()),
                 score=g_mean - 0.25 * g_std)
 
-def feasible3(m, mode, min_tpm=2.0, min_n=10):
+def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6):
     if m is None or m["liq"]:
         return False
     if m["n"] < min_n or m["tpm"] < min_tpm:
@@ -174,6 +174,15 @@ def feasible3(m, mode, min_tpm=2.0, min_n=10):
     cap = 0.80 if mode == "lev" else 0.50
     if m["maxdd"] > cap:
         return False
+    if mode == "lev" and cand is not None:
+        # Safety margin: the worst adverse excursion on train must clear the
+        # liquidation distance with room to spare. Without this, long searches
+        # converge on max leverage that "survived" training by a hair and
+        # then liquidates on any unseen data.
+        lev_max = max(r.get("leverage", 1.0) for r in cand.get("regs", [{}]))
+        liq_dist = 1.0 / max(lev_max, 1e-9) - 0.008
+        if m["worst_mae"] <= -liq_margin * liq_dist:
+            return False
     return True
 
 # ---------------- algorithms (single-process batch APIs) ----------------
@@ -183,7 +192,7 @@ def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True):
     for _ in range(n):
         c = sample_candidate(rng, space, R, mode, per_regime)
         m = eval3(c, method, t0, t1)
-        if feasible3(m, mode):
+        if feasible3(m, mode, cand=c):
             out.append((m["score"], c, m))
     return out
 
@@ -198,7 +207,7 @@ def batch_offspring(rng, space, mode, method, parents, n, t0, t1):
             child = parents[0]
         child = mutate(rng, child, space, mode)
         m = eval3(child, method, t0, t1)
-        if feasible3(m, mode):
+        if feasible3(m, mode, cand=child):
             out.append((m["score"], child, m))
     return out
 
@@ -207,6 +216,6 @@ def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04):
     for _ in range(n):
         child = mutate(rng, seed_cand, space, mode, p_cont=0.15, p_menu=0.04, sigma=sigma)
         m = eval3(child, method, t0, t1)
-        if feasible3(m, mode):
+        if feasible3(m, mode, cand=child):
             out.append((m["score"], child, m))
     return out

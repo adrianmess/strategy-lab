@@ -517,6 +517,29 @@ def runs2():
         out.append(e)
     return jsonify(out)
 
+@app.route("/api/runs2/delete", methods=["POST"])
+def runs2_delete():
+    """Delete an optimizer run directory (pool, configs, caches for that run)."""
+    name = os.path.basename(request.get_json(force=True).get("name", ""))
+    if not name or name.startswith("."):
+        return jsonify(error="invalid run name"), 400
+    if name == "_backtest_tmp":
+        return jsonify(error="_backtest_tmp is a shared working dir; not deletable"), 400
+    run_dir = os.path.join(OPT, "runs", name)
+    if not os.path.isdir(run_dir):
+        return jsonify(error=f"run '{name}' not found"), 404
+    # refuse if a job is still running for this run
+    for jid, j in jobs.items():
+        if j["proc"].poll() is None and j.get("name") == name:
+            return jsonify(error=f"a job is still running for '{name}' — stop it first"), 400
+    import shutil
+    try:
+        shutil.rmtree(run_dir)
+    except Exception as e:
+        return jsonify(error=f"delete failed: {e}"), 500
+    return jsonify(ok=True, deleted=name)
+
+
 @app.route("/api/backtests/delete", methods=["POST"])
 def backtests_delete():
     name = request.get_json(force=True).get("name")

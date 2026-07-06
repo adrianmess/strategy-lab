@@ -287,7 +287,8 @@ function renderRuns(){
         <button class="small" title="Adopt the OOS-best candidate into the trader" onclick="adopt('${r.holdout_best_config}','${r.mode}')">Adopt OOS-best</button>`:''}
         <button class="small" data-x="btn_holdout" title="Backtest ONLY on unseen data after the train-end date — the honest number" onclick="btH('${r.best_config}','${r.name}')">Backtest holdout</button>
         <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
-        <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button></td></tr>`;
+        <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button>
+        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>`;
   }).join('');
 }
 document.querySelectorAll('#runsT th[data-k]').forEach(th=>{
@@ -356,6 +357,11 @@ async function adopt(cfg, mode){
   if(!confirm(`Copy these parameters into the live trader's ${target}?\n(${mode==='spot'?'spot long-only trading':'leveraged futures trading'} — backup kept; restart trader to apply)`))return;
   const r = await api('adopt',{source: cfg, target: target});
   if(r.ok) alert('Adopted into '+target+'. On the Control panel, pick "'+target+'" and start the trader.');
+}
+async function delRun(name){
+  if(!confirm(`Delete run "${name}"?\n\nThis removes its candidate pool and configs permanently (any backtests it published stay on the Backtests page).`)) return;
+  const r = await api('runs2/delete', {name});
+  if(r.ok) refreshRuns();
 }
 async function ai(run){
   const r = await api('jobs/ai_suggest',{run:run, train_end:$('trainEnd').value||undefined});
