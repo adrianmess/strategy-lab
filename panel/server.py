@@ -140,11 +140,15 @@ def jobs_list():
         out.append(entry)
     return jsonify(out)
 
+def _safe_name(n):
+    import re
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", n or "").strip("_")
+
 @app.route("/api/jobs/backtest", methods=["POST"])
 def job_backtest():
     d = request.get_json(force=True)
     cfg = d.get("config", "../adaptive_trader/research2/final_config_v6_lev_none.json")
-    name = d.get("name") or f"bt_{time.strftime('%m%d_%H%M')}"
+    name = _safe_name(d.get("name")) or f"bt_{time.strftime('%m%d_%H%M')}"
     cmd = [sys.executable, "backtest_cli.py", "--config", cfg, "--name", name]
     if d.get("oos_start"):
         cmd += ["--oos-start", d["oos_start"]]
@@ -153,7 +157,7 @@ def job_backtest():
 @app.route("/api/jobs/walkforward", methods=["POST"])
 def job_wf():
     d = request.get_json(force=True)
-    name = d.get("name") or f"wf_{time.strftime('%m%d_%H%M')}"
+    name = _safe_name(d.get("name")) or f"wf_{time.strftime('%m%d_%H%M')}"
     cmd = [sys.executable, "walkforward_cli.py",
            "--strategy", d.get("strategy", "v6"), "--mode", d.get("mode", "lev"),
            "--method", d.get("method", "none"), "--window", str(d.get("window", "all")),
@@ -450,7 +454,7 @@ def param_space():
 def job_optimize2():
     """One optimizer for every strategy (v7 / prime / v6 / scalpx)."""
     d = request.get_json(force=True)
-    name = d.get("name") or f"opt2_{time.strftime('%m%d_%H%M')}"
+    name = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
     cmd = [sys.executable, "optimize2_cli.py",
            "--strategy", d.get("strategy", "v7"),
            "--algo", d.get("algo", "genetic"),

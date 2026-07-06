@@ -15,8 +15,14 @@ sys.path.insert(0, RESEARCH2)
 sys.path.insert(0, RESEARCH)
 
 
+def safe_name(name: str) -> str:
+    """Run names become folder names: strip path separators & odd characters."""
+    import re
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "run"
+
+
 def enter_run_dir(name: str) -> str:
-    run_dir = os.path.join(OPT_DIR, "runs", name)
+    run_dir = os.path.join(OPT_DIR, "runs", safe_name(name))
     os.makedirs(run_dir, exist_ok=True)
     os.chdir(run_dir)
     return run_dir
