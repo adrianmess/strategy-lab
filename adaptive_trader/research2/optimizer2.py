@@ -165,6 +165,9 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000):
                 worst_mae=float(tr["mae"].min()),
                 win=float((tr["net"] > 0).mean()),
                 score=g_mean - 0.25 * g_std)
+    for _k, _v in out.items():   # NaN/inf breaks JSON in browsers
+        if isinstance(_v, float) and not np.isfinite(_v):
+            out[_k] = 0.0
 
 def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6):
     if m is None or m["liq"]:

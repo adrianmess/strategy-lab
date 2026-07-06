@@ -484,6 +484,9 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False):
                worst_mae=float(tr["mae"].min()),
                win=float((tr["net"] > 0).mean()),
                score=g_mean - 0.25 * g_std)
+    for k, v in out.items():   # NaN/inf breaks JSON in browsers
+        if isinstance(v, float) and not np.isfinite(v):
+            out[k] = 0.0
     if collect_trades:
         out["trades"] = tr
     return out

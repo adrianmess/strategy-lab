@@ -484,6 +484,17 @@ def ai_key():
         ok = "ANTHROPIC_API_KEY" in open(env_path).read()
     return jsonify(configured=ok)
 
+def _scrub(o):
+    """NaN/inf are valid for Python's json but not for browsers — replace with null."""
+    import math
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    if isinstance(o, dict):
+        return {k: _scrub(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_scrub(v) for v in o]
+    return o
+
 @app.route("/api/runs2")
 def runs2():
     out = []
@@ -514,6 +525,7 @@ def runs2():
             try:
                 bc = json.load(open(best_p))
                 e["method"] = bc.get("method")
+                e["mode"] = bc.get("mode", e.get("mode"))
                 e["holdout"] = bc.get("holdout")
                 e["holdout_best"] = bc.get("holdout_best")
                 e["seed_holdout"] = bc.get("seed_holdout")
@@ -529,7 +541,7 @@ def runs2():
             e["strategy"] = "scalpx" if "scalp" in nm else \
                 ("v7" if pool_p.endswith("pool2.json") else "v6")
         out.append(e)
-    return jsonify(out)
+    return jsonify(_scrub(out))
 
 @app.route("/api/runs2/delete", methods=["POST"])
 def runs2_delete():
