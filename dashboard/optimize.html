@@ -238,6 +238,7 @@ async function launch(){
       train_end:$('trainEnd').value||undefined, name:$('name').value||undefined,
       single_set: $('perreg').value==='1'};
     if(bt_==='hours') d.hours = bv_; else d.total = bv_;
+    if(SEED_CAND) d.seed_cand = SEED_CAND;
     r = await api('jobs/optimize2', d);
   } else {
     r = await api('jobs/optimize', {strategy:strat, mode:$('mode').value, method:$('method').value,
@@ -262,9 +263,13 @@ function renderRuns(){
   });
   document.querySelector('#runsT tbody').innerHTML = rs.map(r=>{
     const h = r.holdout;
-    const hcell = h ? (h.liq ? '<span class="badge b-red">LIQUIDATED</span>' :
+    let hcell = h ? (h.liq ? '<span class="badge b-red">LIQUIDATED</span>' :
       `<span class="${h.growth>=0?'pos':'neg'}">${fpm(h.growth)}</span> <span class="kv">dd ${(100*h.maxdd).toFixed(0)}%</span>`)
       : '<span class="kv">—</span>';
+    if(r.holdout_best && r.holdout_best.holdout && !r.holdout_best.holdout.liq){
+      const hb = r.holdout_best.holdout;
+      hcell += `<br><span class="kv" title="A lower train-rank candidate that generalizes better. Picked using the holdout, so re-verify before trusting.">OOS-best (#${r.holdout_best.rank}): <span class="pos">${fpm(hb.growth)}</span></span>`;
+    }
     return `<tr><td><b>${r.name}</b></td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
@@ -278,6 +283,8 @@ function renderRuns(){
       <td>${hcell}</td>
       <td>${r.best_config?`
         <button class="small" data-x="btn_backtest" title="Backtest over all history and preview the result here" onclick="bt('${r.best_config}','${r.name}')">Backtest</button>
+        ${r.holdout_best_config?`<button class="small" title="Backtest the OOS-best candidate (the one that actually survived the holdout)" onclick="bt('${r.holdout_best_config}','${r.name}_oosbest')">Backtest OOS-best</button>
+        <button class="small" title="Adopt the OOS-best candidate into the trader" onclick="adopt('${r.holdout_best_config}','${r.mode}')">Adopt OOS-best</button>`:''}
         <button class="small" data-x="btn_holdout" title="Backtest ONLY on unseen data after the train-end date — the honest number" onclick="btH('${r.best_config}','${r.name}')">Backtest holdout</button>
         <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
         <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button></td></tr>`;
@@ -399,8 +406,23 @@ async function aiKey(){
   b.className = 'badge ' + (r.configured?'b-green':'b-amber');
 }
 // ---------- URL prefill (from Backtests page) ----------
+let SEED_CAND = null, SEED_NAME = null;
 (function(){
   const q = new URLSearchParams(location.search);
+  if(q.get('seed')){
+    fetch('/dashboard/backtests.js?t='+Date.now()).then(r=>r.text()).then(txt=>{
+      const entries = JSON.parse(txt.slice(txt.indexOf('=')+1).trim().replace(/;$/,''));
+      const e = entries.find(x=>x.name===q.get('seed'));
+      if(e && e.config && e.config.regs){
+        SEED_CAND = e.config; SEED_NAME = e.name;
+        $('resumeBanner').style.display='block';
+        $('resumeBanner').innerHTML = `Seeding from backtest <b>${e.name}</b> — its exact parameters will be injected as the starting candidate, and the search will try to improve on them. Tip: algorithm <b>refine</b> polishes around the seed; <b>genetic</b> explores more broadly from it.`;
+        $('name').value = (e.name+'_improved').slice(0,40);
+        if(e.strategy) $('strat').value = 'v7';
+        $('algo').value = 'refine';
+      }
+    });
+  }
   if(q.get('strategy')){ const v=q.get('strategy'); if([...$('strat').options].some(o=>o.value===v)) $('strat').value=v; }
   if(q.get('mode')) $('mode').value=q.get('mode');
   if(q.get('method')) $('method').value=q.get('method');

@@ -139,9 +139,8 @@ function optimizeThis(){
   if(e.strategy) q.set('strategy', e.strategy);
   if(e.mode) q.set('mode', e.mode);
   if(e.method) q.set('method', e.method);
-  // if this backtest came from an optimizer run, continue that run
-  const runName = e.name.replace(/_(full|HOLDOUT)$/,'');
-  q.set('resume', runName);
+  // seed the new search with this backtest's exact parameters
+  q.set('seed', e.name);
   location.href = 'optimize.html?'+q.toString();
 }
 function select(i){

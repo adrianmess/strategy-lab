@@ -29,7 +29,10 @@ _G3 = {}
 def load_g3():
     if _G3:
         return _G3
-    pres = get_pres3()
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "..", "..", "optimizer", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    pres = get_pres3(cache=os.path.join(cache_dir, "engine3_pre.pkl"))
     _G3["pres"] = pres
     _G3["regimes"] = {}
     for m in ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"]:

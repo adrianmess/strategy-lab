@@ -448,6 +448,10 @@ def job_optimize2():
     if d.get("total"): cmd += ["--total", str(d["total"])]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
+    if d.get("seed_cand"):
+        run_dir = os.path.join(OPT, "runs", name)
+        os.makedirs(run_dir, exist_ok=True)
+        json.dump(d["seed_cand"], open(os.path.join(run_dir, "seed_cand.json"), "w"))
     return jsonify(id=spawn("optimize-v2", name, cmd, OPT))
 
 @app.route("/api/jobs/ai_suggest", methods=["POST"])
@@ -497,7 +501,11 @@ def runs2():
                 bc = json.load(open(best_p))
                 e["method"] = bc.get("method")
                 e["holdout"] = bc.get("holdout")
+                e["holdout_best"] = bc.get("holdout_best")
+                e["seed_holdout"] = bc.get("seed_holdout")
                 e["best_config"] = f"runs/{d}/best_config.json"
+                if os.path.exists(os.path.join(runs_dir, d, "holdout_best_config.json")):
+                    e["holdout_best_config"] = f"runs/{d}/holdout_best_config.json"
                 e["strategy"] = bc.get("strategy", e.get("strategy", "v7"))
                 e["finished"] = bc.get("generated")
             except Exception:

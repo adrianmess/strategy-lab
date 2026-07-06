@@ -75,6 +75,30 @@ def main():
     import optimizer2 as O
     O.load_g3()
     R = O.load_g3()["regimes"][args.method][1]
+
+    # seed candidate from a backtest ("Optimize this" flow)
+    if os.path.exists("seed_cand.json"):
+        try:
+            seed = json.load(open("seed_cand.json"))
+            seed["mode"] = args.mode
+            m = O.eval3(seed, args.method, None, args.train_end)
+            if m is not None and not m["liq"]:
+                print(f"seeded from backtest: score {m['score']:.4f} eq {m['eq']:.0f} "
+                      f"dd {m['maxdd']:.2f}", flush=True)
+            else:
+                print("seed evaluated but infeasible on this train window; "
+                      "keeping it in the pool anyway as a breeding parent", flush=True)
+            if m is not None:
+                # inject strongly: several copies so genetic breeding picks it up
+                if os.path.exists("pool2.json"):
+                    d0 = json.load(open("pool2.json"))
+                else:
+                    d0 = dict(pool=[], evaluated=0, seed_base=0)
+                d0["pool"] = [[m["score"], seed, m]] * 6 + d0["pool"]
+                json.dump(d0, open("pool2.json", "w"), default=float)
+            os.rename("seed_cand.json", "seed_cand.used.json")
+        except Exception as e:
+            print("seed load failed:", e, flush=True)
     per_regime = not args.single_set
 
     pool, evaluated, seed_base, runtime_s = [], 0, 0, 0.0
@@ -140,16 +164,50 @@ def main():
     print("\nBEST -> runs/%s/best_config.json" % args.name)
     print(json.dumps(best_m, indent=1, default=float))
     if args.train_end:
-        m_oos = None
-        try:
-            m_oos = O.eval3(best_cand, args.method, args.train_end, None)
-        except Exception:
-            pass
-        if m_oos:
-            print("\nHOLDOUT (unseen data after %s):" % args.train_end)
-            print(json.dumps(m_oos, indent=1, default=float))
-            out["holdout"] = m_oos
-            json.dump(out, open("best_config.json", "w"), indent=1, default=float)
+        # Evaluate holdout for the TOP-10 train candidates, not just the winner.
+        # The train-best is often overfit; a slightly lower-scoring candidate
+        # frequently generalizes far better.
+        print("\nHOLDOUT (unseen data after %s) for top candidates:" % args.train_end)
+        holdouts = []
+        for rank, (s, c, m) in enumerate(pool[:10]):
+            try:
+                hm = O.eval3(c, args.method, args.train_end, None)
+            except Exception:
+                hm = None
+            holdouts.append(hm)
+            if hm:
+                tag = "LIQUIDATED" if hm["liq"] else f"{(pow(2.718281828, hm['growth'])-1)*100:+.1f}%/mo dd {hm['maxdd']:.0%}"
+                print(f"  #{rank+1}: train score {s:.3f} -> holdout {tag}", flush=True)
+        if holdouts and holdouts[0]:
+            out["holdout"] = holdouts[0]
+        # pick the best genuine OOS performer among the top-10
+        def hkey(hm):
+            if hm is None or hm["liq"]:
+                return -1e9
+            return hm["growth"]
+        best_h = max(range(len(holdouts)), key=lambda i: hkey(holdouts[i]))
+        if holdouts[best_h] and hkey(holdouts[best_h]) > -1e9 and best_h != 0:
+            s2, c2, m2 = pool[best_h]
+            hb = dict(cand=c2, metrics=m2, holdout=holdouts[best_h],
+                      strategy="v7", mode=args.mode, method=args.method,
+                      note=f"OOS-best from pool rank #{best_h+1} (train-best was rank #1). "
+                           "Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.")
+            json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
+            out["holdout_best"] = dict(rank=best_h + 1, holdout=holdouts[best_h])
+            print(f"\nOOS-BEST is pool rank #{best_h+1} -> saved to holdout_best_config.json")
+        # seed comparison, if this run was seeded from a backtest
+        if os.path.exists("seed_cand.used.json"):
+            try:
+                seed = json.load(open("seed_cand.used.json"))
+                seed["mode"] = args.mode
+                sh = O.eval3(seed, args.method, args.train_end, None)
+                if sh:
+                    tag = "LIQUIDATED" if sh["liq"] else f"{(pow(2.718281828, sh['growth'])-1)*100:+.1f}%/mo"
+                    print(f"\nSEED holdout for comparison: {tag}")
+                    out["seed_holdout"] = sh
+            except Exception:
+                pass
+        json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
 
 if __name__ == "__main__":
