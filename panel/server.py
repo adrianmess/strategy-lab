@@ -126,7 +126,7 @@ def jobs_list():
     for jid, j in sorted(jobs.items(), reverse=True):
         rc = j["proc"].poll()
         entry = dict(id=jid, kind=j["kind"], name=j["name"], cmd=j["cmd"],
-                     started=j["started"],
+                     started=j["started"], stopping=j.get("stopping", False),
                      status="running" if rc is None else f"done ({rc})",
                      log=tail(j["log"], 25))
         if rc is None and j["kind"].startswith("optimize"):
@@ -190,12 +190,26 @@ def job_data():
 
 @app.route("/api/jobs/<jid>/stop", methods=["POST"])
 def job_stop(jid):
+    import signal as _sig
     j = jobs.get(jid)
     if not j:
         return jsonify(error="unknown job"), 404
-    if j["proc"].poll() is None:
-        j["proc"].terminate()
-    return jsonify(ok=True)
+    if j["proc"].poll() is not None:
+        return jsonify(ok=True, note="already finished")
+    if j["kind"].startswith("optimize") and not j.get("stopping"):
+        j["stopping"] = True
+        run_dir = os.path.join(OPT, "runs", j["name"])
+        try:
+            open(os.path.join(run_dir, "stop.flag"), "w").write("stop")
+        except OSError:
+            pass
+        j["proc"].send_signal(_sig.SIGTERM)
+        return jsonify(ok=True, graceful=True,
+                       note="Stopping gracefully: the current generation will finish, "
+                            "then holdout results are computed and saved. This can take "
+                            "up to a minute. Click stop again to force-kill.")
+    j["proc"].terminate()
+    return jsonify(ok=True, note="force-killed")
 
 
 # ---------------- webhook executor (Playwright) ----------------

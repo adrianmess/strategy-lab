@@ -22,9 +22,17 @@ Notes:
 Resumable: same --name continues. Output: runs/<name>/best_config.json
 """
 import _bootstrap as B
-import argparse, json, os, time
+import argparse, json, os, signal, time
 import multiprocessing as mp
 import numpy as np
+
+STOP = {"flag": False}
+
+def _request_stop(signum, frame):
+    if not STOP["flag"]:
+        STOP["flag"] = True
+        print("STOP requested — finishing the current generation, then running "
+              "the finalize step (holdout evaluation)...", flush=True)
 
 
 def worker(args):
@@ -118,6 +126,8 @@ def main():
     target = evaluated + (args.total or 10**12)
     gen = 0
     t_session = time.time()
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
     evals_at_start = evaluated
 
     def write_progress():
@@ -137,7 +147,8 @@ def main():
                        updated=time.time()),
                   open("progress.json", "w"))
     with mp.Pool(args.procs) as p:
-        while time.time() < t_end and evaluated < target:
+        while (time.time() < t_end and evaluated < target
+               and not STOP["flag"] and not os.path.exists("stop.flag")):
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
                            n=args.batch, t0=None, t1=args.train_end,
@@ -171,6 +182,11 @@ def main():
             else:
                 print(f"gen {gen} | evaluated {evaluated} | no feasible yet", flush=True)
 
+    if os.path.exists("stop.flag"):
+        try: os.remove("stop.flag")
+        except OSError: pass
+    if STOP["flag"]:
+        print("stopped early — finalizing with the pool found so far.", flush=True)
     if not pool:
         print("No feasible candidates. Loosen ranges/constraints or run longer.")
         return

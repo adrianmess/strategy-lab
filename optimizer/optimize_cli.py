@@ -14,9 +14,16 @@ Resumable: re-running with the same --name continues from the saved pool.
 Output: runs/<name>/best_config.json (+ pool.json checkpoint).
 """
 import _bootstrap as B
-import argparse, json, os, time
+import argparse, json, os, signal, time
 import multiprocessing as mp
 import numpy as np
+
+STOP = {"flag": False}
+
+def _request_stop(signum, frame):
+    if not STOP["flag"]:
+        STOP["flag"] = True
+        print("STOP requested — finishing current batch, then finalizing...", flush=True)
 
 
 def worker(args):
@@ -75,8 +82,10 @@ def main():
     t_end = time.time() + (args.hours * 3600 if args.hours else 10**12)
     target = evaluated + (args.total or 10**12)
     t_session = time.time()
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
     with mp.Pool(args.procs) as p:
-        while time.time() < t_end and evaluated < target:
+        while time.time() < t_end and evaluated < target and not STOP["flag"]:
             batch_jobs = [(args.strategy, args.mode, args.method, args.batch,
                            seed_base + k, space) for k in range(args.procs)]
             seed_base += args.procs

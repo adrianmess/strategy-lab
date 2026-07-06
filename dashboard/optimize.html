@@ -375,6 +375,11 @@ function fmtEta(s){
   if(s<5400) return Math.round(s/60)+' min';
   return (s/3600).toFixed(1)+' h';
 }
+async function stopJob(id){
+  const r = await api('jobs/'+id+'/stop', {});
+  if(r.note && r.graceful) $('launchMsg').textContent = r.note;
+  refreshJobs();
+}
 async function refreshJobs(){
   const jobs = await api('jobs');
   const running = jobs.filter(j=>j.status==='running' && j.progress);
@@ -389,7 +394,7 @@ async function refreshJobs(){
     return `<div style="border-bottom:1px solid var(--border);padding:8px 0">
     <div class="row" style="justify-content:space-between">
       <span><b>${j.kind}</b> · ${j.name} · <span class="${j.status==='running'?'pos':'kv'}">${j.status}</span> <span class="kv">since ${j.started}</span></span>
-      ${j.status==='running'?`<button class="small" onclick="api('jobs/${j.id}/stop',{})">stop</button>`:''}
+      ${j.status==='running'?`<button class="small" onclick="stopJob('${j.id}')">${j.stopping?'force stop':'stop'}</button>${j.stopping?' <span class="kv">finishing generation, then computing holdout…</span>':''}`:''}
     </div>${bar}<pre>${(j.log||[]).join('\n')}</pre></div>`;
   }).join('') : 'no jobs yet';
 }
