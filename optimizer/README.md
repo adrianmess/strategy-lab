@@ -7,18 +7,23 @@ resumable and publishes to the dashboard.
 
 ## The three tools
 
-### 1. `optimize_cli.py` — parameter search on full history
+### 1. `optimize2_cli.py` — parameter search (one optimizer, every strategy)
 ```bash
 # all combinations of flags work; --procs = number of processes (your choice)
-python3 optimize_cli.py --strategy v6 --mode lev --method none \
-    --procs 8 --hours 6 --name overnight_lev
+python3 optimize2_cli.py --strategy v7 --algo genetic --mode lev --method vol3 \
+    --procs 8 --hours 6 --train-end 2025-09-01 --name overnight_lev
 
-python3 optimize_cli.py --strategy v6 --mode spot --method vol3 \
-    --procs 8 --total 100000 --name big_spot     # candidate-count budget instead
+python3 optimize2_cli.py --strategy prime --algo refine --mode spot --method none \
+    --procs 8 --total 100000 --name prime_spot   # candidate-count budget instead
 ```
+- `--algo genetic` (crossover+mutation, recommended), `random`, or `refine`
+  (small perturbations around the pool best / a seeded backtest).
+- `--train-end` holds out everything after that date; the finalize step
+  evaluates the top-10 candidates on the holdout and saves the best genuine
+  out-of-sample performer to `holdout_best_config.json`.
 - Re-run with the same `--name` to continue where it stopped (pool is saved
-  every batch). Run it for days if you want.
-- Output: `runs/<name>/best_config.json` (top-5 parameter-averaged candidate).
+  every generation). Run it for days if you want.
+- Output: `runs/<name>/best_config.json`.
 
 ### 2. `walkforward_cli.py` — the honest evaluation
 ```bash
@@ -28,7 +33,7 @@ python3 walkforward_cli.py --strategy v6 --mode lev --method none \
 Re-optimizes at every refit date using only past data, tests on the next
 unseen window, then runs the **continuous re-simulation** (positions carry
 across refit boundaries, drawdown is mark-to-market). This number is the one
-to believe — full-history fits from `optimize_cli` are in-sample.
+to believe — full-history fits from `optimize2_cli` are in-sample.
 
 ### 3. `backtest_cli.py` — publish to the dashboard Backtests page
 ```bash
@@ -42,7 +47,7 @@ Adds an entry (stats, MTM equity curve, monthly returns, trade list) to
 
 | flag | meaning |
 |---|---|
-| `--strategy` | `v6` (V5-family, volatility-normalized) or `scalpx` (Scalp-family) |
+| `--strategy` | `v7` (V5-family, full parameter space), `prime` (V5 family · Solana Prime), `v6` (V5-family, volatility-normalized) or `scalpx` (Scalp-family) |
 | `--mode` | `lev` (futures, no stop, lev ≤ 10, liquidation modeled, MTM-DD ≤ 80%) or `spot` (long-only 1x, stops on, DD ≤ 50%) |
 | `--method` | regime classifier: `none`, `vol3`, `vol3_7d`, `volume3`, `trend3`, `volXtrend9` |
 | `--procs` | worker processes — set to your core count (or cores−1) |
@@ -67,8 +72,7 @@ python3 ../adaptive_trader/research/update_data.py   # extends CoinAPI history t
 
 ## Notes
 
-- Search is random sampling + top-5 parameter averaging. Simple, parallel,
-  and hard to fool; with long budgets it explores widely. Scores use
+- Scores use
   mean-minus-half-std of monthly log growth, so lucky one-month wonders rank low.
 - Feasibility gates (liquidation, drawdown caps, min trades) live in
   `wf2.feasible()` — edit there if you want different risk rules.

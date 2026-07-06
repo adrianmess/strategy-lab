@@ -150,18 +150,6 @@ def job_backtest():
         cmd += ["--oos-start", d["oos_start"]]
     return jsonify(id=spawn("backtest", name, cmd, OPT))
 
-@app.route("/api/jobs/optimize", methods=["POST"])
-def job_optimize():
-    d = request.get_json(force=True)
-    name = d.get("name") or f"opt_{time.strftime('%m%d_%H%M')}"
-    cmd = [sys.executable, "optimize_cli.py",
-           "--strategy", d.get("strategy", "v6"), "--mode", d.get("mode", "lev"),
-           "--method", d.get("method", "none"), "--algo", d.get("algo", "random"),
-           "--procs", str(d.get("procs", 4)), "--name", name]
-    if d.get("hours"): cmd += ["--hours", str(d["hours"])]
-    if d.get("total"): cmd += ["--total", str(d["total"])]
-    return jsonify(id=spawn("optimize", name, cmd, OPT))
-
 @app.route("/api/jobs/walkforward", methods=["POST"])
 def job_wf():
     d = request.get_json(force=True)
@@ -457,11 +445,14 @@ def param_space():
     json.dump(d, open(path, "w"), indent=1)
     return jsonify(ok=True)
 
+@app.route("/api/jobs/optimize", methods=["POST"])
 @app.route("/api/jobs/optimize2", methods=["POST"])
 def job_optimize2():
+    """One optimizer for every strategy (v7 / prime / v6 / scalpx)."""
     d = request.get_json(force=True)
     name = d.get("name") or f"opt2_{time.strftime('%m%d_%H%M')}"
     cmd = [sys.executable, "optimize2_cli.py",
+           "--strategy", d.get("strategy", "v7"),
            "--algo", d.get("algo", "genetic"),
            "--mode", d.get("mode", "lev"), "--method", d.get("method", "vol3"),
            "--procs", str(d.get("procs", 4)), "--batch", str(d.get("batch", 100)),

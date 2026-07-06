@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Optimizer v2 CLI — full parameter search (thresholds + indicator lengths)
-on the V7 engine, with algorithm choice and per-regime specialist sets.
+"""Unified optimizer CLI — parameter search for ALL strategies
+(V7 full-param, Solana Prime, V6, ScalpX) with algorithm choice
+(genetic / random / refine), per-regime specialist sets (V7), train/holdout
+splits, seeding from backtests, and resumable pools.
 
 Examples:
   # genetic search, per-regime specialists on volatility terciles, 8 cores, 4 hours:
@@ -37,27 +39,55 @@ def _request_stop(signum, frame):
 
 def worker(args):
     kind, payload = args
-    import optimizer2 as O
-    O.load_g3()
     rng = np.random.default_rng(payload["seed"])
     space = payload["space"]
-    if kind == "random":
-        return O.batch_random(rng, space, payload["R"], payload["mode"],
-                              payload["method"], payload["n"],
-                              payload["t0"], payload["t1"], payload["per_regime"])
+    strategy = payload.get("strategy", "v7")
+    if strategy == "v7":
+        import optimizer2 as O
+        O.load_g3()
+        if kind == "random":
+            return O.batch_random(rng, space, payload["R"], payload["mode"],
+                                  payload["method"], payload["n"],
+                                  payload["t0"], payload["t1"], payload["per_regime"])
+        if kind == "offspring":
+            return O.batch_offspring(rng, space, payload["mode"], payload["method"],
+                                     payload["parents"], payload["n"],
+                                     payload["t0"], payload["t1"])
+        if kind == "refine":
+            return O.batch_refine(rng, space, payload["mode"], payload["method"],
+                                  payload["seed_cand"], payload["n"],
+                                  payload["t0"], payload["t1"])
+        return []
+    # flat-candidate strategies (prime / v6 / scalpx) via the wf2 engine
+    import wf2 as W
+    G = W.load_globals(("v6",) if strategy == "prime" else (strategy,))
+    R = G["nreg"][payload["method"]]
+    strip = lambda res: [(s, c, {k: v for k, v in m.items() if k != "trades"})
+                         for s, c, m in res]
     if kind == "offspring":
-        return O.batch_offspring(rng, space, payload["mode"], payload["method"],
-                                 payload["parents"], payload["n"],
-                                 payload["t0"], payload["t1"])
+        return strip(W.batch_offspring_flat(rng, payload["parents"], payload["mode"],
+                                            space, None, R, payload["method"],
+                                            payload["n"], payload["t0"], payload["t1"]))
     if kind == "refine":
-        return O.batch_refine(rng, space, payload["mode"], payload["method"],
-                              payload["seed_cand"], payload["n"],
-                              payload["t0"], payload["t1"])
+        return strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
+                                         space, payload["method"],
+                                         payload["n"], payload["t0"], payload["t1"]))
+    sampler = {"v6": W.sample_v6, "prime": W.sample_prime}.get(strategy, W.sample_scalpx)
+    out = []
+    for _ in range(payload["n"]):
+        c = sampler(rng, R, payload["mode"], space)
+        m = W.eval_config(c, payload["method"], payload["mode"],
+                          payload["t0"], payload["t1"])
+        if W.feasible(m, payload["mode"]):
+            out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--strategy", default="v7",
+                    choices=["v7", "v6", "scalpx", "prime"])
     ap.add_argument("--algo", default="genetic", choices=["random", "genetic", "refine"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
     ap.add_argument("--method", default="vol3",
@@ -78,18 +108,33 @@ def main():
 
     run_dir = B.enter_run_dir(args.name)
     print(f"run dir: {run_dir} | algo: {args.algo} | procs: {args.procs}", flush=True)
-    space = json.load(open(args.space))["v7"]
+    space = json.load(open(args.space)).get(args.strategy) or {}
+    flat = args.strategy != "v7"
 
-    import optimizer2 as O
-    O.load_g3()
-    R = O.load_g3()["regimes"][args.method][1]
+    if flat:
+        # shared precompute caches (instead of per-run copies)
+        os.environ.setdefault("WF2_CACHE_DIR", os.path.join(B.OPT_DIR, "cache"))
+        import wf2 as W
+        G = W.load_globals(("v6",) if args.strategy == "prime" else (args.strategy,))
+        R = G["nreg"][args.method]
+        if args.single_set:
+            print("note: --single-set applies to V7 only; "
+                  f"{args.strategy} always searches per-regime values", flush=True)
+        def eval_any(cand, t0, t1):
+            return W.eval_config(cand, args.method, args.mode, t0, t1)
+    else:
+        import optimizer2 as O
+        O.load_g3()
+        R = O.load_g3()["regimes"][args.method][1]
+        def eval_any(cand, t0, t1):
+            return O.eval3(cand, args.method, t0, t1)
 
     # seed candidate from a backtest ("Optimize this" flow)
     if os.path.exists("seed_cand.json"):
         try:
             seed = json.load(open("seed_cand.json"))
             seed["mode"] = args.mode
-            m = O.eval3(seed, args.method, None, args.train_end)
+            m = eval_any(seed, None, args.train_end)
             if m is not None and not m["liq"]:
                 print(f"seeded from backtest: score {m['score']:.4f} eq {m['eq']:.0f} "
                       f"dd {m['maxdd']:.2f}", flush=True)
@@ -152,7 +197,7 @@ def main():
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
                            n=args.batch, t0=None, t1=args.train_end,
-                           per_regime=per_regime)
+                           per_regime=per_regime, strategy=args.strategy)
             if args.algo == "random" or len(pool) < 8:
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
             elif args.algo == "genetic":
@@ -191,7 +236,7 @@ def main():
         print("No feasible candidates. Loosen ranges/constraints or run longer.")
         return
     best_cand, best_m = pool[0][1], pool[0][2]
-    out = dict(cand=best_cand, metrics=best_m, strategy="v7", mode=args.mode,
+    out = dict(cand=best_cand, metrics=best_m, strategy=args.strategy, mode=args.mode,
                method=args.method, algo=args.algo, per_regime=per_regime,
                train_end=args.train_end, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
@@ -206,7 +251,7 @@ def main():
         holdouts = []
         for rank, (s, c, m) in enumerate(pool[:10]):
             try:
-                hm = O.eval3(c, args.method, args.train_end, None)
+                hm = eval_any(c, args.train_end, None)
             except Exception:
                 hm = None
             holdouts.append(hm)
@@ -224,7 +269,7 @@ def main():
         if holdouts[best_h] and hkey(holdouts[best_h]) > -1e9 and best_h != 0:
             s2, c2, m2 = pool[best_h]
             hb = dict(cand=c2, metrics=m2, holdout=holdouts[best_h],
-                      strategy="v7", mode=args.mode, method=args.method,
+                      strategy=args.strategy, mode=args.mode, method=args.method,
                       note=f"OOS-best from pool rank #{best_h+1} (train-best was rank #1). "
                            "Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.")
             json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
@@ -235,7 +280,7 @@ def main():
             try:
                 seed = json.load(open("seed_cand.used.json"))
                 seed["mode"] = args.mode
-                sh = O.eval3(seed, args.method, args.train_end, None)
+                sh = eval_any(seed, args.train_end, None)
                 if sh:
                     tag = "LIQUIDATED" if sh["liq"] else f"{(pow(2.718281828, sh['growth'])-1)*100:+.1f}%/mo"
                     print(f"\nSEED holdout for comparison: {tag}")

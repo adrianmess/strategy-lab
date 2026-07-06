@@ -61,18 +61,27 @@ TEST_DAYS = 28
 TREND_VARIANTS = [None, 2.0]
 
 # ---------------- global data (loaded once; fork-inherited) ----------------
+def _cache_path(fn):
+    """Pickle cache location. WF2_CACHE_DIR (set by the optimizer CLI) makes the
+    heavy precompute caches shared across runs instead of per-run-dir."""
+    d = os.environ.get("WF2_CACHE_DIR", "")
+    if d:
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, fn)
+    return fn
+
 _G = {}
 
 def load_globals(need=("v6", "scalpx")):
     segs = None
     if "v6" in need and "v6" not in _G:
         v6 = None
-        if os.path.exists("v6_variants.pkl"):
+        if os.path.exists(_cache_path("v6_variants.pkl")):
             try:
-                v6 = pickle.load(open("v6_variants.pkl", "rb"))
+                v6 = pickle.load(open(_cache_path("v6_variants.pkl"), "rb"))
             except Exception as e:
                 print(f"v6_variants.pkl unreadable ({e}); rebuilding...")
-                try: os.remove("v6_variants.pkl")
+                try: os.remove(_cache_path("v6_variants.pkl"))
                 except OSError: pass
         if v6 is None:
             segs = segs or load_segments()
@@ -82,18 +91,18 @@ def load_globals(need=("v6", "scalpx")):
             for tz in TREND_VARIANTS:
                 pa = [make_adaptive_pre(p, trend_block_z=tz) for p in pres]
                 v6.append(pa)  # list over segments of (q, f)
-            pickle.dump(v6, open("v6_variants.pkl", "wb"))
+            pickle.dump(v6, open(_cache_path("v6_variants.pkl"), "wb"))
         _G["v6"] = v6
         _G["regimes_v6"] = {m: [make_regimes(f, m)[0] for _, f in v6[0]] for m in REGIME_METHODS}
         _G["nreg"] = {m: make_regimes(v6[0][0][1], m)[1] for m in REGIME_METHODS}
     if "scalpx" in need and "scalp" not in _G:
         sc = None
-        if os.path.exists("scalp_pre.pkl"):
+        if os.path.exists(_cache_path("scalp_pre.pkl")):
             try:
-                sc = pickle.load(open("scalp_pre.pkl", "rb"))
+                sc = pickle.load(open(_cache_path("scalp_pre.pkl"), "rb"))
             except Exception as e:
                 print(f"scalp_pre.pkl unreadable ({e}); rebuilding...")
-                try: os.remove("scalp_pre.pkl")
+                try: os.remove(_cache_path("scalp_pre.pkl"))
                 except OSError: pass
         if sc is None:
             segs = segs or load_segments()
@@ -102,7 +111,7 @@ def load_globals(need=("v6", "scalpx")):
                 pre = scalp_precompute(g)
                 f = regime_features(pre)
                 sc.append((pre, f))
-            pickle.dump(sc, open("scalp_pre.pkl", "wb"))
+            pickle.dump(sc, open(_cache_path("scalp_pre.pkl"), "wb"))
         _G["scalp"] = sc
         _G["regimes_sc"] = {m: [make_regimes(f, m)[0] for _, f in sc] for m in REGIME_METHODS}
         _G.setdefault("nreg", {m: make_regimes(sc[0][1], m)[1] for m in REGIME_METHODS})

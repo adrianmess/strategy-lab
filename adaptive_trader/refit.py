@@ -27,7 +27,7 @@ def refit_once(cfg_path, procs, hours, dry):
 
     print("=== 2/4 optimizing ===", flush=True)
     name = f"refit_{time.strftime('%Y%m%d_%H%M')}"
-    opt = os.path.join(HERE, "..", "optimizer", "optimize_cli.py")
+    opt = os.path.join(HERE, "..", "optimizer", "optimize2_cli.py")
     subprocess.run([sys.executable, opt, "--strategy", strategy, "--mode", mode,
                     "--method", method, "--procs", str(procs),
                     "--hours", str(hours), "--name", name], check=True)

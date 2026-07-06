@@ -197,7 +197,7 @@
    }
   },
   "menus": {},
-  "note": "Solana Prime = the RSI/MACD/BB dip system standalone (no crossover), ATR-switched EMA trend filter. Every parameter searchable, per regime. Base = your live xlsx values (validated 105/111 trades). Random search."
+  "note": "Solana Prime = the RSI/MACD/BB dip system standalone (no crossover), ATR-switched EMA trend filter. Every parameter searchable, per regime. Base = your live xlsx values (validated 105/111 trades). Genetic, random, and refine algorithms all supported."
  },
  "scalpx": {
   "continuous": {
@@ -276,7 +276,7 @@
     ]
    }
   },
-  "note": "ScalpX = VRVP+CVD+EMA scalp strategy. CVD/POC/EMA lengths are fixed; thresholds and brackets are searchable. Search is random-only. Reminder: tested edge-less in every configuration so far."
+  "note": "ScalpX = VRVP+CVD+EMA scalp strategy. CVD/POC/EMA lengths are fixed; thresholds and brackets are searchable. Reminder: tested edge-less in every configuration so far."
  },
  "v6": {
   "continuous": {
@@ -340,7 +340,7 @@
    }
   },
   "menus": {},
-  "note": "V6 = thresholds only; indicator lengths are fixed (that's what V7 unlocked). Search is random-only."
+  "note": "V6 = thresholds only; indicator lengths are fixed (that's what V7 unlocked)."
  },
  "v7": {
   "continuous": {

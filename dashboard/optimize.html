@@ -97,8 +97,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="strat">
           <option value="v7">V5 family · V7 full-param (recommended)</option>
           <option value="prime">V5 family · Solana Prime (dip system, no crossover)</option>
-          <option value="scalpx">Scalp family · ScalpX (legacy)</option>
-          <option value="v6">V5 family · V6 (legacy)</option>
+          <option value="scalpx">Scalp family · ScalpX</option>
+          <option value="v6">V5 family · V6 (z-score thresholds)</option>
         </select></div>
       <div class="field"><label data-x="algorithm">Algorithm</label>
         <select id="algo"><option>genetic</option><option>random</option><option>refine</option></select></div>
@@ -230,23 +230,14 @@ document.addEventListener('click', ev=>{
 });
 // ---------- launch ----------
 async function launch(){
-  const strat = $('strat').value;
-  let r;
   const bt_ = $('budgetType').value, bv_ = +$('budgetVal').value;
-  if(strat === 'v7'){
-    const d = {algo:$('algo').value, mode:$('mode').value, method:$('method').value,
-      procs:+$('procs').value,
-      train_end:$('trainEnd').value||undefined, name:$('name').value||undefined,
-      single_set: $('perreg').value==='1'};
-    if(bt_==='hours') d.hours = bv_; else d.total = bv_;
-    if(SEED_CAND) d.seed_cand = SEED_CAND;
-    r = await api('jobs/optimize2', d);
-  } else {
-    const d2 = {strategy:strat, algo:$('algo').value, mode:$('mode').value, method:$('method').value,
-      procs:+$('procs').value, name:$('name').value||undefined};
-    if(bt_==='hours') d2.hours = bv_; else d2.total = bv_;
-    r = await api('jobs/optimize', d2);
-  }
+  const d = {strategy:$('strat').value, algo:$('algo').value, mode:$('mode').value,
+    method:$('method').value, procs:+$('procs').value,
+    train_end:$('trainEnd').value||undefined, name:$('name').value||undefined,
+    single_set: $('perreg').value==='1'};
+  if(bt_==='hours') d.hours = bv_; else d.total = bv_;
+  if(SEED_CAND) d.seed_cand = SEED_CAND;
+  const r = await api('jobs/optimize2', d);
   $('launchMsg').textContent = 'started job '+r.id;
   refreshJobs(); setTimeout(refreshRuns, 3000);
 }
