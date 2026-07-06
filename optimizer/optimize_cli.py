@@ -58,10 +58,11 @@ def main():
     run_dir = B.enter_run_dir(args.name)
     print(f"run dir: {run_dir} | procs: {args.procs}")
     pool_file = "pool.json"
-    pool, seed_base, evaluated = [], 0, 0
+    pool, seed_base, evaluated, runtime_s = [], 0, 0, 0.0
     if os.path.exists(pool_file):
         d = json.load(open(pool_file))
         pool, seed_base, evaluated = d["pool"], d["seed_base"], d.get("evaluated", 0)
+        runtime_s = d.get("runtime_s", 0.0)
         print(f"resuming: {len(pool)} feasible from {evaluated} evaluated")
 
     from wf2 import load_globals, eval_config, feasible, average_cands
@@ -69,6 +70,7 @@ def main():
 
     t_end = time.time() + (args.hours * 3600 if args.hours else 10**12)
     target = evaluated + (args.total or 10**12)
+    t_session = time.time()
     with mp.Pool(args.procs) as p:
         while time.time() < t_end and evaluated < target:
             batch_jobs = [(args.strategy, args.mode, args.method, args.batch,
@@ -79,7 +81,8 @@ def main():
             evaluated += args.batch * args.procs
             pool.sort(key=lambda x: -x[0])
             pool = pool[:200]  # keep top 200
-            json.dump(dict(pool=pool, seed_base=seed_base, evaluated=evaluated),
+            json.dump(dict(pool=pool, seed_base=seed_base, evaluated=evaluated,
+                           runtime_s=runtime_s + (time.time() - t_session)),
                       open(pool_file, "w"), default=float)
             best = pool[0][2] if pool else None
             print(f"evaluated {evaluated} | feasible kept {len(pool)} | "

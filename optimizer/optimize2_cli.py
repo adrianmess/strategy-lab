@@ -77,10 +77,11 @@ def main():
     R = O.load_g3()["regimes"][args.method][1]
     per_regime = not args.single_set
 
-    pool, evaluated, seed_base = [], 0, 0
+    pool, evaluated, seed_base, runtime_s = [], 0, 0, 0.0
     if os.path.exists("pool2.json"):
         d = json.load(open("pool2.json"))
         pool, evaluated, seed_base = d["pool"], d["evaluated"], d["seed_base"]
+        runtime_s = d.get("runtime_s", 0.0)
         print(f"resuming: {len(pool)} feasible / {evaluated} evaluated", flush=True)
     if args.resume_from:
         src = os.path.join(B.OPT_DIR, args.resume_from, "pool2.json") \
@@ -92,6 +93,7 @@ def main():
     t_end = time.time() + (args.hours * 3600 if args.hours else 10**12)
     target = evaluated + (args.total or 10**12)
     gen = 0
+    t_session = time.time()
     with mp.Pool(args.procs) as p:
         while time.time() < t_end and evaluated < target:
             gen += 1
@@ -115,7 +117,8 @@ def main():
             evaluated += args.batch * args.procs
             pool.sort(key=lambda x: -x[0])
             pool = pool[:300]
-            json.dump(dict(pool=pool, evaluated=evaluated, seed_base=seed_base),
+            json.dump(dict(pool=pool, evaluated=evaluated, seed_base=seed_base,
+                           runtime_s=runtime_s + (time.time() - t_session)),
                       open("pool2.json", "w"), default=float)
             if pool:
                 b = pool[0][2]

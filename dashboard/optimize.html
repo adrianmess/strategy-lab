@@ -131,6 +131,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <th data-k="method">regime</th>
       <th data-k="last_run">last run</th>
       <th data-k="evaluated">evaluated</th>
+      <th data-k="runtime_s">compute</th>
       <th data-k="best_score">score</th>
       <th data-k="best_eq">train eq</th>
       <th data-k="maxdd">DD</th>
@@ -270,6 +271,7 @@ function renderRuns(){
       <td>${r.method||''}</td>
       <td class="kv">${r.last_run||''}</td>
       <td>${(r.evaluated||0).toLocaleString()}</td>
+      <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
       <td>${r.best_score!=null?r.best_score.toFixed(3):''}</td>
       <td>${r.best_eq?('$'+Math.round(r.best_eq).toLocaleString()):''}</td>
       <td>${r.maxdd!=null?(100*r.maxdd).toFixed(0)+'%':''}</td>

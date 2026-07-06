@@ -193,14 +193,37 @@ def job_stop(jid):
 webhook = {"proc": None, "started": None, "port": None}
 
 def _port_free(port):
+    """The executor binds 0.0.0.0, so test exactly that, WITHOUT SO_REUSEADDR
+    (reuse can mask conflicts, e.g. macOS AirPlay holding *:5000). Also try
+    connecting: an active listener answers even when a bind probe is unclear."""
     import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
+            c.settimeout(0.3)
+            if c.connect_ex(("127.0.0.1", port)) == 0:
+                return False        # something is listening
+    except OSError:
+        pass
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            s.bind(("127.0.0.1", port))
+            s.bind(("0.0.0.0", port))
             return True
         except OSError:
             return False
+
+
+def _port_owner(port):
+    """Best-effort: who is holding the port? (macOS/Linux, needs lsof)"""
+    try:
+        out = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
+                             capture_output=True, text=True, timeout=5).stdout
+        lines = out.strip().splitlines()
+        if len(lines) >= 2:
+            parts = lines[1].split()
+            return f"{parts[0]} (pid {parts[1]})"
+    except Exception:
+        pass
+    return None
 
 def _sync_webhook_url(port):
     """Keep every trader config pointing at the executor's actual port."""
@@ -224,18 +247,25 @@ def webhook_start():
     if webhook["proc"] is not None and webhook["proc"].poll() is None:
         return jsonify(error="webhook server already running"), 400
     d = request.get_json(force=True) or {}
-    want = int(d.get("port", 5000))
+    want = int(d.get("port", 5001))
+    if want == 5000:
+        want = 5001   # port 5000 is reserved by macOS AirPlay; never use it
     port = None
-    for cand in [want] + [p for p in range(5001, 5011) if p != want]:
+    for cand in [want] + [p for p in range(5001, 5012) if p != want]:
         if _port_free(cand):
             port = cand
             break
     if port is None:
-        return jsonify(error="no free port found between 5000-5010"), 500
+        return jsonify(error="no free port found between 5001-5011"), 500
     note = ""
     if port != want:
-        note = (f"Port {want} was busy (on macOS that's usually the AirPlay Receiver — "
-                f"System Settings > General > AirDrop & Handoff — or an old executor still running). "
+        owner = _port_owner(want)
+        who = f"It's held by: {owner}. " if owner else ""
+        hint = ("That's an old executor still running — stop it or let this one use the new port. "
+                if owner and "ython" in owner else
+                "On macOS, ControlCenter on port 5000 = the AirPlay Receiver "
+                "(System Settings > General > AirDrop & Handoff). ")
+        note = (f"Port {want} was busy. {who}{hint}"
                 f"Started on port {port} instead and updated the trader configs to match.")
     changed = _sync_webhook_url(port)
     log = os.path.join(JOBS_DIR, "webhook_server.log")
@@ -261,6 +291,42 @@ def webhook_status():
     return jsonify(running=running, started=webhook["started"] if running else None,
                    port=webhook.get("port"),
                    log=tail(os.path.join(JOBS_DIR, "webhook_server.log"), 20))
+
+
+# ---------------- manual test orders ----------------
+@app.route("/api/manual", methods=["POST"])
+def manual_order():
+    """Relay a manual order to the MEXC executor webhook. Used to test the
+    execution pipeline. The panel UI asks for typed confirmation first."""
+    d = request.get_json(force=True)
+    action = d.get("action")
+    if action not in ("open_long", "open_short", "close_long", "close_short",
+                      "close_position"):
+        return jsonify(error=f"unknown action {action}"), 400
+    port = webhook.get("port") or 5001
+    url = d.get("url") or f"http://127.0.0.1:{port}/webhook"
+    payload = dict(action=action, symbol=d.get("symbol", "SOL_USDT"))
+    if action.startswith("open"):
+        payload["leverage"] = int(d.get("leverage", 1))
+        payload["quantity"] = int(d.get("quantity", 1))
+    elif action.startswith("close") and action != "close_position":
+        payload["quantity"] = int(d.get("quantity", 1))
+    import requests as _rq
+    log = os.path.join(JOBS_DIR, "manual_orders.log")
+    try:
+        r = _rq.post(url, json=payload, timeout=120)
+        out = dict(ok=r.ok, status=r.status_code, sent=payload, url=url)
+        try:
+            out["response"] = r.json()
+        except Exception:
+            out["response"] = r.text[:500]
+    except Exception as e:
+        out = dict(ok=False, sent=payload, url=url,
+                   error=f"{type(e).__name__}: {e} — is the executor running?")
+    with open(log, "a") as lf:
+        lf.write(json.dumps(dict(t=time.strftime("%Y-%m-%d %H:%M:%S"), **out),
+                            default=str) + "\n")
+    return jsonify(out), (200 if out.get("ok") else 502)
 
 
 # ---------------- configs / runs / adoption ----------------
@@ -417,6 +483,7 @@ def runs2():
         try:
             pd_ = json.load(open(pool_p))
             e["evaluated"] = pd_.get("evaluated")
+            e["runtime_s"] = pd_.get("runtime_s")
             e["feasible"] = len(pd_.get("pool", []))
             if pd_.get("pool"):
                 s, c, m = pd_["pool"][0]
