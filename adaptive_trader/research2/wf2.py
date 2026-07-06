@@ -347,7 +347,8 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
                 v[r] = float(v[r] + rng.normal(0, sigma * (abs(v[r]) + 1e-9)))
     return _normalize_flat(c)
 
-def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1):
+def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1,
+                         max_dd=None):
     """Genetic step for flat candidates; parents = list of cands."""
     out = []
     for _ in range(n):
@@ -358,16 +359,17 @@ def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t
             child = dict(parents[0])
         child = mutate_flat(rng, child, mode, space)
         m = eval_config(child, method, mode, t0, t1)
-        if feasible(m, mode):
+        if feasible(m, mode, cand=child, max_dd=max_dd):
             out.append((m["score"], child, m))
     return out
 
-def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04):
+def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04,
+                      max_dd=None):
     out = []
     for _ in range(n):
         child = mutate_flat(rng, seed_cand, mode, space, p_cont=0.15, sigma=sigma)
         m = eval_config(child, method, mode, t0, t1)
-        if feasible(m, mode):
+        if feasible(m, mode, cand=child, max_dd=max_dd):
             out.append((m["score"], child, m))
     return out
 
@@ -491,15 +493,23 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False):
         out["trades"] = tr
     return out
 
-def feasible(m, mode):
+def feasible(m, mode, cand=None, max_dd=None, liq_margin=0.6):
     if m is None or m["liq"]:
         return False
     if m["n"] < 10 or m["tpm"] < 2:
         return False
-    if mode == "lev" and m["maxdd"] > 0.80:
+    cap = max_dd if max_dd else (0.80 if mode == "lev" else 0.50)
+    if m["maxdd"] > cap:
         return False
-    if mode == "spot" and m["maxdd"] > 0.50:
-        return False
+    if mode == "lev" and cand is not None and "lev" in cand:
+        # Safety margin: worst adverse excursion on train must clear the
+        # liquidation distance with room to spare, else long searches converge
+        # on max-leverage configs that survived training by a hair and then
+        # liquidate on unseen data (observed on V7 before this gate existed).
+        lev_max = max(cand["lev"]) if isinstance(cand["lev"], list) else cand["lev"]
+        liq_dist = 1.0 / max(lev_max, 1e-9) - 0.008
+        if m["worst_mae"] <= -liq_margin * liq_dist:
+            return False
     return True
 
 def average_cands(cands):

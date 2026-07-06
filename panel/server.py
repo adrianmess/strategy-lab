@@ -461,6 +461,7 @@ def job_optimize2():
     if d.get("hours"): cmd += ["--hours", str(d["hours"])]
     if d.get("total"): cmd += ["--total", str(d["total"])]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
+    if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
     if d.get("seed_cand"):
         run_dir = os.path.join(OPT, "runs", name)
@@ -474,6 +475,7 @@ def job_ai():
     cmd = [sys.executable, "ai_advisor.py", "--run", d["run"],
            "--n", str(d.get("n", 12))]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
+    if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
     return jsonify(id=spawn("ai-advisor", d["run"], cmd, OPT))
 
 @app.route("/api/ai_key_status")

@@ -48,15 +48,18 @@ def worker(args):
         if kind == "random":
             return O.batch_random(rng, space, payload["R"], payload["mode"],
                                   payload["method"], payload["n"],
-                                  payload["t0"], payload["t1"], payload["per_regime"])
+                                  payload["t0"], payload["t1"], payload["per_regime"],
+                                  max_dd=payload["max_dd"])
         if kind == "offspring":
             return O.batch_offspring(rng, space, payload["mode"], payload["method"],
                                      payload["parents"], payload["n"],
-                                     payload["t0"], payload["t1"])
+                                     payload["t0"], payload["t1"],
+                                     max_dd=payload["max_dd"])
         if kind == "refine":
             return O.batch_refine(rng, space, payload["mode"], payload["method"],
                                   payload["seed_cand"], payload["n"],
-                                  payload["t0"], payload["t1"])
+                                  payload["t0"], payload["t1"],
+                                  max_dd=payload["max_dd"])
         return []
     # flat-candidate strategies (prime / v6 / scalpx) via the wf2 engine
     import wf2 as W
@@ -67,18 +70,20 @@ def worker(args):
     if kind == "offspring":
         return strip(W.batch_offspring_flat(rng, payload["parents"], payload["mode"],
                                             space, None, R, payload["method"],
-                                            payload["n"], payload["t0"], payload["t1"]))
+                                            payload["n"], payload["t0"], payload["t1"],
+                                            max_dd=payload["max_dd"]))
     if kind == "refine":
         return strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
                                          space, payload["method"],
-                                         payload["n"], payload["t0"], payload["t1"]))
+                                         payload["n"], payload["t0"], payload["t1"],
+                                         max_dd=payload["max_dd"]))
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime}.get(strategy, W.sample_scalpx)
     out = []
     for _ in range(payload["n"]):
         c = sampler(rng, R, payload["mode"], space)
         m = W.eval_config(c, payload["method"], payload["mode"],
                           payload["t0"], payload["t1"])
-        if W.feasible(m, payload["mode"]):
+        if W.feasible(m, payload["mode"], cand=c, max_dd=payload["max_dd"]):
             out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
     return out
 
@@ -99,6 +104,8 @@ def main():
     ap.add_argument("--total", type=int, default=None)
     ap.add_argument("--batch", type=int, default=120)
     ap.add_argument("--train-end", default=None, help="hold out data after this date")
+    ap.add_argument("--max-dd", type=float, default=None,
+                    help="max drawdown cap as a fraction (default 0.80 lev / 0.50 spot)")
     ap.add_argument("--space", default=os.path.join(B.OPT_DIR, "param_space.json"))
     ap.add_argument("--resume-from", default=None, help="seed pool from another run dir")
     ap.add_argument("--name", required=True)
@@ -197,7 +204,8 @@ def main():
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
                            n=args.batch, t0=None, t1=args.train_end,
-                           per_regime=per_regime, strategy=args.strategy)
+                           per_regime=per_regime, strategy=args.strategy,
+                           max_dd=args.max_dd)
             if args.algo == "random" or len(pool) < 8:
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
             elif args.algo == "genetic":
@@ -238,7 +246,7 @@ def main():
     best_cand, best_m = pool[0][1], pool[0][2]
     out = dict(cand=best_cand, metrics=best_m, strategy=args.strategy, mode=args.mode,
                method=args.method, algo=args.algo, per_regime=per_regime,
-               train_end=args.train_end, evaluated=evaluated,
+               train_end=args.train_end, max_dd=args.max_dd, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)

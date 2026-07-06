@@ -115,6 +115,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <span style="display:flex;gap:4px">
         <select id="budgetType" style="width:110px"><option value="hours">hours</option><option value="total">evaluations</option></select>
         <input id="budgetVal" value="2" style="width:70px"></span></div>
+      <div class="field"><label data-x="maxdd">Max drawdown %</label><input id="maxDD" value="80" style="width:60px"></div>
       <div class="field"><label data-x="trainend">Train-end (holdout)</label><input id="trainEnd" value="2025-09-01" style="width:110px"></div>
       <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px"></div>
       <button class="primary" onclick="launch()" style="height:34px">Start search</button>
@@ -209,6 +210,7 @@ const X = {
  processes: ["Processes", `Parallel worker processes evaluating candidates. Set to your CPU core count (or cores−1 to keep the machine responsive). More processes = proportionally faster search.`],
  budget: ["Budget", `How long to search. <b>hours</b>: wall-clock time budget. <b>evaluations</b>: number of candidate backtests to run (each evaluation = one full backtest of one parameter set — a few milliseconds each; 10,000+ is a reasonable session). Runs checkpoint every generation and are resumable by launching again with the same name.`],
  hours: ["Hours", `Time budget. Progress checkpoints every generation, so you can stop anytime and continue later by launching with the same run name. Overnight runs are fine and often worth it.`],
+ maxdd: ["Max drawdown %", `Candidates whose worst peak-to-trough equity loss exceeds this are thrown away during the search. Default 80% for leveraged (drawdown is mark-to-market, so open-position pain counts), 50% for spot. Lower it for configs you could actually sit through — 80% means your $1000 became $200 at some point.`],
  trainend: ["Train-end (holdout)", `The search only sees data BEFORE this date. Afterwards the best config is automatically tested on the data AFTER it — that's the <b>holdout</b> column. Leave blank to use all data (you get no evidence, only an in-sample fit). Recommended: keep ~10 months held out.`],
  runname: ["Run name", `Names the run folder. Re-launching with the same name CONTINUES that run (resumable). Auto-generates if blank.`],
  btn_backtest: ["Backtest (button)", `Runs the run's best config over ALL history (including training data) and publishes it to the Backtests page. A preview with the equity chart appears in this sidebar when it finishes. Note: this is an in-sample number — impressive by construction.`],
@@ -234,6 +236,7 @@ async function launch(){
   const d = {strategy:$('strat').value, algo:$('algo').value, mode:$('mode').value,
     method:$('method').value, procs:+$('procs').value,
     train_end:$('trainEnd').value||undefined, name:$('name').value||undefined,
+    max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
     single_set: $('perreg').value==='1'};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
@@ -459,6 +462,12 @@ let SEED_CAND = null, SEED_NAME = null;
     $('resumeBanner').innerHTML=`Continuing run <b>${q.get('resume')}</b> — settings prefilled from the backtest you selected. Hit <b>Start search</b> to keep optimizing it (it resumes from its saved pool).`;
   }
 })();
+$('mode').onchange = ()=>{
+  const v = +$('maxDD').value;
+  if($('mode').value==='spot' && v===80) $('maxDD').value = 50;
+  if($('mode').value==='lev' && v===50) $('maxDD').value = 80;
+  explain('mode');
+};
 $('strat').onchange = ()=>{
   const legacy = $('strat').value !== 'v7';
   $('perreg').disabled = legacy;   // per-regime specialists is v7-only for now
