@@ -20,7 +20,7 @@ import numpy as np
 
 
 def worker(args):
-    strategy, mode, method, n, seed = args
+    strategy, mode, method, n, seed, space = args
     from wf2 import load_globals, sample_v6, sample_scalpx, eval_config, feasible
     load_globals((strategy,))
     import numpy as np
@@ -31,7 +31,7 @@ def worker(args):
     R = G["nreg"][method]
     out = []
     for _ in range(n):
-        c = sampler(rng, R, mode)
+        c = sampler(rng, R, mode, space)
         m = eval_config(c, method, mode, None, "2099-01-01")
         if feasible(m, mode):
             out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
@@ -67,6 +67,10 @@ def main():
 
     from wf2 import load_globals, eval_config, feasible, average_cands
     load_globals((args.strategy,))  # build caches in parent before forking
+    space_path = os.path.join(B.OPT_DIR, "param_space.json")
+    space = None
+    if os.path.exists(space_path):
+        space = json.load(open(space_path)).get(args.strategy)
 
     t_end = time.time() + (args.hours * 3600 if args.hours else 10**12)
     target = evaluated + (args.total or 10**12)
@@ -74,7 +78,7 @@ def main():
     with mp.Pool(args.procs) as p:
         while time.time() < t_end and evaluated < target:
             batch_jobs = [(args.strategy, args.mode, args.method, args.batch,
-                           seed_base + k) for k in range(args.procs)]
+                           seed_base + k, space) for k in range(args.procs)]
             seed_base += args.procs
             for res in p.map(worker, batch_jobs):
                 pool.extend(res)

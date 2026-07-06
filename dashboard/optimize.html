@@ -145,7 +145,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   <h2>Jobs <span class="mini" id="jobsTitle"></span></h2>
   <div class="card" id="jobs">no jobs yet</div>
 
-  <h2>Parameter space <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
+  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
   <div class="card" id="spaceCard">
     <details open><summary>Continuous parameters (min / max)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
@@ -396,7 +396,13 @@ async function refreshJobs(){
 let SPACE=null;
 async function loadSpace(){
   SPACE = await api('param_space');
-  const sp = SPACE.v7;
+  renderSpace();
+}
+function renderSpace(){
+  const strat = $('strat').value;
+  const sp = SPACE[strat] || SPACE.v7;
+  $('spaceNote').textContent = sp.note || '';
+  $('spaceStrat').textContent = $('strat').selectedOptions[0].text;
   const nm = (k,v)=>`${v.label||k} <span class="kv" style="font-size:10px">${k}</span>`;
   $('contGrid').innerHTML = Object.entries(sp.continuous).map(([k,v])=>`
     <div class="prow"><span class="nm" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${nm(k,v)}</span>
@@ -406,7 +412,7 @@ async function loadSpace(){
       ${v.options.map((o,i)=>`<label style="margin-right:10px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}</div>`).join('');
 }
 async function saveSpace(){
-  const sp = SPACE.v7;
+  const sp = SPACE[$('strat').value] || SPACE.v7;
   document.querySelectorAll('#contGrid input').forEach(inp=>{
     sp.continuous[inp.dataset.k].range[+inp.dataset.i] = parseFloat(inp.value);
   });
@@ -456,11 +462,9 @@ let SEED_CAND = null, SEED_NAME = null;
 })();
 $('strat').onchange = ()=>{
   const legacy = $('strat').value !== 'v7';
-  document.getElementById('spaceCard').style.opacity = legacy ? .45 : 1;
-  document.getElementById('spaceNote').textContent = legacy ?
-    'This editor applies to V7 only. '+$('strat').selectedOptions[0].text+' uses its own fixed built-in ranges (thresholds only, random search).' : '';
   $('algo').disabled = legacy; $('perreg').disabled = legacy;
   if(legacy){ $('algo').value='random'; }
+  if(SPACE) renderSpace();
   explain('strategy');
 };
 refreshRuns(); refreshJobs(); loadSpace(); aiKey();

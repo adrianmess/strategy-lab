@@ -115,18 +115,27 @@ def _per_regime(rng, base_lo, base_hi, R, jitter=0.35):
     return np.clip(base * rng.uniform(1 - jitter, 1 + jitter, R),
                    min(base_lo, base_hi), max(base_lo, base_hi)).tolist()
 
-def sample_v6(rng, R, mode):
+def _rng_range(space, key, default):
+    """Range for `key` from a param-space section, else the built-in default."""
+    try:
+        return tuple(space["continuous"][key]["range"])
+    except Exception:
+        return default
+
+def sample_v6(rng, R, mode, space=None):
+    s = space or {}
     c = dict(
         strategy="v6", tv=int(rng.integers(0, len(TREND_VARIANTS))),
-        zL=_per_regime(rng, -2.6, -0.9, R),
-        zS=_per_regime(rng, 0.9, 2.6, R),
-        zXS=_per_regime(rng, 1.1, 3.0, R),
-        zXLmax=(_per_regime(rng, -2.0, 0.3, R) if rng.random() < 0.5 else [-99.0] * R),
-        ptScale=_per_regime(rng, 0.5, 2.4, R),
+        zL=_per_regime(rng, *_rng_range(s, "zL", (-2.6, -0.9)), R),
+        zS=_per_regime(rng, *_rng_range(s, "zS", (0.9, 2.6)), R),
+        zXS=_per_regime(rng, *_rng_range(s, "zXS", (1.1, 3.0)), R),
+        zXLmax=(_per_regime(rng, *_rng_range(s, "zXLmax", (-2.0, 0.3)), R)
+                if rng.random() < 0.5 else [-99.0] * R),
+        ptScale=_per_regime(rng, *_rng_range(s, "ptScale", (0.5, 2.4)), R),
         eS3=[1.0] * R, eXS=[1.0] * R,
     )
     if mode == "lev":
-        c["lev"] = _per_regime(rng, 1.2, 10.0, R)
+        c["lev"] = _per_regime(rng, *_rng_range(s, "leverage", (1.2, 10.0)), R)
         c["sl"] = 0.0
         # occasionally disable short subsystems in some regimes
         if rng.random() < 0.35:
@@ -140,20 +149,21 @@ def sample_v6(rng, R, mode):
         c["eXS"] = [0.0] * R
     return c
 
-def sample_scalpx(rng, R, mode):
+def sample_scalpx(rng, R, mode, space=None):
+    s = space or {}
     c = dict(
         strategy="scalpx",
-        tpL=_per_regime(rng, 0.002, 0.02, R),
-        tpS=_per_regime(rng, 0.002, 0.02, R),
-        rsiOB=_per_regime(rng, 50, 85, R),
-        rsiOS=_per_regime(rng, 15, 50, R),
+        tpL=_per_regime(rng, *_rng_range(s, "tpL", (0.002, 0.02)), R),
+        tpS=_per_regime(rng, *_rng_range(s, "tpS", (0.002, 0.02)), R),
+        rsiOB=_per_regime(rng, *_rng_range(s, "rsiOB", (50, 85)), R),
+        rsiOS=_per_regime(rng, *_rng_range(s, "rsiOS", (15, 50)), R),
         useCvd=[1.0] * R, useEma=[1.0] * R,
         eL=[1.0] * R, eS=[1.0] * R,
     )
     if rng.random() < 0.4:
         c["useEma"] = rng.choice([0.0, 1.0], R, p=[0.4, 0.6]).tolist()
     if mode == "lev":
-        c["lev"] = _per_regime(rng, 1.2, 10.0, R)
+        c["lev"] = _per_regime(rng, *_rng_range(s, "leverage", (1.2, 10.0)), R)
         c["sl"] = 0.05
         c["slOn"] = 0.0
         if rng.random() < 0.4:
@@ -162,7 +172,8 @@ def sample_scalpx(rng, R, mode):
             c["eL"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
     else:
         c["lev"] = [1.0] * R
-        c["sl"] = float(rng.choice([0.01, 0.02, 0.03, 0.05, 0.08]))
+        sl_opts = (s.get("menus", {}).get("sl", {}) or {}).get("options") or [0.01, 0.02, 0.03, 0.05, 0.08]
+        c["sl"] = float(rng.choice(sl_opts))
         c["slOn"] = 1.0
         c["eS"] = [0.0] * R
     return c
