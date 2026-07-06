@@ -18,7 +18,7 @@ from fast_engine import precompute, PARAM_NAMES          # noqa: E402
 from adaptive import make_adaptive_pre                    # noqa: E402
 from regimes import make_regimes                          # noqa: E402
 from engine import DEFAULT_PARAMS                         # noqa: E402
-from wf2 import build_P_v6, TREND_VARIANTS                # noqa: E402
+from wf2 import build_P_v6, build_P_prime, TREND_VARIANTS                # noqa: E402
 
 logger = logging.getLogger(__name__)
 I = {k: i for i, k in enumerate(PARAM_NAMES)}
@@ -40,7 +40,8 @@ class StrategyV6:
 
     def P(self, R):
         if self._P is None or self._R != R:
-            self._P = build_P_v6(self.cand, R)
+            builder = build_P_prime if self.cand.get("strategy") == "prime" else build_P_v6
+            self._P = builder(self.cand, R)
             self._R = R
         return self._P
 

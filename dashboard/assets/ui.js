@@ -34,6 +34,7 @@ window.STRAT_NAMES = {
   v6: "V5 family · V6",
   "v5.2": "V5 family · V5.2",
   v5: "V5 (original)",
+  prime: "V5 family · Solana Prime",
   scalpx: "Scalp family · ScalpX",
   scalp: "Scalp (original)",
 };

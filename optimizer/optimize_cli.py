@@ -21,11 +21,11 @@ import numpy as np
 
 def worker(args):
     strategy, mode, method, n, seed, space = args
-    from wf2 import load_globals, sample_v6, sample_scalpx, eval_config, feasible
-    load_globals((strategy,))
+    from wf2 import load_globals, sample_v6, sample_scalpx, sample_prime, eval_config, feasible
+    load_globals(("v6",) if strategy == "prime" else (strategy,))
     import numpy as np
     rng = np.random.default_rng(seed)
-    sampler = sample_v6 if strategy == "v6" else sample_scalpx
+    sampler = {"v6": sample_v6, "prime": sample_prime}.get(strategy, sample_scalpx)
     from wf2 import load_globals as _lg
     G = _lg((strategy,))
     R = G["nreg"][method]
@@ -41,7 +41,7 @@ def worker(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--strategy", required=True, choices=["v6", "scalpx"])
+    ap.add_argument("--strategy", required=True, choices=["v6", "scalpx", "prime"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
     ap.add_argument("--method", default="none",
                     choices=["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"])
@@ -66,7 +66,7 @@ def main():
         print(f"resuming: {len(pool)} feasible from {evaluated} evaluated")
 
     from wf2 import load_globals, eval_config, feasible, average_cands
-    load_globals((args.strategy,))  # build caches in parent before forking
+    load_globals(("v6",) if args.strategy == "prime" else (args.strategy,))  # caches before forking
     space_path = os.path.join(B.OPT_DIR, "param_space.json")
     space = None
     if os.path.exists(space_path):

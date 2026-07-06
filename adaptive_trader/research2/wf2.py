@@ -178,6 +178,58 @@ def sample_scalpx(rng, R, mode, space=None):
         c["eS"] = [0.0] * R
     return c
 
+# Solana Prime: the dip system standalone (no crossover). Base = the user's
+# live parameters from their TradingView xlsx export (validated 105/111 trades).
+PRIME_BASE = dict(DEFAULT_PARAMS)
+PRIME_BASE.update(dict(
+    rsiValLong=68.0, macdValPctLong=-0.235 / 100, bbValLong=-0.1,
+    ptLong=1.21 / 100, slLong=0.10, apt1Long=0.7 / 100, apt2Long=0.35 / 100,
+    dur1Long=0.6, dur2Long=43.2, cdPctLong=0.402 / 100, cdPeriodLong=90, cdTfLong="1",
+    rsiValShort=68.0, macdValPctShort=0.21 / 100, bbValShort=1.65,
+    ptShort=1.0 / 100, slShort=0.10, apt1Short=0.9 / 100, apt2Short=0.3 / 100,
+    dur1Short=14.4, dur2Short=38.4, cdPctShort=0.31 / 100, cdPeriodShort=55, cdTfShort="3",
+))
+
+def sample_prime(rng, R, mode, space=None):
+    s = space or {}
+    c = dict(
+        strategy="prime", tv=int(rng.integers(0, len(TREND_VARIANTS))),
+        zL=_per_regime(rng, *_rng_range(s, "zL", (-2.6, -0.9)), R),
+        zS=_per_regime(rng, *_rng_range(s, "zS", (0.9, 2.6)), R),
+        bbL=_per_regime(rng, *_rng_range(s, "bbL", (-0.3, 0.2)), R),
+        bbS=_per_regime(rng, *_rng_range(s, "bbS", (0.6, 1.7)), R),
+        ptScale=_per_regime(rng, *_rng_range(s, "ptScale", (0.5, 2.4)), R),
+        eS3=[1.0] * R,
+    )
+    if mode == "lev":
+        c["lev"] = _per_regime(rng, *_rng_range(s, "leverage", (1.2, 10.0)), R)
+        c["sl"] = 0.0
+        if rng.random() < 0.35:
+            c["eS3"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
+    else:
+        c["lev"] = [1.0] * R
+        c["sl"] = float(rng.choice([0.02, 0.03, 0.04, 0.06, 0.08, 0.10]))
+        c["eS3"] = [0.0] * R
+    return c
+
+def build_P_prime(c, R):
+    rows = []
+    for r in range(R):
+        ov = dict(
+            macdValPctLong=c["zL"][r], macdValPctShort=c["zS"][r],
+            bbValLong=c["bbL"][r], bbValShort=c["bbS"][r],
+            leverage=c["lev"][r],
+            slLong=c["sl"] if c["sl"] > 0 else 0.10,
+            slShort=c["sl"] if c["sl"] > 0 else 0.10,
+            enableLong3m=1.0, enableShort3m=c["eS3"][r],
+            enableLongX=0.0, enableShortX=0.0,
+        )
+        ps = c["ptScale"][r]
+        for k in ["ptLong", "apt1Long", "apt2Long", "ptShort", "apt1Short", "apt2Short"]:
+            ov[k] = PRIME_BASE[k] * ps
+        rows.append(params_to_vec(PRIME_BASE, ov))
+    return np.vstack(rows)
+
 # ---------------- P-matrix builders ----------------
 
 def build_P_v6(c, R):
@@ -219,7 +271,7 @@ def _clip_indices(t_arr, t0, t1):
     return i0, i1
 
 def eval_config(cand, method, mode, t0, t1, collect_trades=False):
-    G = load_globals((cand["strategy"],))
+    G = load_globals(("v6",) if cand["strategy"] == "prime" else (cand["strategy"],))
     R = G["nreg"][method]
     warmup = 3000
     eq = 1000.0
@@ -227,8 +279,8 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False):
     months = 0.0
     liq_any = False
     mtm_dd = 0.0
-    if cand["strategy"] == "v6":
-        P = build_P_v6(cand, R)
+    if cand["strategy"] in ("v6", "prime"):
+        P = (build_P_prime if cand["strategy"] == "prime" else build_P_v6)(cand, R)
         segs = G["v6"][cand["tv"]]
         regs = G["regimes_v6"][method]
         comm = FUT_COMM
@@ -341,10 +393,10 @@ def run_fold(job):
         t_train0 = None
     else:
         t_train0 = t_test0 - pd.Timedelta(days=int(job["window"]))
-    G = load_globals((job["strategy"],))
+    G = load_globals(("v6",) if job["strategy"] == "prime" else (job["strategy"],))
     R = G["nreg"][job["method"]]
     rng = np.random.default_rng(job["seed"] + job["fold_idx"] * 7919)
-    sampler = sample_v6 if job["strategy"] == "v6" else sample_scalpx
+    sampler = {"v6": sample_v6, "prime": sample_prime}.get(job["strategy"], sample_scalpx)
     feas = []
     for _ in range(job["n_samples"]):
         c = sampler(rng, R, job["mode"])
