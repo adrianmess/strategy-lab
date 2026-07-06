@@ -190,21 +190,61 @@ def job_stop(jid):
 
 
 # ---------------- webhook executor (Playwright) ----------------
-webhook = {"proc": None, "started": None}
+webhook = {"proc": None, "started": None, "port": None}
+
+def _port_free(port):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+def _sync_webhook_url(port):
+    """Keep every trader config pointing at the executor's actual port."""
+    changed = []
+    for f in os.listdir(AT):
+        if f.startswith("config") and f.endswith(".json"):
+            p = os.path.join(AT, f)
+            try:
+                c = json.load(open(p))
+            except Exception:
+                continue
+            url = f"http://127.0.0.1:{port}/webhook"
+            if c.get("webhook_url") != url:
+                c["webhook_url"] = url
+                json.dump(c, open(p, "w"), indent=1)
+                changed.append(f)
+    return changed
 
 @app.route("/api/webhook/start", methods=["POST"])
 def webhook_start():
     if webhook["proc"] is not None and webhook["proc"].poll() is None:
         return jsonify(error="webhook server already running"), 400
     d = request.get_json(force=True) or {}
-    port = int(d.get("port", 5000))
+    want = int(d.get("port", 5000))
+    port = None
+    for cand in [want] + [p for p in range(5001, 5011) if p != want]:
+        if _port_free(cand):
+            port = cand
+            break
+    if port is None:
+        return jsonify(error="no free port found between 5000-5010"), 500
+    note = ""
+    if port != want:
+        note = (f"Port {want} was busy (on macOS that's usually the AirPlay Receiver — "
+                f"System Settings > General > AirDrop & Handoff — or an old executor still running). "
+                f"Started on port {port} instead and updated the trader configs to match.")
+    changed = _sync_webhook_url(port)
     log = os.path.join(JOBS_DIR, "webhook_server.log")
     with open(log, "a") as lf:
         proc = subprocess.Popen([sys.executable, "webhook_server.py",
                                  "--instance", "1", "--port", str(port)],
                                 cwd=REPO, stdout=lf, stderr=subprocess.STDOUT)
-    webhook.update(proc=proc, started=time.strftime("%H:%M:%S"))
-    return jsonify(ok=True)
+    webhook.update(proc=proc, started=time.strftime("%H:%M:%S"), port=port)
+    return jsonify(ok=True, port=port, note=note, configs_updated=changed)
 
 @app.route("/api/webhook/stop", methods=["POST"])
 def webhook_stop():
@@ -219,6 +259,7 @@ def webhook_status():
     p = webhook["proc"]
     running = p is not None and p.poll() is None
     return jsonify(running=running, started=webhook["started"] if running else None,
+                   port=webhook.get("port"),
                    log=tail(os.path.join(JOBS_DIR, "webhook_server.log"), 20))
 
 

@@ -1,4 +1,4 @@
-# SOL Strategy Lab
+# Strategy Lab
 
 Research, optimization, backtesting and live-trading platform for SOL/USDT
 strategies on MEXC (3-minute timeframe). Built around the V5 TradingView

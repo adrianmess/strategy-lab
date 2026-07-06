@@ -1,27 +1,47 @@
 {
-  "symbol": "SOL_USDT",
-  "contract_size": 0.1,
-  "webhook_url": "http://127.0.0.1:5000/webhook",
-  "dry_run": true,
-  "poll_seconds": 10,
-  "equity_usdt": 1000.0,
-  "risk_dial": 1.0,
-  "emergency_stop_multiplier": 1.2,
-  "state_file": "trader_state.json",
-  "log_file": "trader.log",
-  "params": {
-    "tv": 0,
-    "sl": 0.10,
-    "zL": [-1.572, -1.762, -1.846],
-    "zS": [2.23, 1.94, 1.414],
-    "zXS": [2.382, 2.306, 2.048],
-    "ptScale": [1.204, 0.778, 1.164],
-    "lev": [2.18, 2.38, 2.16]
-  },
-  "notes": {
-    "params": "Produced by research/optimize.py (walk-forward validated). Arrays are per volatility regime [low, mid, high].",
-    "risk_dial": "Scales leverage. 1.0 = validated config (~2.2-2.4x). 2.0 doubles leverage (max ~5x): OOS growth ~11%/mo but worst-case single-stop equity hit ~50%. Never set above 2.0.",
-    "sl": "Protective stop. It is part of the strategy's safety architecture - keep it ON live. Walk-forward it fired ~2.5x/year at ~25% equity damage per hit.",
-    "dry_run": "true = log actions only, no webhook POSTs. Run dry for at least a week before going live."
-  }
+ "symbol": "SOL_USDT",
+ "contract_size": 0.1,
+ "webhook_url": "http://127.0.0.1:5001/webhook",
+ "dry_run": true,
+ "poll_seconds": 10,
+ "equity_usdt": 1000.0,
+ "risk_dial": 1.0,
+ "emergency_stop_multiplier": 1.2,
+ "state_file": "trader_state.json",
+ "log_file": "trader.log",
+ "params": {
+  "tv": 0,
+  "sl": 0.1,
+  "zL": [
+   -1.572,
+   -1.762,
+   -1.846
+  ],
+  "zS": [
+   2.23,
+   1.94,
+   1.414
+  ],
+  "zXS": [
+   2.382,
+   2.306,
+   2.048
+  ],
+  "ptScale": [
+   1.204,
+   0.778,
+   1.164
+  ],
+  "lev": [
+   2.18,
+   2.38,
+   2.16
+  ]
+ },
+ "notes": {
+  "params": "Produced by research/optimize.py (walk-forward validated). Arrays are per volatility regime [low, mid, high].",
+  "risk_dial": "Scales leverage. 1.0 = validated config (~2.2-2.4x). 2.0 doubles leverage (max ~5x): OOS growth ~11%/mo but worst-case single-stop equity hit ~50%. Never set above 2.0.",
+  "sl": "Protective stop. It is part of the strategy's safety architecture - keep it ON live. Walk-forward it fired ~2.5x/year at ~25% equity damage per hit.",
+  "dry_run": "true = log actions only, no webhook POSTs. Run dry for at least a week before going live."
+ }
 }

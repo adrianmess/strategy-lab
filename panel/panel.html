@@ -41,7 +41,7 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
 </head>
 <body>
 <header>
-  <h1>SOL Strategy Lab</h1>
+  <h1>Strategy Lab</h1>
   <nav>
     <a class="here" href="/">Control panel</a>
     <a href="/dashboard/optimize.html">Optimize</a>
@@ -86,8 +86,8 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
   </div>
   <pre id="tlog">–</pre>
   <div class="row" style="margin-top:8px">
-    <span><span id="wdot" class="dot off"></span><b>MEXC executor</b> <span class="note">(Playwright webhook server — needed for live orders; log in to MEXC in its browser window)</span></span>
-    <button onclick="api('webhook/start',{port:5000}).then(()=>setTimeout(refresh,800))">Start executor</button>
+    <span><span id="wdot" class="dot off"></span><b>MEXC executor</b> <span class="note" id="wportlbl"></span> <span class="note">(Playwright webhook server — needed for live orders; log in to MEXC in its browser window)</span></span>
+    <button onclick="startExecutor()">Start executor</button>
     <button onclick="api('webhook/stop',{}).then(()=>setTimeout(refresh,500))">Stop executor</button>
     <span class="note">needs: <code>pip install playwright && playwright install chromium</code>, then log in to MEXC in the window it opens</span>
   </div>
@@ -172,6 +172,8 @@ async function refresh(){
   try{
     const w = await api('webhook/status');
     $('wdot').className='dot '+(w.running?'on':'off');
+    if(w.running && w.port) document.querySelectorAll('#wport').forEach(x=>x.remove());
+    $('wportlbl').textContent = w.running && w.port ? ('running on port '+w.port) : '';
     const failed = !w.running && (w.log||[]).length;
     $('wlog').style.display = failed ? 'block' : 'none';
     if(failed) $('wlog').textContent = 'executor last output (it is not running):\n'+w.log.join('\n');
@@ -238,6 +240,13 @@ async function startTrader(live){
   setTimeout(refresh,500);
 }
 async function stopTrader(){ await api('trader/stop',{}); setTimeout(refresh,500); }
+async function startExecutor(){
+  const r = await api('webhook/start',{port:5000});
+  if(r.ok){
+    if(r.note) alert(r.note);
+    setTimeout(refresh,800);
+  }
+}
 async function runBacktest(){
   const cfg = $('btCfg').value.trim() || CONFIGS[+$('btPick').value]?.path;
   if(!cfg) return alert('pick a config');
