@@ -156,7 +156,7 @@ def job_optimize():
     name = d.get("name") or f"opt_{time.strftime('%m%d_%H%M')}"
     cmd = [sys.executable, "optimize_cli.py",
            "--strategy", d.get("strategy", "v6"), "--mode", d.get("mode", "lev"),
-           "--method", d.get("method", "none"),
+           "--method", d.get("method", "none"), "--algo", d.get("algo", "random"),
            "--procs", str(d.get("procs", 4)), "--name", name]
     if d.get("hours"): cmd += ["--hours", str(d["hours"])]
     if d.get("total"): cmd += ["--total", str(d["total"])]

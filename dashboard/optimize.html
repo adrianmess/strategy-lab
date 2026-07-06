@@ -242,8 +242,10 @@ async function launch(){
     if(SEED_CAND) d.seed_cand = SEED_CAND;
     r = await api('jobs/optimize2', d);
   } else {
-    r = await api('jobs/optimize', {strategy:strat, mode:$('mode').value, method:$('method').value,
-      procs:+$('procs').value, hours:(bt_==='hours'?bv_:1), name:$('name').value||undefined});
+    const d2 = {strategy:strat, algo:$('algo').value, mode:$('mode').value, method:$('method').value,
+      procs:+$('procs').value, name:$('name').value||undefined};
+    if(bt_==='hours') d2.hours = bv_; else d2.total = bv_;
+    r = await api('jobs/optimize', d2);
   }
   $('launchMsg').textContent = 'started job '+r.id;
   refreshJobs(); setTimeout(refreshRuns, 3000);
@@ -468,8 +470,7 @@ let SEED_CAND = null, SEED_NAME = null;
 })();
 $('strat').onchange = ()=>{
   const legacy = $('strat').value !== 'v7';
-  $('algo').disabled = legacy; $('perreg').disabled = legacy;
-  if(legacy){ $('algo').value='random'; }
+  $('perreg').disabled = legacy;   // per-regime specialists is v7-only for now
   if(SPACE) renderSpace();
   explain('strategy');
 };

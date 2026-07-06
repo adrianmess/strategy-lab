@@ -27,15 +27,22 @@ def _request_stop(signum, frame):
 
 
 def worker(args):
-    strategy, mode, method, n, seed, space = args
-    from wf2 import load_globals, sample_v6, sample_scalpx, sample_prime, eval_config, feasible
+    kind, strategy, mode, method, n, seed, space, payload = args
+    from wf2 import (load_globals, sample_v6, sample_scalpx, sample_prime,
+                     eval_config, feasible, batch_offspring_flat, batch_refine_flat)
     load_globals(("v6",) if strategy == "prime" else (strategy,))
     import numpy as np
     rng = np.random.default_rng(seed)
-    sampler = {"v6": sample_v6, "prime": sample_prime}.get(strategy, sample_scalpx)
-    from wf2 import load_globals as _lg
-    G = _lg((strategy,))
+    G = load_globals(("v6",) if strategy == "prime" else (strategy,))
     R = G["nreg"][method]
+    if kind == "offspring":
+        res = batch_offspring_flat(rng, payload, mode, space, None, R, method,
+                                   n, None, "2099-01-01")
+        return [(s, c, {k: v for k, v in m.items() if k != "trades"}) for s, c, m in res]
+    if kind == "refine":
+        res = batch_refine_flat(rng, payload, mode, space, method, n, None, "2099-01-01")
+        return [(s, c, {k: v for k, v in m.items() if k != "trades"}) for s, c, m in res]
+    sampler = {"v6": sample_v6, "prime": sample_prime}.get(strategy, sample_scalpx)
     out = []
     for _ in range(n):
         c = sampler(rng, R, mode, space)
@@ -49,6 +56,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", required=True, choices=["v6", "scalpx", "prime"])
+    ap.add_argument("--algo", default="random", choices=["random", "genetic", "refine"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
     ap.add_argument("--method", default="none",
                     choices=["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"])
@@ -86,8 +94,22 @@ def main():
     signal.signal(signal.SIGINT, _request_stop)
     with mp.Pool(args.procs) as p:
         while time.time() < t_end and evaluated < target and not STOP["flag"]:
-            batch_jobs = [(args.strategy, args.mode, args.method, args.batch,
-                           seed_base + k, space) for k in range(args.procs)]
+            if args.algo == "random" or len(pool) < 8:
+                batch_jobs = [("random", args.strategy, args.mode, args.method,
+                               args.batch, seed_base + k, space, None)
+                              for k in range(args.procs)]
+            elif args.algo == "genetic":
+                parents = [c for _, c, _ in pool[:24]]
+                batch_jobs = [("offspring", args.strategy, args.mode, args.method,
+                               args.batch, seed_base + k, space, parents)
+                              for k in range(args.procs)]
+                batch_jobs[-1] = ("random", args.strategy, args.mode, args.method,
+                                  args.batch, seed_base + args.procs, space, None)
+            else:  # refine
+                batch_jobs = [("refine", args.strategy, args.mode, args.method,
+                               args.batch, seed_base + k, space,
+                               pool[min(k, len(pool) - 1)][1])
+                              for k in range(args.procs)]
             seed_base += args.procs
             for res in p.map(worker, batch_jobs):
                 pool.extend(res)

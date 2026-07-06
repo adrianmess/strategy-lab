@@ -266,6 +266,102 @@ def build_P_prime(c, R):
     return np.vstack(rows)
 
 
+# ---------------- generic genome ops for flat candidates (v6/prime/scalpx) ----
+FLAT_FLAG_KEYS = {"eL3", "eS3", "eXL", "eXS", "eL", "eS", "useCvd", "useEma"}
+FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
+    "prime": dict(rsiL="rsiValLong", rsiS="rsiValShort", ptL="ptLong", a1L="apt1Long",
+                  a2L="apt2Long", d1L="dur1Long", d2L="dur2Long", ptS="ptShort",
+                  a1S="apt1Short", a2S="apt2Short", d1S="dur1Short", d2S="dur2Short",
+                  cdPL="cdPctLong", cdTL="cdPeriodLong", cdPS="cdPctShort",
+                  cdTS="cdPeriodShort", lev="leverage", bbL="bbL", bbS="bbS",
+                  zL="zL", zS="zS"),
+    "v6": dict(lev="leverage", zL="zL", zS="zS", zXS="zXS", zXLmax="zXLmax",
+               ptScale="ptScale"),
+    "scalpx": dict(lev="leverage", tpL="tpL", tpS="tpS", rsiOB="rsiOB", rsiOS="rsiOS"),
+}
+
+def _normalize_flat(c):
+    """Re-impose per-strategy ordering constraints after crossover/mutation."""
+    if c.get("strategy") == "prime":
+        R = len(c["zL"])
+        for r in range(R):
+            if c["a1L"][r] > c["ptL"][r]: c["a1L"][r] = c["ptL"][r] * 0.7
+            if c["a2L"][r] > c["a1L"][r]: c["a2L"][r] = c["a1L"][r] * 0.6
+            if c["a1S"][r] > c["ptS"][r]: c["a1S"][r] = c["ptS"][r] * 0.7
+            if c["a2S"][r] > c["a1S"][r]: c["a2S"][r] = c["a1S"][r] * 0.6
+            if c["d2L"][r] < c["d1L"][r]: c["d1L"][r], c["d2L"][r] = c["d2L"][r], c["d1L"][r]
+            if c["d2S"][r] < c["d1S"][r]: c["d1S"][r], c["d2S"][r] = c["d2S"][r], c["d1S"][r]
+    return c
+
+def crossover_flat(rng, a, b):
+    child = {}
+    for k in a:
+        v = a[k] if rng.random() < 0.5 else b.get(k, a[k])
+        child[k] = list(v) if isinstance(v, list) else v
+    return _normalize_flat(child)
+
+def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10):
+    s = space or {}
+    strat = cand.get("strategy", "")
+    keymap = FLAT_KEYMAP.get(strat, {})
+    c = {k: (list(v) if isinstance(v, list) else v) for k, v in cand.items()}
+    for k, v in c.items():
+        if k in ("strategy",):
+            continue
+        if k == "tv":
+            if rng.random() < 0.1:
+                c[k] = int(rng.integers(0, len(TREND_VARIANTS)))
+            continue
+        if k == "sl":
+            if mode == "spot" and rng.random() < p_cont:
+                lo, hi = _rng_range(s, "slLong", (0.01, 0.12))
+                c[k] = float(np.clip(v + rng.normal(0, sigma * (hi - lo)), lo, hi))
+            continue
+        if not isinstance(v, list):
+            continue
+        if k in FLAT_FLAG_KEYS:
+            for r in range(len(v)):
+                if rng.random() < p_flag:
+                    v[r] = 1.0 - v[r]
+            continue
+        rr = _rng_range(s, keymap.get(k, k), None) if s else None
+        for r in range(len(v)):
+            if rng.random() >= p_cont:
+                continue
+            # keep disabled-sentinels disabled (e.g. zXLmax = -99)
+            if v[r] <= -90:
+                continue
+            if rr:
+                lo, hi = rr
+                v[r] = float(np.clip(v[r] + rng.normal(0, sigma * (hi - lo)), lo, hi))
+            else:
+                v[r] = float(v[r] + rng.normal(0, sigma * (abs(v[r]) + 1e-9)))
+    return _normalize_flat(c)
+
+def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1):
+    """Genetic step for flat candidates; parents = list of cands."""
+    out = []
+    for _ in range(n):
+        if len(parents) >= 2:
+            i, j = rng.choice(len(parents), 2, replace=False)
+            child = crossover_flat(rng, parents[i], parents[j])
+        else:
+            child = dict(parents[0])
+        child = mutate_flat(rng, child, mode, space)
+        m = eval_config(child, method, mode, t0, t1)
+        if feasible(m, mode):
+            out.append((m["score"], child, m))
+    return out
+
+def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04):
+    out = []
+    for _ in range(n):
+        child = mutate_flat(rng, seed_cand, mode, space, p_cont=0.15, sigma=sigma)
+        m = eval_config(child, method, mode, t0, t1)
+        if feasible(m, mode):
+            out.append((m["score"], child, m))
+    return out
+
 # ---------------- P-matrix builders ----------------
 
 def build_P_v6(c, R):
