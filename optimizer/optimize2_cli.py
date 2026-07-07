@@ -268,6 +268,19 @@ def main():
                 print(f"  #{rank+1}: train score {s:.3f} -> holdout {tag}", flush=True)
         if holdouts and holdouts[0]:
             out["holdout"] = holdouts[0]
+        # survivors-first ranking: non-liquidated by holdout growth, then the rest
+        ranked = [dict(rank=i + 1, train_score=pool[i][0], holdout=holdouts[i])
+                  for i in range(len(holdouts))]
+        ranked.sort(key=lambda r: -1e9 if (r["holdout"] is None or r["holdout"]["liq"])
+                    else r["holdout"]["growth"], reverse=True)
+        out["holdout_top10"] = ranked
+        surv = [r for r in ranked if r["holdout"] and not r["holdout"]["liq"]]
+        print(f"\nSURVIVORS-FIRST: {len(surv)}/{len(ranked)} candidates survived the holdout")
+        for r in ranked[:5]:
+            hm = r["holdout"]
+            tag = "no data" if hm is None else ("LIQUIDATED" if hm["liq"] else
+                  f"{(pow(2.718281828, hm['growth'])-1)*100:+.1f}%/mo dd {hm['maxdd']:.0%}")
+            print(f"  train-rank #{r['rank']}: {tag}")
         # pick the best genuine OOS performer among the top-10
         def hkey(hm):
             if hm is None or hm["liq"]:

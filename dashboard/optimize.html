@@ -218,7 +218,7 @@ const X = {
  btn_adopt: ["Adopt → trader (button)", `Copies the run's best parameters into the live trader's config.json (a timestamped backup of the old config is kept). The trader picks it up on next start from the Control panel. Adopt only configs whose holdout you've checked.`],
  btn_ai: ["AI suggest (button)", `Sends the run's best/worst candidates + parameter ranges to Claude and asks for new candidate ideas. They're evaluated like any other candidate and only join the pool if they score. Needs ANTHROPIC_API_KEY in a .env file at the repo root. After it finishes, continue the run to exploit the ideas.`],
  col_score: ["score (column)", `What the optimizer maximizes on TRAINING data: mean monthly log-growth minus 0.25× its month-to-month std (so one lucky month can't win). Compare within a run; don't trust it as a live estimate.`],
- col_holdout: ["holdout (column)", `Monthly growth on data AFTER train-end — data the search never touched. Green = profitable out of sample; LIQUIDATED = the config died on unseen data. The single most important number on this page.`],
+ col_holdout: ["holdout (column)", `Monthly growth on data AFTER train-end — data the search never touched. Green = profitable out of sample; LIQUIDATED = the config died on unseen data. If the train-best liquidated but a lower-ranked candidate survived, the OOS-best line shows it — and sorting this column ranks runs by their best SURVIVING candidate, so runs with any survivor sit above all-liquidated ones. The <b>Top-10</b> button lists all evaluated candidates, survivors first. The single most important number on this page.`],
  col_dd: ["DD (column)", `Worst mark-to-market drawdown on training data — open positions counted at current price. Lev mode caps this at 80%, spot at 50%.`],
 };
 function explain(key){
@@ -249,7 +249,14 @@ let RUNS=[], sortKey='last_run', sortDir=-1;
 function fpm(x){return (x>=0?'+':'')+(100*(Math.exp(x)-1)).toFixed(1)+'%/mo'}
 async function refreshRuns(){
   RUNS = await api('runs2');
-  RUNS.forEach(r=>{r._hg = r.holdout ? (r.holdout.liq ? -99 : r.holdout.growth) : null;});
+  RUNS.forEach(r=>{
+    // rank by the best NON-liquidated candidate the run produced (train-best or OOS-best)
+    let g = null;
+    if(r.holdout && !r.holdout.liq) g = r.holdout.growth;
+    if(r.holdout_best && r.holdout_best.holdout && !r.holdout_best.holdout.liq)
+      g = Math.max(g ?? -1e9, r.holdout_best.holdout.growth);
+    r._hg = (r.holdout || r.holdout_best) ? (g === null ? -99 : g) : null;
+  });
   renderRuns();
 }
 function renderRuns(){
@@ -283,10 +290,27 @@ function renderRuns(){
         ${r.holdout_best_config?`<button class="small" title="Backtest the OOS-best candidate (the one that actually survived the holdout)" onclick="bt('${r.holdout_best_config}','${r.name}_oosbest')">Backtest OOS-best</button>
         <button class="small" title="Adopt the OOS-best candidate into the trader" onclick="adopt('${r.holdout_best_config}','${r.mode}')">Adopt OOS-best</button>`:''}
         <button class="small" data-x="btn_holdout" title="Backtest ONLY on unseen data after the train-end date — the honest number" onclick="btH('${r.best_config}','${r.name}')">Backtest holdout</button>
+        ${r.holdout_top10?`<button class="small" title="All top-10 candidates ranked survivors-first" onclick="toggleTop10('${r.name}')">Top-10</button>`:''}
         <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
         <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button>
-        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>`;
+        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${top10Row(r)}`;
   }).join('');
+}
+const OPEN10 = new Set();
+function toggleTop10(name){ OPEN10.has(name) ? OPEN10.delete(name) : OPEN10.add(name); renderRuns(); }
+function top10Row(r){
+  if(!OPEN10.has(r.name) || !r.holdout_top10) return '';
+  const rows = r.holdout_top10.map(t=>{
+    const hm = t.holdout;
+    const tag = !hm ? '<span class="kv">no data</span>'
+      : hm.liq ? '<span class="badge b-red">LIQUIDATED</span>'
+      : `<span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span> <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span>`;
+    return `<div class="prow"><span class="kv" style="width:110px">train-rank #${t.rank}</span>
+      <span class="kv" style="width:90px">score ${t.train_score.toFixed(3)}</span>${tag}</div>`;
+  }).join('');
+  return `<tr><td colspan="12" style="background:var(--bg)">
+    <div class="kv" style="margin:4px 0">Top-10 train candidates ranked <b>survivors first</b> (best holdout at top; liquidated sink to the bottom):</div>
+    ${rows}</td></tr>`;
 }
 document.querySelectorAll('#runsT th[data-k]').forEach(th=>{
   th.onclick = ()=>{

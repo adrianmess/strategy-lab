@@ -534,6 +534,7 @@ def runs2():
                 e["mode"] = bc.get("mode", e.get("mode"))
                 e["holdout"] = bc.get("holdout")
                 e["holdout_best"] = bc.get("holdout_best")
+                e["holdout_top10"] = bc.get("holdout_top10")
                 e["seed_holdout"] = bc.get("seed_holdout")
                 e["best_config"] = f"runs/{d}/best_config.json"
                 if os.path.exists(os.path.join(runs_dir, d, "holdout_best_config.json")):
