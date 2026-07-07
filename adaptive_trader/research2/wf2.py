@@ -392,7 +392,7 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
     return _normalize_flat(c)
 
 def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1,
-                         max_dd=None):
+                         max_dd=None, alt=None):
     """Genetic step for flat candidates; parents = list of cands."""
     out = []
     for _ in range(n):
@@ -402,17 +402,17 @@ def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t
         else:
             child = dict(parents[0])
         child = mutate_flat(rng, child, mode, space)
-        m = eval_config(child, method, mode, t0, t1)
+        m = eval_config(child, method, mode, t0, t1, alt=alt)
         if feasible(m, mode, cand=child, max_dd=max_dd):
             out.append((m["score"], child, m))
     return out
 
 def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04,
-                      max_dd=None):
+                      max_dd=None, alt=None):
     out = []
     for _ in range(n):
         child = mutate_flat(rng, seed_cand, mode, space, p_cont=0.15, sigma=sigma)
-        m = eval_config(child, method, mode, t0, t1)
+        m = eval_config(child, method, mode, t0, t1, alt=alt)
         if feasible(m, mode, cand=child, max_dd=max_dd):
             out.append((m["score"], child, m))
     return out
@@ -462,12 +462,35 @@ def build_P_scalpx2(c, R):
 
 # ---------------- evaluation ----------------
 
+ALT_EPOCH = np.datetime64("2020-01-01")
+
+def alt_intervals(t, i0, i1, days, part):
+    """Alternating-block cross-validation: calendar blocks of `days` anchored at
+    a fixed epoch. Even blocks -> train, odd blocks -> holdout. Returns the
+    (a, b) index intervals inside [i0, i1) belonging to `part`."""
+    if i1 - i0 < 2:
+        return []
+    step = np.timedelta64(int(days * 1440), "m")
+    k0 = int((t[i0] - ALT_EPOCH) // step)
+    k1 = int((t[i1 - 1] - ALT_EPOCH) // step)
+    want = 0 if part == "train" else 1
+    out = []
+    for k in range(k0, k1 + 1):
+        if k % 2 != want:
+            continue
+        a = max(int(np.searchsorted(t, ALT_EPOCH + k * step)), i0)
+        b = min(int(np.searchsorted(t, ALT_EPOCH + (k + 1) * step)), i1)
+        if b - a >= 200:
+            out.append((a, b))
+    return out
+
+
 def _clip_indices(t_arr, t0, t1):
     i0 = 0 if t0 is None else int(np.searchsorted(t_arr, np.datetime64(t0)))
     i1 = len(t_arr) if t1 is None else int(np.searchsorted(t_arr, np.datetime64(t1)))
     return i0, i1
 
-def eval_config(cand, method, mode, t0, t1, collect_trades=False):
+def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
     need = {"prime": ("v6",)}.get(cand["strategy"], (cand["strategy"],))
     G = load_globals(need)
     R = G["nreg"][method]
@@ -487,19 +510,22 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False):
             i0, i1 = _clip_indices(pre["t"], t0, t1)
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
-            w0 = max(0, i0 - warmup)
-            sp = slice_pre(pre, w0, i1)
-            eq_before = eq
-            tr, eq, liq = run_fast(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                                   initial_capital=eq, use_sl=use_sl,
-                                   commission=comm if mode == "lev" else SPOT_COMM,
-                                   liq_threshold=-1.0 if mode == "lev" else 1e9)
-            months += (i1 - i0) / (DAY * 30.4)
-            all_tr.append(tr)
-            if mode == "lev" and len(tr):
-                _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
-                mtm_dd = max(mtm_dd, dseg)
-            if liq: liq_any = True; break
+            ivs = [(i0, i1)] if alt is None else alt_intervals(pre["t"], i0, i1, *alt)
+            for a, b in ivs:
+                w0 = max(0, a - warmup)
+                sp = slice_pre(pre, w0, b)
+                eq_before = eq
+                tr, eq, liq = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                       initial_capital=eq, use_sl=use_sl,
+                                       commission=comm if mode == "lev" else SPOT_COMM,
+                                       liq_threshold=-1.0 if mode == "lev" else 1e9)
+                months += (b - a) / (DAY * 30.4)
+                all_tr.append(tr)
+                if mode == "lev" and len(tr):
+                    _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                    mtm_dd = max(mtm_dd, dseg)
+                if liq: liq_any = True; break
+            if liq_any: break
     else:
         sx2 = cand["strategy"] == "scalpx2"
         if sx2:
@@ -514,23 +540,26 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False):
             i0, i1 = _clip_indices(pre["t"], t0, t1)
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
-            w0 = max(0, i0 - warmup)
-            sp = slice_pre2(pre, w0, i1) if sx2 else slice_pre(pre, w0, i1)
-            eq_before = eq
-            if sx2:
-                tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:i1], warmup=i0 - w0,
-                                         initial_capital=eq, commission=comm,
-                                         liq_threshold=-1.0 if mode == "lev" else 1e9)
-            else:
-                tr, eq, liq = run_scalp(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                                        initial_capital=eq, commission=comm,
-                                        liq_threshold=-1.0 if mode == "lev" else 1e9)
-            months += (i1 - i0) / (DAY * 30.4)
-            all_tr.append(tr)
-            if mode == "lev" and len(tr):
-                _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
-                mtm_dd = max(mtm_dd, dseg)
-            if liq: liq_any = True; break
+            ivs = [(i0, i1)] if alt is None else alt_intervals(pre["t"], i0, i1, *alt)
+            for a, b in ivs:
+                w0 = max(0, a - warmup)
+                sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)
+                eq_before = eq
+                if sx2:
+                    tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
+                                             initial_capital=eq, commission=comm,
+                                             liq_threshold=-1.0 if mode == "lev" else 1e9)
+                else:
+                    tr, eq, liq = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                            initial_capital=eq, commission=comm,
+                                            liq_threshold=-1.0 if mode == "lev" else 1e9)
+                months += (b - a) / (DAY * 30.4)
+                all_tr.append(tr)
+                if mode == "lev" and len(tr):
+                    _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                    mtm_dd = max(mtm_dd, dseg)
+                if liq: liq_any = True; break
+            if liq_any: break
     if months <= 0:
         return None
     tr = pd.concat(all_tr, ignore_index=True) if all_tr else pd.DataFrame()

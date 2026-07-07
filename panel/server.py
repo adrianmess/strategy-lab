@@ -152,6 +152,8 @@ def job_backtest():
     cmd = [sys.executable, "backtest_cli.py", "--config", cfg, "--name", name]
     if d.get("oos_start"):
         cmd += ["--oos-start", d["oos_start"]]
+    if d.get("holdout_days"):
+        cmd += ["--holdout-days", str(d["holdout_days"])]
     return jsonify(id=spawn("backtest", name, cmd, OPT))
 
 @app.route("/api/jobs/walkforward", methods=["POST"])
@@ -466,6 +468,7 @@ def job_optimize2():
     if d.get("total"): cmd += ["--total", str(d["total"])]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
     if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
+    if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
     if d.get("seed_cand"):
         run_dir = os.path.join(OPT, "runs", name)
@@ -480,6 +483,7 @@ def job_ai():
            "--n", str(d.get("n", 12))]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
     if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
+    if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
     return jsonify(id=spawn("ai-advisor", d["run"], cmd, OPT))
 
 @app.route("/api/ai_key_status")
@@ -535,6 +539,11 @@ def runs2():
                 e["holdout"] = bc.get("holdout")
                 e["holdout_best"] = bc.get("holdout_best")
                 e["holdout_top10"] = bc.get("holdout_top10")
+                e["holdout_days"] = bc.get("holdout_days")
+                e["train_end"] = bc.get("train_end")
+                e["algo"] = bc.get("algo")
+                e["per_regime"] = bc.get("per_regime")
+                e["max_dd"] = bc.get("max_dd")
                 e["seed_holdout"] = bc.get("seed_holdout")
                 e["best_config"] = f"runs/{d}/best_config.json"
                 if os.path.exists(os.path.join(runs_dir, d, "holdout_best_config.json")):

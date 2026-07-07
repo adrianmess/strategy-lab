@@ -116,7 +116,7 @@ def build_P3(cand):
 
 # ---------------- evaluation ----------------
 
-def eval3(cand, method, t0=None, t1=None, warmup=3000):
+def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None):
     G = load_g3()
     regs_list, R = G["regimes"][method]
     P = build_P3(cand)
@@ -130,6 +130,7 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000):
     all_tr = []
     mtm_dd = 0.0
     liq_any = False
+    from wf2 import alt_intervals
     for pre, reg in zip(G["pres"], regs_list):
         t = pre["t"]
         i0 = 0 if t0 is None else int(np.searchsorted(t, np.datetime64(t0)))
@@ -137,19 +138,23 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000):
         i0 = max(i0, warmup)
         if i1 - i0 < 200:
             continue
-        w0 = max(0, i0 - warmup)
-        sp = slice_pre(pre, w0, i1)
-        eq_before = eq
-        tr, eq, liq = run3(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                           initial_capital=eq, commission=comm,
-                           use_sl=use_sl, dyn_liq=(mode == "lev"))
-        months += (i1 - i0) / (DAY * 30.4)
-        all_tr.append(tr)
-        if len(tr):
-            _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
-            mtm_dd = max(mtm_dd, dseg)
-        if liq:
-            liq_any = True
+        ivs = [(i0, i1)] if alt is None else alt_intervals(t, i0, i1, *alt)
+        for a, b in ivs:
+            w0 = max(0, a - warmup)
+            sp = slice_pre(pre, w0, b)
+            eq_before = eq
+            tr, eq, liq = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
+                               initial_capital=eq, commission=comm,
+                               use_sl=use_sl, dyn_liq=(mode == "lev"))
+            months += (b - a) / (DAY * 30.4)
+            all_tr.append(tr)
+            if len(tr):
+                _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                mtm_dd = max(mtm_dd, dseg)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
             break
     if months <= 0:
         return None
@@ -194,16 +199,16 @@ def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6, max_dd=
 
 # ---------------- algorithms (single-process batch APIs) ----------------
 
-def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True, max_dd=None):
+def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True, max_dd=None, alt=None):
     out = []
     for _ in range(n):
         c = sample_candidate(rng, space, R, mode, per_regime)
-        m = eval3(c, method, t0, t1)
+        m = eval3(c, method, t0, t1, alt=alt)
         if feasible3(m, mode, cand=c, max_dd=max_dd):
             out.append((m["score"], c, m))
     return out
 
-def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None):
+def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, alt=None):
     """Genetic step: produce and evaluate n children from a parent pool."""
     out = []
     for _ in range(n):
@@ -213,16 +218,16 @@ def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None):
         else:
             child = parents[0]
         child = mutate(rng, child, space, mode)
-        m = eval3(child, method, t0, t1)
+        m = eval3(child, method, t0, t1, alt=alt)
         if feasible3(m, mode, cand=child, max_dd=max_dd):
             out.append((m["score"], child, m))
     return out
 
-def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04, max_dd=None):
+def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04, max_dd=None, alt=None):
     out = []
     for _ in range(n):
         child = mutate(rng, seed_cand, space, mode, p_cont=0.15, p_menu=0.04, sigma=sigma)
-        m = eval3(child, method, t0, t1)
+        m = eval3(child, method, t0, t1, alt=alt)
         if feasible3(m, mode, cand=child, max_dd=max_dd):
             out.append((m["score"], child, m))
     return out

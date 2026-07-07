@@ -33,7 +33,19 @@ def gap_info():
                 n_segments=len(segs), segments=spans, skipped_gaps=skipped)
 
 
-def run_single_v7(cfg, oos_start=None):
+def opt_settings(cfg):
+    """Optimizer settings recorded in a best_config, for display on dashboards."""
+    if not isinstance(cfg, dict) or "algo" not in cfg and "evaluated" not in cfg:
+        return None
+    ho = (f"alternating {cfg['holdout_days']:g}d blocks" if cfg.get("holdout_days")
+          else f"after {cfg['train_end']}" if cfg.get("train_end") else "none")
+    return dict(algo=cfg.get("algo"),
+                param_set=("per-regime" if cfg.get("per_regime", True) else "single set"),
+                holdout=ho, max_dd=cfg.get("max_dd"),
+                evaluated=cfg.get("evaluated"))
+
+
+def run_single_v7(cfg, oos_start=None, holdout_days=None):
     """Backtest a V7 (engine3, full-param) candidate."""
     import optimizer2 as O
     from engine3 import run3
@@ -55,39 +67,44 @@ def run_single_v7(cfg, oos_start=None):
         i1 = len(t)
         if i1 - i0 < 200:
             continue
-        w0 = max(0, i0 - warmup)
-        sp = slice_pre(pre, w0, i1)
-        eq0 = eq
-        tr, eq, liq = run3(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                           initial_capital=eq,
-                           commission=0.0004 if mode == "lev" else 0.0005,
-                           use_sl=(mode == "spot"), dyn_liq=(mode == "lev"))
-        months += (i1 - i0) / (480 * 30.4)
-        if len(tr):
-            m, d = mtm_curve(tr, sp["c"], initial=eq0)
-            mdd = max(mdd, d)
-            step = max(1, len(m) // 500)
-            for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
-                if np.isfinite(v):
-                    curve.append(dict(t=str(x), eq=float(v)))
-            trades.append(tr)
-        if liq:
-            liq_any = True
+        from wf2 import alt_intervals
+        ivs = [(i0, i1)] if not holdout_days else alt_intervals(t, i0, i1, holdout_days, "holdout")
+        for a, b in ivs:
+            w0 = max(0, a - warmup)
+            sp = slice_pre(pre, w0, b)
+            eq0 = eq
+            tr, eq, liq = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
+                               initial_capital=eq,
+                               commission=0.0004 if mode == "lev" else 0.0005,
+                               use_sl=(mode == "spot"), dyn_liq=(mode == "lev"))
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
     return build_entry(tr, eq, months, mdd, liq_any, curve,
                        label_extra=dict(strategy=cfg.get("strategy") or cand.get("strategy", "v7"),
                                         mode=mode, method=method,
-                                        kind="full-history (in-sample fit)" if oos_start is None else f"from {oos_start}",
-                                        config=cand))
+                                        kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days else "full-history (in-sample fit)" if oos_start is None else f"from {oos_start}"),
+                                        config=cand, opt=opt_settings(cfg)))
 
 
-def run_single(cfg_path, oos_start=None):
+def run_single(cfg_path, oos_start=None, holdout_days=None):
     cfg = json.load(open(cfg_path))
     cand = cfg["cand"]
     if cfg.get("strategy") in ("v7", "prime7") or cand.get("strategy") in ("v7", "prime7") \
             or "regs" in cand:
-        return run_single_v7(cfg, oos_start)
+        return run_single_v7(cfg, oos_start, holdout_days=holdout_days)
     strategy, mode, method = cfg["strategy"], cfg["mode"], cfg["method"]
     from wf2 import (load_globals, build_P_v6, build_P_scalpx, build_P_prime,
                      mtm_curve, FUT_COMM, SPOT_COMM)
@@ -118,41 +135,46 @@ def run_single(cfg_path, oos_start=None):
         i1 = len(t)
         if i1 - i0 < 200:
             continue
-        w0 = max(0, i0 - warmup)
-        sp = slice_pre2(pre, w0, i1) if sx2 else slice_pre(pre, w0, i1)
-        eq0 = eq
-        if sx2:
-            tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:i1], warmup=i0 - w0,
-                                     initial_capital=eq,
-                                     commission=FUT_COMM if mode == "lev" else SPOT_COMM,
-                                     liq_threshold=-1.0 if mode == "lev" else 1e9)
-        elif v6like:
-            tr, eq, liq = run_fast(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                                   initial_capital=eq, use_sl=(mode == "spot"),
-                                   commission=FUT_COMM if mode == "lev" else SPOT_COMM,
-                                   liq_threshold=-1.0 if mode == "lev" else 1e9)
-        else:
-            tr, eq, liq = run_scalp(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                                    initial_capital=eq,
-                                    commission=FUT_COMM if mode == "lev" else SPOT_COMM,
-                                    liq_threshold=-1.0 if mode == "lev" else 1e9)
-        months += (i1 - i0) / (480 * 30.4)
-        if len(tr):
-            m, d = mtm_curve(tr, sp["c"], initial=eq0)
-            mdd = max(mdd, d)
-            step = max(1, len(m) // 500)
-            for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
-                if np.isfinite(v):
-                    curve.append(dict(t=str(x), eq=float(v)))
-            trades.append(tr)
-        if liq:
-            liq_any = True
+        from wf2 import alt_intervals
+        ivs = [(i0, i1)] if not holdout_days else alt_intervals(t, i0, i1, holdout_days, "holdout")
+        for a, b in ivs:
+            w0 = max(0, a - warmup)
+            sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)
+            eq0 = eq
+            if sx2:
+                tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
+                                         initial_capital=eq,
+                                         commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                         liq_threshold=-1.0 if mode == "lev" else 1e9)
+            elif v6like:
+                tr, eq, liq = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                       initial_capital=eq, use_sl=(mode == "spot"),
+                                       commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                       liq_threshold=-1.0 if mode == "lev" else 1e9)
+            else:
+                tr, eq, liq = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                        initial_capital=eq,
+                                        commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                        liq_threshold=-1.0 if mode == "lev" else 1e9)
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
     return build_entry(tr, eq, months, mdd, liq_any, curve,
                        label_extra=dict(strategy=strategy, mode=mode, method=method,
-                                        kind="full-history (in-sample fit)" if oos_start is None else f"from {oos_start}",
-                                        config=cand))
+                                        kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days else "full-history (in-sample fit)" if oos_start is None else f"from {oos_start}"),
+                                        config=cand, opt=opt_settings(cfg)))
 
 
 def build_entry(tr, eq, months, mdd, liq, curve, label_extra):
@@ -206,6 +228,8 @@ def main():
     ap.add_argument("--config", help="best_config.json / final_config_*.json")
     ap.add_argument("--walkforward", help="walk-forward run dir (uses resim.json)")
     ap.add_argument("--name", required=True)
+    ap.add_argument("--holdout-days", type=float, default=None,
+                    help="evaluate only the alternating held-out blocks of N days")
     ap.add_argument("--oos-start", default=None,
                     help="only simulate from this date (single-config mode)")
     args = ap.parse_args()
@@ -214,7 +238,7 @@ def main():
     B.enter_run_dir("_backtest_tmp")
     if args.config:
         path = args.config if os.path.isabs(args.config) else os.path.join(cwd0, args.config)
-        entry = run_single(path, args.oos_start)
+        entry = run_single(path, args.oos_start, holdout_days=args.holdout_days)
     else:
         wf_dir = args.walkforward if os.path.isabs(args.walkforward) else os.path.join(cwd0, args.walkforward)
         r = json.load(open(os.path.join(wf_dir, "resim.json")))
