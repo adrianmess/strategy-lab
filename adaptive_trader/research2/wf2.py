@@ -22,7 +22,8 @@ from engine import DEFAULT_PARAMS
 from fast_engine import params_to_vec, run_fast, PARAM_NAMES
 from scalp_engine import scalp_precompute, scalp_vec, run_scalp, SCALP_PARAM_NAMES
 from scalp_engine import (scalp_precompute2, run_scalp2, slice_pre2,
-                          SCALP2_VARIANTS, SCALP2_DEFAULT_IDX)
+                          SCALP2_VARIANTS, SCALP2_DEFAULT_IDX, scalp2_hash,
+                          _SCALP2_DEFAULTS)
 from adaptive import make_adaptive_pre, slice_pre
 from regimes import regime_features, make_regimes, REGIME_METHODS, DAY
 from common import load_segments
@@ -99,7 +100,12 @@ def load_globals(need=("v6", "scalpx")):
         _G["nreg"] = {m: make_regimes(v6[0][0][1], m)[1] for m in REGIME_METHODS}
     if "scalpx2" in need and "scalp2" not in _G:
         sc2 = None
-        cp = _cache_path("scalp2_pre.pkl")
+        cp = _cache_path(f"scalp2_pre_{scalp2_hash()}.pkl")
+        _legacy = _cache_path("scalp2_pre.pkl")
+        if not os.path.exists(cp) and os.path.exists(_legacy) \
+                and SCALP2_VARIANTS == _SCALP2_DEFAULTS:
+            try: os.rename(_legacy, cp)
+            except OSError: pass
         if os.path.exists(cp):
             try:
                 sc2 = pickle.load(open(cp, "rb"))

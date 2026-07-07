@@ -32,7 +32,18 @@ def load_g3():
     cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "..", "..", "optimizer", "cache")
     os.makedirs(cache_dir, exist_ok=True)
-    pres = get_pres3(cache=os.path.join(cache_dir, "engine3_pre.pkl"))
+    from engine3 import variants_hash, VARIANTS, _DEFAULT_VARIANTS
+    h = variants_hash()
+    cache = os.path.join(cache_dir, f"engine3_pre_{h}.pkl")
+    legacy = os.path.join(cache_dir, "engine3_pre.pkl")
+    if not os.path.exists(cache) and os.path.exists(legacy) \
+            and VARIANTS == _DEFAULT_VARIANTS:
+        try: os.rename(legacy, cache)   # default lists: reuse the old cache
+        except OSError: pass
+    if not os.path.exists(cache):
+        print(f"indicator-length libraries changed (or first build) — "
+              f"precomputing variants, this can take a few minutes...", flush=True)
+    pres = get_pres3(cache=cache)
     _G3["pres"] = pres
     _G3["regimes"] = {}
     for m in ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"]:

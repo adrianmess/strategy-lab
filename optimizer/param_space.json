@@ -730,7 +730,7 @@
     ]
    }
   },
-  "note": "Prime7 = Solana Prime upgraded to the full-parameter V7 engine: every indicator length (RSI / MACD / Bollinger / trend-EMA) is searchable via the variant menus, entry triggers are z-scored (volatility-adjusted) instead of raw %, and the MACD-crossover subsystem is locked OFF to preserve Prime's dip-system character. Defaults marked on parameters are your live xlsx values."
+  "note": "Prime7 = Solana Prime upgraded to the full-parameter V7 engine: every indicator length (RSI / MACD / Bollinger / trend-EMA) is searchable via the variant menus, entry triggers are z-scored (volatility-adjusted) instead of raw %, and the MACD-crossover subsystem is locked OFF to preserve Prime's dip-system character. Defaults marked on parameters are your live xlsx values. Indicator length LIBRARIES are shared with V7 (same engine) \u2014 edit them under the V7 strategy."
  },
  "scalpx": {
   "continuous": {
@@ -948,7 +948,31 @@
     ]
    }
   },
-  "note": "ScalpX2 = ScalpX upgraded with searchable indicator lengths: RSI, CVD smoothing, VRVP lookback and slow-EMA are now variant menus the optimizer explores per regime. Thresholds/brackets as before. Reminder: the scalp family has tested edge-less so far \u2014 holdout is the number to trust."
+  "note": "ScalpX2 = ScalpX upgraded with searchable indicator lengths: RSI, CVD smoothing, VRVP lookback and slow-EMA are now variant menus the optimizer explores per regime. Thresholds/brackets as before. Reminder: the scalp family has tested edge-less so far \u2014 holdout is the number to trust.",
+  "variants": {
+   "cvd": [
+    25,
+    50,
+    100
+   ],
+   "emaS": [
+    400,
+    800,
+    1200,
+    2000
+   ],
+   "poc": [
+    150,
+    300,
+    600
+   ],
+   "rsi": [
+    7,
+    10,
+    14,
+    21
+   ]
+  }
  },
  "v6": {
   "continuous": {
@@ -1523,6 +1547,101 @@
      4
     ]
    }
+  },
+  "note": "",
+  "variants": {
+   "bb": [
+    [
+     14,
+     2.0
+    ],
+    [
+     21,
+     2.0
+    ],
+    [
+     30,
+     2.0
+    ],
+    [
+     21,
+     2.5
+    ],
+    [
+     50,
+     2.0
+    ]
+   ],
+   "ema": [
+    20,
+    50,
+    95,
+    150,
+    270
+   ],
+   "histn": [
+    2,
+    4,
+    8,
+    12
+   ],
+   "macd": [
+    [
+     3,
+     7
+    ],
+    [
+     3,
+     10
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     8,
+     17
+    ],
+    [
+     12,
+     26
+    ]
+   ],
+   "rsi": [
+    2,
+    3,
+    4,
+    6,
+    9,
+    14
+   ],
+   "xmacd": [
+    [
+     12,
+     26,
+     9
+    ],
+    [
+     12,
+     26,
+     8
+    ],
+    [
+     8,
+     17,
+     9
+    ],
+    [
+     5,
+     35,
+     5
+    ],
+    [
+     20,
+     50,
+     9
+    ]
+   ]
   }
  }
 }

@@ -229,12 +229,30 @@ def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
 # one option per regime via integer indexes. The numba core is reused: the
 # wrapper gathers per-bar 1-D arrays from the stacks before calling it.
 
-SCALP2_VARIANTS = dict(
+_SCALP2_DEFAULTS = dict(
     rsi=[7, 10, 14, 21],            # RSI length (script default 14)
     cvd=[25, 50, 100],              # CVD SMA length (default 50)
     poc=[150, 300, 600],            # VRVP/POC lookback bars (default 300)
     emaS=[400, 800, 1200, 2000],    # slow EMA length (default 1200; fast stays 1)
 )
+
+def _load_scalp2_variants():
+    import os, json
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "..", "optimizer", "param_space.json")
+    try:
+        v = json.load(open(path)).get("scalpx2", {}).get("variants")
+        if v:
+            return {k: [int(x) for x in v[k]] for k in ("rsi", "cvd", "poc", "emaS")}
+    except Exception as e:
+        print(f"scalpx2 variants from param_space.json unusable ({e}); using defaults")
+    return dict(_SCALP2_DEFAULTS)
+
+SCALP2_VARIANTS = _load_scalp2_variants()
+
+def scalp2_hash():
+    import hashlib
+    return hashlib.md5(repr(sorted(SCALP2_VARIANTS.items())).encode()).hexdigest()[:8]
 SCALP2_DEFAULT_IDX = dict(rsi=2, cvd=1, poc=1, emaS=2)
 
 

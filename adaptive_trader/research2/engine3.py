@@ -26,7 +26,7 @@ from engine import ema, rsi as rsi_tv, sma, stdev_pop, DEFAULT_PARAMS
 from fast_engine import last_1m_metric
 from regimes import regime_features, DAY
 
-VARIANTS = dict(
+_DEFAULT_VARIANTS = dict(
     rsi=[2, 3, 4, 6, 9, 14],
     macd=[(3, 7), (3, 10), (5, 13), (8, 17), (12, 26)],
     bb=[(14, 2.0), (21, 2.0), (30, 2.0), (21, 2.5), (50, 2.0)],
@@ -34,6 +34,33 @@ VARIANTS = dict(
     xmacd=[(12, 26, 9), (12, 26, 8), (8, 17, 9), (5, 35, 5), (20, 50, 9)],
     histn=[2, 4, 8, 12],
 )
+
+def _load_variants():
+    """User-editable indicator-length libraries (optimizer/param_space.json,
+    v7.variants). Falls back to the built-in defaults."""
+    import json
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "..", "optimizer", "param_space.json")
+    try:
+        v = json.load(open(path)).get("v7", {}).get("variants")
+        if v:
+            return dict(
+                rsi=[int(x) for x in v["rsi"]],
+                macd=[tuple(map(float, x)) for x in v["macd"]],
+                bb=[tuple(map(float, x)) for x in v["bb"]],
+                ema=[int(x) for x in v["ema"]],
+                xmacd=[tuple(map(float, x)) for x in v["xmacd"]],
+                histn=[int(x) for x in v["histn"]],
+            )
+    except Exception as e:
+        print(f"variants from param_space.json unusable ({e}); using defaults")
+    return dict(_DEFAULT_VARIANTS)
+
+VARIANTS = _load_variants()
+
+def variants_hash():
+    import hashlib
+    return hashlib.md5(repr(sorted(VARIANTS.items())).encode()).hexdigest()[:8]
 ZWIN = 3 * DAY  # z-score window for MACD lines
 
 # ---- P-matrix layout (per regime) ----
@@ -100,9 +127,9 @@ def precompute3(df3: pd.DataFrame, df1: pd.DataFrame):
     l = df3["low"].to_numpy(); c = df3["close"].to_numpy()
     n = len(c)
     rsi_all = np.vstack([rsi_tv(c, L) for L in VARIANTS["rsi"]])
-    macdz_all = np.vstack([zscore(ema(c, f) - ema(c, s)) for f, s in VARIANTS["macd"]])
+    macdz_all = np.vstack([zscore(ema(c, int(f)) - ema(c, int(s))) for f, s in VARIANTS["macd"]])
     bb_all = []
-    for L, sd in VARIANTS["bb"]:
+    for L, sd in [(int(a), float(b)) for a, b in VARIANTS["bb"]]:
         basis = sma(c, L); dev = sd * stdev_pop(c, L)
         bb_all.append((c - (basis - dev)) / (2 * dev))
     bb_all = np.vstack(bb_all)
@@ -115,7 +142,7 @@ def precompute3(df3: pd.DataFrame, df1: pd.DataFrame):
     emaup_all = np.vstack(emaup_all); emadn_all = np.vstack(emadn_all)
     xz_all, xup_all, xdn_all, xhist_all = [], [], [], []
     hist_rising = []
-    for f, s, sg in VARIANTS["xmacd"]:
+    for f, s, sg in [(int(a), int(b), int(g)) for a, b, g in VARIANTS["xmacd"]]:
         line = ema(c, f) - ema(c, s)
         sig = ema(line, sg)
         hist = line - sig

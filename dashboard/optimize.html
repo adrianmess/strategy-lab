@@ -159,7 +159,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <details open><summary>Continuous parameters (min / max)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
     </details>
-    <details id="menuSection"><summary>Indicator variants & menus</summary>
+    <details id="menuSection"><summary>Indicator lengths — editable choice lists</summary>
+      <div class="kv" style="margin:8px 0;font-size:12.5px">Indicator lengths can't be searched as a continuous range (each length means recomputing the indicator over all history), so the search picks from these lists instead. <b>The lists themselves are yours to edit</b> — add or change any lengths below, hit Save. The first run after a change rebuilds the engine cache once (V5 family: a few minutes; Scalp family: ~10s). Checkboxes narrow which options the search may pick without rebuilding.</div>
+      <div id="varGrid" style="margin:6px 0"></div>
       <div id="menuGrid" style="margin-top:10px"></div>
     </details>
     <div class="row" style="margin-top:10px">
@@ -463,7 +465,14 @@ function renderSpace(){
       <button class="small" title="${fixed ? 'Locked (min = max). Click to restore a search range around the default.' : 'Lock at '+(v.default!=null?('the default: '+v.default):'the min value')+' — the search keeps it fixed'}"
         style="padding:1px 6px;${fixed?'color:var(--amber)':''}" onclick="fixParam('${k}')">${fixed?'🔒':'📌'}</button></div>`;
   }).join('');
-  $('menuSection').style.display = Object.keys(sp.menus||{}).length ? '' : 'none';
+  const VFMT = {rsi:'RSI lengths', macd:'MACD fast/slow pairs', bb:'Bollinger length/std-dev pairs',
+    ema:'Trend EMA lengths (used by both long & short menus)', xmacd:'Crossover MACD fast/slow/signal triples',
+    histn:'Histogram rise bars', cvd:'CVD smoothing lengths', poc:'VRVP/POC lookbacks', emaS:'Slow EMA lengths'};
+  $('varGrid').innerHTML = sp.variants ? Object.entries(sp.variants).map(([k,v])=>`
+    <div class="prow" style="margin:3px 0"><span class="nm" style="width:290px">${VFMT[k]||k} <span class="kv" style="font-size:10px">${k}</span></span>
+      <input data-vk="${k}" style="width:340px" value="${v.map(x=>Array.isArray(x)?x.join('/'):x).join(', ')}"></div>`).join('')
+    : '<div class="kv" style="font-size:12px">Length libraries for this strategy are edited on its parent engine strategy (V7 for Prime7).</div>';
+  $('menuSection').style.display = (Object.keys(sp.menus||{}).length || sp.variants) ? '' : 'none';
   $('menuGrid').innerHTML = Object.entries(sp.menus||{}).map(([k,v])=>`
     <div style="margin:6px 0"><b class="nm" style="cursor:pointer" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${v.label||k}</b> <span class="kv" style="font-size:10px">${k}</span>:
       ${v.options.map((o,i)=>`<label style="margin-right:10px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}</div>`).join('');
@@ -501,8 +510,36 @@ async function saveSpace(){
       spec.options = checked;
     }
   }
+  let rebuilt = false;
+  if(sp.variants){
+    const VLAB = {rsi:v=>'RSI '+v, macd:a=>'MACD '+a[0]+'/'+a[1], bb:a=>'BB '+a[0]+'/'+a[1],
+      ema:v=>'EMA '+v, xmacd:a=>'X-MACD '+a.join('/'), histn:v=>v+' bars',
+      cvd:v=>'SMA '+v, poc:v=>v+' bars', emaS:v=>'EMA '+v};
+    const VMENUS = {rsi:['vRsi','vR'], macd:['vMacd'], bb:['vBB'], ema:['vEmaUp','vEmaDn'],
+      xmacd:['vX'], histn:['vHistN'], cvd:['vC'], poc:['vP'], emaS:['vE']};
+    const shares = {v7:['v7','prime7'], scalpx2:['scalpx2']}[$('strat').value] || [$('strat').value];
+    document.querySelectorAll('#varGrid input[data-vk]').forEach(inp=>{
+      const k = inp.dataset.vk;
+      const vals = inp.value.split(',').map(s=>s.trim()).filter(Boolean)
+        .map(s=>s.includes('/') ? s.split('/').map(Number) : Number(s));
+      if(!vals.length || vals.some(v=>Array.isArray(v)?v.some(isNaN):isNaN(v))) return;
+      if(JSON.stringify(vals)!==JSON.stringify(sp.variants[k])) rebuilt = true;
+      sp.variants[k] = vals;
+      for(const sect of shares){
+        const S = SPACE[sect]; if(!S||!S.menus) continue;
+        for(const mk of VMENUS[k]||[]){
+          if(S.menus[mk]){
+            S.menus[mk].options = vals.map((_,i)=>i);
+            S.menus[mk].labels = vals.map(VLAB[k]||(x=>String(x)));
+          }
+        }
+      }
+    });
+  }
   const r = await api('param_space', SPACE);
-  $('spaceMsg').textContent = r.ok?'saved ✓ (new runs use these ranges)':'error';
+  $('spaceMsg').textContent = r.ok ? ('saved ✓ (new runs use these ranges)' +
+    (rebuilt ? ' — length lists changed: the next run rebuilds the engine cache once' : '')) : 'error';
+  if(rebuilt) renderSpace();
 }
 async function aiKey(){
   const r = await api('ai_key_status');
