@@ -18,7 +18,7 @@ sys.path.insert(0, RESEARCH)
 def safe_name(name: str) -> str:
     """Run names become folder names: strip path separators & odd characters."""
     import re
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "run"
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name) or "run"
 
 
 def enter_run_dir(name: str) -> str:

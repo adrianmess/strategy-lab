@@ -222,3 +222,88 @@ def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
         df["entry_t"] = pre["t"][df["entry_idx"].astype(int)]
         df["exit_t"] = pre["t"][df["exit_idx"].astype(int)]
     return df, eq, bool(liq)
+
+
+# ================= ScalpX2: searchable indicator lengths =================
+# Variant libraries precomputed once (like the V7 engine); a candidate picks
+# one option per regime via integer indexes. The numba core is reused: the
+# wrapper gathers per-bar 1-D arrays from the stacks before calling it.
+
+SCALP2_VARIANTS = dict(
+    rsi=[7, 10, 14, 21],            # RSI length (script default 14)
+    cvd=[25, 50, 100],              # CVD SMA length (default 50)
+    poc=[150, 300, 600],            # VRVP/POC lookback bars (default 300)
+    emaS=[400, 800, 1200, 2000],    # slow EMA length (default 1200; fast stays 1)
+)
+SCALP2_DEFAULT_IDX = dict(rsi=2, cvd=1, poc=1, emaS=2)
+
+
+def scalp_precompute2(df3: pd.DataFrame):
+    o = df3["open"].to_numpy(); h = df3["high"].to_numpy()
+    l = df3["low"].to_numpy(); c = df3["close"].to_numpy()
+    v = df3["volume"].to_numpy().astype(np.float64)
+    n = len(c)
+    delta = np.where(c > o, v, np.where(c < o, -v, 0.0))
+    cvd = np.cumsum(delta)
+
+    rsi2d = np.vstack([rsi_tv(c, L) for L in SCALP2_VARIANTS["rsi"]])
+
+    k = len(SCALP2_VARIANTS["cvd"])
+    cvdUp2d = np.zeros((k, n)); cvdDn2d = np.zeros((k, n))
+    above2d = np.zeros((k, n)); below2d = np.zeros((k, n))
+    for j, L in enumerate(SCALP2_VARIANTS["cvd"]):
+        sma = pd.Series(cvd).rolling(L).mean().to_numpy()
+        cvdUp2d[j, 1:] = ((cvd[1:] > sma[1:]) & (cvd[:-1] <= sma[:-1])).astype(float)
+        cvdDn2d[j, 1:] = ((cvd[1:] < sma[1:]) & (cvd[:-1] >= sma[:-1])).astype(float)
+        above2d[j] = (cvd > sma).astype(float)
+        below2d[j] = (cvd < sma).astype(float)
+
+    poc2d = np.vstack([_poc(v, c, L) for L in SCALP2_VARIANTS["poc"]])
+
+    k = len(SCALP2_VARIANTS["emaS"])
+    emaBull2d = np.zeros((k, n)); emaBear2d = np.zeros((k, n))
+    fe = c  # fast EMA length 1 == close (script value)
+    for j, L in enumerate(SCALP2_VARIANTS["emaS"]):
+        se = ema(c, L)
+        emaBull2d[j, 1:] = ((fe[1:] > se[1:]) & (fe[:-1] <= se[:-1])).astype(float)
+        emaBear2d[j, 1:] = ((fe[1:] < se[1:]) & (fe[:-1] >= se[:-1])).astype(float)
+
+    t_ms = (df3["t"].astype("int64") // 10**6).to_numpy().astype(np.float64)
+    return dict(t=df3["t"].to_numpy(), t_ms=t_ms, o=o, h=h, l=l, c=c, vol=v,
+                rsi2d=rsi2d, cvdUp2d=cvdUp2d, cvdDn2d=cvdDn2d,
+                above2d=above2d, below2d=below2d,
+                emaBull2d=emaBull2d, emaBear2d=emaBear2d, poc2d=poc2d)
+
+
+def slice_pre2(pre, i0, i1):
+    n = len(pre["c"])
+    out = {}
+    for k, v in pre.items():
+        if isinstance(v, np.ndarray) and v.ndim == 2 and v.shape[1] == n:
+            out[k] = v[:, i0:i1]
+        elif isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == n:
+            out[k] = v[i0:i1]
+        else:
+            out[k] = v
+    return out
+
+
+def run_scalp2(pre2, P, vidx, regime=None, warmup=1300, initial_capital=100.0,
+               commission=0.0004, liq_threshold=1e9):
+    """vidx: (R, 4) int array of variant indexes [rsi, cvd, poc, emaS] per regime."""
+    n = len(pre2["c"])
+    if regime is None:
+        regime = np.zeros(n, dtype=np.int32)
+    reg = np.asarray(regime, dtype=np.int64)
+    vidx = np.asarray(vidx, dtype=np.int64)
+    ar = np.arange(n)
+    ri, ci, pi, ei = (vidx[reg, j] for j in range(4))
+    pre = dict(t=pre2["t"], o=pre2["o"], h=pre2["h"], l=pre2["l"], c=pre2["c"],
+               rsi=pre2["rsi2d"][ri, ar],
+               cvdUp=pre2["cvdUp2d"][ci, ar], cvdDn=pre2["cvdDn2d"][ci, ar],
+               aboveCvd=pre2["above2d"][ci, ar], belowCvd=pre2["below2d"][ci, ar],
+               emaBull=pre2["emaBull2d"][ei, ar], emaBear=pre2["emaBear2d"][ei, ar],
+               poc=pre2["poc2d"][pi, ar])
+    return run_scalp(pre, P, regime=regime, warmup=warmup,
+                     initial_capital=initial_capital, commission=commission,
+                     liq_threshold=liq_threshold)

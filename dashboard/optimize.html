@@ -96,7 +96,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="strategy">Strategy</label>
         <select id="strat">
           <option value="v7">V5 family · V7 full-param (recommended)</option>
+          <option value="prime7">V5 family · Prime7 (Solana Prime, full-param)</option>
           <option value="prime">V5 family · Solana Prime (dip system, no crossover)</option>
+          <option value="scalpx2">Scalp family · ScalpX2 (full-param)</option>
           <option value="scalpx">Scalp family · ScalpX</option>
           <option value="v6">V5 family · V6 (z-score thresholds)</option>
         </select></div>
@@ -152,7 +154,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <details open><summary>Continuous parameters (min / max)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
     </details>
-    <details><summary>Indicator variants & menus</summary>
+    <details id="menuSection"><summary>Indicator variants & menus</summary>
       <div id="menuGrid" style="margin-top:10px"></div>
     </details>
     <div class="row" style="margin-top:10px">
@@ -192,7 +194,7 @@ const X = {
  strategy: ["Strategy", `Which trading system to optimize — named by lineage so you always know the origin:<dl>
   <dt>V5 family · V7 full-param</dt><dd>Your original V5 TradingView strategy (RSI+MACD+BB dip-buy + MACD-crossover systems), rebuilt so EVERY parameter is searchable — including RSI/MACD/BB/EMA lengths — per regime. Recommended.</dd>
   <dt>V5 family · V6</dt><dd>Earlier version: thresholds searchable, indicator lengths fixed.</dd>
-  <dt>Scalp family · ScalpX</dt><dd>Your VRVP+CVD+EMA scalp strategy. Tested edge-less in every configuration — kept for reference.</dd></dl>`],
+  <dt>Scalp family · ScalpX</dt><dd>Your VRVP+CVD+EMA scalp strategy. Tested edge-less in every configuration — kept for reference.</dd></dl<dt>Prime7</dt><dd>Prime on the full-param V7 engine — indicator lengths searchable, crossover locked off.</dd><dt>ScalpX2</dt><dd>ScalpX with searchable RSI/CVD/VRVP/EMA lengths.</dd>`],
  algorithm: ["Algorithm", `<dl><dt>genetic (recommended)</dt><dd>Evolves a population: best candidates breed, children mutate. Won the head-to-head study: +25%/mo on unseen holdout.</dd>
   <dt>random</dt><dd>Uniform sampling. Unbiased first sweep; its best pick liquidated on holdout in the study.</dd>
   <dt>refine</dt><dd>Small perturbations around the best found so far. Polishes a finished run; doesn't explore.</dd></dl>`],
@@ -430,12 +432,34 @@ function renderSpace(){
   $('spaceNote').textContent = sp.note || '';
   $('spaceStrat').textContent = $('strat').selectedOptions[0].text;
   const nm = (k,v)=>`${v.label||k} <span class="kv" style="font-size:10px">${k}</span>`;
-  $('contGrid').innerHTML = Object.entries(sp.continuous).map(([k,v])=>`
-    <div class="prow"><span class="nm" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${nm(k,v)}</span>
-      <input data-k="${k}" data-i="0" value="${v.range[0]}"><input data-k="${k}" data-i="1" value="${v.range[1]}"></div>`).join('');
-  $('menuGrid').innerHTML = Object.entries(sp.menus).map(([k,v])=>`
+  $('contGrid').innerHTML = Object.entries(sp.continuous).map(([k,v])=>{
+    const fixed = v.range[0] === v.range[1];
+    const doc = (v.doc||'') + (v.default!=null ? ` Default (your live/script value): ${v.default}.` : '') +
+      ' Tip: set min = max (or hit the pin) to LOCK a parameter at a fixed value — the search will not vary it.';
+    return `
+    <div class="prow"><span class="nm" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${nm(k,v)}</span>
+      <input data-k="${k}" data-i="0" value="${v.range[0]}"><input data-k="${k}" data-i="1" value="${v.range[1]}">
+      <button class="small" title="${fixed ? 'Locked (min = max). Click to restore a search range around the default.' : 'Lock at '+(v.default!=null?('the default: '+v.default):'the min value')+' — the search keeps it fixed'}"
+        style="padding:1px 6px;${fixed?'color:var(--amber)':''}" onclick="fixParam('${k}')">${fixed?'🔒':'📌'}</button></div>`;
+  }).join('');
+  $('menuSection').style.display = Object.keys(sp.menus||{}).length ? '' : 'none';
+  $('menuGrid').innerHTML = Object.entries(sp.menus||{}).map(([k,v])=>`
     <div style="margin:6px 0"><b class="nm" style="cursor:pointer" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${v.label||k}</b> <span class="kv" style="font-size:10px">${k}</span>:
       ${v.options.map((o,i)=>`<label style="margin-right:10px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}</div>`).join('');
+}
+function fixParam(k){
+  const sp = SPACE[$('strat').value] || SPACE.v7;
+  const v = sp.continuous[k];
+  if(v.range[0] === v.range[1]){          // unlock: restore a range around the default
+    const c = v.default != null ? v.default : v.range[0];
+    v.range = [c ? c*0.5 : 0, c ? c*1.5 : 1];
+    if(v.range[0] > v.range[1]) v.range.reverse();   // negative defaults
+  } else {                                 // lock at default (fallback: current min)
+    const c = v.default != null ? v.default : parseFloat(document.querySelector(`input[data-k="${k}"][data-i="0"]`).value);
+    v.range = [c, c];
+  }
+  renderSpace();
+  $('spaceMsg').textContent = 'not saved yet — hit Save ranges';
 }
 async function saveSpace(){
   const sp = SPACE[$('strat').value] || SPACE.v7;
@@ -493,7 +517,7 @@ $('mode').onchange = ()=>{
   explain('mode');
 };
 $('strat').onchange = ()=>{
-  const legacy = $('strat').value !== 'v7';
+  const legacy = !['v7','prime7'].includes($('strat').value);
   $('perreg').disabled = legacy;   // per-regime specialists is v7-only for now
   if(SPACE) renderSpace();
   explain('strategy');

@@ -76,7 +76,8 @@ def run_single_v7(cfg, oos_start=None):
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
     return build_entry(tr, eq, months, mdd, liq_any, curve,
-                       label_extra=dict(strategy="v7", mode=mode, method=method,
+                       label_extra=dict(strategy=cfg.get("strategy") or cand.get("strategy", "v7"),
+                                        mode=mode, method=method,
                                         kind="full-history (in-sample fit)" if oos_start is None else f"from {oos_start}",
                                         config=cand))
 
@@ -84,22 +85,29 @@ def run_single_v7(cfg, oos_start=None):
 def run_single(cfg_path, oos_start=None):
     cfg = json.load(open(cfg_path))
     cand = cfg["cand"]
-    if cfg.get("strategy") == "v7" or cand.get("strategy") == "v7":
+    if cfg.get("strategy") in ("v7", "prime7") or cand.get("strategy") in ("v7", "prime7") \
+            or "regs" in cand:
         return run_single_v7(cfg, oos_start)
     strategy, mode, method = cfg["strategy"], cfg["mode"], cfg["method"]
     from wf2 import (load_globals, build_P_v6, build_P_scalpx, build_P_prime,
                      mtm_curve, FUT_COMM, SPOT_COMM)
     from fast_engine import run_fast
-    from scalp_engine import run_scalp
+    from scalp_engine import run_scalp, run_scalp2, slice_pre2
     from adaptive import slice_pre
     from regimes import DAY
     G = load_globals(("v6",) if strategy == "prime" else (strategy,))
     R = G["nreg"][method]
-    builder = {"v6": build_P_v6, "prime": build_P_prime}.get(strategy, build_P_scalpx)
-    P = builder(cand, R)
+    sx2 = strategy == "scalpx2"
+    vidx = None
+    if sx2:
+        from wf2 import build_P_scalpx2
+        P, vidx = build_P_scalpx2(cand, R)
+    else:
+        builder = {"v6": build_P_v6, "prime": build_P_prime}.get(strategy, build_P_scalpx)
+        P = builder(cand, R)
     v6like = strategy in ("v6", "prime")
-    segs = G["v6"][cand.get("tv", 0)] if v6like else G["scalp"]
-    regs = G["regimes_v6" if v6like else "regimes_sc"][method]
+    segs = G["v6"][cand.get("tv", 0)] if v6like else (G["scalp2"] if sx2 else G["scalp"])
+    regs = G["regimes_v6" if v6like else ("regimes_sc2" if sx2 else "regimes_sc")][method]
     warmup = 3000 if strategy == "v6" else 2500
     eq = 1000.0
     trades, curve = [], []
@@ -111,9 +119,14 @@ def run_single(cfg_path, oos_start=None):
         if i1 - i0 < 200:
             continue
         w0 = max(0, i0 - warmup)
-        sp = slice_pre(pre, w0, i1)
+        sp = slice_pre2(pre, w0, i1) if sx2 else slice_pre(pre, w0, i1)
         eq0 = eq
-        if v6like:
+        if sx2:
+            tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:i1], warmup=i0 - w0,
+                                     initial_capital=eq,
+                                     commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                     liq_threshold=-1.0 if mode == "lev" else 1e9)
+        elif v6like:
             tr, eq, liq = run_fast(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
                                    initial_capital=eq, use_sl=(mode == "spot"),
                                    commission=FUT_COMM if mode == "lev" else SPOT_COMM,

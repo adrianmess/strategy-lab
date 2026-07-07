@@ -142,7 +142,7 @@ def jobs_list():
 
 def _safe_name(n):
     import re
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", n or "").strip("_")
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", n or "")
 
 @app.route("/api/jobs/backtest", methods=["POST"])
 def job_backtest():

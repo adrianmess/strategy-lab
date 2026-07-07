@@ -76,6 +76,8 @@ th{color:var(--dim)}
 <dt>V5 (original)</dt><dd>Your TradingView Pine strategy: RSI+MACD+BB%B dip-buy system + a MACD-crossover system, fixed thresholds. Validated bar-for-bar against your exports (325/351 exact).</dd>
 <dt>V6</dt><dd>V5 with volatility-normalized entries: the MACD thresholds are z-scored against their own trailing 3-day volatility, so trigger rates stay constant across quiet/wild markets. Fixes the "stops trading in low volume" problem.</dd>
 <dt>V7 (current)</dt><dd>Full-parameter generation: <b>everything</b> is searchable including indicator lengths (RSI length, MACD fast/slow, BB length/stddev, trend-EMA length, crossover-MACD lengths, histogram bars). With a regime method active, every parameter can differ per market regime — a genuinely different sub-strategy per low/mid/high bucket. Trend-EMA is a clean single length (not V5's ATR-switched pair).</dd>
+<dt>Prime7</dt><dd>Solana Prime upgraded to the full-parameter V7 engine: every indicator length (RSI/MACD/Bollinger/trend-EMA) is searchable via variant menus, entry triggers are z-scored (volatility-adjusted), and the MACD-crossover subsystem is locked off to keep Prime's dip-system character. Defaults = your live xlsx values.</dd>
+<dt>ScalpX2</dt><dd>ScalpX with searchable indicator lengths: RSI period, CVD smoothing, VRVP/POC lookback and slow-EMA length become per-regime variant menus. Thresholds and brackets as in ScalpX.</dd>
 <dt>ScalpX</dt><dd>The VRVP+CVD+EMA scalp strategy, ported exactly. Verdict from testing: <b>no edge</b> — loses in every tested configuration, including its own TradingView export (−16%). Kept for reference.</dd>
 </dl>
 

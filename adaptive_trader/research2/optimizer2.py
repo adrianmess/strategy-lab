@@ -58,8 +58,9 @@ def sample_regime_params(rng, space, mode):
         d[k] = float(rng.uniform(lo, hi))
     for k, spec in space["menus"].items():
         d[k] = float(rng.choice(spec["options"]))
-    for k in space["flags"]:
-        d[k] = float(rng.random() < 0.75)
+    for k, spec in space["flags"].items():
+        fx = spec.get("fixed") if isinstance(spec, dict) else None
+        d[k] = float(fx) if fx is not None else float(rng.random() < 0.75)
     # orderings the engine expects
     if d["apt1Long"] > d["ptLong"]: d["apt1Long"] = d["ptLong"] * 0.7
     if d["apt2Long"] > d["apt1Long"]: d["apt2Long"] = d["apt1Long"] * 0.6
@@ -99,8 +100,11 @@ def mutate(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):
         for k, spec in space["menus"].items():
             if rng.random() < p_menu:
                 d[k] = float(rng.choice(spec["options"]))
-        for k in space["flags"]:
-            if rng.random() < 0.05:
+        for k, spec in space["flags"].items():
+            fx = spec.get("fixed") if isinstance(spec, dict) else None
+            if fx is not None:
+                d[k] = float(fx)
+            elif rng.random() < 0.05:
                 d[k] = 1.0 - d[k]
         if mode == "spot":
             d["leverage"] = 1.0; d["eS3"] = 0.0; d["eXS"] = 0.0

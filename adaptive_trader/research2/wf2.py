@@ -21,6 +21,8 @@ import json, os, pickle, time
 from engine import DEFAULT_PARAMS
 from fast_engine import params_to_vec, run_fast, PARAM_NAMES
 from scalp_engine import scalp_precompute, scalp_vec, run_scalp, SCALP_PARAM_NAMES
+from scalp_engine import (scalp_precompute2, run_scalp2, slice_pre2,
+                          SCALP2_VARIANTS, SCALP2_DEFAULT_IDX)
 from adaptive import make_adaptive_pre, slice_pre
 from regimes import regime_features, make_regimes, REGIME_METHODS, DAY
 from common import load_segments
@@ -95,6 +97,27 @@ def load_globals(need=("v6", "scalpx")):
         _G["v6"] = v6
         _G["regimes_v6"] = {m: [make_regimes(f, m)[0] for _, f in v6[0]] for m in REGIME_METHODS}
         _G["nreg"] = {m: make_regimes(v6[0][0][1], m)[1] for m in REGIME_METHODS}
+    if "scalpx2" in need and "scalp2" not in _G:
+        sc2 = None
+        cp = _cache_path("scalp2_pre.pkl")
+        if os.path.exists(cp):
+            try:
+                sc2 = pickle.load(open(cp, "rb"))
+            except Exception as e:
+                print(f"scalp2_pre.pkl unreadable ({e}); rebuilding...")
+                try: os.remove(cp)
+                except OSError: pass
+        if sc2 is None:
+            segs = segs or load_segments()
+            sc2 = []
+            for g, d1 in segs:
+                pre = scalp_precompute2(g)
+                f = regime_features(pre)
+                sc2.append((pre, f))
+            pickle.dump(sc2, open(cp, "wb"))
+        _G["scalp2"] = sc2
+        _G["regimes_sc2"] = {m: [make_regimes(f, m)[0] for _, f in sc2] for m in REGIME_METHODS}
+        _G.setdefault("nreg", {m: make_regimes(sc2[0][1], m)[1] for m in REGIME_METHODS})
     if "scalpx" in need and "scalp" not in _G:
         sc = None
         if os.path.exists(_cache_path("scalp_pre.pkl")):
@@ -187,6 +210,17 @@ def sample_scalpx(rng, R, mode, space=None):
         c["eS"] = [0.0] * R
     return c
 
+def sample_scalpx2(rng, R, mode, space=None):
+    c = sample_scalpx(rng, R, mode, space)
+    c["strategy"] = "scalpx2"
+    menus = (space or {}).get("menus", {})
+    for key, vkey in (("vR", "rsi"), ("vC", "cvd"), ("vP", "poc"), ("vE", "emaS")):
+        opts = (menus.get(key, {}) or {}).get("options") \
+            or list(range(len(SCALP2_VARIANTS[vkey])))
+        c[key] = [float(rng.choice(opts)) for _ in range(R)]
+    return c
+
+
 # Solana Prime: the dip system standalone (no crossover). Base = the user's
 # live parameters from their TradingView xlsx export (validated 105/111 trades).
 PRIME_BASE = dict(DEFAULT_PARAMS)
@@ -277,6 +311,7 @@ def build_P_prime(c, R):
 
 # ---------------- generic genome ops for flat candidates (v6/prime/scalpx) ----
 FLAT_FLAG_KEYS = {"eL3", "eS3", "eXL", "eXS", "eL", "eS", "useCvd", "useEma"}
+FLAT_MENU_KEYS = {"vR": "rsi", "vC": "cvd", "vP": "poc", "vE": "emaS"}  # scalpx2 variant indexes
 FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
     "prime": dict(rsiL="rsiValLong", rsiS="rsiValShort", ptL="ptLong", a1L="apt1Long",
                   a2L="apt2Long", d1L="dur1Long", d2L="dur2Long", ptS="ptShort",
@@ -287,6 +322,7 @@ FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
     "v6": dict(lev="leverage", zL="zL", zS="zS", zXS="zXS", zXLmax="zXLmax",
                ptScale="ptScale"),
     "scalpx": dict(lev="leverage", tpL="tpL", tpS="tpS", rsiOB="rsiOB", rsiOS="rsiOS"),
+    "scalpx2": dict(lev="leverage", tpL="tpL", tpS="tpS", rsiOB="rsiOB", rsiOS="rsiOS"),
 }
 
 def _normalize_flat(c):
@@ -327,6 +363,14 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
                 c[k] = float(np.clip(v + rng.normal(0, sigma * (hi - lo)), lo, hi))
             continue
         if not isinstance(v, list):
+            continue
+        if k in FLAT_MENU_KEYS:
+            menus = (s or {}).get("menus", {})
+            opts = (menus.get(k, {}) or {}).get("options") \
+                or list(range(len(SCALP2_VARIANTS[FLAT_MENU_KEYS[k]])))
+            for r in range(len(v)):
+                if rng.random() < 0.10:
+                    v[r] = float(rng.choice(opts))
             continue
         if k in FLAT_FLAG_KEYS:
             for r in range(len(v)):
@@ -406,6 +450,16 @@ def build_P_scalpx(c, R):
             slOn=c["slOn"] if "slOn" in c else 1.0)))
     return np.vstack(rows)
 
+def build_P_scalpx2(c, R):
+    P = build_P_scalpx(c, R)
+    vidx = np.zeros((R, 4), dtype=np.int64)
+    keys = ("rsi", "cvd", "poc", "emaS")
+    for j, key in enumerate(("vR", "vC", "vP", "vE")):
+        vals = c.get(key)
+        for r in range(R):
+            vidx[r, j] = int(vals[r]) if vals is not None else SCALP2_DEFAULT_IDX[keys[j]]
+    return P, vidx
+
 # ---------------- evaluation ----------------
 
 def _clip_indices(t_arr, t0, t1):
@@ -414,7 +468,8 @@ def _clip_indices(t_arr, t0, t1):
     return i0, i1
 
 def eval_config(cand, method, mode, t0, t1, collect_trades=False):
-    G = load_globals(("v6",) if cand["strategy"] == "prime" else (cand["strategy"],))
+    need = {"prime": ("v6",)}.get(cand["strategy"], (cand["strategy"],))
+    G = load_globals(need)
     R = G["nreg"][method]
     warmup = 3000
     eq = 1000.0
@@ -446,19 +501,30 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False):
                 mtm_dd = max(mtm_dd, dseg)
             if liq: liq_any = True; break
     else:
-        P = build_P_scalpx(cand, R)
+        sx2 = cand["strategy"] == "scalpx2"
+        if sx2:
+            P, vidx = build_P_scalpx2(cand, R)
+            segs_sc, regs_sc = G["scalp2"], G["regimes_sc2"][method]
+        else:
+            P = build_P_scalpx(cand, R)
+            segs_sc, regs_sc = G["scalp"], G["regimes_sc"][method]
         comm = FUT_COMM if mode == "lev" else SPOT_COMM
         warmup = 2500
-        for (pre, f), reg in zip(G["scalp"], G["regimes_sc"][method]):
+        for (pre, f), reg in zip(segs_sc, regs_sc):
             i0, i1 = _clip_indices(pre["t"], t0, t1)
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
             w0 = max(0, i0 - warmup)
-            sp = slice_pre(pre, w0, i1)
+            sp = slice_pre2(pre, w0, i1) if sx2 else slice_pre(pre, w0, i1)
             eq_before = eq
-            tr, eq, liq = run_scalp(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
-                                    initial_capital=eq, commission=comm,
-                                    liq_threshold=-1.0 if mode == "lev" else 1e9)
+            if sx2:
+                tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:i1], warmup=i0 - w0,
+                                         initial_capital=eq, commission=comm,
+                                         liq_threshold=-1.0 if mode == "lev" else 1e9)
+            else:
+                tr, eq, liq = run_scalp(sp, P, regime=reg[w0:i1], warmup=i0 - w0,
+                                        initial_capital=eq, commission=comm,
+                                        liq_threshold=-1.0 if mode == "lev" else 1e9)
             months += (i1 - i0) / (DAY * 30.4)
             all_tr.append(tr)
             if mode == "lev" and len(tr):

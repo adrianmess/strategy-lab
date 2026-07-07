@@ -42,25 +42,29 @@ def worker(args):
     rng = np.random.default_rng(payload["seed"])
     space = payload["space"]
     strategy = payload.get("strategy", "v7")
-    if strategy == "v7":
+    if strategy in ("v7", "prime7"):   # prime7 = prime on the full-param v7 engine
         import optimizer2 as O
         O.load_g3()
         if kind == "random":
-            return O.batch_random(rng, space, payload["R"], payload["mode"],
-                                  payload["method"], payload["n"],
-                                  payload["t0"], payload["t1"], payload["per_regime"],
-                                  max_dd=payload["max_dd"])
-        if kind == "offspring":
-            return O.batch_offspring(rng, space, payload["mode"], payload["method"],
-                                     payload["parents"], payload["n"],
-                                     payload["t0"], payload["t1"],
-                                     max_dd=payload["max_dd"])
-        if kind == "refine":
-            return O.batch_refine(rng, space, payload["mode"], payload["method"],
-                                  payload["seed_cand"], payload["n"],
-                                  payload["t0"], payload["t1"],
-                                  max_dd=payload["max_dd"])
-        return []
+            res = O.batch_random(rng, space, payload["R"], payload["mode"],
+                                 payload["method"], payload["n"],
+                                 payload["t0"], payload["t1"], payload["per_regime"],
+                                 max_dd=payload["max_dd"])
+        elif kind == "offspring":
+            res = O.batch_offspring(rng, space, payload["mode"], payload["method"],
+                                    payload["parents"], payload["n"],
+                                    payload["t0"], payload["t1"],
+                                    max_dd=payload["max_dd"])
+        elif kind == "refine":
+            res = O.batch_refine(rng, space, payload["mode"], payload["method"],
+                                 payload["seed_cand"], payload["n"],
+                                 payload["t0"], payload["t1"],
+                                 max_dd=payload["max_dd"])
+        else:
+            res = []
+        for _s, _c, _m in res:
+            _c["strategy"] = strategy
+        return res
     # flat-candidate strategies (prime / v6 / scalpx) via the wf2 engine
     import wf2 as W
     G = W.load_globals(("v6",) if strategy == "prime" else (strategy,))
@@ -77,7 +81,8 @@ def worker(args):
                                          space, payload["method"],
                                          payload["n"], payload["t0"], payload["t1"],
                                          max_dd=payload["max_dd"]))
-    sampler = {"v6": W.sample_v6, "prime": W.sample_prime}.get(strategy, W.sample_scalpx)
+    sampler = {"v6": W.sample_v6, "prime": W.sample_prime,
+               "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
     out = []
     for _ in range(payload["n"]):
         c = sampler(rng, R, payload["mode"], space)
@@ -92,7 +97,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", default="v7",
-                    choices=["v7", "v6", "scalpx", "prime"])
+                    choices=["v7", "prime7", "v6", "scalpx", "scalpx2", "prime"])
     ap.add_argument("--algo", default="genetic", choices=["random", "genetic", "refine"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
     ap.add_argument("--method", default="vol3",
@@ -116,7 +121,7 @@ def main():
     run_dir = B.enter_run_dir(args.name)
     print(f"run dir: {run_dir} | algo: {args.algo} | procs: {args.procs}", flush=True)
     space = json.load(open(args.space)).get(args.strategy) or {}
-    flat = args.strategy != "v7"
+    flat = args.strategy not in ("v7", "prime7")
 
     if flat:
         # shared precompute caches (instead of per-run copies)

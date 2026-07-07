@@ -35,7 +35,9 @@ window.STRAT_NAMES = {
   "v5.2": "V5 family · V5.2",
   v5: "V5 (original)",
   prime: "V5 family · Solana Prime",
+  prime7: "V5 family · Prime7 (Prime, full-param)",
   scalpx: "Scalp family · ScalpX",
+  scalpx2: "Scalp family · ScalpX2 (full-param)",
   scalp: "Scalp (original)",
 };
 window.stratName = s => window.STRAT_NAMES[(s || "").toLowerCase()] || s || "unknown";
