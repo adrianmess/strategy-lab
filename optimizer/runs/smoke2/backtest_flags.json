@@ -1,0 +1,20 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 3.491423752034506,
+  "gap_mode": "skip_contaminated",
+  "backtest": "smoke2_full",
+  "at": "2026-07-08 11:53"
+ },
+ "best_config.json|from 2025-09-01": {
+  "source": "best_config.json",
+  "kind": "from 2025-09-01",
+  "liq": false,
+  "growth_pct": 3.485531499644079,
+  "gap_mode": "skip_contaminated",
+  "backtest": "smoke2_HOLDOUT",
+  "at": "2026-07-08 11:53"
+ }
+}

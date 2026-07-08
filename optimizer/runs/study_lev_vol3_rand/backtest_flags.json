@@ -1,0 +1,11 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.31464476969438,
+  "gap_mode": "skip_contaminated",
+  "backtest": "study_lev_vol3_rand_full",
+  "at": "2026-07-08 11:53"
+ }
+}

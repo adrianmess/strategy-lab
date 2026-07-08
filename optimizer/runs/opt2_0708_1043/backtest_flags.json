@@ -1,0 +1,20 @@
+{
+ "best_config.json|alternating holdout (7d blocks)": {
+  "source": "best_config.json",
+  "kind": "alternating holdout (7d blocks)",
+  "liq": true,
+  "growth_pct": -100.0,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0708_1043_HOLDOUT",
+  "at": "2026-07-08 11:54"
+ },
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -99.27195077604482,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0708_1043_full",
+  "at": "2026-07-08 11:54"
+ }
+}

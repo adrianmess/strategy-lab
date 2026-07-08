@@ -377,6 +377,22 @@ def main():
                 pass
         json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
+    # ---- auto-backtest: publish the full backtest right away and flag the run
+    import subprocess, sys as _sys
+    bt = os.path.join(B.OPT_DIR, "backtest_cli.py")
+    jobs_bt = [("best_config.json", f"{args.name}_full")]
+    if os.path.exists("holdout_best_config.json"):
+        jobs_bt.append(("holdout_best_config.json", f"{args.name}_oosbest_full"))
+    for cfg_file, bt_name in jobs_bt:
+        print(f"\nauto-backtest: {cfg_file} -> '{bt_name}' ...", flush=True)
+        try:
+            subprocess.run([_sys.executable, bt,
+                            "--config", os.path.join(run_dir, cfg_file),
+                            "--name", bt_name, "--gap-mode", args.gap_mode],
+                           cwd=B.OPT_DIR, check=True)
+        except Exception as e:
+            print(f"auto-backtest failed: {e}", flush=True)
+
 
 if __name__ == "__main__":
     main()
