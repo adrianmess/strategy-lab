@@ -305,6 +305,7 @@ function renderRuns(){
         ${r.holdout_top10?`<button class="small" title="All top-10 candidates ranked survivors-first" onclick="toggleTop10('${r.name}')">Top-10</button>`:''}
         <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
         <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button>
+        <button class="small" title="Rename this run (published backtests from it are renamed too)" onclick="renameRun('${r.name}')">✎</button>
         <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${top10Row(r)}`;
   }).join('');
 }
@@ -318,6 +319,15 @@ function optChips(r){
              (r.mode==='lev' ? 'DD≤80%' : 'DD≤50%');
   const ps = r.per_regime===false ? 'single set' : 'per-regime';
   return [r.algo||'?', ps, ho, dd].join(' · ');
+}
+async function renameRun(name){
+  const nn = prompt('New name for "'+name+'" (slashes/spaces become _):', name);
+  if(!nn || nn===name) return;
+  const r = await api('runs2/rename', {old:name, new:nn});
+  if(r.error){ alert(r.error); return; }
+  refreshRuns();
+  $('launchMsg').textContent = 'renamed to '+r.name+
+    (r.renamed_backtests ? ' (+'+r.renamed_backtests+' backtest entr'+(r.renamed_backtests>1?'ies':'y')+' updated)' : '');
 }
 function top10Row(r){
   if(!OPEN10.has(r.name) || !r.holdout_top10) return '';

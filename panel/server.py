@@ -571,6 +571,45 @@ def runs2():
         out.append(e)
     return jsonify(_scrub(out))
 
+@app.route("/api/runs2/rename", methods=["POST"])
+def runs2_rename():
+    """Rename a run directory; associated backtest entries follow the new name."""
+    d = request.get_json(force=True)
+    old = os.path.basename(d.get("old", ""))
+    new = _safe_name(d.get("new", ""))
+    if not old or not new:
+        return jsonify(error="both old and new names are required"), 400
+    if new == old:
+        return jsonify(ok=True, renamed_backtests=0)
+    src_dir = os.path.join(OPT, "runs", old)
+    dst_dir = os.path.join(OPT, "runs", new)
+    if not os.path.isdir(src_dir):
+        return jsonify(error=f"run '{old}' not found"), 404
+    if os.path.exists(dst_dir):
+        return jsonify(error=f"a run named '{new}' already exists"), 400
+    for jid, j in jobs.items():
+        if j["proc"].poll() is None and j.get("name") == old:
+            return jsonify(error=f"a job is still running for '{old}' — stop it first"), 400
+    os.rename(src_dir, dst_dir)
+    # rename associated backtest entries (published as <run>, <run>_full, <run>_HOLDOUT, ...)
+    n = 0
+    bt_path = os.path.join(DASH, "backtests.js")
+    if os.path.exists(bt_path):
+        txt = open(bt_path).read()
+        entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
+        for e in entries:
+            nm = e.get("name", "")
+            if nm == old or nm.startswith(old + "_"):
+                e["name"] = new + nm[len(old):]
+                n += 1
+        if n:
+            with open(bt_path, "w") as f:
+                f.write("window.BACKTESTS = ")
+                json.dump(entries, f, default=float)
+                f.write(";")
+    return jsonify(ok=True, name=new, renamed_backtests=n)
+
+
 @app.route("/api/runs2/delete", methods=["POST"])
 def runs2_delete():
     """Delete an optimizer run directory (pool, configs, caches for that run)."""
