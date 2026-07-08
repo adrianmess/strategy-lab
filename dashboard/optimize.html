@@ -294,6 +294,13 @@ function renderRuns(){
       const hb = r.holdout_best.holdout;
       hcell += `<br><span class="kv" title="A lower train-rank candidate that generalizes better. Picked using the holdout, so re-verify before trusting.">OOS-best (#${r.holdout_best.rank}): <span class="pos">${fpm(hb.growth)}</span></span>`;
     }
+    for(const f of (r.backtest_flags||[])){
+      const src_ = f.source==='holdout_best_config.json' ? 'OOS-best' : 'best';
+      const kind = (f.kind||'').startsWith('full') ? 'full' : (f.kind||'');
+      hcell += `<br><span class="kv" title="Result of the last backtest you ran on this run's ${src_} config (${f.kind}, ${f.gap_mode||''}) — ${f.at}">bt ${src_} ${kind}: ${f.liq
+        ? '<span class="badge b-red">LIQUIDATED</span>'
+        : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>`}</span>`;
+    }
     return `<tr><td><b>${r.name}</b></td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>

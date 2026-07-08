@@ -11,7 +11,7 @@ Examples:
   python3 backtest_cli.py --config ../adaptive_trader/research2/final_config_v6_lev_none.json --name production_lev
 """
 import _bootstrap as B
-import argparse, json, os
+import argparse, json, os, time
 import numpy as np
 import pandas as pd
 
@@ -303,6 +303,21 @@ def main():
         path = args.config if os.path.isabs(args.config) else os.path.join(cwd0, args.config)
         entry = run_single(path, args.oos_start, holdout_days=args.holdout_days,
                            gap_mode=args.gap_mode)
+        # flag the outcome on the source optimizer run (runs table shows it)
+        run_dir = os.path.dirname(os.path.abspath(path))
+        if os.path.basename(os.path.dirname(run_dir)) == "runs":
+            fp = os.path.join(run_dir, "backtest_flags.json")
+            try:
+                flags = json.load(open(fp)) if os.path.exists(fp) else {}
+            except Exception:
+                flags = {}
+            key = f"{os.path.basename(path)}|{entry.get('kind', 'full')}"
+            flags[key] = dict(source=os.path.basename(path), kind=entry.get("kind"),
+                              liq=bool(entry["stats"]["liq"]),
+                              growth_pct=float(entry["stats"]["monthly_growth_pct"]),
+                              gap_mode=args.gap_mode, backtest=args.name,
+                              at=time.strftime("%Y-%m-%d %H:%M"))
+            json.dump(flags, open(fp, "w"), indent=1)
     else:
         wf_dir = args.walkforward if os.path.isabs(args.walkforward) else os.path.join(cwd0, args.walkforward)
         r = json.load(open(os.path.join(wf_dir, "resim.json")))

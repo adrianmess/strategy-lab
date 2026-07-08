@@ -566,6 +566,12 @@ def runs2():
                 e["max_dd"] = bc.get("max_dd")
                 e["max_hold_days"] = bc.get("max_hold_days")
                 e["gap_mode"] = bc.get("gap_mode")
+                fp = os.path.join(runs_dir, d, "backtest_flags.json")
+                if os.path.exists(fp):
+                    try:
+                        e["backtest_flags"] = list(json.load(open(fp)).values())
+                    except Exception:
+                        pass
                 e["seed_holdout"] = bc.get("seed_holdout")
                 e["best_config"] = f"runs/{d}/best_config.json"
                 if os.path.exists(os.path.join(runs_dir, d, "holdout_best_config.json")):
