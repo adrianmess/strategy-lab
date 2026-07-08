@@ -342,9 +342,17 @@ function top10Row(r){
     return `<div class="prow"><span class="kv" style="width:110px">train-rank #${t.rank}</span>
       <span class="kv" style="width:90px">score ${t.train_score.toFixed(3)}</span>${tag}</div>`;
   }).join('');
+  const sc = r.holdout_scan;
+  const sv = (r.holdout_survivors||[]).map(t=>{
+    const hm = t.holdout;
+    return `<div class="prow"><span class="kv" style="width:110px">train-rank #${t.rank}</span>
+      <span class="kv" style="width:90px">score ${t.train_score.toFixed(3)}</span>
+      <span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span> <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span></div>`;
+  }).join('');
   return `<tr><td colspan="13" style="background:var(--bg)">
     <div class="kv" style="margin:4px 0">Top-10 train candidates ranked <b>survivors first</b> (best holdout at top; liquidated sink to the bottom):</div>
-    ${rows}</td></tr>`;
+    ${rows}
+    ${sc?`<div class="kv" style="margin:8px 0 4px"><b>Pool scan:</b> holdout evaluated for ${sc.scanned} of ${sc.pool} kept candidates → ${sc.survivors} survived${sc.survivors?'. Best survivors:':' — nothing in this pool generalizes; treat the run as overfit.'}</div>${sv}`:''}</td></tr>`;
 }
 document.querySelectorAll('#runsT th[data-k]').forEach(th=>{
   th.onclick = ()=>{

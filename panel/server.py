@@ -553,6 +553,8 @@ def runs2():
                 e["holdout"] = bc.get("holdout")
                 e["holdout_best"] = bc.get("holdout_best")
                 e["holdout_top10"] = bc.get("holdout_top10")
+                e["holdout_scan"] = bc.get("holdout_scan")
+                e["holdout_survivors"] = bc.get("holdout_survivors")
                 e["holdout_days"] = bc.get("holdout_days")
                 e["train_end"] = bc.get("train_end")
                 e["algo"] = bc.get("algo")

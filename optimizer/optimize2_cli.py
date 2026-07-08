@@ -286,6 +286,34 @@ def main():
                 print(f"  #{rank+1}: train score {s:.3f} -> holdout {tag}", flush=True)
         if holdouts and holdouts[0]:
             out["holdout"] = holdouts[0]
+        # walk the REST of the kept pool (train-score order) until enough
+        # holdout survivors are found — with huge runs the top-10 is often
+        # saturated by overfits while survivors sit deeper in the pool
+        scan = list(holdouts)
+        surv_n = sum(1 for h in scan if h and not h["liq"])
+        TARGET_SURV = 10
+        while len(scan) < len(pool) and surv_n < TARGET_SURV:
+            try:
+                hm = eval_any(pool[len(scan)][1], args.train_end, None, part="holdout")
+            except Exception:
+                hm = None
+            scan.append(hm)
+            if hm and not hm["liq"]:
+                surv_n += 1
+        holdouts = scan
+        survivors = [dict(rank=i + 1, train_score=pool[i][0], holdout=holdouts[i])
+                     for i in range(len(holdouts))
+                     if holdouts[i] and not holdouts[i]["liq"]]
+        survivors.sort(key=lambda r: r["holdout"]["growth"], reverse=True)
+        out["holdout_scan"] = dict(scanned=len(scan), pool=len(pool),
+                                   survivors=len(survivors))
+        out["holdout_survivors"] = survivors[:10]
+        print(f"\nPOOL SCAN: evaluated holdout for {len(scan)}/{len(pool)} kept candidates; "
+              f"{len(survivors)} survived", flush=True)
+        for s in survivors[:5]:
+            hm = s["holdout"]
+            print(f"  train-rank #{s['rank']}: {(pow(2.718281828, hm['growth'])-1)*100:+.1f}%/mo "
+                  f"dd {hm['maxdd']:.0%}", flush=True)
         # survivors-first ranking: non-liquidated by holdout growth, then the rest
         ranked = [dict(rank=i + 1, train_score=pool[i][0], holdout=holdouts[i])
                   for i in range(len(holdouts))]
