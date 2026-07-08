@@ -133,7 +133,14 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   </div>
 
   <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
-    <span class="mini" style="float:right"><label data-x="gapmode" style="cursor:pointer">Backtest gap handling</label>
+    <span class="mini" style="float:right">
+    <label style="margin-right:4px">Show</label>
+    <select id="liqFilter" style="font-size:12px;padding:3px 6px" onchange="localStorage.setItem('liqFilter',this.value);renderRuns()">
+      <option value="all">all runs</option>
+      <option value="clean">✓ no-liq only</option>
+      <option value="liq">liquidated only</option>
+    </select>
+    <label data-x="gapmode" style="cursor:pointer;margin-left:14px">Backtest gap handling</label>
     <select id="gapMode" style="font-size:12px;padding:3px 6px"><option value="skip_contaminated">skip_contaminated (default)</option><option value="skip_open">skip_open</option></select></span></h2>
   <div class="card">
     <div class="tablewrap">
@@ -267,6 +274,7 @@ async function launch(){
 }
 // ---------- runs table ----------
 let RUNS=[], sortKey='last_run', sortDir=-1;
+$('liqFilter').value = localStorage.getItem('liqFilter') || 'all';
 function fpm(x){return (x>=0?'+':'')+(100*(Math.exp(x)-1)).toFixed(1)+'%/mo'}
 async function refreshRuns(){
   RUNS = await api('runs2');
@@ -289,7 +297,11 @@ async function refreshRuns(){
   renderRuns();
 }
 function renderRuns(){
-  const rs = [...RUNS].sort((a,b)=>{
+  const lf = $('liqFilter').value;
+  const base = lf==='clean' ? RUNS.filter(r=>r._clean===2)
+             : lf==='liq'   ? RUNS.filter(r=>r._clean===0)
+             : RUNS;
+  const rs = [...base].sort((a,b)=>{
     const va=a[sortKey], vb=b[sortKey];
     if(typeof va==='string'||typeof vb==='string') return sortDir*String(va??'').localeCompare(String(vb??''));
     return sortDir*(((va??-1e18))-((vb??-1e18)));
