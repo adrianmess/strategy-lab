@@ -88,8 +88,8 @@ const tb = document.querySelector('#bt tbody');
 let sel = null, chart=null, sortKey=null, sortDir=-1;
 function fp(x){return (x>=0?'+':'')+x.toFixed(2)+'%'}
 function fm(x){return x>=1000?x.toExponential(1):x.toFixed(2)}
-const COLKEYS = ['name','kind','strategy','mode','method','s.monthly_growth_pct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win',null,'created',null];
-function colval(e,k){ if(!k)return null; if(k.startsWith('s.')) return e.stats[k.slice(2)]; return e[k]; }
+const COLKEYS = ['name','kind','strategy','mode','method','optstr','s.monthly_growth_pct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win',null,'created',null];
+function colval(e,k){ if(!k)return null; if(k==='optstr') return e.opt ? [e.opt.algo,e.opt.param_set,e.opt.holdout].join(' ') : ''; if(k.startsWith('s.')) return e.stats[k.slice(2)]; return e[k]; }
 document.querySelectorAll('#bt th').forEach((th,i)=>{
   th.onclick = ()=>{ if(!COLKEYS[i])return;
     sortDir = (sortKey===COLKEYS[i])?-sortDir:-1; sortKey=COLKEYS[i]; render(); };
