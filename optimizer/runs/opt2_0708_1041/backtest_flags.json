@@ -1,0 +1,20 @@
+{
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -67.66558097191945,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0708_1041_oosbest_full",
+  "at": "2026-07-08 10:41 (backfilled)"
+ },
+ "best_config.json|alternating holdout (21d blocks)": {
+  "source": "best_config.json",
+  "kind": "alternating holdout (21d blocks)",
+  "liq": true,
+  "growth_pct": -99.78969221377237,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0708_1041_HOLDOUT",
+  "at": "2026-07-08 10:41 (backfilled)"
+ }
+}

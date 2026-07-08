@@ -7,5 +7,14 @@
   "gap_mode": "skip_contaminated",
   "backtest": "opt2_0708_1137_full",
   "at": "2026-07-08 11:48"
+ },
+ "best_config.json|from 2025-09-01": {
+  "source": "best_config.json",
+  "kind": "from 2025-09-01",
+  "liq": false,
+  "growth_pct": 6.369359397738461,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0708_1137_HOLDOUT",
+  "at": "2026-07-08 11:38 (backfilled)"
  }
 }

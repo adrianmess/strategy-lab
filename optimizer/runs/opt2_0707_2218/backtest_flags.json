@@ -7,5 +7,14 @@
   "gap_mode": "skip_contaminated",
   "backtest": "opt2_0707_2218_full",
   "at": "2026-07-08 11:52"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -99.27195077604482,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0707_2218_oosbest_full",
+  "at": "2026-07-08 00:07 (backfilled)"
  }
 }

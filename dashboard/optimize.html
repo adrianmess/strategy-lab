@@ -302,7 +302,9 @@ function renderRuns(){
         : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>`}</span>`;
     }
     const btBest = (r.backtest_flags||[]).find(f=>f.source==='best_config.json' && (f.kind||'').startsWith('full'));
-    const clean = r.holdout && !r.holdout.liq && btBest && !btBest.liq;
+    const btHold = (r.backtest_flags||[]).find(f=>f.source==='best_config.json' && ((f.kind||'').startsWith('from ')||(f.kind||'').startsWith('alternating')));
+    const holdOK = (r.holdout && !r.holdout.liq) || (btHold && !btHold.liq);
+    const clean = holdOK && btBest && !btBest.liq;
     return `<tr><td><b>${r.name}</b>${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
