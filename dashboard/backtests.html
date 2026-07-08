@@ -155,7 +155,8 @@ function select(i){
   if(chart)chart.destroy();
   if(e.curve&&e.curve.length){
     chart = new Chart(document.getElementById('curve'),{type:'line',
-      data:{datasets:[{data:e.curve.map(p=>({x:p.t.slice(0,16),y:Math.max(p.eq,0.01)})),
+      data:{datasets:[{data:e.curve.map(p=>({x:p.t.slice(0,16),y:p.eq==null?null:Math.max(p.eq,0.01)})),
+        spanGaps:false,
         borderColor:e.stats.liq?cssv('--red'):cssv('--green'),borderWidth:1.4,pointRadius:0}]},
       options:{animation:false,scales:{
         x:{type:'category',ticks:{maxTicksLimit:8,color:cssv('--chart-tick')},grid:{color:cssv('--chart-grid')}},
@@ -167,7 +168,7 @@ function select(i){
     `<div class="mcell"><div class="hint">${m.month}</div><div class="${m.ret_pct>=0?'pos':'neg'}">${fp(m.ret_pct)}</div></div>`).join('')||'<span class="hint">n/a</span>';
   const tt=document.querySelector('#tt tbody');
   const tr=(e.trades||[]);
-  const ops=(e.open_positions||[]);
+  const ops=(e.open_positions||[]).filter(o=>o.at==='end of data');
   document.getElementById('tcount').textContent = (tr.length||ops.length)?`(showing ${tr.length}${ops.length?` + ${ops.length} open`:''})`:'(none stored)';
   document.getElementById('openinfo').innerHTML = ops.map(o=>
     `<span class="${o.at==='end of data'?'neg':'hint'}" style="font-weight:600">⚠ OPEN POSITION at ${o.at}: ${o.dir.toUpperCase()} entered ${o.entry_t} @ $${o.entry.toFixed(2)} · ` +

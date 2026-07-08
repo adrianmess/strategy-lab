@@ -116,6 +116,8 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
                 step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))  # break the chart line
                 for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
                     if np.isfinite(v):
                         curve.append(dict(t=str(x), eq=float(v)))
@@ -219,6 +221,8 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
                 step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))  # break the chart line
                 for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
                     if np.isfinite(v):
                         curve.append(dict(t=str(x), eq=float(v)))
