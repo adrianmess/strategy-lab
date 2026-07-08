@@ -484,6 +484,7 @@ def job_optimize2():
     if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
     if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
+    if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
     if d.get("seed_cand"):
         run_dir = os.path.join(OPT, "runs", name)
@@ -500,6 +501,7 @@ def job_ai():
     if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
     if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
+    if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     return jsonify(id=spawn("ai-advisor", d["run"], cmd, OPT))
 
 @app.route("/api/ai_key_status")
@@ -563,6 +565,7 @@ def runs2():
                 e["per_regime"] = bc.get("per_regime")
                 e["max_dd"] = bc.get("max_dd")
                 e["max_hold_days"] = bc.get("max_hold_days")
+                e["gap_mode"] = bc.get("gap_mode")
                 e["seed_holdout"] = bc.get("seed_holdout")
                 e["best_config"] = f"runs/{d}/best_config.json"
                 if os.path.exists(os.path.join(runs_dir, d, "holdout_best_config.json")):

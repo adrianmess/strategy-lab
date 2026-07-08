@@ -398,7 +398,7 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
     return _normalize_flat(c)
 
 def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1,
-                         max_dd=None, alt=None, max_hold=None):
+                         max_dd=None, alt=None, max_hold=None, gap_mode=None):
     """Genetic step for flat candidates; parents = list of cands."""
     out = []
     for _ in range(n):
@@ -408,17 +408,17 @@ def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t
         else:
             child = dict(parents[0])
         child = mutate_flat(rng, child, mode, space)
-        m = eval_config(child, method, mode, t0, t1, alt=alt)
+        m = eval_config(child, method, mode, t0, t1, alt=alt, gap_mode=gap_mode)
         if feasible(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
 
 def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04,
-                      max_dd=None, alt=None, max_hold=None):
+                      max_dd=None, alt=None, max_hold=None, gap_mode=None):
     out = []
     for _ in range(n):
         child = mutate_flat(rng, seed_cand, mode, space, p_cont=0.15, sigma=sigma)
-        m = eval_config(child, method, mode, t0, t1, alt=alt)
+        m = eval_config(child, method, mode, t0, t1, alt=alt, gap_mode=gap_mode)
         if feasible(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
@@ -468,6 +468,33 @@ def build_P_scalpx2(c, R):
 
 # ---------------- evaluation ----------------
 
+def contamination_mask(t, warmup):
+    """skip_contaminated: after each small intra-segment data gap (missing bars
+    that did NOT trigger a segment split), suppress NEW entries while indicators
+    re-converge: 30 bars per missing bar, min 60 bars (3h), max the full warmup.
+    Exits/position management are unaffected."""
+    t64 = t.astype("datetime64[m]")
+    dt = np.diff(t64).astype(int)
+    mask = np.zeros(len(t), dtype=np.int8)
+    for j in np.where(dt > 4)[0]:
+        missing = int(round(dt[j] / 3.0)) - 1
+        W = int(np.clip(30 * missing, 60, warmup))
+        mask[j + 1: j + 1 + W] = 1
+    return mask
+
+
+_CONTAM = {}
+
+def contam_for(pre, warmup):
+    """Memoized per-segment contamination mask (segments live for the process)."""
+    key = (id(pre["t"]), warmup)
+    m = _CONTAM.get(key)
+    if m is None:
+        m = contamination_mask(pre["t"], warmup)
+        _CONTAM[key] = m
+    return m
+
+
 ALT_EPOCH = np.datetime64("2020-01-01")
 
 def alt_intervals(t, i0, i1, days, part):
@@ -496,7 +523,8 @@ def _clip_indices(t_arr, t0, t1):
     i1 = len(t_arr) if t1 is None else int(np.searchsorted(t_arr, np.datetime64(t1)))
     return i0, i1
 
-def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
+def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
+                gap_mode=None):
     need = {"prime": ("v6",)}.get(cand["strategy"], (cand["strategy"],))
     G = load_globals(need)
     R = G["nreg"][method]
@@ -517,6 +545,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
             i0, i1 = _clip_indices(pre["t"], t0, t1)
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
+            cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
             ivs = [(i0, i1)] if alt is None else alt_intervals(pre["t"], i0, i1, *alt)
             for a, b in ivs:
                 w0 = max(0, a - warmup)
@@ -526,7 +555,8 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
                                            initial_capital=eq, use_sl=use_sl,
                                            commission=comm if mode == "lev" else SPOT_COMM,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                           return_open=True)
+                                           return_open=True,
+                                           no_entry=(cm[w0:b] if cm is not None else None))
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
                                    * 3.0 / 1440.0)
@@ -554,21 +584,23 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
             i0, i1 = _clip_indices(pre["t"], t0, t1)
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
+            cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
             ivs = [(i0, i1)] if alt is None else alt_intervals(pre["t"], i0, i1, *alt)
             for a, b in ivs:
                 w0 = max(0, a - warmup)
                 sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)
                 eq_before = eq
+                ne = cm[w0:b] if cm is not None else None
                 if sx2:
                     tr, eq, liq, op = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
                                                  initial_capital=eq, commission=comm,
                                                  liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                                 return_open=True)
+                                                 return_open=True, no_entry=ne)
                 else:
                     tr, eq, liq, op = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
                                                 initial_capital=eq, commission=comm,
                                                 liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                                return_open=True)
+                                                return_open=True, no_entry=ne)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
                                    * 3.0 / 1440.0)

@@ -34,18 +34,8 @@ def gap_info():
 
 
 def contamination_mask(t, warmup):
-    """skip_contaminated: after each small intra-segment data gap (missing bars
-    that did NOT trigger a segment split), suppress NEW entries while indicators
-    re-converge: 30 bars per missing bar, min 60 bars (3h), max the full warmup.
-    Exits/position management are unaffected."""
-    t64 = t.astype("datetime64[m]")
-    dt = np.diff(t64).astype(int)
-    mask = np.zeros(len(t), dtype=np.int8)
-    for j in np.where(dt > 4)[0]:
-        missing = int(round(dt[j] / 3.0)) - 1
-        W = int(np.clip(30 * missing, 60, warmup))
-        mask[j + 1: j + 1 + W] = 1
-    return mask
+    from wf2 import contamination_mask as _cm
+    return _cm(t, warmup)
 
 
 def opt_settings(cfg):
@@ -58,6 +48,7 @@ def opt_settings(cfg):
                 param_set=("per-regime" if cfg.get("per_regime", True) else "single set"),
                 holdout=ho, max_dd=cfg.get("max_dd"),
                 max_hold_days=cfg.get("max_hold_days"),
+                gap_mode=cfg.get("gap_mode"),
                 evaluated=cfg.get("evaluated"))
 
 

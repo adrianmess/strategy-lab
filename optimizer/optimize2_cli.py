@@ -50,19 +50,19 @@ def worker(args):
                                  payload["method"], payload["n"],
                                  payload["t0"], payload["t1"], payload["per_regime"],
                                  max_dd=payload["max_dd"], alt=payload["alt"],
-                                 max_hold=payload["max_hold"])
+                                 max_hold=payload["max_hold"], gap_mode=payload["gap_mode"])
         elif kind == "offspring":
             res = O.batch_offspring(rng, space, payload["mode"], payload["method"],
                                     payload["parents"], payload["n"],
                                     payload["t0"], payload["t1"],
                                     max_dd=payload["max_dd"], alt=payload["alt"],
-                                    max_hold=payload["max_hold"])
+                                    max_hold=payload["max_hold"], gap_mode=payload["gap_mode"])
         elif kind == "refine":
             res = O.batch_refine(rng, space, payload["mode"], payload["method"],
                                  payload["seed_cand"], payload["n"],
                                  payload["t0"], payload["t1"],
                                  max_dd=payload["max_dd"], alt=payload["alt"],
-                                 max_hold=payload["max_hold"])
+                                 max_hold=payload["max_hold"], gap_mode=payload["gap_mode"])
         else:
             res = []
         for _s, _c, _m in res:
@@ -79,20 +79,23 @@ def worker(args):
                                             space, None, R, payload["method"],
                                             payload["n"], payload["t0"], payload["t1"],
                                             max_dd=payload["max_dd"], alt=payload["alt"],
-                                            max_hold=payload["max_hold"]))
+                                            max_hold=payload["max_hold"],
+                                            gap_mode=payload["gap_mode"]))
     if kind == "refine":
         return strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
                                          space, payload["method"],
                                          payload["n"], payload["t0"], payload["t1"],
                                          max_dd=payload["max_dd"], alt=payload["alt"],
-                                         max_hold=payload["max_hold"]))
+                                         max_hold=payload["max_hold"],
+                                         gap_mode=payload["gap_mode"]))
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
     out = []
     for _ in range(payload["n"]):
         c = sampler(rng, R, payload["mode"], space)
         m = W.eval_config(c, payload["method"], payload["mode"],
-                          payload["t0"], payload["t1"], alt=payload["alt"])
+                          payload["t0"], payload["t1"], alt=payload["alt"],
+                          gap_mode=payload["gap_mode"])
         if W.feasible(m, payload["mode"], cand=c, max_dd=payload["max_dd"],
                       max_hold=payload["max_hold"]):
             out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
@@ -118,6 +121,10 @@ def main():
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
+    ap.add_argument("--gap-mode", default="skip_contaminated",
+                    choices=["skip_open", "skip_contaminated"],
+                    help="evaluation gap handling — matches the backtest default so "
+                         "candidates are searched and displayed under the same rules")
     ap.add_argument("--max-hold-days", type=float, default=None,
                     help="throw out any candidate whose simulation ever holds a "
                          "position longer than this many days (blank = unlimited)")
@@ -150,14 +157,15 @@ def main():
                   f"{args.strategy} always searches per-regime values", flush=True)
         def eval_any(cand, t0, t1, part="train"):
             alt = (args.holdout_days, part) if args.holdout_days else None
-            return W.eval_config(cand, args.method, args.mode, t0, t1, alt=alt)
+            return W.eval_config(cand, args.method, args.mode, t0, t1, alt=alt,
+                                 gap_mode=args.gap_mode)
     else:
         import optimizer2 as O
         O.load_g3()
         R = O.load_g3()["regimes"][args.method][1]
         def eval_any(cand, t0, t1, part="train"):
             alt = (args.holdout_days, part) if args.holdout_days else None
-            return O.eval3(cand, args.method, t0, t1, alt=alt)
+            return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode)
 
     # seed candidate from a backtest ("Optimize this" flow)
     if os.path.exists("seed_cand.json"):
@@ -229,6 +237,7 @@ def main():
                            n=args.batch, t0=None, t1=args.train_end,
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
+                           gap_mode=args.gap_mode,
                            alt=((args.holdout_days, "train") if args.holdout_days else None))
             if args.algo == "random" or len(pool) < 8:
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
@@ -271,7 +280,8 @@ def main():
     out = dict(cand=best_cand, metrics=best_m, strategy=args.strategy, mode=args.mode,
                method=args.method, algo=args.algo, per_regime=per_regime,
                train_end=args.train_end, holdout_days=args.holdout_days,
-               max_dd=args.max_dd, max_hold_days=args.max_hold_days, evaluated=evaluated,
+               max_dd=args.max_dd, max_hold_days=args.max_hold_days,
+               gap_mode=args.gap_mode, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)

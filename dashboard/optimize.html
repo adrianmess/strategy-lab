@@ -119,6 +119,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <input id="budgetVal" value="2" style="width:70px"></span></div>
       <div class="field"><label data-x="maxdd">Max drawdown %</label><input id="maxDD" value="80" style="width:60px"></div>
       <div class="field"><label data-x="maxhold">Max days in trade</label><input id="maxHold" value="" placeholder="∞" style="width:60px"></div>
+      <div class="field"><label data-x="gapmode">Gap handling</label>
+        <select id="optGap" style="width:150px"><option value="skip_contaminated">skip_contaminated</option><option value="skip_open">skip_open</option></select></div>
       <div class="field"><label data-x="trainend">Holdout</label>
         <span style="display:flex;gap:4px">
         <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="alt">alternating days</option></select>
@@ -254,6 +256,7 @@ async function launch(){
     name:$('name').value||undefined,
     max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
     max_hold_days:(+$('maxHold').value>0) ? +$('maxHold').value : undefined,
+    gap_mode:$('optGap').value,
     single_set: $('perreg').value==='1'};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
@@ -325,7 +328,8 @@ function optChips(r){
              (r.mode==='lev' ? 'DD≤80%' : 'DD≤50%');
   const ps = r.per_regime===false ? 'single set' : 'per-regime';
   const mh = r.max_hold_days ? `≤${r.max_hold_days}d in trade` : null;
-  return [r.algo||'?', ps, ho, dd, mh].filter(Boolean).join(' · ');
+  const gm = r.gap_mode ? `gaps: ${r.gap_mode.replace('skip_','')}` : null;
+  return [r.algo||'?', ps, ho, dd, mh, gm].filter(Boolean).join(' · ');
 }
 async function renameRun(name){
   const nn = prompt('New name for "'+name+'" (slashes/spaces become _):', name);
