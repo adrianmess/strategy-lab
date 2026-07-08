@@ -117,7 +117,7 @@ function render(){
   tb.innerHTML = order.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}">
     <td>${e.name}</td><td>${e.kind||''}</td><td>${stratName(e.strategy)}</td>
     <td><span class="pill ${e.mode}">${e.mode||''}</span></td><td>${e.method||''}</td>
-    <td class="hint" style="font-size:11.5px">${e.opt ? [e.opt.algo, e.opt.param_set, 'holdout: '+e.opt.holdout, e.opt.max_dd!=null?('DD≤'+Math.round(100*e.opt.max_dd)+'%'):(e.mode==='lev'?'DD≤80%':'DD≤50%'), e.opt.max_hold_days?('≤'+e.opt.max_hold_days+'d in trade'):null, e.opt.gap_mode?('gaps: '+e.opt.gap_mode.replace('skip_','')):null].filter(Boolean).join(' · ') : '—'}</td>
+    <td class="hint" style="font-size:11.5px">${e.opt ? [e.opt.algo, e.opt.param_set, 'holdout: '+e.opt.holdout, e.opt.max_dd!=null?('DD≤'+Math.round(100*e.opt.max_dd)+'%'):(e.mode==='lev'?'DD≤80%':'DD≤50%'), e.opt.max_hold_days?('≤'+e.opt.max_hold_days+'d in trade'):null, e.opt.gap_mode?('gaps: '+e.opt.gap_mode.replace('skip_','')):null, e.opt.evaluated?(e.opt.evaluated.toLocaleString()+' evals'):null].filter(Boolean).join(' · ') : '—'}</td>
     <td class="${s.monthly_growth_pct>=0?'pos':'neg'}">${fp(s.monthly_growth_pct)}</td>
     <td>${fm(s.total_mult)}</td>
     <td class="${s.liq?'neg':'pos'}">${s.liq?'LIQ':'no'}</td>
