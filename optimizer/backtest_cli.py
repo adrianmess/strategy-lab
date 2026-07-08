@@ -60,8 +60,10 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None):
         P = _np.vstack([P[min(i, P.shape[0] - 1)] for i in range(R)])
     eq = 1000.0; trades, curve = [], []
     mdd = 0.0; months = 0.0; liq_any = False
+    open_positions = []
     warmup = 3000
-    for pre, reg in zip(G["pres"], regs_list):
+    n_segs = len(G["pres"])
+    for si, (pre, reg) in enumerate(zip(G["pres"], regs_list)):
         t = pre["t"]
         i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
         i1 = len(t)
@@ -69,14 +71,26 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None):
             continue
         from wf2 import alt_intervals
         ivs = [(i0, i1)] if not holdout_days else alt_intervals(t, i0, i1, holdout_days, "holdout")
-        for a, b in ivs:
+        for iv_i, (a, b) in enumerate(ivs):
             w0 = max(0, a - warmup)
             sp = slice_pre(pre, w0, b)
             eq0 = eq
-            tr, eq, liq = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
-                               initial_capital=eq,
-                               commission=0.0004 if mode == "lev" else 0.0005,
-                               use_sl=(mode == "spot"), dyn_liq=(mode == "lev"))
+            tr, eq, liq, op = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                   initial_capital=eq,
+                                   commission=0.0004 if mode == "lev" else 0.0005,
+                                   use_sl=(mode == "spot"), dyn_liq=(mode == "lev"),
+                                   return_open=True)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir=("long" if op["dir"] > 0 else "short"),
+                        entry_t=op["entry_t"][:16], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
+                        move_pct=float((mark / op["entry"] - 1) * op["dir"]),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
             months += (b - a) / (480 * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
@@ -92,7 +106,7 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None):
         if liq_any:
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
-    return build_entry(tr, eq, months, mdd, liq_any, curve,
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
                        label_extra=dict(strategy=cfg.get("strategy") or cand.get("strategy", "v7"),
                                         mode=mode, method=method,
                                         kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days else "full-history (in-sample fit)" if oos_start is None else f"from {oos_start}"),
@@ -129,7 +143,9 @@ def run_single(cfg_path, oos_start=None, holdout_days=None):
     eq = 1000.0
     trades, curve = [], []
     mdd = 0.0; months = 0.0; liq_any = False
-    for (pre, f), reg in zip(segs, regs):
+    open_positions = []
+    n_segs = len(segs)
+    for si, ((pre, f), reg) in enumerate(zip(segs, regs)):
         t = pre["t"]
         i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
         i1 = len(t)
@@ -137,25 +153,39 @@ def run_single(cfg_path, oos_start=None, holdout_days=None):
             continue
         from wf2 import alt_intervals
         ivs = [(i0, i1)] if not holdout_days else alt_intervals(t, i0, i1, holdout_days, "holdout")
-        for a, b in ivs:
+        for iv_i, (a, b) in enumerate(ivs):
             w0 = max(0, a - warmup)
             sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)
             eq0 = eq
             if sx2:
-                tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
-                                         initial_capital=eq,
-                                         commission=FUT_COMM if mode == "lev" else SPOT_COMM,
-                                         liq_threshold=-1.0 if mode == "lev" else 1e9)
+                tr, eq, liq, op = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
+                                             initial_capital=eq,
+                                             commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                             liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                             return_open=True)
             elif v6like:
-                tr, eq, liq = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
-                                       initial_capital=eq, use_sl=(mode == "spot"),
-                                       commission=FUT_COMM if mode == "lev" else SPOT_COMM,
-                                       liq_threshold=-1.0 if mode == "lev" else 1e9)
+                tr, eq, liq, op = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                           initial_capital=eq, use_sl=(mode == "spot"),
+                                           commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                           liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                           return_open=True)
             else:
-                tr, eq, liq = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
-                                        initial_capital=eq,
-                                        commission=FUT_COMM if mode == "lev" else SPOT_COMM,
-                                        liq_threshold=-1.0 if mode == "lev" else 1e9)
+                tr, eq, liq, op = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                            initial_capital=eq,
+                                            commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                            return_open=True)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir=("long" if op["dir"] > 0 else "short"),
+                        entry_t=op["entry_t"][:16], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
+                        move_pct=float((mark / op["entry"] - 1) * op["dir"]),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
             months += (b - a) / (480 * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
@@ -171,13 +201,13 @@ def run_single(cfg_path, oos_start=None, holdout_days=None):
         if liq_any:
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
-    return build_entry(tr, eq, months, mdd, liq_any, curve,
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
                        label_extra=dict(strategy=strategy, mode=mode, method=method,
                                         kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days else "full-history (in-sample fit)" if oos_start is None else f"from {oos_start}"),
                                         config=cand, opt=opt_settings(cfg)))
 
 
-def build_entry(tr, eq, months, mdd, liq, curve, label_extra):
+def build_entry(tr, eq, months, mdd, liq, curve, label_extra, open_positions=None):
     g = np.log(max(eq, 1e-9) / 1000.0) / max(months, 1e-9)
     tl = []
     if len(tr):
@@ -204,8 +234,11 @@ def build_entry(tr, eq, months, mdd, liq, curve, label_extra):
                            tpm=len(tr) / max(months, 1e-9),
                            sl_hits=int((tr["reason"] == 1).sum()) if len(tr) else 0,
                            worst_mae=float(tr["mae"].min()) if len(tr) else 0.0,
-                           win=float((tr["net"] > 0).mean()) if len(tr) else 0.0),
-                curve=curve, trades=tl, monthly=monthly_tbl, **label_extra)
+                           win=float((tr["net"] > 0).mean()) if len(tr) else 0.0,
+                           open_at_end=bool(open_positions and
+                                            any(o["at"] == "end of data" for o in open_positions))),
+                curve=curve, trades=tl, monthly=monthly_tbl,
+                open_positions=(open_positions or []), **label_extra)
 
 
 def load_backtests():

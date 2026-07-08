@@ -335,17 +335,21 @@ def _core3(t_ms, o, h, l, c,
                 if c[i] <= entry_price * (1 - pt):
                     pend_exit = 0
 
-    return trades[:nt], equity, liquidated
+    open_pos = np.zeros(6)
+    if pos != 0:
+        open_pos[0] = pos; open_pos[1] = entry_idx; open_pos[2] = entry_price
+        open_pos[3] = qty; open_pos[4] = lev_used; open_pos[5] = 1.0
+    return trades[:nt], equity, liquidated, open_pos
 
 
 def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
-         commission=0.0004, use_sl=True, dyn_liq=True):
+         commission=0.0004, use_sl=True, dyn_liq=True, return_open=False):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
     if P.ndim == 1:
         P = P.reshape(1, -1)
-    tr, eq, liq = _core3(pre["t_ms"], pre["o"], pre["h"], pre["l"], pre["c"],
+    tr, eq, liq, _op = _core3(pre["t_ms"], pre["o"], pre["h"], pre["l"], pre["c"],
                          pre["rsi_all"], pre["macdz_all"], pre["bb_all"],
                          pre["emaup_all"], pre["emadn_all"],
                          pre["xz_all"], pre["xup_all"], pre["xdn_all"],
@@ -360,6 +364,13 @@ def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
     if len(df):
         df["entry_t"] = pre["t"][df["entry_idx"].astype(int)]
         df["exit_t"] = pre["t"][df["exit_idx"].astype(int)]
+    if return_open:
+        op = None
+        if _op[0] != 0:
+            op = dict(dir=int(_op[0]), entry_idx=int(_op[1]), entry=float(_op[2]),
+                      qty=float(_op[3]), lev=float(_op[4]),
+                      entry_t=str(pre["t"][int(_op[1])]))
+        return df, eq, bool(liq), op
     return df, eq, bool(liq)
 
 

@@ -200,17 +200,21 @@ def _scalp_core(o, h, l, c, rsi, cvdUp, cvdDn, aboveCvd, belowCvd,
             pend_sl = c[i] * (1 + P[r, 2])
             pend_lev = P[r, 5]
 
-    return trades[:nt], equity, liquidated
+    open_pos = np.zeros(6)
+    if pos != 0:
+        open_pos[0] = pos; open_pos[1] = entry_idx; open_pos[2] = entry_price
+        open_pos[3] = qty; open_pos[4] = lev_used; open_pos[5] = 1.0
+    return trades[:nt], equity, liquidated, open_pos
 
 
 def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
-              commission=0.0004, liq_threshold=1e9):
+              commission=0.0004, liq_threshold=1e9, return_open=False):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
     if P.ndim == 1:
         P = P.reshape(1, -1)
-    tr, eq, liq = _scalp_core(pre["o"], pre["h"], pre["l"], pre["c"], pre["rsi"],
+    tr, eq, liq, _op = _scalp_core(pre["o"], pre["h"], pre["l"], pre["c"], pre["rsi"],
                               pre["cvdUp"], pre["cvdDn"], pre["aboveCvd"], pre["belowCvd"],
                               pre["emaBull"], pre["emaBear"], pre["poc"],
                               regime.astype(np.int32), P.astype(np.float64),
@@ -221,6 +225,13 @@ def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
     if len(df):
         df["entry_t"] = pre["t"][df["entry_idx"].astype(int)]
         df["exit_t"] = pre["t"][df["exit_idx"].astype(int)]
+    if return_open:
+        op = None
+        if _op[0] != 0:
+            op = dict(dir=int(_op[0]), entry_idx=int(_op[1]), entry=float(_op[2]),
+                      qty=float(_op[3]), lev=float(_op[4]),
+                      entry_t=str(pre["t"][int(_op[1])]))
+        return df, eq, bool(liq), op
     return df, eq, bool(liq)
 
 
@@ -307,7 +318,7 @@ def slice_pre2(pre, i0, i1):
 
 
 def run_scalp2(pre2, P, vidx, regime=None, warmup=1300, initial_capital=100.0,
-               commission=0.0004, liq_threshold=1e9):
+               commission=0.0004, liq_threshold=1e9, return_open=False):
     """vidx: (R, 4) int array of variant indexes [rsi, cvd, poc, emaS] per regime."""
     n = len(pre2["c"])
     if regime is None:
@@ -324,4 +335,4 @@ def run_scalp2(pre2, P, vidx, regime=None, warmup=1300, initial_capital=100.0,
                poc=pre2["poc2d"][pi, ar])
     return run_scalp(pre, P, regime=regime, warmup=warmup,
                      initial_capital=initial_capital, commission=commission,
-                     liq_threshold=liq_threshold)
+                     liq_threshold=liq_threshold, return_open=return_open)

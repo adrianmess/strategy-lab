@@ -77,6 +77,7 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 <section>
   <h2>Trades <span class="hint" id="tcount"></span></h2>
   <table id="tt"><thead><tr><th>entry</th><th>exit</th><th>dir</th><th>entry px</th><th>exit px</th><th>net</th><th>worst excursion</th><th>reason</th><th>lev</th></tr></thead><tbody></tbody></table>
+  <div id="openinfo" style="margin:6px 0"></div>
   <div id="gapinfo" class="hint" style="margin-top:10px"></div>
   <details><summary>config JSON</summary><pre id="cfg"></pre></details>
 </section>
@@ -166,8 +167,19 @@ function select(i){
     `<div class="mcell"><div class="hint">${m.month}</div><div class="${m.ret_pct>=0?'pos':'neg'}">${fp(m.ret_pct)}</div></div>`).join('')||'<span class="hint">n/a</span>';
   const tt=document.querySelector('#tt tbody');
   const tr=(e.trades||[]);
-  document.getElementById('tcount').textContent = tr.length?`(showing ${tr.length})`:'(none stored)';
-  tt.innerHTML = tr.slice().reverse().map(t=>`<tr>
+  const ops=(e.open_positions||[]);
+  document.getElementById('tcount').textContent = (tr.length||ops.length)?`(showing ${tr.length}${ops.length?` + ${ops.length} open`:''})`:'(none stored)';
+  document.getElementById('openinfo').innerHTML = ops.map(o=>
+    `<span class="${o.at==='end of data'?'neg':'hint'}" style="font-weight:600">⚠ OPEN POSITION at ${o.at}: ${o.dir.toUpperCase()} entered ${o.entry_t} @ $${o.entry.toFixed(2)} · ` +
+    `mark $${o.mark.toFixed(2)} (${(100*o.move_pct).toFixed(1)}% ${o.move_pct<0?'underwater':'in profit'} at ${o.lev.toFixed(1)}×, ` +
+    `unrealized ${o.unreal>=0?'+':''}$${o.unreal.toFixed(0)}) as of ${o.as_of}. Not included in the stats above.</span>`).join('<br>');
+  const openRows = ops.map(o=>`<tr style="background:rgba(248,81,73,.08)">
+    <td>${o.entry_t}</td><td><b>OPEN</b> (${o.at==='end of data'?'end of data':'gap'})</td><td>${o.dir}</td>
+    <td>${o.entry.toFixed(3)}</td><td>${o.mark.toFixed(3)} <span class="hint">mark</span></td>
+    <td class="${o.unreal>=0?'pos':'neg'}">${o.unreal.toFixed(2)} <span class="hint">unrealized</span></td>
+    <td>${(100*o.move_pct).toFixed(2)}%</td>
+    <td class="neg">still open</td><td>${o.lev.toFixed(1)}×</td></tr>`).join('');
+  tt.innerHTML = openRows + tr.slice().reverse().map(t=>`<tr>
     <td>${(t.entry_t||'').slice(0,16)}</td><td>${(t.exit_t||'').slice(0,16)}</td><td>${t.dir}</td>
     <td>${t.entry.toFixed(3)}</td><td>${t.exit.toFixed(3)}</td>
     <td class="${t.net>=0?'pos':'neg'}">${t.net.toFixed(2)}</td>
