@@ -149,6 +149,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <th data-k="best_score">score</th>
       <th data-k="best_eq">train eq</th>
       <th data-k="maxdd">DD</th>
+      <th data-k="_clean">no-liq</th>
       <th data-k="_hg">holdout</th>
       <th>actions</th>
     </tr></thead><tbody></tbody></table>
@@ -270,6 +271,14 @@ function fpm(x){return (x>=0?'+':'')+(100*(Math.exp(x)-1)).toFixed(1)+'%/mo'}
 async function refreshRuns(){
   RUNS = await api('runs2');
   RUNS.forEach(r=>{
+    const fl = r.backtest_flags||[];
+    const btBest = fl.find(f=>f.source==='best_config.json' && (f.kind||'').startsWith('full'));
+    const btHold = fl.find(f=>f.source==='best_config.json' && ((f.kind||'').startsWith('from ')||(f.kind||'').startsWith('alternating')));
+    const holdLiq = (r.holdout && r.holdout.liq) || (btHold && btHold.liq);
+    const holdOK  = (r.holdout && !r.holdout.liq) || (btHold && !btHold.liq);
+    if(holdOK && btBest && !btBest.liq) r._clean = 2;        // survived both
+    else if(holdLiq || (btBest && btBest.liq)) r._clean = 0; // liquidated somewhere
+    else r._clean = 1;                                        // not fully tested yet
     // rank by the best NON-liquidated candidate the run produced (train-best or OOS-best)
     let g = null;
     if(r.holdout && !r.holdout.liq) g = r.holdout.growth;
@@ -301,10 +310,7 @@ function renderRuns(){
         ? '<span class="badge b-red">LIQUIDATED</span>'
         : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>`}</span>`;
     }
-    const btBest = (r.backtest_flags||[]).find(f=>f.source==='best_config.json' && (f.kind||'').startsWith('full'));
-    const btHold = (r.backtest_flags||[]).find(f=>f.source==='best_config.json' && ((f.kind||'').startsWith('from ')||(f.kind||'').startsWith('alternating')));
-    const holdOK = (r.holdout && !r.holdout.liq) || (btHold && !btHold.liq);
-    const clean = holdOK && btBest && !btBest.liq;
+    const clean = r._clean === 2;
     return `<tr><td><b>${r.name}</b>${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
@@ -316,6 +322,7 @@ function renderRuns(){
       <td>${r.best_score!=null?r.best_score.toFixed(3):''}</td>
       <td>${r.best_eq?('$'+Math.round(r.best_eq).toLocaleString()):''}</td>
       <td>${r.maxdd!=null?(100*r.maxdd).toFixed(0)+'%':''}</td>
+      <td>${r._clean===2?'<span class="badge b-green" title="No liquidation on holdout or full backtest">✓</span>':r._clean===0?'<span class="badge b-red" title="Liquidated on the holdout and/or the full backtest">LIQ</span>':'<span class="kv" title="Run both the holdout evaluation and a full backtest to fill this in">—</span>'}</td>
       <td>${hcell}</td>
       <td>${r.best_config?`
         <button class="small" data-x="btn_backtest" title="Backtest over all history and preview the result here" onclick="bt('${r.best_config}','${r.name}')">Backtest</button>
@@ -368,7 +375,7 @@ function top10Row(r){
       <span class="kv" style="width:90px">score ${t.train_score.toFixed(3)}</span>
       <span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span> <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span></div>`;
   }).join('');
-  return `<tr><td colspan="13" style="background:var(--bg)">
+  return `<tr><td colspan="14" style="background:var(--bg)">
     <div class="kv" style="margin:4px 0">Top-10 train candidates ranked <b>survivors first</b> (best holdout at top; liquidated sink to the bottom):</div>
     ${rows}
     ${sc?`<div class="kv" style="margin:8px 0 4px"><b>Pool scan:</b> holdout evaluated for ${sc.scanned} of ${sc.pool} kept candidates → ${sc.survivors} survived${sc.survivors?'. Best survivors:':' — nothing in this pool generalizes; treat the run as overfit.'}</div>${sv}`:''}</td></tr>`;
