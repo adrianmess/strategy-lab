@@ -33,6 +33,21 @@ def gap_info():
                 n_segments=len(segs), segments=spans, skipped_gaps=skipped)
 
 
+def contamination_mask(t, warmup):
+    """skip_contaminated: after each small intra-segment data gap (missing bars
+    that did NOT trigger a segment split), suppress NEW entries while indicators
+    re-converge: 30 bars per missing bar, min 60 bars (3h), max the full warmup.
+    Exits/position management are unaffected."""
+    t64 = t.astype("datetime64[m]")
+    dt = np.diff(t64).astype(int)
+    mask = np.zeros(len(t), dtype=np.int8)
+    for j in np.where(dt > 4)[0]:
+        missing = int(round(dt[j] / 3.0)) - 1
+        W = int(np.clip(30 * missing, 60, warmup))
+        mask[j + 1: j + 1 + W] = 1
+    return mask
+
+
 def opt_settings(cfg):
     """Optimizer settings recorded in a best_config, for display on dashboards."""
     if not isinstance(cfg, dict) or "algo" not in cfg and "evaluated" not in cfg:
@@ -45,7 +60,7 @@ def opt_settings(cfg):
                 evaluated=cfg.get("evaluated"))
 
 
-def run_single_v7(cfg, oos_start=None, holdout_days=None):
+def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contaminated"):
     """Backtest a V7 (engine3, full-param) candidate."""
     import optimizer2 as O
     from engine3 import run3
@@ -63,8 +78,12 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None):
     open_positions = []
     warmup = 3000
     n_segs = len(G["pres"])
+    suppressed = 0
     for si, (pre, reg) in enumerate(zip(G["pres"], regs_list)):
         t = pre["t"]
+        seg_mask = contamination_mask(t, 3000) if gap_mode == "skip_contaminated" else None
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
         i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
         i1 = len(t)
         if i1 - i0 < 200:
@@ -79,7 +98,8 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None):
                                    initial_capital=eq,
                                    commission=0.0004 if mode == "lev" else 0.0005,
                                    use_sl=(mode == "spot"), dyn_liq=(mode == "lev"),
-                                   return_open=True)
+                                   return_open=True,
+                                   no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
             if op:
                 is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
                 if is_end or not holdout_days:
@@ -107,18 +127,19 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None):
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
     return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
-                       label_extra=dict(strategy=cfg.get("strategy") or cand.get("strategy", "v7"),
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy=cfg.get("strategy") or cand.get("strategy", "v7"),
                                         mode=mode, method=method,
                                         kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days else "full-history (in-sample fit)" if oos_start is None else f"from {oos_start}"),
                                         config=cand, opt=opt_settings(cfg)))
 
 
-def run_single(cfg_path, oos_start=None, holdout_days=None):
+def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_contaminated"):
     cfg = json.load(open(cfg_path))
     cand = cfg["cand"]
     if cfg.get("strategy") in ("v7", "prime7") or cand.get("strategy") in ("v7", "prime7") \
             or "regs" in cand:
-        return run_single_v7(cfg, oos_start, holdout_days=holdout_days)
+        return run_single_v7(cfg, oos_start, holdout_days=holdout_days, gap_mode=gap_mode)
     strategy, mode, method = cfg["strategy"], cfg["mode"], cfg["method"]
     from wf2 import (load_globals, build_P_v6, build_P_scalpx, build_P_prime,
                      mtm_curve, FUT_COMM, SPOT_COMM)
@@ -145,8 +166,12 @@ def run_single(cfg_path, oos_start=None, holdout_days=None):
     mdd = 0.0; months = 0.0; liq_any = False
     open_positions = []
     n_segs = len(segs)
+    suppressed = 0
     for si, ((pre, f), reg) in enumerate(zip(segs, regs)):
         t = pre["t"]
+        seg_mask = contamination_mask(t, warmup) if gap_mode == "skip_contaminated" else None
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
         i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
         i1 = len(t)
         if i1 - i0 < 200:
@@ -162,19 +187,22 @@ def run_single(cfg_path, oos_start=None, holdout_days=None):
                                              initial_capital=eq,
                                              commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                              liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                             return_open=True)
+                                             return_open=True,
+                                             no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
             elif v6like:
                 tr, eq, liq, op = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
                                            initial_capital=eq, use_sl=(mode == "spot"),
                                            commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                           return_open=True)
+                                           return_open=True,
+                                           no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
             else:
                 tr, eq, liq, op = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
                                             initial_capital=eq,
                                             commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                             liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                            return_open=True)
+                                            return_open=True,
+                                            no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
             if op:
                 is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
                 if is_end or not holdout_days:
@@ -202,7 +230,8 @@ def run_single(cfg_path, oos_start=None, holdout_days=None):
             break
     tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
     return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
-                       label_extra=dict(strategy=strategy, mode=mode, method=method,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy=strategy, mode=mode, method=method,
                                         kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days else "full-history (in-sample fit)" if oos_start is None else f"from {oos_start}"),
                                         config=cand, opt=opt_settings(cfg)))
 
@@ -263,6 +292,11 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="evaluate only the alternating held-out blocks of N days")
+    ap.add_argument("--gap-mode", default="skip_contaminated",
+                    choices=["skip_open", "skip_contaminated"],
+                    help="skip_open: drop trades open at gap boundaries (always on). "
+                         "skip_contaminated (default): also suppress entries while "
+                         "indicators re-converge after small in-segment gaps.")
     ap.add_argument("--oos-start", default=None,
                     help="only simulate from this date (single-config mode)")
     args = ap.parse_args()
@@ -271,7 +305,8 @@ def main():
     B.enter_run_dir("_backtest_tmp")
     if args.config:
         path = args.config if os.path.isabs(args.config) else os.path.join(cwd0, args.config)
-        entry = run_single(path, args.oos_start, holdout_days=args.holdout_days)
+        entry = run_single(path, args.oos_start, holdout_days=args.holdout_days,
+                           gap_mode=args.gap_mode)
     else:
         wf_dir = args.walkforward if os.path.isabs(args.walkforward) else os.path.join(cwd0, args.walkforward)
         r = json.load(open(os.path.join(wf_dir, "resim.json")))

@@ -114,7 +114,7 @@ def _core(t_ms, o, h, l, c,
           regime,            # int32 per bar
           P,                 # (n_regimes, NP) param matrix
           warmup, initial_capital, commission,
-          use_sl, liq_threshold):
+          use_sl, liq_threshold, no_entry):
     """Returns trade array + final equity + liquidation flag.
     trade row: [entry_idx, exit_idx, dir, system(0=3m,1=cross), entry, exit,
                 qty, net, mae, reason(0=pt,1=sl,2=liq), lev]
@@ -196,7 +196,7 @@ def _core(t_ms, o, h, l, c,
                     liquidated = 1
                     break
 
-        if i < warmup:
+        if i < warmup or no_entry[i] == 1:
             continue
         tm = t_ms[i]
 
@@ -281,13 +281,15 @@ def _core(t_ms, o, h, l, c,
 
 
 def run_fast(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
-             commission=0.0004, use_sl=True, liq_threshold=0.12, return_open=False):
+             commission=0.0004, use_sl=True, liq_threshold=0.12, return_open=False, no_entry=None):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
     if P.ndim == 1:
         P = P.reshape(1, -1)
     cdXL = pre.get("cdMetricXL", pre["cdMetricL"])
+    if no_entry is None:
+        no_entry = np.zeros(len(pre["c"]), dtype=np.int8)
     tr, eq, liq, _op = _core(pre["t_ms"], pre["o"], pre["h"], pre["l"], pre["c"],
                         pre["rsiL"], pre["macdL"], pre["bbPctL"],
                         pre["emaLongUp"], pre["emaShortDown"],
@@ -296,7 +298,7 @@ def run_fast(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
                         pre["cdMetricL"], pre["cdMetricS"], pre["cdMetricXS"], cdXL,
                         regime.astype(np.int32), P.astype(np.float64),
                         warmup, initial_capital, commission,
-                        1 if use_sl else 0, liq_threshold)
+                        1 if use_sl else 0, liq_threshold, no_entry)
     cols = ["entry_idx", "exit_idx", "dir", "system", "entry", "exit",
             "qty", "net", "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)

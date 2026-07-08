@@ -129,7 +129,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     </div>
   </div>
 
-  <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span></h2>
+  <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
+    <span class="mini" style="float:right"><label data-x="gapmode" style="cursor:pointer">Backtest gap handling</label>
+    <select id="gapMode" style="font-size:12px;padding:3px 6px"><option value="skip_contaminated">skip_contaminated (default)</option><option value="skip_open">skip_open</option></select></span></h2>
   <div class="card">
     <div class="tablewrap">
     <table id="runsT"><thead><tr>
@@ -220,6 +222,7 @@ const X = {
  budget: ["Budget", `How long to search. <b>hours</b>: wall-clock time budget. <b>evaluations</b>: number of candidate backtests to run (each evaluation = one full backtest of one parameter set — a few milliseconds each; 10,000+ is a reasonable session). Runs checkpoint every generation and are resumable by launching again with the same name.`],
  hours: ["Hours", `Time budget. Progress checkpoints every generation, so you can stop anytime and continue later by launching with the same run name. Overnight runs are fine and often worth it.`],
  maxdd: ["Max drawdown %", `Candidates whose worst peak-to-trough equity loss exceeds this are thrown away during the search. Default 80% for leveraged (drawdown is mark-to-market, so open-position pain counts), 50% for spot. Lower it for configs you could actually sit through — 80% means your $1000 became $200 at some point.`],
+ gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
  trainend: ["Holdout", `How unseen data is reserved to verify the result honestly.<dl><dt>after date</dt><dd>The search only sees data BEFORE the date; the best configs are then tested on everything after it. Simple, but the holdout is only the most recent market era.</dd><dt>alternating days</dt><dd>The calendar is cut into blocks of N days (e.g. 30): the search trains on every other block and is tested on the skipped ones. The holdout then samples ALL market eras — bull, bear, chop — not just the recent one. Positions force-close at block edges, so very slow strategies suit larger blocks.</dd></dl>Leave the date blank (or days 0) for no holdout — you get no evidence, only an in-sample fit.`],
  runname: ["Run name", `Names the run folder. Re-launching with the same name CONTINUES that run (resumable). Auto-generates if blank.`],
  btn_backtest: ["Backtest (button)", `Runs the run's best config over ALL history (including training data) and publishes it to the Backtests page. A preview with the equity chart appears in this sidebar when it finishes. Note: this is an in-sample number — impressive by construction.`],
@@ -354,7 +357,7 @@ document.querySelectorAll('#runsT th[data-k]').forEach(th=>{
 });
 // ---------- actions with preview ----------
 async function runAndPreview(cfg, name, oos, hd){
-  const body = {config:cfg, name:name};
+  const body = {config:cfg, name:name, gap_mode:$('gapMode').value};
   if(oos) body.oos_start = oos;
   if(hd) body.holdout_days = hd;
   const r = await api('jobs/backtest', body);

@@ -166,6 +166,8 @@ def job_backtest():
         cmd += ["--oos-start", d["oos_start"]]
     if d.get("holdout_days"):
         cmd += ["--holdout-days", str(d["holdout_days"])]
+    if d.get("gap_mode"):
+        cmd += ["--gap-mode", d["gap_mode"]]
     return jsonify(id=spawn("backtest", name, cmd, OPT))
 
 @app.route("/api/jobs/walkforward", methods=["POST"])

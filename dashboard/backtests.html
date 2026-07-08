@@ -186,8 +186,9 @@ function select(i){
     <td>${(100*t.mae).toFixed(2)}%</td>
     <td class="${t.reason==='profit_target'?'':'neg'}">${t.reason}</td><td>${t.lev.toFixed(1)}×</td></tr>`).join('');
   const g = e.gap_handling;
+  const gm = e.gap_mode ? ` Gap mode: <b>${e.gap_mode}</b>${e.gap_mode==='skip_contaminated'?` — entries were additionally suppressed on ${(e.suppressed_bars||0).toLocaleString()} bars while indicators re-converged after small in-segment gaps`:''}.` : '';
   document.getElementById('gapinfo').innerHTML = g ?
-    `<b style="color:var(--green)">Data gaps skipped.</b> Simulation split into ${g.n_segments} continuous segments (gap threshold ${g.threshold_min} min); no positions held across gaps, no P&L inside them.` +
+    `<b style="color:var(--green)">Data gaps skipped.</b> Simulation split into ${g.n_segments} continuous segments (gap threshold ${g.threshold_min} min); no positions held across gaps, no P&L inside them.${gm}` +
     (g.skipped_gaps&&g.skipped_gaps.length?`<br>Skipped ranges: ${g.skipped_gaps.join(' · ')}`:'') +
     (g.retroactive?'<br><i>(metadata added retroactively — this run did use segmented data)</i>':'') :
     '<b style="color:var(--amber)">Gap handling unknown</b> (entry predates gap tracking).';

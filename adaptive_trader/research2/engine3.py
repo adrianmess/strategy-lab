@@ -188,7 +188,7 @@ def _core3(t_ms, o, h, l, c,
            xz_all, xup_all, xdn_all, xhist_all, hist_all,
            cd1, cd3, trend,
            regime, P, warmup, initial_capital, commission,
-           use_sl, dyn_liq):
+           use_sl, dyn_liq, no_entry):
     n = len(c)
     equity = initial_capital
     pos = 0; pend = 0; pend_sys = 0
@@ -247,7 +247,7 @@ def _core3(t_ms, o, h, l, c,
                         nt += 1
                     liquidated = 1; break
 
-        if i < warmup:
+        if i < warmup or no_entry[i] == 1:
             continue
         r = regime[i]
         tm = t_ms[i]
@@ -343,12 +343,15 @@ def _core3(t_ms, o, h, l, c,
 
 
 def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
-         commission=0.0004, use_sl=True, dyn_liq=True, return_open=False):
+         commission=0.0004, use_sl=True, dyn_liq=True, return_open=False,
+         no_entry=None):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
     if P.ndim == 1:
         P = P.reshape(1, -1)
+    if no_entry is None:
+        no_entry = np.zeros(n, dtype=np.int8)
     tr, eq, liq, _op = _core3(pre["t_ms"], pre["o"], pre["h"], pre["l"], pre["c"],
                          pre["rsi_all"], pre["macdz_all"], pre["bb_all"],
                          pre["emaup_all"], pre["emadn_all"],
@@ -357,7 +360,7 @@ def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
                          pre["cd1"], pre["cd3"], pre["trend"],
                          regime.astype(np.int32), P.astype(np.float64),
                          warmup, initial_capital, commission,
-                         1 if use_sl else 0, 1 if dyn_liq else 0)
+                         1 if use_sl else 0, 1 if dyn_liq else 0, no_entry)
     cols = ["entry_idx", "exit_idx", "dir", "system", "entry", "exit",
             "qty", "net", "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)
