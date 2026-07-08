@@ -141,6 +141,7 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None):
     all_tr = []
     mtm_dd = 0.0
     liq_any = False
+    max_hold = 0.0
     from wf2 import alt_intervals
     for pre, reg in zip(G["pres"], regs_list):
         t = pre["t"]
@@ -154,9 +155,16 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None):
             w0 = max(0, a - warmup)
             sp = slice_pre(pre, w0, b)
             eq_before = eq
-            tr, eq, liq = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
-                               initial_capital=eq, commission=comm,
-                               use_sl=use_sl, dyn_liq=(mode == "lev"))
+            tr, eq, liq, op = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                   initial_capital=eq, commission=comm,
+                                   use_sl=use_sl, dyn_liq=(mode == "lev"),
+                                   return_open=True)
+            if len(tr):
+                max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
+                               * 3.0 / 1440.0)
+            if op:
+                max_hold = max(max_hold,
+                               (len(sp["c"]) - 1 - op["entry_idx"]) * 3.0 / 1440.0)
             months += (b - a) / (DAY * 30.4)
             all_tr.append(tr)
             if len(tr):
@@ -179,19 +187,24 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None):
     gm = pd.DataFrame(dict(mo=mo, lg=lg)).groupby("mo")["lg"].last().diff().dropna()
     g_mean = float(gm.mean()) if len(gm) >= 2 else growth
     g_std = float(gm.std()) if len(gm) >= 2 else 0.0
-    return dict(n=len(tr), months=months, eq=float(eq), growth=float(growth),
-                liq=liq_any, maxdd=float(mtm_dd), tpm=len(tr) / months,
-                sl_hits=int((tr["reason"] == 1).sum()),
-                worst_mae=float(tr["mae"].min()),
-                win=float((tr["net"] > 0).mean()),
-                score=g_mean - 0.25 * g_std)
+    out = dict(n=len(tr), months=months, eq=float(eq), growth=float(growth),
+               liq=liq_any, maxdd=float(mtm_dd), tpm=len(tr) / months,
+               sl_hits=int((tr["reason"] == 1).sum()),
+               worst_mae=float(tr["mae"].min()),
+               win=float((tr["net"] > 0).mean()),
+               max_hold_days=float(max_hold),
+               score=g_mean - 0.25 * g_std)
     for _k, _v in out.items():   # NaN/inf breaks JSON in browsers
         if isinstance(_v, float) and not np.isfinite(_v):
             out[_k] = 0.0
+    return out
 
-def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6, max_dd=None):
+def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6, max_dd=None,
+              max_hold=None):
     if m is None or m["liq"]:
         return False
+    if max_hold and m.get("max_hold_days", 0.0) > max_hold:
+        return False   # a position stayed open longer than allowed: throw the candidate out
     if m["n"] < min_n or m["tpm"] < min_tpm:
         return False
     cap = max_dd if max_dd else (0.80 if mode == "lev" else 0.50)
@@ -210,16 +223,16 @@ def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6, max_dd=
 
 # ---------------- algorithms (single-process batch APIs) ----------------
 
-def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True, max_dd=None, alt=None):
+def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True, max_dd=None, alt=None, max_hold=None):
     out = []
     for _ in range(n):
         c = sample_candidate(rng, space, R, mode, per_regime)
         m = eval3(c, method, t0, t1, alt=alt)
-        if feasible3(m, mode, cand=c, max_dd=max_dd):
+        if feasible3(m, mode, cand=c, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], c, m))
     return out
 
-def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, alt=None):
+def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, alt=None, max_hold=None):
     """Genetic step: produce and evaluate n children from a parent pool."""
     out = []
     for _ in range(n):
@@ -230,15 +243,15 @@ def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, a
             child = parents[0]
         child = mutate(rng, child, space, mode)
         m = eval3(child, method, t0, t1, alt=alt)
-        if feasible3(m, mode, cand=child, max_dd=max_dd):
+        if feasible3(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
 
-def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04, max_dd=None, alt=None):
+def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04, max_dd=None, alt=None, max_hold=None):
     out = []
     for _ in range(n):
         child = mutate(rng, seed_cand, space, mode, p_cont=0.15, p_menu=0.04, sigma=sigma)
         m = eval3(child, method, t0, t1, alt=alt)
-        if feasible3(m, mode, cand=child, max_dd=max_dd):
+        if feasible3(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out

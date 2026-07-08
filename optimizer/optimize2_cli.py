@@ -49,17 +49,20 @@ def worker(args):
             res = O.batch_random(rng, space, payload["R"], payload["mode"],
                                  payload["method"], payload["n"],
                                  payload["t0"], payload["t1"], payload["per_regime"],
-                                 max_dd=payload["max_dd"], alt=payload["alt"])
+                                 max_dd=payload["max_dd"], alt=payload["alt"],
+                                 max_hold=payload["max_hold"])
         elif kind == "offspring":
             res = O.batch_offspring(rng, space, payload["mode"], payload["method"],
                                     payload["parents"], payload["n"],
                                     payload["t0"], payload["t1"],
-                                    max_dd=payload["max_dd"], alt=payload["alt"])
+                                    max_dd=payload["max_dd"], alt=payload["alt"],
+                                    max_hold=payload["max_hold"])
         elif kind == "refine":
             res = O.batch_refine(rng, space, payload["mode"], payload["method"],
                                  payload["seed_cand"], payload["n"],
                                  payload["t0"], payload["t1"],
-                                 max_dd=payload["max_dd"], alt=payload["alt"])
+                                 max_dd=payload["max_dd"], alt=payload["alt"],
+                                 max_hold=payload["max_hold"])
         else:
             res = []
         for _s, _c, _m in res:
@@ -75,12 +78,14 @@ def worker(args):
         return strip(W.batch_offspring_flat(rng, payload["parents"], payload["mode"],
                                             space, None, R, payload["method"],
                                             payload["n"], payload["t0"], payload["t1"],
-                                            max_dd=payload["max_dd"], alt=payload["alt"]))
+                                            max_dd=payload["max_dd"], alt=payload["alt"],
+                                            max_hold=payload["max_hold"]))
     if kind == "refine":
         return strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
                                          space, payload["method"],
                                          payload["n"], payload["t0"], payload["t1"],
-                                         max_dd=payload["max_dd"], alt=payload["alt"]))
+                                         max_dd=payload["max_dd"], alt=payload["alt"],
+                                         max_hold=payload["max_hold"]))
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
     out = []
@@ -88,7 +93,8 @@ def worker(args):
         c = sampler(rng, R, payload["mode"], space)
         m = W.eval_config(c, payload["method"], payload["mode"],
                           payload["t0"], payload["t1"], alt=payload["alt"])
-        if W.feasible(m, payload["mode"], cand=c, max_dd=payload["max_dd"]):
+        if W.feasible(m, payload["mode"], cand=c, max_dd=payload["max_dd"],
+                      max_hold=payload["max_hold"]):
             out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
     return out
 
@@ -112,6 +118,9 @@ def main():
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
+    ap.add_argument("--max-hold-days", type=float, default=None,
+                    help="throw out any candidate whose simulation ever holds a "
+                         "position longer than this many days (blank = unlimited)")
     ap.add_argument("--max-dd", type=float, default=None,
                     help="max drawdown cap as a fraction (default 0.80 lev / 0.50 spot)")
     ap.add_argument("--space", default=os.path.join(B.OPT_DIR, "param_space.json"))
@@ -219,7 +228,7 @@ def main():
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
                            n=args.batch, t0=None, t1=args.train_end,
                            per_regime=per_regime, strategy=args.strategy,
-                           max_dd=args.max_dd,
+                           max_dd=args.max_dd, max_hold=args.max_hold_days,
                            alt=((args.holdout_days, "train") if args.holdout_days else None))
             if args.algo == "random" or len(pool) < 8:
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
@@ -262,7 +271,7 @@ def main():
     out = dict(cand=best_cand, metrics=best_m, strategy=args.strategy, mode=args.mode,
                method=args.method, algo=args.algo, per_regime=per_regime,
                train_end=args.train_end, holdout_days=args.holdout_days,
-               max_dd=args.max_dd, evaluated=evaluated,
+               max_dd=args.max_dd, max_hold_days=args.max_hold_days, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
@@ -303,7 +312,9 @@ def main():
         holdouts = scan
         survivors = [dict(rank=i + 1, train_score=pool[i][0], holdout=holdouts[i])
                      for i in range(len(holdouts))
-                     if holdouts[i] and not holdouts[i]["liq"]]
+                     if holdouts[i] and not holdouts[i]["liq"]
+                     and not (args.max_hold_days and
+                              holdouts[i].get("max_hold_days", 0) > args.max_hold_days)]
         survivors.sort(key=lambda r: r["holdout"]["growth"], reverse=True)
         out["holdout_scan"] = dict(scanned=len(scan), pool=len(pool),
                                    survivors=len(survivors))

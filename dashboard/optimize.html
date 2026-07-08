@@ -118,6 +118,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="budgetType" style="width:110px"><option value="hours">hours</option><option value="total">evaluations</option></select>
         <input id="budgetVal" value="2" style="width:70px"></span></div>
       <div class="field"><label data-x="maxdd">Max drawdown %</label><input id="maxDD" value="80" style="width:60px"></div>
+      <div class="field"><label data-x="maxhold">Max days in trade</label><input id="maxHold" value="" placeholder="∞" style="width:60px"></div>
       <div class="field"><label data-x="trainend">Holdout</label>
         <span style="display:flex;gap:4px">
         <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="alt">alternating days</option></select>
@@ -223,6 +224,7 @@ const X = {
  hours: ["Hours", `Time budget. Progress checkpoints every generation, so you can stop anytime and continue later by launching with the same run name. Overnight runs are fine and often worth it.`],
  maxdd: ["Max drawdown %", `Candidates whose worst peak-to-trough equity loss exceeds this are thrown away during the search. Default 80% for leveraged (drawdown is mark-to-market, so open-position pain counts), 50% for spot. Lower it for configs you could actually sit through — 80% means your $1000 became $200 at some point.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
+ maxhold: ["Max days in trade", `Throws out any candidate whose simulation EVER holds a position longer than this many days — including positions still open at the end of the data or at gap boundaries. This kills the configs that get a trade stuck underwater for months waiting for a profit target. It does NOT close or alter any trade; the whole candidate is simply disqualified from the pool (and from holdout survivor ranking). Blank = unlimited.`],
  trainend: ["Holdout", `How unseen data is reserved to verify the result honestly.<dl><dt>after date</dt><dd>The search only sees data BEFORE the date; the best configs are then tested on everything after it. Simple, but the holdout is only the most recent market era.</dd><dt>alternating days</dt><dd>The calendar is cut into blocks of N days (e.g. 30): the search trains on every other block and is tested on the skipped ones. The holdout then samples ALL market eras — bull, bear, chop — not just the recent one. Positions force-close at block edges, so very slow strategies suit larger blocks.</dd></dl>Leave the date blank (or days 0) for no holdout — you get no evidence, only an in-sample fit.`],
  runname: ["Run name", `Names the run folder. Re-launching with the same name CONTINUES that run (resumable). Auto-generates if blank.`],
  btn_backtest: ["Backtest (button)", `Runs the run's best config over ALL history (including training data) and publishes it to the Backtests page. A preview with the equity chart appears in this sidebar when it finishes. Note: this is an in-sample number — impressive by construction.`],
@@ -251,6 +253,7 @@ async function launch(){
     holdout_days:($('hoMode').value==='alt' ? (+$('hoDays').value||undefined) : undefined),
     name:$('name').value||undefined,
     max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
+    max_hold_days:(+$('maxHold').value>0) ? +$('maxHold').value : undefined,
     single_set: $('perreg').value==='1'};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
@@ -321,7 +324,8 @@ function optChips(r){
   const dd = r.max_dd!=null ? `DD≤${Math.round(100*r.max_dd)}%` :
              (r.mode==='lev' ? 'DD≤80%' : 'DD≤50%');
   const ps = r.per_regime===false ? 'single set' : 'per-regime';
-  return [r.algo||'?', ps, ho, dd].join(' · ');
+  const mh = r.max_hold_days ? `≤${r.max_hold_days}d in trade` : null;
+  return [r.algo||'?', ps, ho, dd, mh].filter(Boolean).join(' · ');
 }
 async function renameRun(name){
   const nn = prompt('New name for "'+name+'" (slashes/spaces become _):', name);

@@ -398,7 +398,7 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
     return _normalize_flat(c)
 
 def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1,
-                         max_dd=None, alt=None):
+                         max_dd=None, alt=None, max_hold=None):
     """Genetic step for flat candidates; parents = list of cands."""
     out = []
     for _ in range(n):
@@ -409,17 +409,17 @@ def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t
             child = dict(parents[0])
         child = mutate_flat(rng, child, mode, space)
         m = eval_config(child, method, mode, t0, t1, alt=alt)
-        if feasible(m, mode, cand=child, max_dd=max_dd):
+        if feasible(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
 
 def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04,
-                      max_dd=None, alt=None):
+                      max_dd=None, alt=None, max_hold=None):
     out = []
     for _ in range(n):
         child = mutate_flat(rng, seed_cand, mode, space, p_cont=0.15, sigma=sigma)
         m = eval_config(child, method, mode, t0, t1, alt=alt)
-        if feasible(m, mode, cand=child, max_dd=max_dd):
+        if feasible(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
 
@@ -506,6 +506,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
     months = 0.0
     liq_any = False
     mtm_dd = 0.0
+    max_hold = 0.0
     if cand["strategy"] in ("v6", "prime"):
         P = (build_P_prime if cand["strategy"] == "prime" else build_P_v6)(cand, R)
         segs = G["v6"][cand["tv"]]
@@ -521,10 +522,17 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
                 w0 = max(0, a - warmup)
                 sp = slice_pre(pre, w0, b)
                 eq_before = eq
-                tr, eq, liq = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
-                                       initial_capital=eq, use_sl=use_sl,
-                                       commission=comm if mode == "lev" else SPOT_COMM,
-                                       liq_threshold=-1.0 if mode == "lev" else 1e9)
+                tr, eq, liq, op = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                           initial_capital=eq, use_sl=use_sl,
+                                           commission=comm if mode == "lev" else SPOT_COMM,
+                                           liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                           return_open=True)
+                if len(tr):
+                    max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
+                                   * 3.0 / 1440.0)
+                if op:
+                    max_hold = max(max_hold,
+                                   (len(sp["c"]) - 1 - op["entry_idx"]) * 3.0 / 1440.0)
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
                 if mode == "lev" and len(tr):
@@ -552,13 +560,21 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
                 sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)
                 eq_before = eq
                 if sx2:
-                    tr, eq, liq = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
-                                             initial_capital=eq, commission=comm,
-                                             liq_threshold=-1.0 if mode == "lev" else 1e9)
+                    tr, eq, liq, op = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
+                                                 initial_capital=eq, commission=comm,
+                                                 liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                                 return_open=True)
                 else:
-                    tr, eq, liq = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
-                                            initial_capital=eq, commission=comm,
-                                            liq_threshold=-1.0 if mode == "lev" else 1e9)
+                    tr, eq, liq, op = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                                initial_capital=eq, commission=comm,
+                                                liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                                return_open=True)
+                if len(tr):
+                    max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
+                                   * 3.0 / 1440.0)
+                if op:
+                    max_hold = max(max_hold,
+                                   (len(sp["c"]) - 1 - op["entry_idx"]) * 3.0 / 1440.0)
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
                 if mode == "lev" and len(tr):
@@ -586,6 +602,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
                sl_hits=int((tr["reason"] == 1).sum()),
                worst_mae=float(tr["mae"].min()),
                win=float((tr["net"] > 0).mean()),
+               max_hold_days=float(max_hold),
                score=g_mean - 0.25 * g_std)
     for k, v in out.items():   # NaN/inf breaks JSON in browsers
         if isinstance(v, float) and not np.isfinite(v):
@@ -594,9 +611,11 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None):
         out["trades"] = tr
     return out
 
-def feasible(m, mode, cand=None, max_dd=None, liq_margin=0.6):
+def feasible(m, mode, cand=None, max_dd=None, liq_margin=0.6, max_hold=None):
     if m is None or m["liq"]:
         return False
+    if max_hold and m.get("max_hold_days", 0.0) > max_hold:
+        return False   # a position stayed open longer than allowed: throw the candidate out
     if m["n"] < 10 or m["tpm"] < 2:
         return False
     cap = max_dd if max_dd else (0.80 if mode == "lev" else 0.50)

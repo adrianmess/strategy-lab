@@ -57,6 +57,7 @@ def opt_settings(cfg):
     return dict(algo=cfg.get("algo"),
                 param_set=("per-regime" if cfg.get("per_regime", True) else "single set"),
                 holdout=ho, max_dd=cfg.get("max_dd"),
+                max_hold_days=cfg.get("max_hold_days"),
                 evaluated=cfg.get("evaluated"))
 
 
