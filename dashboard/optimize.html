@@ -318,9 +318,9 @@ function renderRuns(){
     for(const f of (r.backtest_flags||[])){
       const src_ = f.source==='holdout_best_config.json' ? 'OOS-best' : 'best';
       const kind = (f.kind||'').startsWith('full') ? 'full' : (f.kind||'');
-      hcell += `<br><span class="kv" title="Result of the last backtest you ran on this run's ${src_} config (${f.kind}, ${f.gap_mode||''}) — ${f.at}">bt ${src_} ${kind}: ${f.liq
+      hcell += `<br><a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(f.backtest)}" title="Open this backtest on the Backtests page (${f.kind}, ${f.gap_mode||''}) — ${f.at}">bt ${src_} ${kind}: ${f.liq
         ? '<span class="badge b-red">LIQUIDATED</span>'
-        : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>`}</span>`;
+        : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>`} ↗</a>`;
     }
     const clean = r._clean === 2;
     return `<tr><td><b>${r.name}</b>${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>

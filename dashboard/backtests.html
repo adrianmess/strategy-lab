@@ -62,30 +62,31 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
   </div>
 </section>
 
-<section class="flex">
-  <div class="chartbox">
-    <h2 style="margin-top:0">Equity (mark-to-market, log)</h2>
-    <div id="ct" class="hint"></div>
-    <canvas id="curve" height="120"></canvas>
+<div id="detailHolder" style="display:none;padding:14px 10px;">
+  <div class="flex" style="display:flex;gap:18px;flex-wrap:wrap">
+    <div class="chartbox" style="flex:2;min-width:420px">
+      <h2 style="margin-top:0">Equity (mark-to-market, log)</h2>
+      <div id="ct" class="hint"></div>
+      <canvas id="curve" height="120"></canvas>
+    </div>
+    <div class="chartbox" style="flex:1;min-width:280px">
+      <h2 style="margin-top:0">Monthly returns</h2>
+      <div id="mgrid" class="mgrid"></div>
+    </div>
   </div>
-  <div class="chartbox">
-    <h2 style="margin-top:0">Monthly returns</h2>
-    <div id="mgrid" class="mgrid"></div>
-  </div>
-</section>
-
-<section>
-  <h2>Trades <span class="hint" id="tcount"></span></h2>
+  <h2 style="margin-top:14px">Trades <span class="hint" id="tcount"></span></h2>
+  <div style="max-height:340px;overflow-y:auto">
   <table id="tt"><thead><tr><th>entry</th><th>exit</th><th>dir</th><th>entry px</th><th>exit px</th><th>net</th><th>worst excursion</th><th>reason</th><th>lev</th></tr></thead><tbody></tbody></table>
+  </div>
   <div id="openinfo" style="margin:6px 0"></div>
   <div id="gapinfo" class="hint" style="margin-top:10px"></div>
   <details><summary>config JSON</summary><pre id="cfg"></pre></details>
-</section>
+</div>
 </main>
 <script>
 const BT = window.BACKTESTS||[];
 const tb = document.querySelector('#bt tbody');
-let sel = null, chart=null, sortKey=null, sortDir=-1;
+let sel = null, chart=null, sortKey='created', sortDir=-1;
 function fp(x){return (x>=0?'+':'')+x.toFixed(2)+'%'}
 function fm(x){return x>=1000?x.toExponential(1):x.toFixed(2)}
 const COLKEYS = ['name','kind','strategy','mode','method','optstr','s.monthly_growth_pct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win',null,'created',null];
@@ -103,6 +104,8 @@ function gapBadge(e){
   return `<span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="${tip}">skipped ✓</span>`;
 }
 function render(){
+  const holder = document.getElementById('detailHolder');
+  holder.style.display='none'; document.querySelector('main').appendChild(holder);
   let order = BT.map((e,i)=>i);
   if(sortKey){
     order.sort((a,b)=>{
@@ -123,7 +126,15 @@ function render(){
     <td>${gapBadge(e)}</td>
     <td class="hint">${e.created||''}</td>
     <td><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
-  tb.querySelectorAll('tr').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i));
+  tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
+  if(sel!==null){
+    const row = tb.querySelector(`tr[data-i="${sel}"]`);
+    if(row){
+      row.insertAdjacentHTML('afterend', `<tr class="detailrow"><td colspan="16" id="detailCell" style="background:var(--bg)"></td></tr>`);
+      document.getElementById('detailCell').appendChild(holder);
+      holder.style.display='';
+    }
+  }
   tb.querySelectorAll('button.del').forEach(b=>b.onclick=async ev=>{
     ev.stopPropagation();
     if(!confirm(`Delete backtest entry "${b.dataset.name}"?`))return;
@@ -147,6 +158,7 @@ function optimizeThis(){
 }
 function select(i){
   sel=i; render();
+  if(i===null){ if(chart){chart.destroy();chart=null;} return; }
   const e = BT[i];
   document.getElementById('ct').innerHTML = `<b>${e.name}</b> · ${stratName(e.strategy)}
     <button style="margin-left:12px;padding:3px 10px;font-size:12px;cursor:pointer;border-radius:6px"
@@ -163,7 +175,7 @@ function select(i){
         y:{type:'logarithmic',ticks:{color:cssv('--chart-tick')},grid:{color:cssv('--chart-grid')}}},
         plugins:{legend:{display:false}}}});
   }
-  window.onThemeChange = ()=>select(sel);
+  window.onThemeChange = ()=>{ if(sel!==null) select(sel); };
   document.getElementById('mgrid').innerHTML=(e.monthly||[]).map(m=>
     `<div class="mcell"><div class="hint">${m.month}</div><div class="${m.ret_pct>=0?'pos':'neg'}">${fp(m.ret_pct)}</div></div>`).join('')||'<span class="hint">n/a</span>';
   const tt=document.querySelector('#tt tbody');
@@ -195,7 +207,18 @@ function select(i){
     '<b style="color:var(--amber)">Gap handling unknown</b> (entry predates gap tracking).';
   document.getElementById('cfg').textContent = JSON.stringify(e.config,null,1)||'—';
 }
-render(); if(BT.length)select(0);
+(function(){
+  if(!BT.length){ render(); return; }
+  const want = new URLSearchParams(location.search).get('sel');
+  let idx = want ? BT.findIndex(e=>e.name===want) : -1;
+  if(idx < 0){
+    idx = 0;
+    for(let i=1;i<BT.length;i++) if((BT[i].created||'') > (BT[idx].created||'')) idx = i;
+  }
+  select(idx);
+  const row = tb.querySelector(`tr[data-i="${idx}"]`);
+  if(row && want) row.scrollIntoView({block:'center'});
+})();
 </script>
 </body>
 </html>

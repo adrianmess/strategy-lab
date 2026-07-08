@@ -6,6 +6,15 @@
   "growth_pct": 46.15964075978769,
   "gap_mode": "skip_contaminated",
   "backtest": "__seed_test_genetic_2_full",
-  "at": "2026-07-08 11:52"
+  "at": "2026-07-08 12:21"
+ },
+ "best_config.json|from 2025-09-01": {
+  "source": "best_config.json",
+  "kind": "from 2025-09-01",
+  "liq": false,
+  "growth_pct": 25.437963166358625,
+  "gap_mode": "skip_contaminated",
+  "backtest": "__seed_test_genetic_2_HOLDOUT",
+  "at": "2026-07-08 12:21"
  }
 }
