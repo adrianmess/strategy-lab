@@ -36,6 +36,18 @@ def tail(path, lines=80):
         return []
 
 
+_LOADED_MTIME = os.path.getmtime(os.path.abspath(__file__))
+
+@app.route("/api/version")
+def api_version():
+    """Lets the pages detect a stale server process after code updates."""
+    try:
+        cur = os.path.getmtime(os.path.abspath(__file__))
+    except OSError:
+        cur = _LOADED_MTIME
+    return jsonify(stale=(cur != _LOADED_MTIME))
+
+
 def spawn(kind, name, cmd, cwd):
     jid = f"{kind}_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
     log = os.path.join(JOBS_DIR, jid + ".log")

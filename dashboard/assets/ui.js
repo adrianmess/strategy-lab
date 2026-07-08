@@ -42,3 +42,14 @@ window.STRAT_NAMES = {
 };
 window.stratName = s => window.STRAT_NAMES[(s || "").toLowerCase()] || s || "unknown";
 window.cssv = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// stale-server banner: the panel server keeps running old code until restarted
+fetch('/api/version').then(r=>r.json()).then(v=>{
+  if(!v.stale) return;
+  const b = document.createElement('div');
+  b.style.cssText = 'position:sticky;top:0;z-index:99;background:var(--red,#d33);color:#fff;'+
+    'padding:8px 20px;font:600 13px -apple-system,sans-serif;text-align:center';
+  b.textContent = '⚠ The panel server is running an OLDER version of the code — new features are silently ignored. '+
+    'Stop it (Ctrl+C in its terminal) and start it again:  python3 panel/server.py';
+  document.body.prepend(b);
+}).catch(()=>{});
