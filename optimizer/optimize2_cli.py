@@ -103,14 +103,28 @@ def worker(args):
 
 
 def parse_lockbox(s):
-    """'..2024-11-01,2025-07-01..' -> [(None,'2024-11-01'), ('2025-07-01',None)]"""
+    """'..2024-11-01,2025-07-01..' -> [(None,'2024-11-01'), ('2025-07-01',None)].
+    A bare date ('2025-09-01') means from that date onward."""
     out = []
     for part in (s or "").split(","):
         part = part.strip()
         if not part:
             continue
-        a, b = part.split("..")
-        out.append((a.strip() or None, b.strip() or None))
+        if ".." in part:
+            a, b = part.split("..", 1)
+        else:
+            a, b = part, ""   # bare date = lockbox from that date to the end
+        a, b = (a.strip() or None), (b.strip() or None)
+        for d in (a, b):
+            if d is not None:
+                try:
+                    np.datetime64(d)
+                except Exception:
+                    raise SystemExit(
+                        f"--lockbox: '{d}' is not a date. Use YYYY-MM-DD ranges like "
+                        f"'2025-09-01..' or '..2024-11-01,2025-07-01..' (comma-separated, "
+                        f"open sides allowed; a bare date means 'from that date onward').")
+        out.append((a, b))
     return out
 
 
