@@ -100,7 +100,7 @@ DEFAULTS3 = dict(
     cdPctLong=0.00402, cdPeriodLong=90.0, cdPctShort=0.003, cdPeriodShort=70.0,
     xCdPctLong=0.99, xCdPeriodLong=90.0, xCdPctShort=0.0003, xCdPeriodShort=7.0,
     xMinBetween=13.0,
-    slLong=0.10, slShort=0.10, leverage=2.5,
+    slLong=0.10, slShort=0.10, leverage=8.0,
     eL3=1.0, eS3=1.0, eXL=0.0, eXS=1.0, requireHistPos=1.0,
     vRsi=1, vMacd=0, vBB=1, vEmaUp=2, vEmaDn=4, vX=1, vHistN=3,
     trendBlockZ=99.0,

@@ -159,7 +159,7 @@ def build_anchor_defaults(strategy, mode, R, space):
                  rsiOB=[D["rsiOB"]] * R, rsiOS=[D["rsiOS"]] * R,
                  useCvd=[1.0] * R, useEma=[1.0] * R,
                  eL=[1.0] * R, eS=[0.0 if mode == "spot" else 1.0] * R,
-                 lev=[1.0 if mode == "spot" else 2.0] * R,
+                 lev=[1.0 if mode == "spot" else float(D.get("leverage", 1.0))] * R,
                  sl=(0.05 if mode == "spot" else 0.05),
                  slOn=(1.0 if mode == "spot" else 0.0))
         if strategy == "scalpx2":
