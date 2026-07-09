@@ -1,0 +1,20 @@
+{
+ "quick___quick_prime.json|full-history (in-sample fit)": {
+  "source": "quick___quick_prime.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.12140696598267,
+  "gap_mode": "skip_open",
+  "backtest": "__quick_prime",
+  "at": "2026-07-09 16:16"
+ },
+ "quick___quick_prime2.json|full-history (in-sample fit)": {
+  "source": "quick___quick_prime2.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.12140696598267,
+  "gap_mode": "skip_open",
+  "backtest": "__quick_prime2",
+  "at": "2026-07-09 16:17"
+ }
+}

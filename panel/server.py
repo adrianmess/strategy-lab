@@ -156,11 +156,44 @@ def _safe_name(n):
     import re
     return re.sub(r"[^A-Za-z0-9._-]+", "_", n or "")
 
+@app.route("/api/defaults")
+def api_defaults():
+    """The strategy's stored live-default parameters as an editable candidate."""
+    strategy = request.args.get("strategy", "v7")
+    mode = request.args.get("mode", "lev")
+    method = request.args.get("method", "vol3")
+    R = {"none": 1, "volXtrend9": 9}.get(method, 3)
+    code = (
+        "import _bootstrap as B, json\n"
+        "from optimize2_cli import build_anchor_defaults\n"
+        f"space = json.load(open(B.OPT_DIR + '/param_space.json')).get({strategy!r}) or {{}}\n"
+        f"print(json.dumps(build_anchor_defaults({strategy!r}, {mode!r}, {R}, space), default=float))"
+    )
+    try:
+        out = subprocess.run([sys.executable, "-c", code], cwd=OPT,
+                             capture_output=True, text=True, timeout=120)
+        if out.returncode != 0:
+            return jsonify(error=out.stderr.strip().splitlines()[-1] if out.stderr else "failed"), 400
+        return jsonify(cand=json.loads(out.stdout.strip().splitlines()[-1]))
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
 @app.route("/api/jobs/backtest", methods=["POST"])
 def job_backtest():
     d = request.get_json(force=True)
-    cfg = d.get("config", "../adaptive_trader/research2/final_config_v6_lev_none.json")
     name = _safe_name(d.get("name")) or f"bt_{time.strftime('%m%d_%H%M')}"
+    if d.get("cand"):
+        # quick backtest: a raw candidate (defaults or user-edited), no optimizer run
+        qdir = os.path.join(OPT, "runs", "_backtest_tmp")
+        os.makedirs(qdir, exist_ok=True)
+        cfg = os.path.join(qdir, f"quick_{name}.json")
+        json.dump(dict(cand=d["cand"], strategy=d.get("strategy", "v7"),
+                       mode=d.get("mode", "lev"), method=d.get("method", "vol3"),
+                       kind="quick backtest (no optimizer)"),
+                  open(cfg, "w"))
+    else:
+        cfg = d.get("config", "../adaptive_trader/research2/final_config_v6_lev_none.json")
     cmd = [sys.executable, "backtest_cli.py", "--config", cfg, "--name", name]
     if d.get("oos_start"):
         cmd += ["--oos-start", d["oos_start"]]

@@ -140,8 +140,11 @@ def build_anchor_defaults(strategy, mode, R, space):
     if strategy == "prime":
         import wf2 as W
         P = W.PRIME_BASE
+        # NOTE: this pipeline z-scores the entry MACD (volatility-normalized),
+        # so the live raw %-thresholds are translated by quantile matching:
+        # z fires at the same historical rate as the raw threshold did.
         c = dict(strategy="prime", tv=0,
-                 zL=[P["macdValPctLong"]] * R, zS=[P["macdValPctShort"]] * R,
+                 zL=[-1.248] * R, zS=[1.128] * R,
                  rsiL=[P["rsiValLong"]] * R, rsiS=[P["rsiValShort"]] * R,
                  bbL=[P["bbValLong"]] * R, bbS=[P["bbValShort"]] * R,
                  ptL=[P["ptLong"]] * R, a1L=[P["apt1Long"]] * R, a2L=[P["apt2Long"]] * R,
