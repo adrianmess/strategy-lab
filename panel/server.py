@@ -555,6 +555,7 @@ def runs2():
                 bc = json.load(open(best_p))
                 e["method"] = bc.get("method")
                 e["mode"] = bc.get("mode", e.get("mode"))
+                e["no_survivors"] = ("cand" in bc and bc.get("cand") is None)
                 e["holdout"] = bc.get("holdout")
                 e["holdout_best"] = bc.get("holdout_best")
                 e["holdout_top10"] = bc.get("holdout_top10")
@@ -577,7 +578,8 @@ def runs2():
                     except Exception:
                         pass
                 e["seed_holdout"] = bc.get("seed_holdout")
-                e["best_config"] = f"runs/{d}/best_config.json"
+                if bc.get("cand") is not None:
+                    e["best_config"] = f"runs/{d}/best_config.json"
                 if os.path.exists(os.path.join(runs_dir, d, "holdout_best_config.json")):
                     e["holdout_best_config"] = f"runs/{d}/holdout_best_config.json"
                 e["strategy"] = bc.get("strategy", e.get("strategy", "v7"))

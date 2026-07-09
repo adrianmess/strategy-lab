@@ -1,0 +1,35 @@
+{
+ "strategy": "v7",
+ "mode": "lev",
+ "method": "vol3",
+ "algo": "crossfit",
+ "per_regime": true,
+ "holdout_days": 21.0,
+ "lockbox": "2025-09-01",
+ "max_dd": null,
+ "max_hold_days": 30.0,
+ "gap_mode": "skip_contaminated",
+ "evaluated": 22594600,
+ "crossfit": {
+  "fold_days": 21.0,
+  "lockboxes": [
+   [
+    "2025-09-01",
+    null
+   ]
+  ],
+  "foldA": {
+   "feasible": 300,
+   "survivors": 0
+  },
+  "foldB": {
+   "feasible": 300,
+   "survivors": 0
+  },
+  "merged": 0,
+  "finalists": []
+ },
+ "cand": null,
+ "metrics": null,
+ "generated": "2026-07-09 05:15"
+}

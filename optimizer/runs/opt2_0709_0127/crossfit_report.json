@@ -1,0 +1,19 @@
+{
+ "fold_days": 21.0,
+ "lockboxes": [
+  [
+   "2025-09-01",
+   null
+  ]
+ ],
+ "foldA": {
+  "feasible": 300,
+  "survivors": 0
+ },
+ "foldB": {
+  "feasible": 300,
+  "survivors": 0
+ },
+ "merged": 0,
+ "finalists": []
+}

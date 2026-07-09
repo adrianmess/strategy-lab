@@ -313,6 +313,22 @@ function renderRuns(){
   });
   document.querySelector('#runsT tbody').innerHTML = rs.map(r=>{
     const h = r.holdout;
+    if(r.no_survivors){
+      const hs = r.holdout_scan;
+      return `<tr><td><b>${r.name}</b></td>
+      <td>${stratName(r.strategy)}</td>
+      <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
+      <td>${r.method||''}</td>
+      <td class="kv" style="font-size:11.5px">${optChips(r)}</td>
+      <td class="kv">${r.last_run||''}</td>
+      <td>${(r.evaluated||0).toLocaleString()}</td>
+      <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
+      <td colspan="3"><span class="badge b-red">0 SURVIVORS</span> <span class="kv">every candidate died out-of-sample — no config produced (that's the honest result${hs?`; ${hs.scanned} scanned`:''})</span></td>
+      <td><span class="badge b-red" title="Nothing survived — nothing to trade">✕</span></td>
+      <td>—</td>
+      <td>${r.crossfit?`<button class="small" onclick="toggleTop10('${r.name}')">Report</button>`:''}
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${top10Row(r)}`;
+    }
     let hcell = h ? (h.liq ? '<span class="badge b-red">LIQUIDATED</span>' :
       `<span class="${h.growth>=0?'pos':'neg'}">${fpm(h.growth)}</span> <span class="kv">dd ${(100*h.maxdd).toFixed(0)}%</span>`)
       : '<span class="kv">—</span>';

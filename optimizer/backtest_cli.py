@@ -131,7 +131,10 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
 
 def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_contaminated"):
     cfg = json.load(open(cfg_path))
-    cand = cfg["cand"]
+    cand = cfg.get("cand")
+    if not cand:
+        raise SystemExit("This run produced NO surviving candidate (see its report) — "
+                         "there is nothing to backtest.")
     if cfg.get("strategy") in ("v7", "prime7") or cand.get("strategy") in ("v7", "prime7") \
             or "regs" in cand:
         return run_single_v7(cfg, oos_start, holdout_days=holdout_days, gap_mode=gap_mode)
