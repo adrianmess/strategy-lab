@@ -97,7 +97,9 @@ def sample_candidate(rng, space, R, mode, per_regime=True):
 def crossover(rng, a, b):
     child = dict(strategy="v7", mode=a["mode"], regs=[])
     for ra, rb in zip(a["regs"], b["regs"]):
-        child["regs"].append({k: (ra[k] if rng.random() < 0.5 else rb[k]) for k in ra})
+        keys = set(ra) | set(rb)
+        child["regs"].append({k: (ra[k] if (k not in rb or (k in ra and rng.random() < 0.5))
+                                  else rb[k]) for k in keys})
     return child
 
 def mutate(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):

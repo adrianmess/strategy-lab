@@ -132,8 +132,11 @@ def build_anchor_defaults(strategy, mode, R, space):
                 base[k] = float(spec["fixed"])
         if mode == "spot":
             base.update(leverage=1.0, eS3=0.0, eXS=0.0)
+        allowed = (set(space.get("continuous") or {}) | set(space.get("menus") or {})
+                   | set(space.get("flags") or {}))
+        reg = {k: v for k, v in base.items() if k in allowed}
         return dict(strategy=strategy, mode=mode,
-                    regs=[dict(base) for _ in range(R)])
+                    regs=[dict(reg) for _ in range(R)])
     if strategy == "prime":
         import wf2 as W
         P = W.PRIME_BASE
