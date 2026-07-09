@@ -102,12 +102,294 @@ def worker(args):
     return out
 
 
+def parse_lockbox(s):
+    """'..2024-11-01,2025-07-01..' -> [(None,'2024-11-01'), ('2025-07-01',None)]"""
+    out = []
+    for part in (s or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        a, b = part.split("..")
+        out.append((a.strip() or None, b.strip() or None))
+    return out
+
+
+def complement_ranges(lockboxes):
+    """The searchable ranges = everything the lockboxes don't cover."""
+    if not lockboxes:
+        return None
+    lbs = sorted(lockboxes, key=lambda r: (r[0] is not None, r[0] or ""))
+    out, prev_end = [], None
+    for a, b in lbs:
+        if a is None:
+            prev_end = b
+            continue
+        out.append((prev_end, a))
+        prev_end = b
+    if prev_end is not None:
+        out.append((prev_end, None))
+    out = [r for r in out if not (r[0] is None and r[1] is None)]
+    return out or None
+
+
+def run_crossfit(args, space, R, per_regime, flat):
+    """Cross-fit: search A on even fold-blocks, search B on odd, cross-score every
+    pool candidate on its opposite fold, breed the mutual survivors on the full
+    (non-lockbox) region, then judge finalists once on each lockbox."""
+    fold = args.holdout_days
+    lockboxes = parse_lockbox(args.lockbox)
+    ranges = complement_ranges(lockboxes)
+    print(f"CROSS-FIT | fold {fold:g}d | lockboxes {lockboxes or 'none'} | "
+          f"search ranges {ranges or 'all data'}", flush=True)
+    if flat:
+        import wf2 as W
+        def ev(c, alt):
+            return W.eval_config(c, args.method, args.mode, None, None,
+                                 alt=alt, gap_mode=args.gap_mode)
+        def feas(m, c):
+            return W.feasible(m, args.mode, cand=c, max_dd=args.max_dd,
+                              max_hold=args.max_hold_days)
+    else:
+        import optimizer2 as O
+        def ev(c, alt):
+            return O.eval3(c, args.method, alt=alt, gap_mode=args.gap_mode)
+        def feas(m, c):
+            return O.feasible3(m, args.mode, cand=c, max_dd=args.max_dd,
+                               max_hold=args.max_hold_days)
+
+    total_budget = args.total
+    hours_budget = args.hours
+    t0_session = time.time()
+    state = dict(evaluated=0, seed_base=0)
+
+    def write_prog(base, span, phase_pct, label):
+        el = time.time() - t0_session
+        pct = min(1.0, base + span * min(1.0, phase_pct))
+        if total_budget:
+            rate = state["evaluated"] / max(el, 1e-9)
+            eta = max(0.0, (total_budget - state["evaluated"]) / max(rate, 1e-9))
+        else:
+            eta = max(0.0, hours_budget * 3600 - el)
+        json.dump(dict(pct=pct, eta_s=eta, elapsed_s=el, phase=label,
+                       evaluated_session=state["evaluated"],
+                       budget=(total_budget or hours_budget),
+                       budget_type=("evaluations" if total_budget else "hours"),
+                       updated=time.time()),
+                  open("progress.json", "w"))
+
+    def stopped():
+        return STOP["flag"] or os.path.exists("stop.flag")
+
+    def search_phase(p, pool_file, alt, share, prog_base, label, seed_pool=None):
+        """One genetic search under the given window spec; returns its pool."""
+        pool = list(seed_pool or [])
+        ev_target = int((total_budget or 10**12) * share)
+        t_end = t0_session + (hours_budget * 3600 * (prog_base + share)
+                              if hours_budget else 10**12)
+        done = 0
+        gen = 0
+        while (time.time() < t_end and done < ev_target and not stopped()):
+            gen += 1
+            payload = dict(space=space, R=R, mode=args.mode, method=args.method,
+                           n=args.batch, t0=None, t1=None,
+                           per_regime=per_regime, strategy=args.strategy,
+                           max_dd=args.max_dd, max_hold=args.max_hold_days,
+                           gap_mode=args.gap_mode, alt=alt)
+            if len(pool) < 8:
+                jobs = [("random", dict(payload, seed=state["seed_base"] + k))
+                        for k in range(args.procs)]
+            else:
+                parents = [c for _, c, _ in pool[:24]]
+                jobs = [("offspring", dict(payload, parents=parents,
+                                           seed=state["seed_base"] + k))
+                        for k in range(args.procs)]
+                jobs[-1] = ("random", dict(payload, seed=state["seed_base"] + args.procs))
+            state["seed_base"] += args.procs + 1
+            for res in p.map(worker, jobs):
+                pool.extend(res)
+            done += args.batch * args.procs
+            state["evaluated"] += args.batch * args.procs
+            pool.sort(key=lambda x: -x[0])
+            pool = pool[:300]
+            json.dump(dict(pool=pool, evaluated=state["evaluated"],
+                           seed_base=state["seed_base"]),
+                      open(pool_file, "w"), default=float)
+            write_prog(prog_base, share, done / max(ev_target, 1) if total_budget
+                       else (time.time() - t0_session) / (hours_budget * 3600) - prog_base,
+                       label)
+            best = f"best {pool[0][0]:.4f}" if pool else "no feasible yet"
+            print(f"[{label}] gen {gen} | evaluated {done} | feasible {len(pool)} | {best}",
+                  flush=True)
+        return pool
+
+    def cross_score(pool, alt_opposite, label):
+        surv = []
+        for rank, (s, c, m) in enumerate(pool):
+            try:
+                hm = ev(c, alt_opposite)
+            except Exception:
+                hm = None
+            if hm and not hm["liq"] and not (args.max_hold_days and
+                                             hm.get("max_hold_days", 0) > args.max_hold_days):
+                surv.append(dict(rank=rank + 1, cand=c, cross=hm))
+        surv.sort(key=lambda x: x["cross"]["growth"], reverse=True)
+        print(f"[{label}] cross-scored {len(pool)} candidates -> {len(surv)} survive "
+              f"the opposite fold", flush=True)
+        return surv
+
+    altA = dict(days=fold, part="train", ranges=ranges)     # even blocks
+    altB = dict(days=fold, part="holdout", ranges=ranges)   # odd blocks
+    alt_full = dict(ranges=ranges) if ranges else None      # whole search region
+
+    with mp.Pool(args.procs) as p:
+        poolA = search_phase(p, "poolA.json", altA, 0.38, 0.0, "fold A (even blocks)")
+        poolB = [] if stopped() else             search_phase(p, "poolB.json", altB, 0.38, 0.38, "fold B (odd blocks)")
+
+        survA = cross_score(poolA, altB, "A->B")   # A candidates on odd blocks
+        survB = cross_score(poolB, altA, "B->A")   # B candidates on even blocks
+        write_prog(0.80, 0.0, 0.0, "cross-scoring")
+
+        merged = []
+        parents = [x["cand"] for x in survA[:12]] + [x["cand"] for x in survB[:12]]
+        if len(parents) >= 2 and not stopped():
+            seed_pool = []
+            for c in parents:
+                m = ev(c, alt_full)
+                if m and feas(m, c):
+                    seed_pool.append((m["score"], c, m))
+            seed_pool.sort(key=lambda x: -x[0])
+            merged = search_phase(p, "pool_merge.json", alt_full, 0.15, 0.80,
+                                  "merge (breeding survivors on both folds)",
+                                  seed_pool=seed_pool)
+        elif len(parents) < 2:
+            print("not enough cross-fold survivors to breed — skipping merge phase",
+                  flush=True)
+
+    # ---- finalists & lockbox verdicts
+    finalists = []
+    seen = set()
+    def add_finalist(c, origin, cross):
+        key = json.dumps(c, sort_keys=True, default=float)
+        if key in seen:
+            return
+        seen.add(key)
+        finalists.append(dict(cand=c, origin=origin, cross=cross))
+    for x in survA[:5]:
+        add_finalist(x["cand"], f"fold A rank #{x['rank']}", x["cross"])
+    for x in survB[:5]:
+        add_finalist(x["cand"], f"fold B rank #{x['rank']}", x["cross"])
+    for s, c, m in merged[:5]:
+        add_finalist(c, "merge", None)
+
+    for f in finalists:
+        f["lockboxes"] = []
+        for lb in lockboxes:
+            try:
+                v = ev(f["cand"], dict(ranges=[lb]))
+            except Exception:
+                v = None
+            f["lockboxes"].append(dict(range=list(lb), verdict=v))
+
+    def lb_key(f):
+        vs = [x["verdict"] for x in f["lockboxes"]]
+        g = f["cross"]["growth"] if f["cross"] else -1e9
+        if lockboxes:
+            if any(v is None or v["liq"] for v in vs):
+                return (-1, g)              # all-fail case: least-bad by cross-fold
+            return (1, min(v["growth"] for v in vs))
+        return (0, g)
+    winner = max(finalists, key=lb_key) if finalists else None
+
+    total_eval = state["evaluated"]
+    report = dict(fold_days=fold, lockboxes=[list(x) for x in lockboxes],
+                  foldA=dict(feasible=len(poolA), survivors=len(survA)),
+                  foldB=dict(feasible=len(poolB), survivors=len(survB)),
+                  merged=len(merged),
+                  finalists=[dict(origin=f["origin"],
+                                  cross=({k: v for k, v in f["cross"].items() if k != "trades"}
+                                         if f["cross"] else None),
+                                  lockboxes=[dict(range=x["range"],
+                                                  liq=(x["verdict"] or {}).get("liq"),
+                                                  growth=(x["verdict"] or {}).get("growth"),
+                                                  maxdd=(x["verdict"] or {}).get("maxdd"))
+                                             for x in f["lockboxes"]])
+                             for f in finalists])
+    json.dump(report, open("crossfit_report.json", "w"), indent=1, default=float)
+
+    if winner is None:
+        print("\nCROSS-FIT: no candidate survived its opposite fold — nothing robust "
+              "exists under these settings. No config produced.", flush=True)
+        json.dump(dict(pool=[], evaluated=total_eval, seed_base=state["seed_base"]),
+                  open("pool2.json", "w"))
+        json.dump(dict(strategy=args.strategy, mode=args.mode, method=args.method,
+                       algo="crossfit", per_regime=per_regime,
+                       holdout_days=fold, lockbox=args.lockbox,
+                       max_dd=args.max_dd, max_hold_days=args.max_hold_days,
+                       gap_mode=args.gap_mode, evaluated=total_eval,
+                       crossfit=report, cand=None, metrics=None,
+                       generated=time.strftime("%Y-%m-%d %H:%M")),
+                  open("best_config.json", "w"), indent=1, default=float)
+        return None
+
+    wc = winner["cand"]
+    wm = ev(wc, alt_full) or ev(wc, None)
+    # the honest single number for the table: worst lockbox verdict, else cross-fold
+    verdicts = [x["verdict"] for x in winner["lockboxes"] if x["verdict"]]
+    table_holdout = (min(verdicts, key=lambda v: v["growth"]) if verdicts
+                     else winner["cross"])
+    pool_out = [[wm["score"] if wm else 0.0, wc,
+                 {k: v for k, v in (wm or {}).items() if k != "trades"}]]
+    json.dump(dict(pool=pool_out, evaluated=total_eval, seed_base=state["seed_base"]),
+              open("pool2.json", "w"), default=float)
+    out = dict(cand=wc, metrics={k: v for k, v in (wm or {}).items() if k != "trades"},
+               strategy=args.strategy, mode=args.mode, method=args.method,
+               algo="crossfit", per_regime=per_regime,
+               train_end=None, holdout_days=fold, lockbox=args.lockbox,
+               max_dd=args.max_dd, max_hold_days=args.max_hold_days,
+               gap_mode=args.gap_mode, evaluated=total_eval,
+               holdout=({k: v for k, v in table_holdout.items() if k != "trades"}
+                        if table_holdout else None),
+               holdout_scan=dict(scanned=len(poolA) + len(poolB),
+                                 pool=len(poolA) + len(poolB),
+                                 survivors=len(survA) + len(survB)),
+               crossfit=report, winner_origin=winner["origin"],
+               generated=time.strftime("%Y-%m-%d %H:%M"))
+    json.dump(out, open("best_config.json", "w"), indent=1, default=float)
+    print(f"\nCROSS-FIT WINNER ({winner['origin']}): "
+          + (f"lockbox worst {(pow(2.718281828, table_holdout['growth'])-1)*100:+.1f}%/mo"
+         if verdicts else
+         (f"cross-fold {(pow(2.718281828, table_holdout['growth'])-1)*100:+.1f}%/mo"
+          if table_holdout else "no verdict")), flush=True)
+    print(f"survivors: fold A {len(survA)}, fold B {len(survB)} | merged pool {len(merged)}",
+          flush=True)
+    return out
+
+
+def auto_backtest(args, run_dir):
+    """Publish full backtests of the run's configs and flag the run."""
+    import subprocess, sys as _sys
+    bt = os.path.join(B.OPT_DIR, "backtest_cli.py")
+    jobs_bt = [("best_config.json", f"{args.name}_full")]
+    if os.path.exists("holdout_best_config.json"):
+        jobs_bt.append(("holdout_best_config.json", f"{args.name}_oosbest_full"))
+    for cfg_file, bt_name in jobs_bt:
+        print(f"\nauto-backtest: {cfg_file} -> '{bt_name}' ...", flush=True)
+        try:
+            subprocess.run([_sys.executable, bt,
+                            "--config", os.path.join(run_dir, cfg_file),
+                            "--name", bt_name, "--gap-mode", args.gap_mode],
+                           cwd=B.OPT_DIR, check=True)
+        except Exception as e:
+            print(f"auto-backtest failed: {e}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", default="v7",
                     choices=["v7", "prime7", "v6", "scalpx", "scalpx2", "prime"])
-    ap.add_argument("--algo", default="genetic", choices=["random", "genetic", "refine"])
+    ap.add_argument("--algo", default="genetic",
+                    choices=["random", "genetic", "refine", "crossfit"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
     ap.add_argument("--method", default="vol3",
                     choices=["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"])
@@ -118,6 +400,10 @@ def main():
     ap.add_argument("--total", type=int, default=None)
     ap.add_argument("--batch", type=int, default=120)
     ap.add_argument("--train-end", default=None, help="hold out data after this date")
+    ap.add_argument("--lockbox", default=None,
+                    help="cross-fit lockboxes: comma-separated date ranges 'a..b' with "
+                         "open sides allowed, e.g. '2025-09-01..' or "
+                         "'..2024-11-01,2025-07-01..'. Judged once, at the end.")
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
@@ -137,10 +423,12 @@ def main():
     if args.hours is None and args.total is None:
         args.hours = 1.0
 
-    if args.holdout_days:
+    if args.holdout_days or args.algo == "crossfit":
         if args.train_end:
-            print("note: --holdout-days overrides --train-end (alternating blocks)", flush=True)
+            print("note: alternating blocks override --train-end", flush=True)
         args.train_end = None
+        if args.algo == "crossfit" and not args.holdout_days:
+            args.holdout_days = 21.0   # default fold size
     run_dir = B.enter_run_dir(args.name)
     print(f"run dir: {run_dir} | algo: {args.algo} | procs: {args.procs}", flush=True)
     space = json.load(open(args.space)).get(args.strategy) or {}
@@ -167,6 +455,18 @@ def main():
             alt = (args.holdout_days, part) if args.holdout_days else None
             return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode)
 
+    per_regime = not args.single_set
+    if args.algo == "crossfit":
+        signal.signal(signal.SIGTERM, _request_stop)
+        signal.signal(signal.SIGINT, _request_stop)
+        res = run_crossfit(args, space, R, per_regime, flat)
+        if os.path.exists("stop.flag"):
+            try: os.remove("stop.flag")
+            except OSError: pass
+        if res is not None:
+            auto_backtest(args, run_dir)
+        return
+
     # seed candidate from a backtest ("Optimize this" flow)
     if os.path.exists("seed_cand.json"):
         try:
@@ -190,7 +490,6 @@ def main():
             os.rename("seed_cand.json", "seed_cand.used.json")
         except Exception as e:
             print("seed load failed:", e, flush=True)
-    per_regime = not args.single_set
 
     pool, evaluated, seed_base, runtime_s = [], 0, 0, 0.0
     if os.path.exists("pool2.json"):
@@ -377,21 +676,7 @@ def main():
                 pass
         json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
-    # ---- auto-backtest: publish the full backtest right away and flag the run
-    import subprocess, sys as _sys
-    bt = os.path.join(B.OPT_DIR, "backtest_cli.py")
-    jobs_bt = [("best_config.json", f"{args.name}_full")]
-    if os.path.exists("holdout_best_config.json"):
-        jobs_bt.append(("holdout_best_config.json", f"{args.name}_oosbest_full"))
-    for cfg_file, bt_name in jobs_bt:
-        print(f"\nauto-backtest: {cfg_file} -> '{bt_name}' ...", flush=True)
-        try:
-            subprocess.run([_sys.executable, bt,
-                            "--config", os.path.join(run_dir, cfg_file),
-                            "--name", bt_name, "--gap-mode", args.gap_mode],
-                           cwd=B.OPT_DIR, check=True)
-        except Exception as e:
-            print(f"auto-backtest failed: {e}", flush=True)
+    auto_backtest(args, run_dir)
 
 
 if __name__ == "__main__":

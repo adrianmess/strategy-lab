@@ -518,6 +518,36 @@ def alt_intervals(t, i0, i1, days, part):
     return out
 
 
+def eval_intervals(t, i0, i1, alt):
+    """Index intervals to simulate, from the `alt` window spec:
+      None                      -> the whole [i0, i1)
+      (days, part)              -> alternating blocks (train=even / holdout=odd)
+      dict(days, part, ranges)  -> restrict to `ranges` [(t0,t1) date strings,
+                                   None = open side], then alternate if days.
+    Used for train/holdout folds and lockboxes (cross-fit)."""
+    if alt is None:
+        return [(i0, i1)]
+    if isinstance(alt, dict):
+        days, part, ranges = alt.get("days"), alt.get("part"), alt.get("ranges")
+    else:
+        days, part, ranges = alt[0], alt[1], None
+    windows = [(i0, i1)]
+    if ranges:
+        windows = []
+        for r0, r1 in ranges:
+            a = i0 if r0 is None else max(i0, int(np.searchsorted(t, np.datetime64(r0))))
+            b = i1 if r1 is None else min(i1, int(np.searchsorted(t, np.datetime64(r1))))
+            if b - a >= 200:
+                windows.append((a, b))
+    out = []
+    for a, b in windows:
+        if days:
+            out.extend(alt_intervals(t, a, b, days, part))
+        else:
+            out.append((a, b))
+    return out
+
+
 def _clip_indices(t_arr, t0, t1):
     i0 = 0 if t0 is None else int(np.searchsorted(t_arr, np.datetime64(t0)))
     i1 = len(t_arr) if t1 is None else int(np.searchsorted(t_arr, np.datetime64(t1)))
@@ -546,7 +576,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
             cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
-            ivs = [(i0, i1)] if alt is None else alt_intervals(pre["t"], i0, i1, *alt)
+            ivs = eval_intervals(pre["t"], i0, i1, alt)
             for a, b in ivs:
                 w0 = max(0, a - warmup)
                 sp = slice_pre(pre, w0, b)
@@ -585,7 +615,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
             i0 = max(i0, warmup)   # never trade unconverged indicators
             if i1 - i0 < 200: continue
             cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
-            ivs = [(i0, i1)] if alt is None else alt_intervals(pre["t"], i0, i1, *alt)
+            ivs = eval_intervals(pre["t"], i0, i1, alt)
             for a, b in ivs:
                 w0 = max(0, a - warmup)
                 sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)

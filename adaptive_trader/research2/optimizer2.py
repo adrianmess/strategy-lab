@@ -142,7 +142,7 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None):
     mtm_dd = 0.0
     liq_any = False
     max_hold = 0.0
-    from wf2 import alt_intervals, contam_for
+    from wf2 import eval_intervals, contam_for
     for pre, reg in zip(G["pres"], regs_list):
         cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
         t = pre["t"]
@@ -151,7 +151,7 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None):
         i0 = max(i0, warmup)
         if i1 - i0 < 200:
             continue
-        ivs = [(i0, i1)] if alt is None else alt_intervals(t, i0, i1, *alt)
+        ivs = eval_intervals(t, i0, i1, alt)
         for a, b in ivs:
             w0 = max(0, a - warmup)
             sp = slice_pre(pre, w0, b)

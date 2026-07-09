@@ -49,6 +49,7 @@ def opt_settings(cfg):
                 holdout=ho, max_dd=cfg.get("max_dd"),
                 max_hold_days=cfg.get("max_hold_days"),
                 gap_mode=cfg.get("gap_mode"),
+                lockbox=cfg.get("lockbox"),
                 evaluated=cfg.get("evaluated"))
 
 

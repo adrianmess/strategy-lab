@@ -103,7 +103,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
           <option value="v6">V5 family · V6 (z-score thresholds)</option>
         </select></div>
       <div class="field"><label data-x="algorithm">Algorithm</label>
-        <select id="algo"><option>genetic</option><option>random</option><option>refine</option></select></div>
+        <select id="algo" onchange="algoChanged()"><option>genetic</option><option>random</option><option>refine</option><option value="crossfit">cross-fit (genetic ×2 + merge)</option></select></div>
       <div class="field"><label data-x="mode">Mode</label>
         <select id="mode"><option>lev</option><option>spot</option></select></div>
       <div class="field"><label data-x="regime">Regime</label>
@@ -119,6 +119,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <input id="budgetVal" value="2" style="width:70px"></span></div>
       <div class="field"><label data-x="maxdd">Max drawdown %</label><input id="maxDD" value="80" style="width:60px"></div>
       <div class="field"><label data-x="maxhold">Max days in trade</label><input id="maxHold" value="" placeholder="∞" style="width:60px"></div>
+      <div class="field" id="lockboxField" style="display:none"><label data-x="lockbox">Lockbox</label>
+        <input id="lockbox" placeholder="2025-09-01.." style="width:190px" title="date ranges 'a..b', comma-separated; open sides allowed"></div>
       <div class="field"><label data-x="gapmode">Gap handling</label>
         <select id="optGap" style="width:150px"><option value="skip_contaminated">skip_contaminated</option><option value="skip_open">skip_open</option></select></div>
       <div class="field"><label data-x="trainend">Holdout</label>
@@ -217,6 +219,7 @@ const X = {
   <dt>Scalp family · ScalpX</dt><dd>Your VRVP+CVD+EMA scalp strategy. Tested edge-less in every configuration — kept for reference.</dd></dl<dt>Prime7</dt><dd>Prime on the full-param V7 engine — indicator lengths searchable, crossover locked off.</dd><dt>ScalpX2</dt><dd>ScalpX with searchable RSI/CVD/VRVP/EMA lengths.</dd>`],
  algorithm: ["Algorithm", `<dl><dt>genetic (recommended)</dt><dd>Evolves a population: best candidates breed, children mutate. Won the head-to-head study: +25%/mo on unseen holdout.</dd>
   <dt>random</dt><dd>Uniform sampling. Unbiased first sweep; its best pick liquidated on holdout in the study.</dd>
+  <dt>cross-fit</dt><dd>Two mirrored genetic searches on alternating calendar blocks (A trains on even, B on odd), every candidate cross-scored on the fold it never saw, survivors from both directions bred together, and the finalists judged ONCE on the lockbox dates. Finds configs that work everywhere or honestly reports that none exist.</dd>
   <dt>refine</dt><dd>Small perturbations around the best found so far. Polishes a finished run; doesn't explore.</dd></dl>`],
  mode: ["Mode", `<dl><dt>lev</dt><dd>Futures, your live style: leverage ≤10x, NO stop-loss, exits at profit targets only. Liquidation modeled per trade at (1/leverage − 0.8%). Search requires: never liquidated + mark-to-market drawdown ≤ 80%.</dd>
   <dt>spot</dt><dd>Long-only, 1x, stop-losses ON, spot fees. Drawdown ≤ 50%.</dd></dl>`],
@@ -233,6 +236,7 @@ const X = {
  budget: ["Budget", `How long to search. <b>hours</b>: wall-clock time budget. <b>evaluations</b>: number of candidate backtests to run (each evaluation = one full backtest of one parameter set — a few milliseconds each; 10,000+ is a reasonable session). Runs checkpoint every generation and are resumable by launching again with the same name.`],
  hours: ["Hours", `Time budget. Progress checkpoints every generation, so you can stop anytime and continue later by launching with the same run name. Overnight runs are fine and often worth it.`],
  maxdd: ["Max drawdown %", `Candidates whose worst peak-to-trough equity loss exceeds this are thrown away during the search. Default 80% for leveraged (drawdown is mark-to-market, so open-position pain counts), 50% for spot. Lower it for configs you could actually sit through — 80% means your $1000 became $200 at some point.`],
+ lockbox: ["Lockbox", `Date ranges completely hidden from the cross-fit searches, used exactly once at the end to judge the finalists. Format: 'a..b' ranges, comma-separated, open sides allowed — '2025-09-01..' locks everything after Sep 2025; '..2024-11-01, 2025-07-01..' locks the first and last eras and searches the middle. With alternating-days as the fold size. Treat a lockbox verdict as spendable once: if you tune settings because of it and rerun, it's no longer unseen.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
  maxhold: ["Max days in trade", `Throws out any candidate whose simulation EVER holds a position longer than this many days — including positions still open at the end of the data or at gap boundaries. This kills the configs that get a trade stuck underwater for months waiting for a profit target. It does NOT close or alter any trade; the whole candidate is simply disqualified from the pool (and from holdout survivor ranking). Blank = unlimited.`],
  trainend: ["Holdout", `How unseen data is reserved to verify the result honestly.<dl><dt>after date</dt><dd>The search only sees data BEFORE the date; the best configs are then tested on everything after it. Simple, but the holdout is only the most recent market era.</dd><dt>alternating days</dt><dd>The calendar is cut into blocks of N days (e.g. 30): the search trains on every other block and is tested on the skipped ones. The holdout then samples ALL market eras — bull, bear, chop — not just the recent one. Positions force-close at block edges, so very slow strategies suit larger blocks.</dd></dl>Leave the date blank (or days 0) for no holdout — you get no evidence, only an in-sample fit.`],
@@ -265,6 +269,7 @@ async function launch(){
     max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
     max_hold_days:(+$('maxHold').value>0) ? +$('maxHold').value : undefined,
     gap_mode:$('optGap').value,
+    lockbox:($('algo').value==='crossfit' && $('lockbox').value.trim()) ? $('lockbox').value.trim() : undefined,
     single_set: $('perreg').value==='1'};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
@@ -341,7 +346,7 @@ function renderRuns(){
         ${r.holdout_best_config?`<button class="small" title="Backtest the OOS-best candidate (the one that actually survived the holdout)" onclick="bt('${r.holdout_best_config}','${r.name}_oosbest')">Backtest OOS-best</button>
         <button class="small" title="Adopt the OOS-best candidate into the trader" onclick="adopt('${r.holdout_best_config}','${r.mode}')">Adopt OOS-best</button>`:''}
         <button class="small" data-x="btn_holdout" title="Backtest ONLY on unseen data after the train-end date — the honest number" onclick="btH('${r.best_config}','${r.name}',${r.holdout_days||'null'})">Backtest holdout</button>
-        ${r.holdout_top10?`<button class="small" title="All top-10 candidates ranked survivors-first" onclick="toggleTop10('${r.name}')">Top-10</button>`:''}
+        ${(r.holdout_top10||r.crossfit)?`<button class="small" title="${r.crossfit?'Cross-fit report: folds, survivors, lockbox verdicts':'All top-10 candidates ranked survivors-first'}" onclick="toggleTop10('${r.name}')">${r.crossfit?'Report':'Top-10'}</button>`:''}
         <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
         <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button>
         <button class="small" title="Rename this run (published backtests from it are renamed too)" onclick="renameRun('${r.name}')">✎</button>
@@ -349,6 +354,22 @@ function renderRuns(){
   }).join('');
 }
 const OPEN10 = new Set();
+function crossfitRow(r){
+  const cf = r.crossfit;
+  const fin = (cf.finalists||[]).map(f=>{
+    const lbs = (f.lockboxes||[]).map(x=>x.liq==null?'<span class="kv">no data</span>':
+      x.liq?'<span class="badge b-red">LIQ</span>':
+      `<span class="${x.growth>=0?'pos':'neg'}">${fpm(x.growth)}</span> <span class="kv">dd ${(100*(x.maxdd||0)).toFixed(0)}%</span>`).join(' · ');
+    const cross = f.cross ? `${fpm(f.cross.growth)} <span class="kv">on opposite fold</span>` : '<span class="kv">merged (no single fold)</span>';
+    return `<div class="prow"><span class="kv" style="width:150px">${f.origin}</span><span style="width:220px">${cross}</span><span class="kv" style="width:80px">lockbox:</span>${lbs||'<span class="kv">none set</span>'}</div>`;
+  }).join('');
+  return `<tr><td colspan="14" style="background:var(--bg)">
+    <div class="kv" style="margin:4px 0"><b>Cross-fit report</b> — fold ${cf.fold_days}d ·
+      fold A: ${cf.foldA.feasible} feasible, ${cf.foldA.survivors} survive fold B ·
+      fold B: ${cf.foldB.feasible} feasible, ${cf.foldB.survivors} survive fold A ·
+      merged pool: ${cf.merged}${r.winner_origin?` · winner: ${r.winner_origin}`:''}</div>
+    ${fin}</td></tr>`;
+}
 function toggleTop10(name){ OPEN10.has(name) ? OPEN10.delete(name) : OPEN10.add(name); renderRuns(); }
 function optChips(r){
   if(!r.algo && r.max_dd==null && !r.holdout_days && !r.train_end) return '—';
@@ -359,7 +380,8 @@ function optChips(r){
   const ps = r.per_regime===false ? 'single set' : 'per-regime';
   const mh = r.max_hold_days ? `≤${r.max_hold_days}d in trade` : null;
   const gm = r.gap_mode ? `gaps: ${r.gap_mode.replace('skip_','')}` : null;
-  return [r.algo||'?', ps, ho, dd, mh, gm].filter(Boolean).join(' · ');
+  const lb = r.lockbox ? `lockbox ${r.lockbox}` : null;
+  return [r.algo||'?', ps, ho, dd, mh, gm, lb].filter(Boolean).join(' · ');
 }
 async function renameRun(name){
   const nn = prompt('New name for "'+name+'" (slashes/spaces become _):', name);
@@ -371,7 +393,9 @@ async function renameRun(name){
     (r.renamed_backtests ? ' (+'+r.renamed_backtests+' backtest entr'+(r.renamed_backtests>1?'ies':'y')+' updated)' : '');
 }
 function top10Row(r){
-  if(!OPEN10.has(r.name) || !r.holdout_top10) return '';
+  if(!OPEN10.has(r.name)) return '';
+  if(r.crossfit) return crossfitRow(r);
+  if(!r.holdout_top10) return '';
   const rows = r.holdout_top10.map(t=>{
     const hm = t.holdout;
     const tag = !hm ? '<span class="kv">no data</span>'
@@ -535,6 +559,12 @@ function renderSpace(){
   $('menuGrid').innerHTML = Object.entries(sp.menus||{}).map(([k,v])=>`
     <div style="margin:6px 0"><b class="nm" style="cursor:pointer" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${v.label||k}</b> <span class="kv" style="font-size:10px">${k}</span>:
       ${v.options.map((o,i)=>`<label style="margin-right:10px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}</div>`).join('');
+}
+function algoChanged(){
+  const cf = $('algo').value === 'crossfit';
+  $('lockboxField').style.display = cf ? '' : 'none';
+  if(cf){ $('hoMode').value = 'alt'; hoModeChanged(); return; }
+  explain('algorithm');
 }
 function hoModeChanged(){
   const alt = $('hoMode').value==='alt';
