@@ -102,6 +102,20 @@ def worker(args):
     return out
 
 
+def reservoir_add(res, seen, items, rng, cap=300):
+    """Uniform reservoir sample over every feasible candidate ever produced —
+    keeps generalizers that the score-ranked elite pool would evict."""
+    for it in items:
+        seen[0] += 1
+        if len(res) < cap:
+            res.append(it)
+        else:
+            j = int(rng.integers(0, seen[0]))
+            if j < cap:
+                res[j] = it
+    return res
+
+
 def parse_lockbox(s):
     """'..2024-11-01,2025-07-01..' -> [(None,'2024-11-01'), ('2025-07-01',None)].
     A bare date ('2025-09-01') means from that date onward."""
@@ -194,9 +208,15 @@ def run_crossfit(args, space, R, per_regime, flat):
     def stopped():
         return STOP["flag"] or os.path.exists("stop.flag")
 
-    def search_phase(p, pool_file, alt, share, prog_base, label, seed_pool=None):
-        """One genetic search under the given window spec; returns its pool."""
+    def search_phase(p, pool_file, alt, share, prog_base, label, seed_pool=None,
+                     cross_alt=None):
+        """One genetic search under the given window spec; returns (pool, reservoir).
+        cross_alt: every 5 generations, evict pool candidates that liquidate on the
+        opposite fold (legitimate inside cross-fit — the lockbox stays the judge)."""
         pool = list(seed_pool or [])
+        reservoir, res_seen = [], [0]
+        _rr = np.random.default_rng(777)
+        cross_ok = {}   # cand-key -> bool, avoid re-checking
         ev_target = int((total_budget or 10**12) * share)
         t_end = t0_session + (hours_budget * 3600 * (prog_base + share)
                               if hours_budget else 10**12)
@@ -221,12 +241,34 @@ def run_crossfit(args, space, R, per_regime, flat):
             state["seed_base"] += args.procs + 1
             for res in p.map(worker, jobs):
                 pool.extend(res)
+                reservoir_add(reservoir, res_seen, res, _rr)
             done += args.batch * args.procs
             state["evaluated"] += args.batch * args.procs
             pool.sort(key=lambda x: -x[0])
             pool = pool[:300]
+            if cross_alt is not None and gen % 5 == 0 and len(pool) > 8:
+                kept = []
+                for entry in pool:
+                    key = json.dumps(entry[1], sort_keys=True, default=float)
+                    ok = cross_ok.get(key)
+                    if ok is None:
+                        try:
+                            hm = ev(entry[1], cross_alt)
+                        except Exception:
+                            hm = None
+                        ok = bool(hm and not hm["liq"])
+                        cross_ok[key] = ok
+                    if ok:
+                        kept.append(entry)
+                if kept:   # never wipe the pool entirely — keep breeding material
+                    evicted = len(pool) - len(kept)
+                    pool = kept
+                    if evicted:
+                        print(f"[{label}] cross-prune: evicted {evicted} "
+                              f"opposite-fold failures", flush=True)
             json.dump(dict(pool=pool, evaluated=state["evaluated"],
-                           seed_base=state["seed_base"]),
+                           seed_base=state["seed_base"],
+                           reservoir=reservoir, res_seen=res_seen[0]),
                       open(pool_file, "w"), default=float)
             write_prog(prog_base, share, done / max(ev_target, 1) if total_budget
                        else (time.time() - t0_session) / (hours_budget * 3600) - prog_base,
@@ -234,7 +276,7 @@ def run_crossfit(args, space, R, per_regime, flat):
             best = f"best {pool[0][0]:.4f}" if pool else "no feasible yet"
             print(f"[{label}] gen {gen} | evaluated {done} | feasible {len(pool)} | {best}",
                   flush=True)
-        return pool
+        return pool, reservoir
 
     def cross_score(pool, alt_opposite, label):
         surv = []
@@ -255,12 +297,20 @@ def run_crossfit(args, space, R, per_regime, flat):
     altB = dict(days=fold, part="holdout", ranges=ranges)   # odd blocks
     alt_full = dict(ranges=ranges) if ranges else None      # whole search region
 
-    with mp.Pool(args.procs) as p:
-        poolA = search_phase(p, "poolA.json", altA, 0.38, 0.0, "fold A (even blocks)")
-        poolB = [] if stopped() else             search_phase(p, "poolB.json", altB, 0.38, 0.38, "fold B (odd blocks)")
+    def merge_unique(pool, reservoir):
+        seen = {json.dumps(c, sort_keys=True, default=float) for _, c, _ in pool}
+        return pool + [e for e in reservoir
+                       if json.dumps(e[1], sort_keys=True, default=float) not in seen]
 
-        survA = cross_score(poolA, altB, "A->B")   # A candidates on odd blocks
-        survB = cross_score(poolB, altA, "B->A")   # B candidates on even blocks
+    with mp.Pool(args.procs) as p:
+        poolA, resA = search_phase(p, "poolA.json", altA, 0.38, 0.0,
+                                   "fold A (even blocks)", cross_alt=altB)
+        poolB, resB = ([], []) if stopped() else \
+            search_phase(p, "poolB.json", altB, 0.38, 0.38,
+                         "fold B (odd blocks)", cross_alt=altA)
+
+        survA = cross_score(merge_unique(poolA, resA), altB, "A->B")
+        survB = cross_score(merge_unique(poolB, resB), altA, "B->A")
         write_prog(0.80, 0.0, 0.0, "cross-scoring")
 
         merged = []
@@ -272,9 +322,9 @@ def run_crossfit(args, space, R, per_regime, flat):
                 if m and feas(m, c):
                     seed_pool.append((m["score"], c, m))
             seed_pool.sort(key=lambda x: -x[0])
-            merged = search_phase(p, "pool_merge.json", alt_full, 0.15, 0.80,
-                                  "merge (breeding survivors on both folds)",
-                                  seed_pool=seed_pool)
+            merged, _ = search_phase(p, "pool_merge.json", alt_full, 0.15, 0.80,
+                                     "merge (breeding survivors on both folds)",
+                                     seed_pool=seed_pool)
         elif len(parents) < 2:
             print("not enough cross-fold survivors to breed — skipping merge phase",
                   flush=True)
@@ -506,10 +556,14 @@ def main():
             print("seed load failed:", e, flush=True)
 
     pool, evaluated, seed_base, runtime_s = [], 0, 0, 0.0
+    reservoir, res_seen = [], [0]
+    _res_rng = np.random.default_rng(12345)
     if os.path.exists("pool2.json"):
         d = json.load(open("pool2.json"))
         pool, evaluated, seed_base = d["pool"], d["evaluated"], d["seed_base"]
         runtime_s = d.get("runtime_s", 0.0)
+        reservoir = d.get("reservoir", [])
+        res_seen = [d.get("res_seen", len(reservoir))]
         print(f"resuming: {len(pool)} feasible / {evaluated} evaluated", flush=True)
     if args.resume_from:
         src = os.path.join(B.OPT_DIR, args.resume_from, "pool2.json") \
@@ -566,10 +620,12 @@ def main():
             seed_base += args.procs + 1
             for res in p.map(worker, jobs):
                 pool.extend(res)
+                reservoir_add(reservoir, res_seen, res, _res_rng)
             evaluated += args.batch * args.procs
             pool.sort(key=lambda x: -x[0])
             pool = pool[:300]
             json.dump(dict(pool=pool, evaluated=evaluated, seed_base=seed_base,
+                           reservoir=reservoir, res_seen=res_seen[0],
                            runtime_s=runtime_s + (time.time() - t_session)),
                       open("pool2.json", "w"), default=float)
             write_progress()
@@ -621,26 +677,31 @@ def main():
         # walk the REST of the kept pool (train-score order) until enough
         # holdout survivors are found — with huge runs the top-10 is often
         # saturated by overfits while survivors sit deeper in the pool
+        seen_keys = {json.dumps(c, sort_keys=True, default=float) for _, c, _ in pool}
+        extra = [e for e in reservoir
+                 if json.dumps(e[1], sort_keys=True, default=float) not in seen_keys]
+        scan_src = list(pool) + extra   # elite first, then the uniform reservoir
         scan = list(holdouts)
         surv_n = sum(1 for h in scan if h and not h["liq"])
         TARGET_SURV = 10
-        while len(scan) < len(pool) and surv_n < TARGET_SURV:
+        while len(scan) < len(scan_src) and surv_n < TARGET_SURV:
             try:
-                hm = eval_any(pool[len(scan)][1], args.train_end, None, part="holdout")
+                hm = eval_any(scan_src[len(scan)][1], args.train_end, None, part="holdout")
             except Exception:
                 hm = None
             scan.append(hm)
             if hm and not hm["liq"]:
                 surv_n += 1
         holdouts = scan
-        survivors = [dict(rank=i + 1, train_score=pool[i][0], holdout=holdouts[i])
+        pool_scan = scan_src   # ranking below refers into this combined list
+        survivors = [dict(rank=i + 1, train_score=pool_scan[i][0], holdout=holdouts[i])
                      for i in range(len(holdouts))
                      if holdouts[i] and not holdouts[i]["liq"]
                      and not (args.max_hold_days and
                               holdouts[i].get("max_hold_days", 0) > args.max_hold_days)]
         survivors.sort(key=lambda r: r["holdout"]["growth"], reverse=True)
-        out["holdout_scan"] = dict(scanned=len(scan), pool=len(pool),
-                                   survivors=len(survivors))
+        out["holdout_scan"] = dict(scanned=len(scan), pool=len(pool_scan),
+                                   reservoir=len(extra), survivors=len(survivors))
         out["holdout_survivors"] = survivors[:10]
         print(f"\nPOOL SCAN: evaluated holdout for {len(scan)}/{len(pool)} kept candidates; "
               f"{len(survivors)} survived", flush=True)
