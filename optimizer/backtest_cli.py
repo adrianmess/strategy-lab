@@ -50,6 +50,7 @@ def opt_settings(cfg):
                 max_hold_days=cfg.get("max_hold_days"),
                 gap_mode=cfg.get("gap_mode"),
                 lockbox=cfg.get("lockbox"),
+                scoring=cfg.get("scoring"),
                 evaluated=cfg.get("evaluated"))
 
 

@@ -486,6 +486,7 @@ def job_optimize2():
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
     if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     if d.get("lockbox"): cmd += ["--lockbox", d["lockbox"]]
+    if d.get("scoring"): cmd += ["--scoring", d["scoring"]]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
     if d.get("seed_cand"):
         run_dir = os.path.join(OPT, "runs", name)
@@ -569,6 +570,7 @@ def runs2():
                 e["max_hold_days"] = bc.get("max_hold_days")
                 e["gap_mode"] = bc.get("gap_mode")
                 e["lockbox"] = bc.get("lockbox")
+                e["scoring"] = bc.get("scoring")
                 e["crossfit"] = bc.get("crossfit")
                 e["winner_origin"] = bc.get("winner_origin")
                 fp = os.path.join(runs_dir, d, "backtest_flags.json")

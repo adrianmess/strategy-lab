@@ -127,7 +127,8 @@ def build_P3(cand):
 
 # ---------------- evaluation ----------------
 
-def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None):
+def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None,
+          scoring=None):
     G = load_g3()
     regs_list, R = G["regimes"][method]
     P = build_P3(cand)
@@ -142,6 +143,8 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None):
     mtm_dd = 0.0
     liq_any = False
     max_hold = 0.0
+    held_bars = 0.0
+    total_bars = 0.0
     from wf2 import eval_intervals, contam_for
     for pre, reg in zip(G["pres"], regs_list):
         cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
@@ -161,12 +164,15 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None):
                                    use_sl=use_sl, dyn_liq=(mode == "lev"),
                                    return_open=True,
                                    no_entry=(cm[w0:b] if cm is not None else None))
+            total_bars += (b - a)
             if len(tr):
                 max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
                                * 3.0 / 1440.0)
+                held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
             if op:
-                max_hold = max(max_hold,
-                               (len(sp["c"]) - 1 - op["entry_idx"]) * 3.0 / 1440.0)
+                op_held = len(sp["c"]) - 1 - op["entry_idx"]
+                max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                held_bars += op_held
             months += (b - a) / (DAY * 30.4)
             all_tr.append(tr)
             if len(tr):
@@ -195,7 +201,13 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None):
                worst_mae=float(tr["mae"].min()),
                win=float((tr["net"] > 0).mean()),
                max_hold_days=float(max_hold),
+               in_market=float(held_bars / max(total_bars, 1.0)),
                score=g_mean - 0.25 * g_std)
+    if scoring == "worst_window":
+        rw = gm.rolling(3).mean().dropna()
+        out["score"] = float(rw.min()) if len(rw) else out["score"]
+    elif scoring == "underwater":
+        out["score"] = out["score"] - 0.5 * out["in_market"]
     for _k, _v in out.items():   # NaN/inf breaks JSON in browsers
         if isinstance(_v, float) and not np.isfinite(_v):
             out[_k] = 0.0
@@ -225,16 +237,16 @@ def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6, max_dd=
 
 # ---------------- algorithms (single-process batch APIs) ----------------
 
-def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True, max_dd=None, alt=None, max_hold=None, gap_mode=None):
+def batch_random(rng, space, R, mode, method, n, t0, t1, per_regime=True, max_dd=None, alt=None, max_hold=None, gap_mode=None, scoring=None):
     out = []
     for _ in range(n):
         c = sample_candidate(rng, space, R, mode, per_regime)
-        m = eval3(c, method, t0, t1, alt=alt, gap_mode=gap_mode)
+        m = eval3(c, method, t0, t1, alt=alt, gap_mode=gap_mode, scoring=scoring)
         if feasible3(m, mode, cand=c, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], c, m))
     return out
 
-def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, alt=None, max_hold=None, gap_mode=None):
+def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, alt=None, max_hold=None, gap_mode=None, scoring=None):
     """Genetic step: produce and evaluate n children from a parent pool."""
     out = []
     for _ in range(n):
@@ -244,16 +256,16 @@ def batch_offspring(rng, space, mode, method, parents, n, t0, t1, max_dd=None, a
         else:
             child = parents[0]
         child = mutate(rng, child, space, mode)
-        m = eval3(child, method, t0, t1, alt=alt, gap_mode=gap_mode)
+        m = eval3(child, method, t0, t1, alt=alt, gap_mode=gap_mode, scoring=scoring)
         if feasible3(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
 
-def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04, max_dd=None, alt=None, max_hold=None, gap_mode=None):
+def batch_refine(rng, space, mode, method, seed_cand, n, t0, t1, sigma=0.04, max_dd=None, alt=None, max_hold=None, gap_mode=None, scoring=None):
     out = []
     for _ in range(n):
         child = mutate(rng, seed_cand, space, mode, p_cont=0.15, p_menu=0.04, sigma=sigma)
-        m = eval3(child, method, t0, t1, alt=alt, gap_mode=gap_mode)
+        m = eval3(child, method, t0, t1, alt=alt, gap_mode=gap_mode, scoring=scoring)
         if feasible3(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out

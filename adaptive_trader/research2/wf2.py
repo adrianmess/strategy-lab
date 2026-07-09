@@ -398,7 +398,7 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
     return _normalize_flat(c)
 
 def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1,
-                         max_dd=None, alt=None, max_hold=None, gap_mode=None):
+                         max_dd=None, alt=None, max_hold=None, gap_mode=None, scoring=None):
     """Genetic step for flat candidates; parents = list of cands."""
     out = []
     for _ in range(n):
@@ -408,17 +408,17 @@ def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t
         else:
             child = dict(parents[0])
         child = mutate_flat(rng, child, mode, space)
-        m = eval_config(child, method, mode, t0, t1, alt=alt, gap_mode=gap_mode)
+        m = eval_config(child, method, mode, t0, t1, alt=alt, gap_mode=gap_mode, scoring=scoring)
         if feasible(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
 
 def batch_refine_flat(rng, seed_cand, mode, space, method, n, t0, t1, sigma=0.04,
-                      max_dd=None, alt=None, max_hold=None, gap_mode=None):
+                      max_dd=None, alt=None, max_hold=None, gap_mode=None, scoring=None):
     out = []
     for _ in range(n):
         child = mutate_flat(rng, seed_cand, mode, space, p_cont=0.15, sigma=sigma)
-        m = eval_config(child, method, mode, t0, t1, alt=alt, gap_mode=gap_mode)
+        m = eval_config(child, method, mode, t0, t1, alt=alt, gap_mode=gap_mode, scoring=scoring)
         if feasible(m, mode, cand=child, max_dd=max_dd, max_hold=max_hold):
             out.append((m["score"], child, m))
     return out
@@ -554,7 +554,7 @@ def _clip_indices(t_arr, t0, t1):
     return i0, i1
 
 def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
-                gap_mode=None):
+                gap_mode=None, scoring=None):
     need = {"prime": ("v6",)}.get(cand["strategy"], (cand["strategy"],))
     G = load_globals(need)
     R = G["nreg"][method]
@@ -565,6 +565,8 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
     liq_any = False
     mtm_dd = 0.0
     max_hold = 0.0
+    held_bars = 0.0
+    total_bars = 0.0
     if cand["strategy"] in ("v6", "prime"):
         P = (build_P_prime if cand["strategy"] == "prime" else build_P_v6)(cand, R)
         segs = G["v6"][cand["tv"]]
@@ -587,12 +589,15 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
                                            return_open=True,
                                            no_entry=(cm[w0:b] if cm is not None else None))
+                total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
                                    * 3.0 / 1440.0)
+                    held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
                 if op:
-                    max_hold = max(max_hold,
-                                   (len(sp["c"]) - 1 - op["entry_idx"]) * 3.0 / 1440.0)
+                    op_held = len(sp["c"]) - 1 - op["entry_idx"]
+                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    held_bars += op_held
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
                 if mode == "lev" and len(tr):
@@ -631,12 +636,15 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                                                 initial_capital=eq, commission=comm,
                                                 liq_threshold=-1.0 if mode == "lev" else 1e9,
                                                 return_open=True, no_entry=ne)
+                total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
                                    * 3.0 / 1440.0)
+                    held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
                 if op:
-                    max_hold = max(max_hold,
-                                   (len(sp["c"]) - 1 - op["entry_idx"]) * 3.0 / 1440.0)
+                    op_held = len(sp["c"]) - 1 - op["entry_idx"]
+                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    held_bars += op_held
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
                 if mode == "lev" and len(tr):
@@ -665,7 +673,13 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                worst_mae=float(tr["mae"].min()),
                win=float((tr["net"] > 0).mean()),
                max_hold_days=float(max_hold),
+               in_market=float(held_bars / max(total_bars, 1.0)),
                score=g_mean - 0.25 * g_std)
+    if scoring == "worst_window":
+        rw = gm.rolling(3).mean().dropna()
+        out["score"] = float(rw.min()) if len(rw) else out["score"]
+    elif scoring == "underwater":
+        out["score"] = out["score"] - 0.5 * out["in_market"]
     for k, v in out.items():   # NaN/inf breaks JSON in browsers
         if isinstance(v, float) and not np.isfinite(v):
             out[k] = 0.0

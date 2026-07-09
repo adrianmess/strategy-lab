@@ -50,19 +50,22 @@ def worker(args):
                                  payload["method"], payload["n"],
                                  payload["t0"], payload["t1"], payload["per_regime"],
                                  max_dd=payload["max_dd"], alt=payload["alt"],
-                                 max_hold=payload["max_hold"], gap_mode=payload["gap_mode"])
+                                 max_hold=payload["max_hold"], gap_mode=payload["gap_mode"],
+                                 scoring=payload["scoring"])
         elif kind == "offspring":
             res = O.batch_offspring(rng, space, payload["mode"], payload["method"],
                                     payload["parents"], payload["n"],
                                     payload["t0"], payload["t1"],
                                     max_dd=payload["max_dd"], alt=payload["alt"],
-                                    max_hold=payload["max_hold"], gap_mode=payload["gap_mode"])
+                                    max_hold=payload["max_hold"], gap_mode=payload["gap_mode"],
+                                 scoring=payload["scoring"])
         elif kind == "refine":
             res = O.batch_refine(rng, space, payload["mode"], payload["method"],
                                  payload["seed_cand"], payload["n"],
                                  payload["t0"], payload["t1"],
                                  max_dd=payload["max_dd"], alt=payload["alt"],
-                                 max_hold=payload["max_hold"], gap_mode=payload["gap_mode"])
+                                 max_hold=payload["max_hold"], gap_mode=payload["gap_mode"],
+                                 scoring=payload["scoring"])
         else:
             res = []
         for _s, _c, _m in res:
@@ -80,14 +83,16 @@ def worker(args):
                                             payload["n"], payload["t0"], payload["t1"],
                                             max_dd=payload["max_dd"], alt=payload["alt"],
                                             max_hold=payload["max_hold"],
-                                            gap_mode=payload["gap_mode"]))
+                                            gap_mode=payload["gap_mode"],
+                                            scoring=payload["scoring"]))
     if kind == "refine":
         return strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
                                          space, payload["method"],
                                          payload["n"], payload["t0"], payload["t1"],
                                          max_dd=payload["max_dd"], alt=payload["alt"],
                                          max_hold=payload["max_hold"],
-                                         gap_mode=payload["gap_mode"]))
+                                         gap_mode=payload["gap_mode"],
+                                         scoring=payload["scoring"]))
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
     out = []
@@ -95,11 +100,16 @@ def worker(args):
         c = sampler(rng, R, payload["mode"], space)
         m = W.eval_config(c, payload["method"], payload["mode"],
                           payload["t0"], payload["t1"], alt=payload["alt"],
-                          gap_mode=payload["gap_mode"])
+                          gap_mode=payload["gap_mode"], scoring=payload["scoring"])
         if W.feasible(m, payload["mode"], cand=c, max_dd=payload["max_dd"],
                       max_hold=payload["max_hold"]):
             out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
     return out
+
+
+def _scoring(args):
+    """classic -> None so evaluation takes the pre-existing, untouched code path."""
+    return None if args.scoring == "classic" else args.scoring
 
 
 def reservoir_add(res, seen, items, rng, cap=300):
@@ -173,14 +183,15 @@ def run_crossfit(args, space, R, per_regime, flat):
         import wf2 as W
         def ev(c, alt):
             return W.eval_config(c, args.method, args.mode, None, None,
-                                 alt=alt, gap_mode=args.gap_mode)
+                                 alt=alt, gap_mode=args.gap_mode, scoring=_scoring(args))
         def feas(m, c):
             return W.feasible(m, args.mode, cand=c, max_dd=args.max_dd,
                               max_hold=args.max_hold_days)
     else:
         import optimizer2 as O
         def ev(c, alt):
-            return O.eval3(c, args.method, alt=alt, gap_mode=args.gap_mode)
+            return O.eval3(c, args.method, alt=alt, gap_mode=args.gap_mode,
+                           scoring=_scoring(args))
         def feas(m, c):
             return O.feasible3(m, args.mode, cand=c, max_dd=args.max_dd,
                                max_hold=args.max_hold_days)
@@ -228,7 +239,7 @@ def run_crossfit(args, space, R, per_regime, flat):
                            n=args.batch, t0=None, t1=None,
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
-                           gap_mode=args.gap_mode, alt=alt)
+                           gap_mode=args.gap_mode, alt=alt, scoring=_scoring(args))
             if len(pool) < 8:
                 jobs = [("random", dict(payload, seed=state["seed_base"] + k))
                         for k in range(args.procs)]
@@ -389,7 +400,7 @@ def run_crossfit(args, space, R, per_regime, flat):
                        algo="crossfit", per_regime=per_regime,
                        holdout_days=fold, lockbox=args.lockbox,
                        max_dd=args.max_dd, max_hold_days=args.max_hold_days,
-                       gap_mode=args.gap_mode, evaluated=total_eval,
+                       gap_mode=args.gap_mode, scoring=args.scoring, evaluated=total_eval,
                        crossfit=report, cand=None, metrics=None,
                        generated=time.strftime("%Y-%m-%d %H:%M")),
                   open("best_config.json", "w"), indent=1, default=float)
@@ -410,7 +421,7 @@ def run_crossfit(args, space, R, per_regime, flat):
                algo="crossfit", per_regime=per_regime,
                train_end=None, holdout_days=fold, lockbox=args.lockbox,
                max_dd=args.max_dd, max_hold_days=args.max_hold_days,
-               gap_mode=args.gap_mode, evaluated=total_eval,
+               gap_mode=args.gap_mode, scoring=args.scoring, evaluated=total_eval,
                holdout=({k: v for k, v in table_holdout.items() if k != "trades"}
                         if table_holdout else None),
                holdout_scan=dict(scanned=len(poolA) + len(poolB),
@@ -471,6 +482,12 @@ def main():
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
+    ap.add_argument("--scoring", default="classic",
+                    choices=["classic", "worst_window", "underwater"],
+                    help="classic (default, unchanged): mean monthly growth minus "
+                         "volatility penalty. worst_window: rank by the WORST rolling "
+                         "3-month stretch. underwater: classic minus a penalty for the "
+                         "fraction of time capital sits locked in open positions.")
     ap.add_argument("--gap-mode", default="skip_contaminated",
                     choices=["skip_open", "skip_contaminated"],
                     help="evaluation gap handling — matches the backtest default so "
@@ -510,14 +527,15 @@ def main():
         def eval_any(cand, t0, t1, part="train"):
             alt = (args.holdout_days, part) if args.holdout_days else None
             return W.eval_config(cand, args.method, args.mode, t0, t1, alt=alt,
-                                 gap_mode=args.gap_mode)
+                                 gap_mode=args.gap_mode, scoring=_scoring(args))
     else:
         import optimizer2 as O
         O.load_g3()
         R = O.load_g3()["regimes"][args.method][1]
         def eval_any(cand, t0, t1, part="train"):
             alt = (args.holdout_days, part) if args.holdout_days else None
-            return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode)
+            return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode,
+                           scoring=_scoring(args))
 
     per_regime = not args.single_set
     if args.algo == "crossfit":
@@ -604,7 +622,7 @@ def main():
                            n=args.batch, t0=None, t1=args.train_end,
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
-                           gap_mode=args.gap_mode,
+                           gap_mode=args.gap_mode, scoring=_scoring(args),
                            alt=((args.holdout_days, "train") if args.holdout_days else None))
             if args.algo == "random" or len(pool) < 8:
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
@@ -650,7 +668,7 @@ def main():
                method=args.method, algo=args.algo, per_regime=per_regime,
                train_end=args.train_end, holdout_days=args.holdout_days,
                max_dd=args.max_dd, max_hold_days=args.max_hold_days,
-               gap_mode=args.gap_mode, evaluated=evaluated,
+               gap_mode=args.gap_mode, scoring=args.scoring, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
