@@ -37,6 +37,7 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 </style>
 <link rel="stylesheet" href="assets/theme.css">
 <script src="assets/ui.js"></script>
+<script src="assets/param_names.js"></script>
 </head>
 <body>
 <header>
@@ -69,8 +70,10 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
     <button onclick="qbRun()" style="padding:6px 12px;cursor:pointer;border-radius:6px;font-weight:600">Run backtest</button>
     <span class="hint" id="qbMsg"></span>
   </div>
-  <details id="qbEditWrap" style="margin-top:8px"><summary class="hint">parameters (edit before running for custom settings)</summary>
-    <textarea id="qbParams" spellcheck="false" style="width:100%;height:180px;font:11px monospace;margin-top:6px"></textarea>
+  <details id="qbEditWrap" style="margin-top:8px"><summary class="hint">parameters (edit before running for custom settings — names & order match your pine script)</summary>
+    <div id="qbForm" style="margin-top:6px;max-height:420px;overflow-y:auto"></div>
+    <details style="margin-top:6px"><summary class="hint">raw JSON (advanced)</summary>
+    <textarea id="qbParams" spellcheck="false" style="width:100%;height:140px;font:11px monospace;margin-top:6px"></textarea></details>
   </details>
 </section>
 
@@ -108,27 +111,61 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 </div>
 </main>
 <script>
+let QB_CAND = null;
+function qbRenderForm(cand){
+  QB_CAND = cand;
+  const spec = window.PARAM_ORDER[qbStrat.value] || [];
+  const isRegs = !!cand.regs;
+  const R = isRegs ? cand.regs.length : Math.max(1, ...Object.values(cand)
+              .filter(Array.isArray).map(a=>a.length));
+  const getv = (k)=> isRegs ? cand.regs.map(r=>r[k]) : cand[k];
+  const hdr = R>1 ? `<div style="display:flex;gap:6px;font-size:10px;color:var(--hint,#888);margin:2px 0">
+    <span style="width:320px"></span>${[...Array(R)].map((_,i)=>`<span style="width:90px">regime ${i} (${['low','mid','high'][i]||i} vol)</span>`).join('')}</div>` : '';
+  document.getElementById('qbForm').innerHTML = hdr + spec.map((p,si)=>{
+    if(p.info) return `<div style="display:flex;gap:6px;margin:2px 0;opacity:.45;font-size:12px">
+      <span style="width:320px">${p.info}</span><span>${p.v}</span></div>`;
+    const v = getv(p.k);
+    if(v === undefined) return '';
+    const vals = Array.isArray(v) ? v : [v];
+    const inputs = vals.map((x,ri)=>`<input data-qk="${p.k}" data-qr="${ri}" value="${typeof x==='number'?+x.toFixed(6):x}"
+      style="width:90px;font-size:12px;padding:2px 4px">`).join('');
+    return `<div style="display:flex;gap:6px;margin:2px 0;align-items:center;font-size:12px">
+      <span style="width:320px" title="${p.u||''}">${p.n}${p.menu?' <b style="color:var(--amber,#c90)">▤</b>':''}${p.u?` <span style="opacity:.55;font-size:10px">${p.u}</span>`:''}</span>
+      ${inputs}</div>`;
+  }).join('');
+  document.getElementById('qbParams').value = JSON.stringify(cand, null, 1);
+}
+function qbCollect(){
+  if(!QB_CAND) return null;
+  const cand = JSON.parse(JSON.stringify(QB_CAND));
+  document.querySelectorAll('#qbForm input[data-qk]').forEach(inp=>{
+    const k = inp.dataset.qk, r = +inp.dataset.qr, val = parseFloat(inp.value);
+    if(isNaN(val)) return;
+    if(cand.regs) cand.regs[r][k] = val;
+    else if(Array.isArray(cand[k])) cand[k][r] = val;
+    else cand[k] = val;
+  });
+  return cand;
+}
 async function qbLoad(){
   document.getElementById('qbMsg').textContent = 'building defaults…';
   try{
     const q = new URLSearchParams({strategy:qbStrat.value, mode:qbMode.value, method:qbMethod.value});
     const r = await fetch('/api/defaults?'+q).then(x=>x.json());
     if(r.error){ document.getElementById('qbMsg').textContent = r.error; return null; }
-    document.getElementById('qbParams').value = JSON.stringify(r.cand, null, 1);
+    qbRenderForm(r.cand);
     document.getElementById('qbEditWrap').open = true;
     document.getElementById('qbMsg').textContent = 'defaults loaded — edit if you want, then Run';
     return r.cand;
   }catch(e){ document.getElementById('qbMsg').textContent = 'needs the panel server (open via :8800)'; return null; }
 }
 async function qbRun(){
-  let cand;
-  const raw = document.getElementById('qbParams').value.trim();
-  if(raw){
-    try{ cand = JSON.parse(raw); }
-    catch(e){ document.getElementById('qbMsg').textContent = 'parameter JSON is invalid: '+e.message; return; }
-  } else {
-    cand = await qbLoad();
-    if(!cand) return;
+  let cand = qbCollect();
+  if(!cand){
+    const raw = document.getElementById('qbParams').value.trim();
+    if(raw){ try{ cand = JSON.parse(raw); }catch(e){
+      document.getElementById('qbMsg').textContent = 'parameter JSON invalid: '+e.message; return; } }
+    else { cand = await qbLoad(); if(!cand) return; }
   }
   const name = document.getElementById('qbName').value.trim() ||
     (qbStrat.value + '_defaults_' + qbMode.value);
@@ -136,7 +173,32 @@ async function qbRun(){
                 method:qbMethod.value, gap_mode:qbGap.value, name:name};
   const r = await fetch('/api/jobs/backtest', {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(x=>x.json());
-  document.getElementById('qbMsg').textContent = 'running… the entry appears here when done (refresh)';
+  document.getElementById('qbMsg').textContent = 'running…';
+  watchJob(r.id, name);
+}
+async function watchJob(jid, name){
+  for(let i=0;i<200;i++){
+    await new Promise(res=>setTimeout(res, 3000));
+    try{
+      const jobs = await fetch('/api/jobs').then(x=>x.json());
+      const j = jobs.find(x=>x.id===jid);
+      if(j && j.status !== 'running'){
+        document.getElementById('qbMsg').textContent =
+          j.status.includes('(0)') ? 'done — showing result' : 'job failed: see job log';
+        await reloadBacktests(name);
+        return;
+      }
+    }catch(e){}
+  }
+}
+async function reloadBacktests(selectName){
+  const t = await fetch('/dashboard/backtests.js?t='+Date.now()).then(x=>x.text());
+  let list;
+  try{ list = JSON.parse(t.slice(t.indexOf('=')+1).trim().replace(/;$/,'')); }catch(e){ return; }
+  BT.length = 0; list.forEach(e=>BT.push(e));
+  const idx = selectName ? BT.findIndex(e=>e.name===selectName) : -1;
+  sel = null; render();
+  if(idx >= 0) select(idx);
 }
 const BT = window.BACKTESTS||[];
 const tb = document.querySelector('#bt tbody');

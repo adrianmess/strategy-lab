@@ -16,5 +16,32 @@
   "gap_mode": "skip_open",
   "backtest": "__quick_prime2",
   "at": "2026-07-09 16:17"
+ },
+ "quick_v7_defaults_lev.json|full-history (in-sample fit)": {
+  "source": "quick_v7_defaults_lev.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -99.27195077604482,
+  "gap_mode": "skip_open",
+  "backtest": "v7_defaults_lev",
+  "at": "2026-07-09 16:37"
+ },
+ "quick_prime_defaults_lev.json|full-history (in-sample fit)": {
+  "source": "quick_prime_defaults_lev.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.12140696598267,
+  "gap_mode": "skip_open",
+  "backtest": "prime_defaults_lev",
+  "at": "2026-07-09 16:36"
+ },
+ "quick_prime7_defaults_lev.json|full-history (in-sample fit)": {
+  "source": "quick_prime7_defaults_lev.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.31464476969438,
+  "gap_mode": "skip_contaminated",
+  "backtest": "prime7_defaults_lev",
+  "at": "2026-07-09 16:37"
  }
 }

@@ -177,13 +177,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
 
   <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
   <div class="card" id="spaceCard">
-    <details open><summary>Continuous parameters (min / max)</summary>
+    <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
-    </details>
-    <details id="menuSection"><summary>Indicator lengths — editable choice lists</summary>
-      <div class="kv" style="margin:8px 0;font-size:12.5px">Indicator lengths can't be searched as a continuous range (each length means recomputing the indicator over all history), so the search picks from these lists instead. <b>The lists themselves are yours to edit</b> — add or change any lengths below, hit Save. The first run after a change rebuilds the engine cache once (V5 family: a few minutes; Scalp family: ~10s). Checkboxes narrow which options the search may pick without rebuilding.</div>
-      <div id="varGrid" style="margin:6px 0"></div>
-      <div id="menuGrid" style="margin-top:10px"></div>
+      <div id="menuGrid" style="margin-top:8px"></div>
     </details>
     <div class="row" style="margin-top:10px">
       <button class="primary" onclick="saveSpace()">Save parameter space</button>
@@ -579,17 +575,26 @@ function renderSpace(){
       <button class="small" title="${fixed ? 'Locked (min = max). Click to restore a search range around the default.' : 'Lock at '+(v.default!=null?('the default: '+v.default):'the min value')+' — the search keeps it fixed'}"
         style="padding:1px 6px;${fixed?'color:var(--amber)':''}" onclick="fixParam('${k}')">${fixed?'🔒':'📌'}</button></div>`;
   }).join('');
-  const VFMT = {rsi:'RSI lengths', macd:'MACD fast/slow pairs', bb:'Bollinger length/std-dev pairs',
-    ema:'Trend EMA lengths (used by both long & short menus)', xmacd:'Crossover MACD fast/slow/signal triples',
-    histn:'Histogram rise bars', cvd:'CVD smoothing lengths', poc:'VRVP/POC lookbacks', emaS:'Slow EMA lengths'};
-  $('varGrid').innerHTML = sp.variants ? Object.entries(sp.variants).map(([k,v])=>`
-    <div class="prow" style="margin:3px 0"><span class="nm" style="width:290px">${VFMT[k]||k} <span class="kv" style="font-size:10px">${k}</span></span>
-      <input data-vk="${k}" style="width:340px" value="${v.map(x=>Array.isArray(x)?x.join('/'):x).join(', ')}"></div>`).join('')
-    : '<div class="kv" style="font-size:12px">Length libraries for this strategy are edited on its parent engine strategy (V7 for Prime7).</div>';
-  $('menuSection').style.display = (Object.keys(sp.menus||{}).length || sp.variants) ? '' : 'none';
-  $('menuGrid').innerHTML = Object.entries(sp.menus||{}).map(([k,v])=>`
-    <div style="margin:6px 0"><b class="nm" style="cursor:pointer" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(v.doc||'')}">${v.label||k}</b> <span class="kv" style="font-size:10px">${k}</span>:
-      ${v.options.map((o,i)=>`<label style="margin-right:10px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}</div>`).join('');
+  const VKEY = {vRsi:'rsi', vMacd:'macd', vBB:'bb', vEmaUp:'ema', vEmaDn:'ema',
+    vX:'xmacd', vHistN:'histn', vR:'rsi', vC:'cvd', vP:'poc', vE:'emaS'};
+  const rendered = new Set();
+  $('menuGrid').innerHTML = Object.entries(sp.menus||{}).map(([k,v])=>{
+    const vkey = VKEY[k];
+    const vals = (sp.variants && vkey && sp.variants[vkey]) ? sp.variants[vkey] : null;
+    let lib = '';
+    if(vals && !rendered.has(vkey)){
+      rendered.add(vkey);
+      lib = `<input data-vk="${vkey}" style="width:230px;font-size:11px;margin-left:10px"
+        value="${vals.map(x=>Array.isArray(x)?x.join('/'):x).join(', ')}"
+        title="the actual lengths behind the choices — edit freely (e.g. add 21); saving a changed list rebuilds the engine cache once">`;
+    } else if(vals){
+      lib = `<span class="kv" style="font-size:10px;margin-left:10px">(same length list as above)</span>`;
+    }
+    return `<div class="prow" style="margin:4px 0;flex-wrap:wrap">
+      <span class="nm" style="min-width:290px" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify((v.doc||'') + ' Searched per regime: the optimizer picks one of the CHECKED options for each regime, like any other parameter — only min/max ranges do not apply (each length requires precomputing the indicator over all history).')}">${v.label||k} <span class="kv" style="font-size:10px">${k}</span></span>
+      ${v.options.map((o,i)=>`<label style="margin-right:8px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}
+      ${lib}</div>`;
+  }).join('');
 }
 function algoChanged(){
   const cf = $('algo').value === 'crossfit';
@@ -638,7 +643,7 @@ async function saveSpace(){
     const VMENUS = {rsi:['vRsi','vR'], macd:['vMacd'], bb:['vBB'], ema:['vEmaUp','vEmaDn'],
       xmacd:['vX'], histn:['vHistN'], cvd:['vC'], poc:['vP'], emaS:['vE']};
     const shares = {v7:['v7','prime7'], scalpx2:['scalpx2']}[$('strat').value] || [$('strat').value];
-    document.querySelectorAll('#varGrid input[data-vk]').forEach(inp=>{
+    document.querySelectorAll('#menuGrid input[data-vk]').forEach(inp=>{
       const k = inp.dataset.vk;
       const vals = inp.value.split(',').map(s=>s.trim()).filter(Boolean)
         .map(s=>s.includes('/') ? s.split('/').map(Number) : Number(s));
