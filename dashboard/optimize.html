@@ -118,6 +118,10 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="budgetType" style="width:110px"><option value="hours">hours</option><option value="total">evaluations</option></select>
         <input id="budgetVal" value="2" style="width:70px"></span></div>
       <div class="field"><label data-x="maxdd">Max drawdown %</label><input id="maxDD" value="80" style="width:60px"></div>
+      <div class="field"><label data-x="anchor">Anchor</label>
+        <span style="display:flex;gap:4px">
+        <select id="anchor" style="width:170px"><option value="">none (default)</option><option value="defaults">strategy live defaults</option></select>
+        <input id="anchorStr" value="0" style="width:45px" title="anchor strength: 0 = seeding only; e.g. 0.3 also penalizes distance from the anchor"></span></div>
       <div class="field"><label data-x="scoring">Scoring</label>
         <select id="scoring"><option value="classic">classic (default)</option><option value="worst_window">worst 3-month window</option><option value="underwater">time-in-trade penalty</option></select></div>
       <div class="field"><label data-x="maxhold">Max days in trade</label><input id="maxHold" value="" placeholder="∞" style="width:60px"></div>
@@ -240,6 +244,7 @@ const X = {
  maxdd: ["Max drawdown %", `Candidates whose worst peak-to-trough equity loss exceeds this are thrown away during the search. Default 80% for leveraged (drawdown is mark-to-market, so open-position pain counts), 50% for spot. Lower it for configs you could actually sit through — 80% means your $1000 became $200 at some point.`],
  lockbox: ["Lockbox", `Date ranges completely hidden from the cross-fit searches, used exactly once at the end to judge the finalists. Format: 'a..b' ranges, comma-separated, open sides allowed — '2025-09-01..' locks everything after Sep 2025; '..2024-11-01, 2025-07-01..' locks the first and last eras and searches the middle. With alternating-days as the fold size. Treat a lockbox verdict as spendable once: if you tune settings because of it and rerun, it's no longer unseen.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
+ anchor: ["Anchor", `Starts the search from a KNOWN-GOOD configuration instead of pure randomness.<dl><dt>none (default)</dt><dd>Unchanged behavior: the population starts random. Best for honest exploration.</dd><dt>strategy live defaults</dt><dd>Seeds the population with your live parameter values (the ones shown as defaults next to each parameter) and explores outward from them.</dd><dt>backtest: …</dt><dd>Anchor to any published backtest's exact config.</dd></dl>The number is the <b>anchor strength</b>: 0 = seeding only; e.g. 0.3 also subtracts 0.3 × (normalized parameter distance from the anchor) from every candidate's score, so the search pays rent for wandering. Anchoring is a deliberate bias: great for polishing what works ("better than my defaults, near my defaults"), wrong for discovering something different — use unanchored cross-fit for that.`],
  scoring: ["Scoring", `How candidates are RANKED during the search (feasibility rules are unchanged).<dl><dt>classic (default)</dt><dd>The original, untouched formula: average monthly growth minus a volatility penalty. All previous runs used this.</dd><dt>worst 3-month window</dt><dd>Ranks by the WORST rolling 3-month stretch instead of the average. A config carried by one lucky quarter stops winning; the only way up is to fix the weak periods.</dd><dt>time-in-trade penalty</dt><dd>Classic minus a penalty for the fraction of time capital sits locked in open positions. Pushes the search toward the quick-recycling character of your live defaults (max holds of days, not months).</dd></dl>New runs record their scoring in the settings chips, so runs bred under different rules are never confused.`],
  maxhold: ["Max days in trade", `Throws out any candidate whose simulation EVER holds a position longer than this many days — including positions still open at the end of the data or at gap boundaries. This kills the configs that get a trade stuck underwater for months waiting for a profit target. It does NOT close or alter any trade; the whole candidate is simply disqualified from the pool (and from holdout survivor ranking). Blank = unlimited.`],
  trainend: ["Holdout", `How unseen data is reserved to verify the result honestly.<dl><dt>after date</dt><dd>The search only sees data BEFORE the date; the best configs are then tested on everything after it. Simple, but the holdout is only the most recent market era.</dd><dt>alternating days</dt><dd>The calendar is cut into blocks of N days (e.g. 30): the search trains on every other block and is tested on the skipped ones. The holdout then samples ALL market eras — bull, bear, chop — not just the recent one. Positions force-close at block edges, so very slow strategies suit larger blocks.</dd></dl>Leave the date blank (or days 0) for no holdout — you get no evidence, only an in-sample fit.`],
@@ -273,6 +278,10 @@ async function launch(){
     max_hold_days:(+$('maxHold').value>0) ? +$('maxHold').value : undefined,
     gap_mode:$('optGap').value,
     scoring:($('scoring').value!=='classic') ? $('scoring').value : undefined,
+    anchor:($('anchor').value==='defaults') ? 'defaults' : undefined,
+    anchor_cand:($('anchor').value.startsWith('bt:')) ?
+      (BT_ANCHORS.find(e=>e.name===$('anchor').value.slice(3))||{}).config : undefined,
+    anchor_strength:(+$('anchorStr').value>0 && $('anchor').value) ? +$('anchorStr').value : undefined,
     lockbox:($('algo').value==='crossfit' && $('lockbox').value.trim()) ? $('lockbox').value.trim() : undefined,
     single_set: $('perreg').value==='1'};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
@@ -402,7 +411,8 @@ function optChips(r){
   const gm = r.gap_mode ? `gaps: ${r.gap_mode.replace('skip_','')}` : null;
   const lb = r.lockbox ? `lockbox ${r.lockbox}` : null;
   const sc = (r.scoring && r.scoring!=='classic') ? `scoring: ${r.scoring.replace('_','-')}` : null;
-  return [r.algo||'?', ps, ho, dd, mh, gm, lb, sc].filter(Boolean).join(' · ');
+  const an = r.anchor ? `anchored (${r.anchor}${r.anchor_strength?`, λ${r.anchor_strength}`:''})` : null;
+  return [r.algo||'?', ps, ho, dd, mh, gm, lb, sc, an].filter(Boolean).join(' · ');
 }
 async function renameRun(name){
   const nn = prompt('New name for "'+name+'" (slashes/spaces become _):', name);
@@ -690,7 +700,22 @@ $('mode').onchange = ()=>{
   if($('mode').value==='lev' && v===50) $('maxDD').value = 80;
   explain('mode');
 };
+let BT_ANCHORS = [];
+fetch('/dashboard/backtests.js').then(r=>r.text()).then(t=>{
+  try{ BT_ANCHORS = JSON.parse(t.slice(t.indexOf('=')+1).trim().replace(/;$/,''))
+        .filter(e=>e.config && e.config.strategy); }catch(e){}
+  fillAnchors();
+}).catch(()=>{});
+function fillAnchors(){
+  const strat = $('strat').value;
+  const sel = $('anchor'); const keep = sel.value;
+  sel.innerHTML = '<option value="">none (default)</option><option value="defaults">strategy live defaults</option>' +
+    BT_ANCHORS.filter(e=>e.config.strategy===strat)
+      .map(e=>`<option value="bt:${e.name}">backtest: ${e.name}</option>`).join('');
+  if([...sel.options].some(o=>o.value===keep)) sel.value = keep;
+}
 $('strat').onchange = ()=>{
+  fillAnchors();
   const legacy = !['v7','prime7'].includes($('strat').value);
   $('perreg').disabled = legacy;   // per-regime specialists is v7-only for now
   if(SPACE) renderSpace();

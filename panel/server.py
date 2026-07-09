@@ -492,6 +492,15 @@ def job_optimize2():
         run_dir = os.path.join(OPT, "runs", name)
         os.makedirs(run_dir, exist_ok=True)
         json.dump(d["seed_cand"], open(os.path.join(run_dir, "seed_cand.json"), "w"))
+    if d.get("anchor_cand"):
+        run_dir = os.path.join(OPT, "runs", name)
+        os.makedirs(run_dir, exist_ok=True)
+        json.dump(d["anchor_cand"], open(os.path.join(run_dir, "anchor_cand.json"), "w"))
+        cmd += ["--anchor", "file"]
+    elif d.get("anchor") == "defaults":
+        cmd += ["--anchor", "defaults"]
+    if d.get("anchor_strength"):
+        cmd += ["--anchor-strength", str(d["anchor_strength"])]
     return jsonify(id=spawn("optimize-v2", name, cmd, OPT))
 
 @app.route("/api/jobs/ai_suggest", methods=["POST"])
@@ -571,6 +580,8 @@ def runs2():
                 e["gap_mode"] = bc.get("gap_mode")
                 e["lockbox"] = bc.get("lockbox")
                 e["scoring"] = bc.get("scoring")
+                e["anchor"] = bc.get("anchor")
+                e["anchor_strength"] = bc.get("anchor_strength")
                 e["crossfit"] = bc.get("crossfit")
                 e["winner_origin"] = bc.get("winner_origin")
                 fp = os.path.join(runs_dir, d, "backtest_flags.json")

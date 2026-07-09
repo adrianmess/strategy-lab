@@ -70,7 +70,7 @@ def worker(args):
             res = []
         for _s, _c, _m in res:
             _c["strategy"] = strategy
-        return res
+        return _apply_anchor(res, payload, space, strategy)
     # flat-candidate strategies (prime / v6 / scalpx) via the wf2 engine
     import wf2 as W
     G = W.load_globals(("v6",) if strategy == "prime" else (strategy,))
@@ -78,21 +78,21 @@ def worker(args):
     strip = lambda res: [(s, c, {k: v for k, v in m.items() if k != "trades"})
                          for s, c, m in res]
     if kind == "offspring":
-        return strip(W.batch_offspring_flat(rng, payload["parents"], payload["mode"],
+        return _apply_anchor(strip(W.batch_offspring_flat(rng, payload["parents"], payload["mode"],
                                             space, None, R, payload["method"],
                                             payload["n"], payload["t0"], payload["t1"],
                                             max_dd=payload["max_dd"], alt=payload["alt"],
                                             max_hold=payload["max_hold"],
                                             gap_mode=payload["gap_mode"],
-                                            scoring=payload["scoring"]))
+                                            scoring=payload["scoring"])), payload, space, strategy)
     if kind == "refine":
-        return strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
+        return _apply_anchor(strip(W.batch_refine_flat(rng, payload["seed_cand"], payload["mode"],
                                          space, payload["method"],
                                          payload["n"], payload["t0"], payload["t1"],
                                          max_dd=payload["max_dd"], alt=payload["alt"],
                                          max_hold=payload["max_hold"],
                                          gap_mode=payload["gap_mode"],
-                                         scoring=payload["scoring"]))
+                                         scoring=payload["scoring"])), payload, space, strategy)
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
     out = []
@@ -104,7 +104,108 @@ def worker(args):
         if W.feasible(m, payload["mode"], cand=c, max_dd=payload["max_dd"],
                       max_hold=payload["max_hold"]):
             out.append((m["score"], c, {k: v for k, v in m.items() if k != "trades"}))
-    return out
+    return _apply_anchor(out, payload, space, strategy)
+
+
+def _apply_anchor(res, payload, space, strategy):
+    a = payload.get("anchor_cand")
+    s = payload.get("anchor_strength") or 0.0
+    if not a or s <= 0 or not res:
+        return res
+    return [(sc - s * anchor_distance(c, a, space, strategy), c, m)
+            for sc, c, m in res]
+
+
+def build_anchor_defaults(strategy, mode, R, space):
+    """The strategy's stored live-default parameters as a candidate."""
+    if strategy in ("v7", "prime7"):
+        from engine3 import DEFAULTS3
+        base = dict(DEFAULTS3)
+        if strategy == "prime7":
+            import wf2 as W
+            for k, v in W.PRIME_BASE.items():
+                if k in base and isinstance(v, (int, float)):
+                    base[k] = float(v)
+            base.update(eXL=0.0, eXS=0.0, requireHistPos=0.0)
+        for k, spec in (space.get("flags") or {}).items():
+            if isinstance(spec, dict) and spec.get("fixed") is not None:
+                base[k] = float(spec["fixed"])
+        if mode == "spot":
+            base.update(leverage=1.0, eS3=0.0, eXS=0.0)
+        return dict(strategy=strategy, mode=mode,
+                    regs=[dict(base) for _ in range(R)])
+    if strategy == "prime":
+        import wf2 as W
+        P = W.PRIME_BASE
+        c = dict(strategy="prime", tv=0,
+                 zL=[P["macdValPctLong"]] * R, zS=[P["macdValPctShort"]] * R,
+                 rsiL=[P["rsiValLong"]] * R, rsiS=[P["rsiValShort"]] * R,
+                 bbL=[P["bbValLong"]] * R, bbS=[P["bbValShort"]] * R,
+                 ptL=[P["ptLong"]] * R, a1L=[P["apt1Long"]] * R, a2L=[P["apt2Long"]] * R,
+                 d1L=[P["dur1Long"]] * R, d2L=[P["dur2Long"]] * R,
+                 ptS=[P["ptShort"]] * R, a1S=[P["apt1Short"]] * R, a2S=[P["apt2Short"]] * R,
+                 d1S=[P["dur1Short"]] * R, d2S=[P["dur2Short"]] * R,
+                 cdPL=[P["cdPctLong"]] * R, cdTL=[float(P["cdPeriodLong"])] * R,
+                 cdPS=[P["cdPctShort"]] * R, cdTS=[float(P["cdPeriodShort"])] * R,
+                 eL3=[1.0] * R, eS3=[0.0 if mode == "spot" else 1.0] * R,
+                 lev=[1.0 if mode == "spot" else float(P.get("leverage", 2.5))] * R,
+                 sl=(0.10 if mode == "spot" else 0.0))
+        return c
+    if strategy in ("scalpx", "scalpx2"):
+        from scalp_engine import SCALP_DEFAULTS
+        D = SCALP_DEFAULTS
+        c = dict(strategy=strategy,
+                 tpL=[D["tpLong"]] * R, tpS=[D["tpShort"]] * R,
+                 rsiOB=[D["rsiOB"]] * R, rsiOS=[D["rsiOS"]] * R,
+                 useCvd=[1.0] * R, useEma=[1.0] * R,
+                 eL=[1.0] * R, eS=[0.0 if mode == "spot" else 1.0] * R,
+                 lev=[1.0 if mode == "spot" else 2.0] * R,
+                 sl=(0.05 if mode == "spot" else 0.05),
+                 slOn=(1.0 if mode == "spot" else 0.0))
+        if strategy == "scalpx2":
+            from scalp_engine import SCALP2_DEFAULT_IDX as I
+            c.update(vR=[float(I["rsi"])] * R, vC=[float(I["cvd"])] * R,
+                     vP=[float(I["poc"])] * R, vE=[float(I["emaS"])] * R)
+        return c
+    raise SystemExit(f"--anchor defaults: {strategy} has no stored live defaults — "
+                     f"anchor to a published backtest instead.")
+
+
+def anchor_distance(c, anchor, space, strategy):
+    """Mean normalized parameter distance between candidate and anchor (0 = identical)."""
+    tot, n = 0.0, 0
+    cont = space.get("continuous") or {}
+    if strategy in ("v7", "prime7"):
+        for ra, rb in zip(anchor.get("regs", []), c.get("regs", [])):
+            for k, spec in cont.items():
+                lo, hi = spec.get("range", (0, 0))
+                if hi > lo and k in ra and k in rb:
+                    tot += min(1.0, abs(float(rb[k]) - float(ra[k])) / (hi - lo)); n += 1
+            for k in (space.get("menus") or {}):
+                if k in ra and k in rb:
+                    tot += 0.0 if ra[k] == rb[k] else 1.0; n += 1
+            for k in (space.get("flags") or {}):
+                if k in ra and k in rb:
+                    tot += abs(float(rb[k]) - float(ra[k])); n += 1
+        return tot / max(n, 1)
+    from wf2 import FLAT_KEYMAP
+    km = FLAT_KEYMAP.get(strategy, {})
+    for k, av in anchor.items():
+        if k in ("strategy", "tv") or k not in c:
+            continue
+        cv = c[k]
+        if isinstance(av, list) and isinstance(cv, list):
+            spec = cont.get(km.get(k, k))
+            for a2, c2 in zip(av, cv):
+                if spec and spec["range"][1] > spec["range"][0]:
+                    lo, hi = spec["range"]
+                    tot += min(1.0, abs(float(c2) - float(a2)) / (hi - lo))
+                else:
+                    tot += min(1.0, abs(float(c2) - float(a2)) / (abs(float(a2)) + 1e-9))
+                n += 1
+        elif isinstance(av, (int, float)) and isinstance(cv, (int, float)):
+            tot += min(1.0, abs(float(cv) - float(av)) / (abs(float(av)) + 1e-9)); n += 1
+    return tot / max(n, 1)
 
 
 def _scoring(args):
@@ -170,7 +271,7 @@ def complement_ranges(lockboxes):
     return out or None
 
 
-def run_crossfit(args, space, R, per_regime, flat):
+def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
     """Cross-fit: search A on even fold-blocks, search B on odd, cross-score every
     pool candidate on its opposite fold, breed the mutual survivors on the full
     (non-lockbox) region, then judge finalists once on each lockbox."""
@@ -239,7 +340,8 @@ def run_crossfit(args, space, R, per_regime, flat):
                            n=args.batch, t0=None, t1=None,
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
-                           gap_mode=args.gap_mode, alt=alt, scoring=_scoring(args))
+                           gap_mode=args.gap_mode, alt=alt, scoring=_scoring(args),
+                           anchor_cand=anchor_cand, anchor_strength=args.anchor_strength)
             if len(pool) < 8:
                 jobs = [("random", dict(payload, seed=state["seed_base"] + k))
                         for k in range(args.procs)]
@@ -314,11 +416,25 @@ def run_crossfit(args, space, R, per_regime, flat):
                        if json.dumps(e[1], sort_keys=True, default=float) not in seen]
 
     with mp.Pool(args.procs) as p:
+        def anchor_seed(alt):
+            if anchor_cand is None:
+                return None
+            try:
+                m = ev(anchor_cand, alt)
+                if m:
+                    return [(m["score"], anchor_cand,
+                             {k: v for k, v in m.items() if k != "trades"})] * 3
+            except Exception:
+                pass
+            return None
+
         poolA, resA = search_phase(p, "poolA.json", altA, 0.38, 0.0,
-                                   "fold A (even blocks)", cross_alt=altB)
+                                   "fold A (even blocks)", cross_alt=altB,
+                                   seed_pool=anchor_seed(altA))
         poolB, resB = ([], []) if stopped() else \
             search_phase(p, "poolB.json", altB, 0.38, 0.38,
-                         "fold B (odd blocks)", cross_alt=altA)
+                         "fold B (odd blocks)", cross_alt=altA,
+                         seed_pool=anchor_seed(altB))
 
         survA = cross_score(merge_unique(poolA, resA), altB, "A->B")
         survB = cross_score(merge_unique(poolB, resB), altA, "B->A")
@@ -400,7 +516,8 @@ def run_crossfit(args, space, R, per_regime, flat):
                        algo="crossfit", per_regime=per_regime,
                        holdout_days=fold, lockbox=args.lockbox,
                        max_dd=args.max_dd, max_hold_days=args.max_hold_days,
-                       gap_mode=args.gap_mode, scoring=args.scoring, evaluated=total_eval,
+                       gap_mode=args.gap_mode, scoring=args.scoring,
+               anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=total_eval,
                        crossfit=report, cand=None, metrics=None,
                        generated=time.strftime("%Y-%m-%d %H:%M")),
                   open("best_config.json", "w"), indent=1, default=float)
@@ -421,7 +538,8 @@ def run_crossfit(args, space, R, per_regime, flat):
                algo="crossfit", per_regime=per_regime,
                train_end=None, holdout_days=fold, lockbox=args.lockbox,
                max_dd=args.max_dd, max_hold_days=args.max_hold_days,
-               gap_mode=args.gap_mode, scoring=args.scoring, evaluated=total_eval,
+               gap_mode=args.gap_mode, scoring=args.scoring,
+               anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=total_eval,
                holdout=({k: v for k, v in table_holdout.items() if k != "trades"}
                         if table_holdout else None),
                holdout_scan=dict(scanned=len(poolA) + len(poolB),
@@ -482,6 +600,14 @@ def main():
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
+    ap.add_argument("--anchor", default=None, choices=["defaults", "file"],
+                    help="anchored search: seed the population from the strategy's "
+                         "stored live defaults ('defaults') or from anchor_cand.json "
+                         "in the run dir ('file' — written by the site when you pick "
+                         "a backtest as anchor)")
+    ap.add_argument("--anchor-strength", type=float, default=0.0,
+                    help="0 = seeding only; >0 additionally penalizes a candidate's "
+                         "score by strength x normalized parameter distance from the anchor")
     ap.add_argument("--scoring", default="classic",
                     choices=["classic", "worst_window", "underwater"],
                     help="classic (default, unchanged): mean monthly growth minus "
@@ -538,10 +664,19 @@ def main():
                            scoring=_scoring(args))
 
     per_regime = not args.single_set
+    anchor_cand = None
+    if args.anchor == "file":
+        anchor_cand = json.load(open("anchor_cand.json"))
+        anchor_cand["mode"] = args.mode
+        print(f"anchored to backtest config (strength {args.anchor_strength:g})", flush=True)
+    elif args.anchor == "defaults":
+        anchor_cand = build_anchor_defaults(args.strategy, args.mode, R, space)
+        print(f"anchored to {args.strategy} stored live defaults "
+              f"(strength {args.anchor_strength:g})", flush=True)
     if args.algo == "crossfit":
         signal.signal(signal.SIGTERM, _request_stop)
         signal.signal(signal.SIGINT, _request_stop)
-        res = run_crossfit(args, space, R, per_regime, flat)
+        res = run_crossfit(args, space, R, per_regime, flat, anchor_cand=anchor_cand)
         if os.path.exists("stop.flag"):
             try: os.remove("stop.flag")
             except OSError: pass
@@ -590,6 +725,21 @@ def main():
             pool.extend(json.load(open(src))["pool"])
             print(f"seeded {len(pool)} candidates from {args.resume_from}", flush=True)
 
+    if anchor_cand is not None:
+        try:
+            am = eval_any(anchor_cand, None, args.train_end)
+            if am is not None and not am.get("liq"):
+                pool = [[am["score"], anchor_cand,
+                         {k: v for k, v in am.items() if k != "trades"}]] * 3 + pool
+                print(f"anchor evaluated: score {am['score']:.4f} eq {am['eq']:.0f}",
+                      flush=True)
+            else:
+                print("anchor is infeasible on this train window "
+                      f"({'liquidated' if am else 'no trades'}) — used only as the "
+                      "starting point for exploration, not kept in the pool", flush=True)
+        except Exception as e:
+            print(f"anchor evaluation failed: {e}", flush=True)
+
     t_end = time.time() + (args.hours * 3600 if args.hours else 10**12)
     target = evaluated + (args.total or 10**12)
     gen = 0
@@ -623,8 +773,14 @@ def main():
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
                            gap_mode=args.gap_mode, scoring=_scoring(args),
+                           anchor_cand=anchor_cand, anchor_strength=args.anchor_strength,
                            alt=((args.holdout_days, "train") if args.holdout_days else None))
-            if args.algo == "random" or len(pool) < 8:
+            if anchor_cand is not None and len(pool) < 24 and args.algo != "random":
+                # anchored start: explore around the anchor instead of uniform randomness
+                jobs = [("refine", dict(payload, seed_cand=anchor_cand, seed=seed_base + k))
+                        for k in range(args.procs)]
+                jobs[-1] = ("random", dict(payload, seed=seed_base + args.procs))
+            elif args.algo == "random" or len(pool) < 8:
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
             elif args.algo == "genetic":
                 parents = [c for _, c, _ in pool[:24]]
@@ -668,7 +824,8 @@ def main():
                method=args.method, algo=args.algo, per_regime=per_regime,
                train_end=args.train_end, holdout_days=args.holdout_days,
                max_dd=args.max_dd, max_hold_days=args.max_hold_days,
-               gap_mode=args.gap_mode, scoring=args.scoring, evaluated=evaluated,
+               gap_mode=args.gap_mode, scoring=args.scoring,
+               anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)

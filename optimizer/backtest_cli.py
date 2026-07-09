@@ -51,6 +51,7 @@ def opt_settings(cfg):
                 gap_mode=cfg.get("gap_mode"),
                 lockbox=cfg.get("lockbox"),
                 scoring=cfg.get("scoring"),
+                anchor=cfg.get("anchor"), anchor_strength=cfg.get("anchor_strength"),
                 evaluated=cfg.get("evaluated"))
 
 
