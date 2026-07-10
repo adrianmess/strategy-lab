@@ -111,7 +111,8 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 </div>
 </main>
 <script>
-let QB_CAND = null;
+let QB_CAND = null, QB_SPACE = null;
+fetch('/api/param_space').then(r=>r.json()).then(s=>{QB_SPACE=s; if(QB_CAND) qbRenderForm(QB_CAND);}).catch(()=>{});
 function qbRenderForm(cand){
   QB_CAND = cand;
   const spec = window.PARAM_ORDER[qbStrat.value] || [];
@@ -127,8 +128,19 @@ function qbRenderForm(cand){
     const v = getv(p.k);
     if(v === undefined) return '';
     const vals = Array.isArray(v) ? v : [v];
-    const inputs = vals.map((x,ri)=>`<input data-qk="${p.k}" data-qr="${ri}" value="${typeof x==='number'?+x.toFixed(6):x}"
-      style="width:90px;font-size:12px;padding:2px 4px">`).join('');
+    const mspec = p.menu && QB_SPACE && (QB_SPACE[qbStrat.value]||{}).menus
+      ? (QB_SPACE[qbStrat.value].menus[p.k] || null) : null;
+    const inputs = vals.map((x,ri)=>{
+      if(mspec && mspec.labels){
+        return `<select data-qk="${p.k}" data-qr="${ri}" style="width:96px;font-size:12px;padding:2px 2px">` +
+          mspec.labels.map((lab,li)=>{
+            const optv = (p.k==='trendBlockZ') ? mspec.options[li] : li;
+            return `<option value="${optv}" ${(+x===+optv)?'selected':''}>${lab}</option>`;
+          }).join('') + `</select>`;
+      }
+      return `<input data-qk="${p.k}" data-qr="${ri}" value="${typeof x==='number'?+x.toFixed(6):x}"
+      style="width:90px;font-size:12px;padding:2px 4px">`;
+    }).join('');
     return `<div style="display:flex;gap:6px;margin:2px 0;align-items:center;font-size:12px">
       <span style="width:320px" title="${p.u||''}">${p.n}${p.menu?' <b style="color:var(--amber,#c90)">▤</b>':''}${p.u?` <span style="opacity:.55;font-size:10px">${p.u}</span>`:''}</span>
       ${inputs}</div>`;
@@ -138,7 +150,7 @@ function qbRenderForm(cand){
 function qbCollect(){
   if(!QB_CAND) return null;
   const cand = JSON.parse(JSON.stringify(QB_CAND));
-  document.querySelectorAll('#qbForm input[data-qk]').forEach(inp=>{
+  document.querySelectorAll('#qbForm [data-qk]').forEach(inp=>{
     const k = inp.dataset.qk, r = +inp.dataset.qr, val = parseFloat(inp.value);
     if(isNaN(val)) return;
     if(cand.regs) cand.regs[r][k] = val;

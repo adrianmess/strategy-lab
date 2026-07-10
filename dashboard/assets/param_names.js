@@ -51,14 +51,18 @@ window.PARAM_ORDER = {
  // ===== V7 / Prime7 (V5.2 crossover export order; z / variant-menu params noted) =====
  v7: [
   {k:"leverage", n:"Leverage", per:1},
+  {info:"ATR Length / Volatility Thresholds (ATR)", v:"replaced — V7 switches parameters by volatility REGIME instead of the ATR-EMA switch"},
+  {info:"Long/Short EMA Length (Low/High Volatility)", v:"replaced by the per-regime EMA choices below"},
   {k:"vEmaUp", n:"Long EMA Length", per:1, menu:1},
   {k:"vEmaDn", n:"Short EMA Length", per:1, menu:1},
   {k:"vRsi", n:"RSI Length (Long+Short)", per:1, menu:1},
   {k:"rsiValLong", n:"RSI OverSold Level (Long)", per:1},
   {k:"vMacd", n:"MACD Fast/Slow Length (Long+Short)", per:1, menu:1},
+  {info:"MACD Smoothing", v:"not used — the entry MACD line is z-scored instead"},
   {k:"zL", n:"MACD Value (%) (Long)", per:1, u:"z-scored here"},
   {k:"vBB", n:"BB Length / StdDev (Long+Short)", per:1, menu:1},
   {k:"bbValLong", n:"BB %B Value (Long)", per:1},
+  {info:"Cooldown Time Frame (Long/Short)", v:"1 min / 3 min (fixed in engine)"},
   {k:"ptLong", n:"Profit Target (%) (Long)", per:1, u:"fraction: 0.012 = 1.2%"},
   {k:"slLong", n:"Stop Loss (%) (Long)", per:1, u:"fraction; spot mode only"},
   {k:"apt1Long", n:"Adjusted Profit Target 1 (%) (Long)", per:1, u:"fraction"},
