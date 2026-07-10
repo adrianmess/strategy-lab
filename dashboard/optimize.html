@@ -565,35 +565,43 @@ function renderSpace(){
   $('spaceNote').textContent = sp.note || '';
   $('spaceStrat').textContent = $('strat').selectedOptions[0].text;
   const nm = (k,v)=>`${v.label||k} <span class="kv" style="font-size:10px">${k}</span>`;
-  $('contGrid').innerHTML = Object.entries(sp.continuous).map(([k,v])=>{
-    const fixed = v.range[0] === v.range[1];
-    const doc = (v.doc||'') + (v.default!=null ? ` Default (your live/script value): ${v.default}.` : '') +
-      ' Tip: set min = max (or hit the pin) to LOCK a parameter at a fixed value — the search will not vary it.';
-    return `
-    <div class="prow"><span class="nm" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${nm(k,v)}</span>
-      <input data-k="${k}" data-i="0" value="${v.range[0]}"><input data-k="${k}" data-i="1" value="${v.range[1]}">
-      <button class="small" title="${fixed ? 'Locked (min = max). Click to restore a search range around the default.' : 'Lock at '+(v.default!=null?('the default: '+v.default):'the min value')+' — the search keeps it fixed'}"
-        style="padding:1px 6px;${fixed?'color:var(--amber)':''}" onclick="fixParam('${k}')">${fixed?'🔒':'📌'}</button></div>`;
-  }).join('');
   const VKEY = {vRsi:'rsi', vMacd:'macd', vBB:'bb', vEmaUp:'ema', vEmaDn:'ema',
     vX:'xmacd', vHistN:'histn', vR:'rsi', vC:'cvd', vP:'poc', vE:'emaS'};
-  const rendered = new Set();
-  $('menuGrid').innerHTML = Object.entries(sp.menus||{}).map(([k,v])=>{
-    const vkey = VKEY[k];
-    const vals = (sp.variants && vkey && sp.variants[vkey]) ? sp.variants[vkey] : null;
-    let lib = '';
-    if(vals && !rendered.has(vkey)){
-      rendered.add(vkey);
-      lib = `<input data-vk="${vkey}" style="width:230px;font-size:11px;margin-left:10px"
-        value="${vals.map(x=>Array.isArray(x)?x.join('/'):x).join(', ')}"
-        title="the actual lengths behind the choices — edit freely (e.g. add 21); saving a changed list rebuilds the engine cache once">`;
-    } else if(vals){
-      lib = `<span class="kv" style="font-size:10px;margin-left:10px">(same length list as above)</span>`;
+  const fmtOpt = x => Array.isArray(x) ? x.join('/') : String(x);
+  const libOwner = {};   // vkey -> first menu key that renders editable values
+  const entries = [
+    ...Object.entries(sp.continuous).map(([k,v])=>({k,v,kind:'cont'})),
+    ...Object.entries(sp.menus||{}).map(([k,v])=>({k,v,kind:'menu'})),
+  ].sort((a,b)=>((a.v.order??500)-(b.v.order??500)) || a.k.localeCompare(b.k));
+  $('contGrid').innerHTML = entries.map(({k,v,kind})=>{
+    const doc = (v.doc||'') + (kind==='menu'
+      ? ' Each choice is a separate value the search may pick (per regime). Edit a value freely; untick to exclude it from the search; leave blank to drop it. Changing values rebuilds the engine cache once on the next run.'
+      : (v.default!=null ? ` Default (your live/script value): ${v.default}.` : '') +
+        ' Tip: set min = max (or hit the pin) to LOCK a parameter at a fixed value.');
+    const nm = `<span class="nm" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${v.label||k} <span class="kv" style="font-size:10px">${k}</span></span>`;
+    if(kind==='cont'){
+      const fixed = v.range[0] === v.range[1];
+      return `<div class="prow">${nm}
+        <input data-k="${k}" data-i="0" value="${v.range[0]}"><input data-k="${k}" data-i="1" value="${v.range[1]}">
+        <button class="small" title="${fixed ? 'Locked (min = max). Click to restore a search range around the default.' : 'Lock at '+(v.default!=null?('the default: '+v.default):'the min value')}"
+          style="padding:1px 6px;${fixed?'color:var(--amber)':''}" onclick="fixParam('${k}')">${fixed?'🔒':'📌'}</button></div>`;
     }
-    return `<div class="prow" style="margin:4px 0;flex-wrap:wrap">
-      <span class="nm" style="min-width:290px" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify((v.doc||'') + ' Searched per regime: the optimizer picks one of the CHECKED options for each regime, like any other parameter — only min/max ranges do not apply (each length requires precomputing the indicator over all history).')}">${v.label||k} <span class="kv" style="font-size:10px">${k}</span></span>
-      ${v.options.map((o,i)=>`<label style="margin-right:8px;font-size:12px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${o}" checked> ${(v.labels||v.options)[i]}</label>`).join('')}
-      ${lib}</div>`;
+    // menu: one row per choice, plus an add-choice row
+    const vkey = VKEY[k];
+    const vals = (sp.variants && vkey && sp.variants[vkey]) ? sp.variants[vkey] : v.options;
+    const shared = vkey && libOwner[vkey] && libOwner[vkey] !== k;
+    if(vkey && !libOwner[vkey]) libOwner[vkey] = k;
+    const rows = vals.map((val,i)=>{
+      const checked = v.options.includes(i) || (!vkey && v.options.includes(val));
+      return `<div class="prow">
+        <span class="nm" style="padding-left:14px" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${v.label||k} — choice ${i+1}</span>
+        <input data-mvk="${k}" data-mvi="${i}" value="${fmtOpt(val)}" ${shared?'disabled title="shared with the row above — edit it there"':''} style="${shared?'opacity:.5':''}">
+        <label style="font-size:11px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${i}" ${checked?'checked':''}> search</label></div>`;
+    }).join('');
+    const addRow = shared ? '' : `<div class="prow"><span class="nm" style="padding-left:14px;opacity:.6">${v.label||k} — add choice</span>
+      <input data-mvk="${k}" data-mvi="${vals.length}" placeholder="new value" >
+      <label style="font-size:11px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${vals.length}" checked> search</label></div>`;
+    return rows + addRow;
   }).join('');
 }
 function algoChanged(){
@@ -624,42 +632,54 @@ function fixParam(k){
 }
 async function saveSpace(){
   const sp = SPACE[$('strat').value] || SPACE.v7;
-  document.querySelectorAll('#contGrid input').forEach(inp=>{
+  document.querySelectorAll('#contGrid input[data-k]').forEach(inp=>{
     sp.continuous[inp.dataset.k].range[+inp.dataset.i] = parseFloat(inp.value);
   });
-  for(const k of Object.keys(sp.menus)){
-    const checked = [...document.querySelectorAll(`input[data-mk="${k}"]:checked`)].map(x=>parseFloat(x.dataset.mo));
-    if(checked.length){
-      const spec = sp.menus[k];
-      if(spec.labels) spec.labels = spec.options.map((o,i)=>checked.includes(o)?spec.labels[i]:null).filter(x=>x!==null);
-      spec.options = checked;
-    }
-  }
+  const VKEY = {vRsi:'rsi', vMacd:'macd', vBB:'bb', vEmaUp:'ema', vEmaDn:'ema',
+    vX:'xmacd', vHistN:'histn', vR:'rsi', vC:'cvd', vP:'poc', vE:'emaS'};
+  const VLAB = {rsi:v=>'RSI '+v, macd:a=>'MACD '+a.join('/'), bb:a=>'BB '+a.join('/'),
+    ema:v=>'EMA '+v, xmacd:a=>'X-MACD '+a.join('/'), histn:v=>v+' bars',
+    cvd:v=>'SMA '+v, poc:v=>v+' bars', emaS:v=>'EMA '+v};
+  const parseVal = s => s.includes('/') ? s.split('/').map(Number) : Number(s);
+  const bad = v => v==null || (Array.isArray(v) ? v.some(isNaN) : isNaN(v));
+  // collect per-choice values + checkboxes
+  const mv = {}, mc = {};
+  document.querySelectorAll('#contGrid input[data-mvk]').forEach(inp=>{
+    const s = inp.value.trim();
+    (mv[inp.dataset.mvk] ||= [])[+inp.dataset.mvi] = s ? parseVal(s) : null;
+  });
+  document.querySelectorAll('#contGrid input[data-mk]').forEach(cb=>{
+    (mc[cb.dataset.mk] ||= {})[+cb.dataset.mo] = cb.checked;
+  });
+  // owner menu key per shared library = first (pine-order) with that vkey
+  const menuOrder = Object.entries(sp.menus||{}).sort((a,b)=>((a[1].order??500)-(b[1].order??500)));
+  const owner = {};
+  for(const [k] of menuOrder){ const vk = VKEY[k]; if(vk && !owner[vk]) owner[vk] = k; }
   let rebuilt = false;
-  if(sp.variants){
-    const VLAB = {rsi:v=>'RSI '+v, macd:a=>'MACD '+a[0]+'/'+a[1], bb:a=>'BB '+a[0]+'/'+a[1],
-      ema:v=>'EMA '+v, xmacd:a=>'X-MACD '+a.join('/'), histn:v=>v+' bars',
-      cvd:v=>'SMA '+v, poc:v=>v+' bars', emaS:v=>'EMA '+v};
-    const VMENUS = {rsi:['vRsi','vR'], macd:['vMacd'], bb:['vBB'], ema:['vEmaUp','vEmaDn'],
-      xmacd:['vX'], histn:['vHistN'], cvd:['vC'], poc:['vP'], emaS:['vE']};
-    const shares = {v7:['v7','prime7'], scalpx2:['scalpx2']}[$('strat').value] || [$('strat').value];
-    document.querySelectorAll('#menuGrid input[data-vk]').forEach(inp=>{
-      const k = inp.dataset.vk;
-      const vals = inp.value.split(',').map(s=>s.trim()).filter(Boolean)
-        .map(s=>s.includes('/') ? s.split('/').map(Number) : Number(s));
-      if(!vals.length || vals.some(v=>Array.isArray(v)?v.some(isNaN):isNaN(v))) return;
-      if(JSON.stringify(vals)!==JSON.stringify(sp.variants[k])) rebuilt = true;
-      sp.variants[k] = vals;
-      for(const sect of shares){
-        const S = SPACE[sect]; if(!S||!S.menus) continue;
-        for(const mk of VMENUS[k]||[]){
-          if(S.menus[mk]){
-            S.menus[mk].options = vals.map((_,i)=>i);
-            S.menus[mk].labels = vals.map(VLAB[k]||(x=>String(x)));
-          }
-        }
+  for(const [k, spec] of menuOrder){
+    const vk = VKEY[k];
+    const srcKey = vk ? owner[vk] : k;
+    const raw = mv[srcKey] || [];
+    const vals = [], oldIdx = [];
+    raw.forEach((v,i)=>{ if(!bad(v)){ vals.push(v); oldIdx.push(i); } });
+    if(!vals.length) continue;
+    const checked = mc[k] || {};
+    if(vk){
+      if(sp.variants && JSON.stringify(sp.variants[vk]) !== JSON.stringify(vals)){
+        rebuilt = true; sp.variants[vk] = vals;
       }
-    });
+      const opts = oldIdx.map((oi,ni)=>checked[oi]!==false ? ni : null).filter(x=>x!==null);
+      spec.options = opts.length ? opts : vals.map((_,i)=>i);
+      spec.labels = vals.map(VLAB[vk] || (x=>String(x)));
+    } else {
+      const opts = oldIdx.filter(oi=>checked[oi]!==false).map(oi=>raw[oi]);
+      if(opts.length){
+        const oldLabels = spec.labels || [];
+        const oldOpts = spec.options || [];
+        spec.labels = opts.map(v=>{ const j = oldOpts.indexOf(v); return j>=0 && oldLabels[j] ? oldLabels[j] : String(v); });
+        spec.options = opts;
+      }
+    }
   }
   const r = await api('param_space', SPACE);
   $('spaceMsg').textContent = r.ok ? ('saved ✓ (new runs use these ranges)' +
