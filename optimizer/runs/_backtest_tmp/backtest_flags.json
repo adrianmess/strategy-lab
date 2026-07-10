@@ -43,5 +43,23 @@
   "gap_mode": "skip_contaminated",
   "backtest": "prime7_defaults_lev",
   "at": "2026-07-09 16:37"
+ },
+ "quick___og_prime.json|original engine (full pine logic)": {
+  "source": "quick___og_prime.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": 26.13724404504896,
+  "gap_mode": "skip_open",
+  "backtest": "__og_prime",
+  "at": "2026-07-09 17:33"
+ },
+ "quick___og_v5.json|original engine (full pine logic)": {
+  "source": "quick___og_v5.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": 40.425585012703195,
+  "gap_mode": "skip_open",
+  "backtest": "__og_v5",
+  "at": "2026-07-09 17:34"
  }
 }

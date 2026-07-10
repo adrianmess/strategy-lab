@@ -163,12 +163,19 @@ def api_defaults():
     mode = request.args.get("mode", "lev")
     method = request.args.get("method", "vol3")
     R = {"none": 1, "volXtrend9": 9}.get(method, 3)
-    code = (
-        "import _bootstrap as B, json\n"
-        "from optimize2_cli import build_anchor_defaults\n"
-        f"space = json.load(open(B.OPT_DIR + '/param_space.json')).get({strategy!r}) or {{}}\n"
-        f"print(json.dumps(build_anchor_defaults({strategy!r}, {mode!r}, {R}, space), default=float))"
-    )
+    if strategy.endswith("_original"):
+        code = (
+            "import _bootstrap as B, json\n"
+            "from backtest_cli import original_defaults\n"
+            f"print(json.dumps(original_defaults({strategy!r}, {mode!r}), default=float))"
+        )
+    else:
+        code = (
+            "import _bootstrap as B, json\n"
+            "from optimize2_cli import build_anchor_defaults\n"
+            f"space = json.load(open(B.OPT_DIR + '/param_space.json')).get({strategy!r}) or {{}}\n"
+            f"print(json.dumps(build_anchor_defaults({strategy!r}, {mode!r}, {R}, space), default=float))"
+        )
     try:
         out = subprocess.run([sys.executable, "-c", code], cwd=OPT,
                              capture_output=True, text=True, timeout=120)

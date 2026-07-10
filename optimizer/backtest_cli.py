@@ -38,6 +38,118 @@ def contamination_mask(t, warmup):
     return _cm(t, warmup)
 
 
+ORIGINAL_STRATEGIES = ("v5_original", "prime_original")
+
+def original_defaults(strategy, mode):
+    """Every pine input of the ORIGINAL script, unmodified logic, single set."""
+    from engine import DEFAULT_PARAMS
+    p = {k: (1.0 if v is True else 0.0 if v is False else v)
+         for k, v in DEFAULT_PARAMS.items()
+         if k not in ("cdTfLong", "cdTfShort", "xCdTfLong", "xCdTfShort",
+                      "initial_capital", "commission")}
+    if strategy == "prime_original":
+        from wf2 import PRIME_BASE
+        for k, v in PRIME_BASE.items():
+            if k in p and isinstance(v, (int, float)) and not isinstance(v, bool):
+                p[k] = v
+        p["enableLongX"] = 0.0
+        p["enableShortX"] = 0.0
+    else:
+        p.setdefault("enableLongX", 1.0)
+        p.setdefault("enableShortX", 1.0)
+    p.setdefault("enableLong3m", 1.0)
+    p.setdefault("enableShort3m", 1.0)
+    if mode == "spot":
+        p["leverage"] = 1.0
+        p["enableShort3m"] = 0.0
+        p["enableShortX"] = 0.0
+    return p
+
+
+def run_single_original(cfg, oos_start=None, holdout_days=None,
+                        gap_mode="skip_contaminated"):
+    """The ORIGINAL strategy engine: raw %-thresholds, ATR-switched EMAs, every
+    indicator length recomputed fresh from the submitted parameters."""
+    from engine import DEFAULT_PARAMS
+    import fast_engine as fe
+    from common import load_segments
+    from wf2 import mtm_curve, contamination_mask, eval_intervals, FUT_COMM, SPOT_COMM
+    from adaptive import slice_pre
+    strategy, mode = cfg["strategy"], cfg.get("mode", "lev")
+    p = dict(DEFAULT_PARAMS)
+    p.update({k: v for k, v in cfg["cand"].items()})
+    P = fe.params_to_vec(p, dict(
+        enableLong3m=p.get("enableLong3m", 1.0), enableShort3m=p.get("enableShort3m", 1.0),
+        enableLongX=p.get("enableLongX", 1.0), enableShortX=p.get("enableShortX", 1.0),
+    )).reshape(1, -1)
+    warmup = 3000
+    eq = 1000.0
+    trades, curve, open_positions = [], [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    suppressed = 0
+    segs = load_segments()
+    n_segs = len(segs)
+    for si, (g, d1) in enumerate(segs):
+        print(f"precomputing indicators, segment {si + 1}/{n_segs} ...", flush=True)
+        pre = fe.precompute(g, d1, p)          # RAW indicators at the requested lengths
+        t = pre["t"]
+        seg_mask = (contamination_mask(t, warmup)
+                    if gap_mode == "skip_contaminated" else None)
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        ivs = [(i0, i1)] if not holdout_days else eval_intervals(t, i0, i1,
+                dict(days=holdout_days, part="holdout"))
+        regime = np.zeros(len(t), dtype=np.int32)
+        for iv_i, (a, b) in enumerate(ivs):
+            w0 = max(0, a - warmup)
+            sp = slice_pre(pre, w0, b)
+            eq0 = eq
+            tr, eq, liq, op = fe.run_fast(sp, P, regime=regime[w0:b], warmup=a - w0,
+                                          initial_capital=eq, use_sl=True,
+                                          commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                          liq_threshold=-1.0 if mode == "lev" else 1e9,
+                                          return_open=True,
+                                          no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir=("long" if op["dir"] > 0 else "short"),
+                        entry_t=op["entry_t"][:16], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
+                        move_pct=float((mark / op["entry"] - 1) * op["dir"]),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy=strategy, mode=mode, method="none",
+                                        kind=("original engine (full pine logic)"
+                                              if oos_start is None else f"original, from {oos_start}"),
+                                        config=cfg["cand"]))
+
+
 def opt_settings(cfg):
     """Optimizer settings recorded in a best_config, for display on dashboards."""
     if not isinstance(cfg, dict) or "algo" not in cfg and "evaluated" not in cfg:
@@ -137,6 +249,9 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
     if not cand:
         raise SystemExit("This run produced NO surviving candidate (see its report) — "
                          "there is nothing to backtest.")
+    if cfg.get("strategy") in ORIGINAL_STRATEGIES:
+        return run_single_original(cfg, oos_start, holdout_days=holdout_days,
+                                   gap_mode=gap_mode)
     if cfg.get("strategy") in ("v7", "prime7") or cand.get("strategy") in ("v7", "prime7") \
             or "regs" in cand:
         return run_single_v7(cfg, oos_start, holdout_days=holdout_days, gap_mode=gap_mode)
