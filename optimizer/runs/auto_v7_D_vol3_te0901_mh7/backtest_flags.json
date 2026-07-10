@@ -1,0 +1,29 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.31464476969438,
+  "gap_mode": "skip_contaminated",
+  "backtest": "auto_v7_D_vol3_te0901_mh7_full",
+  "at": "2026-07-09 22:46"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 13.865779070134066,
+  "gap_mode": "skip_contaminated",
+  "backtest": "auto_v7_D_vol3_te0901_mh7_oosbest_full",
+  "at": "2026-07-09 22:46"
+ },
+ "survivor2_config.json|full-history (in-sample fit)": {
+  "source": "survivor2_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 5.028120576983142,
+  "gap_mode": "skip_contaminated",
+  "backtest": "auto_v7_D_survivor2_full",
+  "at": "2026-07-09 22:51"
+ }
+}

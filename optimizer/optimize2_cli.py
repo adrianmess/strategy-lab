@@ -908,6 +908,8 @@ def main():
         def hkey(hm):
             if hm is None or hm["liq"]:
                 return -1e9
+            if args.max_hold_days and hm.get("max_hold_days", 0) > args.max_hold_days:
+                return -1e9   # OOS-best must respect the hold limit, like survivors do
             return hm["growth"]
         best_h = max(range(len(holdouts)), key=lambda i: hkey(holdouts[i]))
         if holdouts[best_h] and hkey(holdouts[best_h]) > -1e9 and best_h != 0:
