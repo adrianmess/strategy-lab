@@ -593,8 +593,10 @@ function renderSpace(){
     if(vkey && !libOwner[vkey]) libOwner[vkey] = k;
     const rows = vals.map((val,i)=>{
       const checked = v.options.includes(i) || (!vkey && v.options.includes(val));
+      // menus whose choices are meanings (not lengths) show their label, e.g. "block z>3"
+      const meaning = (!vkey && v.labels && v.labels[v.options.indexOf(val)]) || null;
       return `<div class="prow">
-        <span class="nm" style="padding-left:14px" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${v.label||k} — choice ${i+1}</span>
+        <span class="nm" style="padding-left:14px" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${v.label||k} — ${meaning || ('choice '+(i+1))}</span>
         <input data-mvk="${k}" data-mvi="${i}" value="${fmtOpt(val)}" ${shared?'disabled title="shared with the row above — edit it there"':''} style="${shared?'opacity:.5':''}">
         <label style="font-size:11px;color:var(--dim)"><input type="checkbox" data-mk="${k}" data-mo="${i}" ${checked?'checked':''}> search</label></div>`;
     }).join('');
