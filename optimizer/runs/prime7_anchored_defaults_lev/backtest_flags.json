@@ -6,7 +6,7 @@
   "growth_pct": -80.31464476969438,
   "gap_mode": "skip_contaminated",
   "backtest": "prime7_anchored_defaults_lev_full",
-  "at": "2026-07-09 16:10"
+  "at": "2026-07-09 21:34"
  },
  "best_config.json|from 2025-09-01": {
   "source": "best_config.json",
@@ -16,5 +16,14 @@
   "gap_mode": "skip_contaminated",
   "backtest": "prime7_anchored_defaults_lev_HOLDOUT",
   "at": "2026-07-09 16:10"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.31464476969438,
+  "gap_mode": "skip_contaminated",
+  "backtest": "prime7_anchored_defaults_lev_oosbest_full",
+  "at": "2026-07-09 21:34"
  }
 }

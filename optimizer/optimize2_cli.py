@@ -884,18 +884,19 @@ def main():
         out["holdout_scan"] = dict(scanned=len(scan), pool=len(pool_scan),
                                    reservoir=len(extra), survivors=len(survivors))
         out["holdout_survivors"] = survivors[:10]
-        print(f"\nPOOL SCAN: evaluated holdout for {len(scan)}/{len(pool)} kept candidates; "
+        print(f"\nPOOL SCAN: evaluated holdout for {len(scan)}/{len(pool_scan)} "
+              f"candidates ({len(pool)} elite + {len(extra)} reservoir); "
               f"{len(survivors)} survived", flush=True)
         for s in survivors[:5]:
             hm = s["holdout"]
             print(f"  train-rank #{s['rank']}: {(pow(2.718281828, hm['growth'])-1)*100:+.1f}%/mo "
                   f"dd {hm['maxdd']:.0%}", flush=True)
         # survivors-first ranking: non-liquidated by holdout growth, then the rest
-        ranked = [dict(rank=i + 1, train_score=pool[i][0], holdout=holdouts[i])
+        ranked = [dict(rank=i + 1, train_score=pool_scan[i][0], holdout=holdouts[i])
                   for i in range(len(holdouts))]
         ranked.sort(key=lambda r: -1e9 if (r["holdout"] is None or r["holdout"]["liq"])
                     else r["holdout"]["growth"], reverse=True)
-        out["holdout_top10"] = ranked
+        out["holdout_top10"] = ranked[:10]
         surv = [r for r in ranked if r["holdout"] and not r["holdout"]["liq"]]
         print(f"\nSURVIVORS-FIRST: {len(surv)}/{len(ranked)} candidates survived the holdout")
         for r in ranked[:5]:
@@ -910,7 +911,7 @@ def main():
             return hm["growth"]
         best_h = max(range(len(holdouts)), key=lambda i: hkey(holdouts[i]))
         if holdouts[best_h] and hkey(holdouts[best_h]) > -1e9 and best_h != 0:
-            s2, c2, m2 = pool[best_h]
+            s2, c2, m2 = pool_scan[best_h]
             hb = dict(cand=c2, metrics=m2, holdout=holdouts[best_h],
                       strategy=args.strategy, mode=args.mode, method=args.method,
                       note=f"OOS-best from pool rank #{best_h+1} (train-best was rank #1). "

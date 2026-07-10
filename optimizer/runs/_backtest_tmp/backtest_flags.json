@@ -61,5 +61,14 @@
   "gap_mode": "skip_open",
   "backtest": "__og_v5",
   "at": "2026-07-09 17:34"
+ },
+ "quick_prime_original_defaults_lev.json|original engine (full pine logic)": {
+  "source": "quick_prime_original_defaults_lev.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": 23.194267783633894,
+  "gap_mode": "skip_contaminated",
+  "backtest": "prime_original_defaults_lev",
+  "at": "2026-07-09 21:14"
  }
 }
