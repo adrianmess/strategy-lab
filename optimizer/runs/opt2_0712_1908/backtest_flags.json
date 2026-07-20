@@ -1,0 +1,12 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 2.5364356028118262,
+  "total_mult": 1.8459644005889129,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0712_1908_full",
+  "at": "2026-07-12 19:09"
+ }
+}

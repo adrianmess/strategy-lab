@@ -5,13 +5,107 @@ Fetches Min1 and Min3 klines for the configured symbol and maintains a
 rolling history long enough for all indicators/regime windows (>= 35 days).
 """
 import time
+import json
+import asyncio
 import logging
+import threading
 import requests
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 BASE = "https://contract.mexc.com/api/v1/contract/kline"
+WS_URL = "wss://contract.mexc.com/edge"
+
+
+class LivePrice:
+    """Real-time last price from MEXC's contract WebSocket, maintained in a
+    background thread. Auto-reconnects. If websockets is unavailable or the
+    socket is down, get() returns None and callers fall back to the kline close
+    — so this is strictly an enhancement, never a regression."""
+
+    def __init__(self, symbol: str):
+        self.symbol = symbol
+        self._price = None
+        self._ts = 0.0
+        self._stop = False
+        self._thread = None
+
+    def start(self):
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="LivePrice",
+                                        daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop = True
+
+    def _run(self):
+        try:
+            asyncio.run(self._loop())
+        except Exception as e:
+            logger.warning("LivePrice thread ended: %s (falling back to klines)", e)
+
+    async def _loop(self):
+        try:
+            import websockets
+        except Exception as e:
+            logger.warning("websockets not available (%s); live price disabled, "
+                           "using 1m kline close", e)
+            return
+        while not self._stop:
+            try:
+                async with websockets.connect(WS_URL, ping_interval=None,
+                                              close_timeout=5) as ws:
+                    await ws.send(json.dumps(
+                        {"method": "sub.ticker", "param": {"symbol": self.symbol}}))
+                    logger.info("LivePrice: subscribed to %s ticker (WebSocket)",
+                                self.symbol)
+                    pinger = asyncio.create_task(self._pinger(ws))
+                    try:
+                        async for msg in ws:
+                            self._handle(msg)
+                            if self._stop:
+                                break
+                    finally:
+                        pinger.cancel()
+            except Exception as e:
+                if not self._stop:
+                    logger.warning("LivePrice reconnecting after: %s", e)
+                    await asyncio.sleep(2)
+
+    async def _pinger(self, ws):
+        try:
+            while True:
+                await asyncio.sleep(15)
+                await ws.send(json.dumps({"method": "ping"}))
+        except Exception:
+            pass
+
+    def _handle(self, msg):
+        try:
+            j = json.loads(msg)
+        except Exception:
+            return
+        d = j.get("data")
+        if isinstance(d, dict):
+            p = d.get("lastPrice", d.get("fairPrice"))
+            if p:
+                try:
+                    self._price = float(p)
+                    self._ts = time.time()
+                except (TypeError, ValueError):
+                    pass
+
+    def get(self, max_age: float = 5.0):
+        """Latest tick price if fresher than max_age seconds, else None."""
+        if self._price is not None and (time.time() - self._ts) <= max_age:
+            return self._price
+        return None
+
+    def age(self):
+        return (time.time() - self._ts) if self._ts else None
 HISTORY_DAYS = 35          # rolling window kept in memory
 MAX_PER_REQ = 2000         # MEXC returns up to ~2000 points
 
@@ -74,10 +168,11 @@ def resample_3m(df1: pd.DataFrame) -> pd.DataFrame:
 
 
 class Feed:
-    def __init__(self, symbol: str):
+    def __init__(self, symbol: str, live: bool = True):
         self.symbol = symbol
         self.df3 = None
         self.df1 = None
+        self.live = LivePrice(symbol) if live else None
 
     def backfill(self):
         end = int(time.time())
@@ -86,6 +181,8 @@ class Feed:
         self.df1 = fetch_range(self.symbol, "Min1", start, end)
         self.df3 = resample_3m(self.df1)
         logger.info("Backfill done: %d 3m bars, %d 1m bars", len(self.df3), len(self.df1))
+        if self.live:
+            self.live.start()   # begin streaming real-time ticks
 
     def update(self):
         """Fetch the most recent bars and merge. Returns True if a new CLOSED
@@ -108,5 +205,16 @@ class Feed:
         df = self.df3
         return df[df["t"] + pd.Timedelta(minutes=3) <= now].reset_index(drop=True)
 
-    def last_price(self) -> float:
+    def last_price(self, max_age: float = 5.0) -> float:
+        """Live WebSocket tick if fresh, else the most recent 1m kline close."""
+        if self.live is not None:
+            p = self.live.get(max_age=max_age)
+            if p is not None:
+                return p
         return float(self.df1["close"].iloc[-1])
+
+    def price_source(self):
+        """'live' if a fresh tick is available, else 'kline' — for logging."""
+        if self.live is not None and self.live.get() is not None:
+            return "live"
+        return "kline"

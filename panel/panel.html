@@ -13,6 +13,7 @@ h1{margin:0;font-size:18px}
 nav a{color:var(--dim);text-decoration:none;margin-left:18px;font-weight:600}
 nav a.here,nav a:hover{color:var(--blue)}
 main{padding:22px 28px;max-width:1350px;margin:0 auto}
+main.cols{max-width:none}
 h2{font-size:14px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin:26px 0 10px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:14px}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
@@ -35,6 +36,18 @@ th{color:var(--dim)}
 label{color:var(--dim);font-size:12px;margin-right:4px}
 .warnbox{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.4);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13px}
 .note{color:var(--dim);font-size:12px}
+.tabs{display:flex;gap:6px;margin-bottom:-1px;flex-wrap:wrap}
+.tab{padding:7px 16px;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;
+  background:var(--bg);color:var(--dim);cursor:pointer;font-weight:600;font-size:13px;user-select:none}
+.tab.here{background:var(--panel);color:var(--fg)}
+.tab .dot{width:8px;height:8px;margin-right:5px}
+#instWrap.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px;align-items:start}
+#instWrap.cols .icard{margin-bottom:0}
+.icard .iname{font-weight:700;color:var(--dim);margin-bottom:8px;display:none}
+#instWrap.cols .icard .iname{display:block}
+.star-on{color:var(--green)} .rate-star{letter-spacing:1px;font-size:13px}
+.rate1{color:var(--amber)} .rate2{color:rgb(45,186,150)} .rate3{color:var(--green)}
+.procdup td{background:rgba(248,81,73,.08)}
 </style>
 <link rel="stylesheet" href="/dashboard/assets/theme.css">
 <script src="/dashboard/assets/ui.js"></script>
@@ -50,7 +63,7 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
     <a href="/dashboard/docs.html">Docs</a>
   </nav>
 </header>
-<main>
+<main id="main">
 
 <div id="doctorBox" style="display:none" class="warnbox">
   <b>Environment problems detected</b> — some features may fail until fixed:
@@ -62,54 +75,16 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
   </div>
 </div>
 
-<h2>Live trader</h2>
-<div class="card">
-  <div class="row" style="justify-content:space-between">
-    <div>
-      <span id="tdot" class="dot off"></span><b id="tstate">stopped</b>
-      <span class="kv" id="tinfo"></span>
-    </div>
-    <div class="row">
-      <label>config</label>
-      <select id="tcfg"><option>config.json</option><option>config_spot.json</option><option>config_legacy_stopON.json</option></select>
-      <button class="primary" onclick="startTrader(false)">Start dry-run</button>
-      <button class="danger" onclick="startTrader(true)">Start LIVE</button>
-      <button onclick="stopTrader()">Stop</button>
-    </div>
-  </div>
-  <div class="row" style="margin-top:6px"><span class="note" id="cfgSummary">…</span></div>
-  <div class="row" style="margin-top:4px"><span class="note"><b>Dry-run</b> = the trader runs the full strategy live (real prices, real signals, real position tracking) but only LOGS the orders it would place — nothing is sent to MEXC. Use it to watch a config behave before risking money. <b>LIVE</b> sends real orders through the MEXC executor below.</span></div>
-  <div id="posbox" class="row" style="margin-top:10px"></div>
-  <div class="warnbox" id="levwarn" style="display:none">
-    This config is <b>leveraged with NO stop loss</b>. A March-2024-style move liquidates the position.
-    Dry-run first; size only what you can lose entirely.
-  </div>
-  <pre id="tlog">–</pre>
-  <div class="row" style="margin-top:8px">
-    <span><span id="wdot" class="dot off"></span><b>MEXC executor</b> <span class="note" id="wportlbl"></span> <span class="note">(Playwright webhook server — needed for live orders; log in to MEXC in its browser window)</span></span>
-    <button onclick="startExecutor()">Start executor</button>
-    <button onclick="api('webhook/stop',{}).then(()=>setTimeout(refresh,500))">Stop executor</button>
-    <span class="note">needs: <code>pip install playwright && playwright install chromium</code>, then log in to MEXC in the window it opens</span>
-  </div>
-  <pre id="wlog" style="display:none"></pre>
-  <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
-    <div class="row">
-      <b>Manual test orders</b>
-      <span class="note">sends a single order through the executor — for verifying the pipeline works. These are REAL orders when the executor is logged in to MEXC. Start small (1 contract = 0.1 SOL). Note: the live trader tracks its own positions — close manual test positions before starting it.</span>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label>symbol</label><input id="mSym" value="SOL_USDT" style="width:110px">
-      <label>leverage</label><input id="mLev" value="1" style="width:55px">
-      <label>quantity (contracts)</label><input id="mQty" value="1" style="width:70px">
-      <button class="small" onclick="manual('open_long')" style="color:var(--green)">Open LONG</button>
-      <button class="small" onclick="manual('open_short')" style="color:var(--red)">Open SHORT</button>
-      <button class="small" onclick="manual('close_long')">Close LONG</button>
-      <button class="small" onclick="manual('close_short')">Close SHORT</button>
-      <button class="small danger" onclick="manual('close_position')">Close ALL</button>
-    </div>
-    <pre id="mResult" style="display:none;margin-top:8px"></pre>
-  </div>
-</div>
+<h2 style="display:flex;justify-content:space-between;align-items:center">
+  <span>Instances <span class="note" style="text-transform:none;letter-spacing:0">— each instance = one executor (own browser + port) + one trader (own config)</span></span>
+  <span class="row" style="gap:6px">
+    <button class="small" id="layoutBtn" onclick="toggleLayout()">⫴ columns</button>
+    <button class="small" onclick="addInstance()">+ add instance</button>
+    <button class="small" onclick="forceStopExecutors()" title="Kills EVERY executor process on the machine — including terminal-started ones the normal Stop can't reach — plus orphaned executor browsers. Your MEXC logins survive (they live in the browser profiles on disk).">Force stop all executors ⚠</button>
+  </span>
+</h2>
+<div id="instTabs" class="tabs"></div>
+<div id="instWrap"></div>
 
 <h2>Trader settings <span class="note">(applies on next trader start)</span></h2>
 <div class="card row" id="settings">
@@ -122,9 +97,9 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
   <span class="note" id="sMsg"></span>
 </div>
 
-<h2>Configs & optimizer runs</h2>
+<h2>Configs & optimizer runs <span class="note">— ★ / stars come from your marks on the Optimize page</span></h2>
 <div class="card">
-  <table id="cfgT"><thead><tr><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
+  <table id="cfgT"><thead><tr><th></th><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
   <div class="note" style="margin-top:6px">“Backtest” publishes to the Backtests page. “Adopt” copies the parameters into the selected trader config (with automatic backup).
   Adopt target: <select id="adoptTarget"><option>config.json</option><option>config_spot.json</option></select></div>
 </div>
@@ -161,6 +136,14 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
   </div>
 </div>
 
+<h2>All running processes <span class="note">— everything on this machine, including processes this panel didn't start</span></h2>
+<div class="card">
+  <div id="procWarn"></div>
+  <table id="procT"><thead><tr><th>kind</th><th>pid</th><th>started</th><th>flags</th><th>command</th><th></th></tr></thead><tbody><tr><td colspan="6" class="kv">scanning…</td></tr></tbody></table>
+  <div class="row" style="margin-top:6px"><button class="small" onclick="refreshProcs()">↻ rescan</button>
+    <span class="note">“hidden” = not started by this panel (terminal-started or orphaned). More than one trader, or an executor you don't recognize, is exactly what this table is for.</span></div>
+</div>
+
 <h2>Jobs</h2>
 <div class="card" id="jobs">no jobs yet</div>
 
@@ -173,39 +156,176 @@ async function api(path, body){
   if(!r.ok) alert(j.error||'error');
   return j;
 }
-async function refresh(){
-  const s = await api('status');
-  $('tdot').className = 'dot ' + (s.running ? (s.live?'warn-dot':'on') : 'off');
-  $('tstate').textContent = s.running ? (s.live?'RUNNING — LIVE':'running (dry-run)') : 'stopped';
-  $('tinfo').textContent = ` · ${s.config} · mode ${s.mode||'?'} · method ${s.method||'?'} · equity $${s.equity_usdt}` + (s.started?` · since ${s.started}`:'');
-  $('levwarn').style.display = (s.mode==='lev')?'block':'none';
-  const p = s.position;
-  $('posbox').innerHTML = p ? `<span>position: <b class="${p.dir>0?'pos':'neg'}">${p.dir>0?'LONG':'SHORT'}</b></span>
-    <span class="kv">entry <b>${(+p.entry_price).toFixed(3)}</b></span>
-    <span class="kv">qty <b>${p.qty}</b></span> <span class="kv">lev <b>${(+p.lev).toFixed(1)}×</b></span>
-    <span class="kv">system <b>${p.system===0?'3m':'cross'}</b></span>
-    <span class="kv">opened <b>${p.opened_at||''}</b></span>` : '<span class="kv">no open position</span>';
-  $('tlog').textContent = (s.log||[]).join('\n') || '–';
-  try{
-    const w = await api('webhook/status');
-    $('wdot').className='dot '+(w.running?'on':'off');
-    if(w.running && w.port) document.querySelectorAll('#wport').forEach(x=>x.remove());
-    $('wportlbl').textContent = w.running && w.port ? ('running on port '+w.port) : '';
-    const failed = !w.running && (w.log||[]).length;
-    $('wlog').style.display = failed ? 'block' : 'none';
-    if(failed) $('wlog').textContent = 'executor last output (it is not running):\n'+w.log.join('\n');
-  }catch(e){}
-  try{
-    const tcs = await api('trader_configs');
-    const sel = $('tcfg');
-    const cur = sel.value;
-    sel.innerHTML = tcs.map(c=>`<option value="${c.file}">${c.file} — ${stratName(c.strategy)} · ${c.mode||'?'}</option>`).join('');
+// ---------------- instances ----------------
+let INSTS = [];                       // [{id, cfg, port, ...}] from /api/instances
+let CUR = localStorage.getItem('curInst') || '1';
+let LAYOUT = localStorage.getItem('instLayout') || 'tabs';
+let TCONFIGS = [];                    // trader config files (shared)
+const _shotAuto = {};                 // instance -> interval id
+
+function instCard(i){
+  return `<div class="card icard" id="icard_${i}">
+  <div class="iname">Instance ${i}</div>
+  <div class="row" style="justify-content:space-between">
+    <div>
+      <span id="tdot_${i}" class="dot off"></span><b id="tstate_${i}">stopped</b>
+      <span class="kv" id="tinfo_${i}"></span>
+    </div>
+    <div class="row">
+      <label>config</label>
+      <select id="tcfg_${i}" onchange="cfgChanged('${i}')"></select>
+      <button class="primary" onclick="startTrader('${i}',false)">Start dry-run</button>
+      <button class="danger" onclick="startTrader('${i}',true)">Start LIVE</button>
+      <button onclick="stopTrader('${i}')">Stop</button>
+      ${i!=='1'?`<button class="small" title="Remove this instance (must be fully stopped)" onclick="removeInstance('${i}')">✕ remove</button>`:''}
+    </div>
+  </div>
+  <div class="row" style="margin-top:6px"><span class="note" id="cfgSummary_${i}">…</span></div>
+  <div class="row" style="margin-top:4px"><span class="note"><b>Dry-run</b> = full strategy on live prices, orders only LOGGED. <b>LIVE</b> sends real orders through this instance's executor.</span></div>
+  <div id="posbox_${i}" class="row" style="margin-top:10px"></div>
+  <div class="warnbox" id="levwarn_${i}" style="display:none">
+    This config is <b>leveraged with NO stop loss</b>. A March-2024-style move liquidates the position.
+    Dry-run first; size only what you can lose entirely.
+  </div>
+  <pre id="tlog_${i}">–</pre>
+  <div class="row" style="margin-top:8px">
+    <span><span id="wdot_${i}" class="dot off"></span><b>MEXC executor</b> <span class="note" id="wportlbl_${i}"></span> <span class="note">(Playwright webhook server — browser profile instance_${i})</span></span>
+    <label title="Run Chrome hidden (no window). Use headed for the FIRST login — the captcha slider needs a real window."><input type="checkbox" id="wHeadless_${i}"> headless</label>
+    <button onclick="startExecutor('${i}')">Start executor</button>
+    <button onclick="stopExecutor('${i}')">Stop executor</button>
+    <button onclick="viewExecutor('${i}')" title="Screenshot of this executor's browser right now — works in headless mode">View live 📷</button>
+    <span id="wproxy_${i}" class="note"></span>
+  </div>
+  <div id="wshot_${i}" style="display:none;margin-top:8px">
+    <div class="row"><span class="note" id="wshotcap_${i}">live view</span>
+      <label title="auto-refresh every 2s"><input type="checkbox" id="wshotauto_${i}" onchange="refreshShot('${i}')"> auto</label>
+      <button onclick="refreshShot('${i}')">↻ refresh</button>
+      <button onclick="$('wshot_${i}').style.display='none';stopShotAuto('${i}')">close</button></div>
+    <img id="wshotimg_${i}" style="max-width:100%;border:1px solid var(--border);border-radius:6px;margin-top:4px">
+  </div>
+  <pre id="wlog_${i}" style="display:none"></pre>
+  <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+    <div class="row">
+      <b>Manual test orders</b>
+      <span class="note">REAL orders through this instance's executor when logged in. Start small (1 contract = 0.1 SOL). Close manual positions before starting the trader.</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label>symbol</label><input id="mSym_${i}" value="SOL_USDT" style="width:110px">
+      <label>leverage</label><input id="mLev_${i}" value="1" style="width:55px">
+      <label>quantity (contracts)</label><input id="mQty_${i}" value="1" style="width:70px">
+      <button class="small" onclick="manual('${i}','open_long')" style="color:var(--green)">Open LONG</button>
+      <button class="small" onclick="manual('${i}','open_short')" style="color:var(--red)">Open SHORT</button>
+      <button class="small" onclick="manual('${i}','close_long')">Close LONG</button>
+      <button class="small" onclick="manual('${i}','close_short')">Close SHORT</button>
+      <button class="small danger" onclick="manual('${i}','close_position')">Close ALL</button>
+    </div>
+    <pre id="mResult_${i}" style="display:none;margin-top:8px"></pre>
+  </div>
+</div>`;
+}
+
+function renderInstances(){
+  const wrap = $('instWrap'), tabs = $('instTabs');
+  if(!INSTS.some(x=>x.id===CUR)) CUR = INSTS[0] ? INSTS[0].id : '1';
+  tabs.innerHTML = LAYOUT==='tabs' ? INSTS.map(x=>
+    `<span class="tab ${x.id===CUR?'here':''}" id="tab_${x.id}" onclick="switchTab('${x.id}')">
+       <span class="dot off" id="tabdot_${x.id}"></span>Instance ${x.id}</span>`).join('') : '';
+  tabs.style.display = LAYOUT==='tabs' ? 'flex' : 'none';
+  wrap.className = LAYOUT==='cols' ? 'cols' : '';
+  $('main').className = LAYOUT==='cols' ? 'cols' : '';
+  wrap.innerHTML = INSTS.map(x=>instCard(x.id)).join('');
+  INSTS.forEach(x=>{
+    $('icard_'+x.id).style.display = (LAYOUT==='cols' || x.id===CUR) ? '' : 'none';
+    $('wHeadless_'+x.id).checked = !!x.headless;
+  });
+  fillCfgSelects();
+  refresh();
+}
+function switchTab(i){ CUR = i; localStorage.setItem('curInst', i); renderInstances(); }
+function toggleLayout(){
+  LAYOUT = LAYOUT==='tabs' ? 'cols' : 'tabs';
+  localStorage.setItem('instLayout', LAYOUT);
+  $('layoutBtn').textContent = LAYOUT==='tabs' ? '⫴ columns' : '▭ tabs';
+  renderInstances();
+}
+async function loadInstances(){
+  try{ INSTS = await api('instances'); }catch(e){ INSTS = [{id:'1'}]; }
+  $('layoutBtn').textContent = LAYOUT==='tabs' ? '⫴ columns' : '▭ tabs';
+  renderInstances();
+}
+async function addInstance(){
+  const r = await api('instances/add',{});
+  if(r.ok){ await api('instances'); CUR = r.id; localStorage.setItem('curInst', CUR); loadInstances(); }
+}
+async function removeInstance(i){
+  if(!confirm(`Remove instance ${i}? (Its trader and executor must be stopped.)`)) return;
+  const r = await api('instances/remove',{id:i});
+  if(r.ok){ CUR='1'; loadInstances(); }
+}
+function cfgChanged(i){
+  const x = INSTS.find(v=>v.id===i); if(x) x.cfg = $('tcfg_'+i).value;
+  updateCfgSummary(i);
+}
+function fillCfgSelects(){
+  INSTS.forEach(x=>{
+    const sel = $('tcfg_'+x.id); if(!sel) return;
+    const cur = sel.value || x.cfg;
+    sel.innerHTML = TCONFIGS.map(c=>`<option value="${c.file}">${c.file} — ${typeof stratName==='function'?stratName(c.strategy):c.strategy} · ${c.mode||'?'}</option>`).join('');
     if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
-    const c = tcs.find(x=>x.file===sel.value);
-    if(c) $('cfgSummary').innerHTML = `Selected config: <b>${c.file}</b> runs <b>${stratName(c.strategy)}</b> in <b>${c.mode}</b> mode`+
-      `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}`+
-      `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}.`;
+    updateCfgSummary(x.id);
+  });
+}
+function updateCfgSummary(i){
+  const sel = $('tcfg_'+i); if(!sel) return;
+  const c = TCONFIGS.find(x=>x.file===sel.value);
+  if(c) $('cfgSummary_'+i).innerHTML = `Selected config: <b>${c.file}</b> runs <b>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</b> in <b>${c.mode}</b> mode`+
+    `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}`+
+    `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}.`;
+}
+
+async function refreshInst(i){
+  try{
+    const s = await api('status?instance='+i);
+    const dot = s.running ? (s.live?'warn-dot':'on') : 'off';
+    $('tdot_'+i).className = 'dot ' + dot;
+    const td = $('tabdot_'+i); if(td) td.className = 'dot ' + dot;
+    $('tstate_'+i).textContent = s.running ? (s.live?'RUNNING — LIVE':'running (dry-run)') : 'stopped';
+    $('tinfo_'+i).textContent = ` · ${s.config} · mode ${s.mode||'?'} · method ${s.method||'?'} · equity $${s.equity_usdt}` + (s.started?` · since ${s.started}`:'');
+    $('levwarn_'+i).style.display = (s.mode==='lev')?'block':'none';
+    const p = s.position;
+    $('posbox_'+i).innerHTML = p ? `<span>position: <b class="${p.dir>0?'pos':'neg'}">${p.dir>0?'LONG':'SHORT'}</b></span>
+      <span class="kv">entry <b>${(+p.entry_price).toFixed(3)}</b></span>
+      <span class="kv">qty <b>${p.qty}</b></span> <span class="kv">lev <b>${(+p.lev).toFixed(1)}×</b></span>
+      <span class="kv">system <b>${p.system===0?'3m':'cross'}</b></span>
+      <span class="kv">opened <b>${p.opened_at||''}</b></span>` : '<span class="kv">no open position</span>';
+    $('tlog_'+i).textContent = (s.log||[]).join('\n') || '–';
   }catch(e){}
+  try{
+    const w = await api('webhook/status?instance='+i);
+    $('wdot_'+i).className='dot '+(w.running?'on':'off');
+    $('wportlbl_'+i).textContent = w.running && w.port
+      ? ('running on port '+w.port+(w.headless?' · headless':' · headed')) : '';
+    const pr = w.proxy||{state:'unknown'};
+    const wp = $('wproxy_'+i);
+    if(!w.running){ wp.textContent=''; }
+    else if(pr.state==='ok'){ wp.innerHTML = `<span class="pos">🔒 proxy OK</span> <span class="kv">egress ${pr.ip||'?'}</span>`; }
+    else if(pr.state==='leak'){ wp.innerHTML = `<span class="neg">⚠ PROXY LEAK — real IP exposed, DO NOT trade live</span>`; }
+    else if(pr.state==='none'){ wp.innerHTML = `<span style="color:var(--amber,#d29922)">no proxy (direct connection)</span>`; }
+    else { wp.innerHTML = `<span class="kv">proxy: checking…</span>`; }
+    const failed = !w.running && (w.log||[]).length;
+    $('wlog_'+i).style.display = failed ? 'block' : 'none';
+    if(failed) $('wlog_'+i).textContent = 'executor last output (it is not running):\n'+w.log.join('\n');
+  }catch(e){}
+}
+
+async function refresh(){
+  try{
+    TCONFIGS = await api('trader_configs');
+    fillCfgSelects();
+  }catch(e){}
+  for(const x of INSTS){
+    if(LAYOUT==='cols' || x.id===CUR || LAYOUT==='tabs') await refreshInst(x.id);
+  }
   const jobs = await api('jobs');
   $('jobs').innerHTML = jobs.length ? jobs.map(j=>`<div class="job">
     <div class="row" style="justify-content:space-between">
@@ -214,12 +334,98 @@ async function refresh(){
     </div>
     <pre>${(j.log||[]).join('\n')}</pre></div>`).join('') : 'no jobs yet';
 }
+
+async function startTrader(i, live){
+  const cfg = $('tcfg_'+i).value;
+  if(live){
+    const c = prompt(`Instance ${i}: this will place REAL orders via its executor.\nType LIVE to confirm:`);
+    if(c!=='LIVE') return;
+    await api('trader/start',{instance:i, config:cfg, live:true, confirm:'LIVE'});
+  } else {
+    await api('trader/start',{instance:i, config:cfg, live:false});
+  }
+  setTimeout(refresh,500);
+}
+async function stopTrader(i){ await api('trader/stop',{instance:i}); setTimeout(refresh,500); }
+async function startExecutor(i){
+  const headless = $('wHeadless_'+i).checked;
+  if(headless && !confirm("Start headless (no visible window)?\n\nUse headed (unchecked) for the FIRST login — the MEXC captcha slider needs a real window. Once logged in, headless reuses the saved session.\n\nStart headless anyway?")) return;
+  const r = await api('webhook/start',{instance:i, headless});
+  if(r.ok){
+    if(r.note) alert(r.note);
+    if(headless) setTimeout(()=>{ $('wshot_'+i).style.display='block'; refreshShot(i); }, 4000);
+    setTimeout(refresh,800);
+  }
+}
+async function stopExecutor(i){ await api('webhook/stop',{instance:i}); setTimeout(refresh,500); }
+async function forceStopExecutors(){
+  if(!confirm("Force-stop ALL executor processes (every instance)?\n\nThis also kills executors started from a terminal and any orphaned executor browser windows. Non-executor programs on ports 5001-5011 are left alone.\n\nYour MEXC logins are safe — they live in the browser profiles on disk.\n\nRunning traders can't place orders until executors are restarted.")) return;
+  const r = await api('webhook/force_stop',{});
+  alert((r.killed && r.killed.length ? 'force-stopped:\n  '+r.killed.join('\n  ') : 'nothing to stop')
+    + (r.skipped && r.skipped.length ? '\nleft alone:\n  '+r.skipped.join('\n  ') : ''));
+  setTimeout(refresh, 800); refreshProcs();
+}
+async function viewExecutor(i){
+  $('wshot_'+i).style.display='block';
+  await refreshShot(i);
+}
+async function refreshShot(i){
+  const img = $('wshotimg_'+i);
+  img.src = '/api/webhook/screenshot?instance='+i+'&t='+Date.now();
+  $('wshotcap_'+i).textContent = 'live view · '+new Date().toLocaleTimeString();
+  if($('wshotauto_'+i).checked && !_shotAuto[i]){ _shotAuto[i] = setInterval(()=>refreshShot(i), 2000); }
+  if(!$('wshotauto_'+i).checked) stopShotAuto(i);
+}
+function stopShotAuto(i){ if(_shotAuto[i]){ clearInterval(_shotAuto[i]); _shotAuto[i]=null; } }
+async function manual(i, action){
+  const qty = +$('mQty_'+i).value, lev = +$('mLev_'+i).value, sym = $('mSym_'+i).value;
+  const desc = action.replace('_',' ').toUpperCase() + (action.startsWith('open') ? ` ${qty} contract(s) of ${sym} at ${lev}x` : ` on ${sym}`);
+  const c = prompt(`Instance ${i} — this sends a REAL order to MEXC through its executor:\n\n  ${desc}\n\nType SEND to confirm:`);
+  if(c !== 'SEND') return;
+  const box = $('mResult_'+i);
+  box.style.display='block'; box.textContent = 'sending '+action+'…';
+  const r = await fetch('/api/manual',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({instance:i, action, symbol:sym, leverage:lev, quantity:qty})}).then(x=>x.json());
+  box.textContent = JSON.stringify(r, null, 1);
+}
+
+// ---------------- processes ----------------
+async function refreshProcs(){
+  try{
+    const r = await api('processes');
+    const ps = r.processes||[];
+    $('procWarn').innerHTML = (r.warnings||[]).map(w=>`<div class="warnbox">⚠ ${w}</div>`).join('');
+    const dupKinds = new Set();
+    ['trader','executor'].forEach(k=>{ if(ps.filter(p=>p.kind===k).length>1) dupKinds.add(k); });
+    document.querySelector('#procT tbody').innerHTML = ps.length ? ps.map(p=>`
+      <tr class="${dupKinds.has(p.kind)?'procdup':''}">
+        <td><b>${p.kind}</b></td><td>${p.pid}</td><td class="kv">${p.started}</td>
+        <td>${p.live?'<span class="neg" style="font-weight:700">LIVE</span> ':''}${p.me?'<span class="kv">(this panel)</span>':(p.panel_child?'<span class="kv">panel-started</span>':'<span style="color:var(--amber)">hidden</span>')}</td>
+        <td class="kv" style="font-size:11.5px;max-width:480px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.cmd.replace(/"/g,'&quot;')}">${p.cmd}</td>
+        <td>${p.me?'':`<button class="small" style="color:var(--red)" onclick="killProc(${p.pid},'${p.kind}',${p.live})">kill</button>`}</td>
+      </tr>`).join('') : '<tr><td colspan="6" class="kv">no strategy-lab processes running</td></tr>';
+  }catch(e){}
+}
+async function killProc(pid, kind, live){
+  if(!confirm(`Kill ${kind} pid ${pid}${live?' — it is running LIVE':''}?`)) return;
+  const r = await api('processes/kill',{pid});
+  if(r.ok){ refreshProcs(); setTimeout(refresh, 500); }
+}
+
+// ---------------- shared sections ----------------
 let CONFIGS=[];
+function rateHtml(c){
+  const star = c.best ? '<span class="star-on" title="marked best on the Optimize page">★</span>' : '';
+  const r = c.rating||0;
+  const stars = r ? `<span class="rate-star rate${r}" title="your rating on the Optimize page">${'★'.repeat(r)}</span>` : '';
+  return star + (star&&stars?' ':'') + stars;
+}
 async function refreshConfigs(){
   CONFIGS = await api('configs');
-  $('btPick').innerHTML = CONFIGS.map((c,i)=>`<option value="${i}">${c.label}</option>`).join('');
+  $('btPick').innerHTML = CONFIGS.map((c,i)=>`<option value="${i}">${c.best?'★ ':''}${c.rating?'★'.repeat(c.rating)+' ':''}${c.label}</option>`).join('');
   document.querySelector('#cfgT tbody').innerHTML = CONFIGS.map((c,i)=>`<tr>
-    <td>${c.label}</td><td>${stratName(c.strategy)}</td><td>${c.mode||''}</td><td>${c.method||''}</td>
+    <td style="white-space:nowrap">${rateHtml(c)}</td>
+    <td>${c.label}</td><td>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</td><td>${c.mode||''}</td><td>${c.method||''}</td>
     <td>${c.eq?('$'+Math.round(c.eq).toLocaleString()):''}</td>
     <td>${c.maxdd?((100*c.maxdd).toFixed(0)+'%'):''}</td><td>${c.n||''}</td>
     <td><button class="small" onclick="btFromRow(${i})">Backtest</button>
@@ -245,35 +451,6 @@ async function saveSettings(){
     body:JSON.stringify({equity_usdt:+$('sEquity').value, poll_seconds:+$('sPoll').value,
       webhook_url:$('sHook').value, emergency_exit_adverse: em?(+em/100):null})}).then(r=>r.json());
   $('sMsg').textContent = r.ok ? 'saved ✓ (restart trader to apply)' : (r.error||'error');
-}
-async function startTrader(live){
-  if(live){
-    const c = prompt("This will place REAL orders via the Playwright webhook.\nType LIVE to confirm:");
-    if(c!=='LIVE') return;
-    await api('trader/start',{config:$('tcfg').value, live:true, confirm:'LIVE'});
-  } else {
-    await api('trader/start',{config:$('tcfg').value, live:false});
-  }
-  setTimeout(refresh,500);
-}
-async function stopTrader(){ await api('trader/stop',{}); setTimeout(refresh,500); }
-async function manual(action){
-  const qty = +$('mQty').value, lev = +$('mLev').value, sym = $('mSym').value;
-  const desc = action.replace('_',' ').toUpperCase() + (action.startsWith('open') ? ` ${qty} contract(s) of ${sym} at ${lev}x` : ` on ${sym}`);
-  const c = prompt(`This sends a REAL order to MEXC through the executor:\n\n  ${desc}\n\nType SEND to confirm:`);
-  if(c !== 'SEND') return;
-  const box = $('mResult');
-  box.style.display='block'; box.textContent = 'sending '+action+'…';
-  const r = await fetch('/api/manual',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action, symbol:sym, leverage:lev, quantity:qty})}).then(x=>x.json());
-  box.textContent = JSON.stringify(r, null, 1);
-}
-async function startExecutor(){
-  const r = await api('webhook/start',{port:5001});
-  if(r.ok){
-    if(r.note) alert(r.note);
-    setTimeout(refresh,800);
-  }
 }
 async function runBacktest(){
   const cfg = $('btCfg').value.trim() || CONFIGS[+$('btPick').value]?.path;
@@ -302,9 +479,10 @@ async function fixCaches(){
   alert('Removed:\n'+(r.removed.length?r.removed.join('\n'):'nothing needed removing'));
   runDoctor();
 }
-refresh(); refreshConfigs(); loadSettings(); runDoctor();
+loadInstances(); refreshConfigs(); loadSettings(); runDoctor(); refreshProcs();
 setInterval(refresh, 4000);
 setInterval(refreshConfigs, 20000);
+setInterval(refreshProcs, 10000);
 </script>
 </body>
 </html>

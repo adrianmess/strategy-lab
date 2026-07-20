@@ -1,0 +1,22 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 15.058514247041987,
+  "total_mult": 30.964848707354673,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0712_1726_full",
+  "at": "2026-07-12 17:28"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 18.424207564003936,
+  "total_mult": 62.70670758504511,
+  "gap_mode": "skip_contaminated",
+  "backtest": "opt2_0712_1726_oosbest_full",
+  "at": "2026-07-12 17:28"
+ }
+}

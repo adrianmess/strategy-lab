@@ -14,12 +14,29 @@ body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,'
 header{padding:20px 32px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;justify-content:space-between;align-items:center}
 h1{margin:0;font-size:20px}
 a{color:var(--blue);text-decoration:none}
-main{padding:24px 32px;max-width:1400px;margin:0 auto}
+main{padding:24px 32px}
 h2{font-size:16px;border-bottom:1px solid var(--border);padding-bottom:8px}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
 th{color:var(--dim)} th:first-child,td:first-child{text-align:left}
 tr:hover td{background:#1c2129} tr.sel td{background:#1f3a5f}
+tr.rate1 td{background:rgba(210,153,34,.07)}
+tr.rate2 td{background:rgba(45,186,150,.07)}
+tr.rate3 td{background:rgba(63,185,80,.10)}
+tr.rate1 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+tr.rate2 td:first-child{box-shadow:inset 3px 0 0 rgb(45,186,150)}
+tr.rate3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tr.best td{background:rgba(63,185,80,.08)}
+tr.best td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tr.best:hover td{background:rgba(63,185,80,.14)} tr.best.sel td{background:#1f3a5f}
+button.star{background:none;border:none;cursor:pointer;font-size:14px;color:var(--dim)}
+button.star:hover{color:var(--green)} button.star.on{color:var(--green)}
+.rstars{white-space:nowrap;font-size:14px;letter-spacing:1px;cursor:pointer;user-select:none}
+.rstars span{color:var(--dim);opacity:.4}
+.rstars span:hover{opacity:1}
+.rstars.r1 span.on{color:var(--amber);opacity:1}
+.rstars.r2 span.on{color:rgb(45,186,150);opacity:1}
+.rstars.r3 span.on{color:var(--green);opacity:1}
 .pos{color:var(--green)}.neg{color:var(--red)}.warn{color:var(--amber)}
 .chartbox{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin:16px 0}
 .flex{display:flex;gap:16px;flex-wrap:wrap}.flex>div{flex:1;min-width:420px}
@@ -58,6 +75,8 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
     <label class="hint">Strategy<br><select id="qbStrat">
       <option value="prime_original">Solana Prime — ORIGINAL (full pine logic)</option>
       <option value="v5_original">V5.2 Crossover — ORIGINAL (full pine logic)</option>
+      <option value="macdx_original">MACD Crossover (TP/SL/Time/Hist) — ORIGINAL (full pine logic)</option>
+      <option value="rocx_original">V4 ROC/SMA Trend — ORIGINAL (full pine logic)</option>
       <option value="prime">V5 family · Solana Prime</option>
       <option value="prime7">V5 family · Prime7</option>
       <option value="v7">V5 family · V7 full-param</option>
@@ -81,12 +100,17 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 
 <section>
   <h2>All published backtests</h2>
-  <p class="hint">Click a row to inspect · click column headers to sort · run new backtests from the <a href="optimize.html">Optimize page</a>.</p>
+  <p class="hint">Click a row to inspect · click column headers to sort · tick checkboxes to combine their source runs · run new backtests from the <a href="optimize.html">Optimize page</a>.</p>
+  <div id="cmbBar" style="display:none;margin:4px 0 8px">
+    <span id="cmbCount" style="font-weight:600"></span>
+    <button onclick="sendToCombine()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are prefilled in the Combine row on the Optimize page">→ combine these runs on the Optimize page</button>
+    <button onclick="clearCmbSel()">clear</button>
+  </div>
   <div class="tablewrap">
   <table id="bt"><thead><tr>
     <th>name</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th>optimizer settings</th><th>growth/mo</th>
-    <th>total ×</th><th>liq?</th><th>max DD (MTM)</th><th>stops</th><th>trades</th><th>win</th>
-    <th>gaps</th><th>created</th><th></th>
+    <th>total %</th><th>total ×</th><th>liq?</th><th>max DD (MTM)</th><th>stops</th><th>trades</th><th>win</th>
+    <th>gaps</th><th>created</th><th title="your quality rating: ★ good, ★★ very good, ★★★ great — click to sort">rating</th><th></th>
   </tr></thead><tbody></tbody></table>
   </div>
 </section>
@@ -105,7 +129,7 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
   </div>
   <h2 style="margin-top:14px">Trades <span class="hint" id="tcount"></span></h2>
   <div style="max-height:340px;overflow-y:auto">
-  <table id="tt"><thead><tr><th>entry</th><th>exit</th><th>dir</th><th>entry px</th><th>exit px</th><th>net</th><th>worst excursion</th><th>reason</th><th>lev</th></tr></thead><tbody></tbody></table>
+  <table id="tt"><thead><tr><th>entry</th><th>exit</th><th>dir</th><th>entry px</th><th>exit px</th><th title="price move in the trade's direction; hover a value for the leveraged equity impact">% gain</th><th>net</th><th>worst excursion</th><th>reason</th><th>lev</th></tr></thead><tbody></tbody></table>
   </div>
   <div id="openinfo" style="margin:6px 0"></div>
   <div id="gapinfo" class="hint" style="margin-top:10px"></div>
@@ -216,14 +240,33 @@ async function reloadBacktests(selectName){
 }
 const BT = window.BACKTESTS||[];
 const tb = document.querySelector('#bt tbody');
-let sel = null, chart=null, sortKey='created', sortDir=-1;
+let sel = null, chart=null,
+    sortKey = localStorage.getItem('btSortKey') || 'created',
+    sortDir = +(localStorage.getItem('btSortDir') || -1) || -1;
+const CMBSEL = new Set();
+function updateCmbBar(){
+  document.getElementById('cmbBar').style.display = CMBSEL.size ? '' : 'none';
+  document.getElementById('cmbCount').textContent = CMBSEL.size + ' selected';
+}
+function clearCmbSel(){ CMBSEL.clear(); updateCmbBar(); render(); }
+function sendToCombine(){
+  localStorage.setItem('cmbFromBt', JSON.stringify([...CMBSEL]));
+  location.href = 'optimize.html';
+}
 function fp(x){return (x>=0?'+':'')+x.toFixed(2)+'%'}
 function fm(x){return x>=1000?x.toExponential(1):x.toFixed(2)}
-const COLKEYS = ['name','kind','strategy','mode','method','optstr','s.monthly_growth_pct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win',null,'created',null];
-function colval(e,k){ if(!k)return null; if(k==='optstr') return e.opt ? [e.opt.algo,e.opt.param_set,e.opt.holdout].join(' ') : ''; if(k.startsWith('s.')) return e.stats[k.slice(2)]; return e[k]; }
+const COLKEYS = ['name','kind','strategy','mode','method','optstr','s.monthly_growth_pct','totalpct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win',null,'created','rating',null];
+function totalPct(e){ const s=e.stats; if(!s || s.liq || s.total_mult==null || !isFinite(s.total_mult)) return null; return (s.total_mult-1)*100; }
+function fTotalPct(e){ const p=totalPct(e); if(p==null) return '<span class="hint">—</span>';
+  const t = Math.abs(p)>=10000 ? (p>=0?'+':'')+p.toExponential(2)+'%'
+          : (p>=0?'+':'')+p.toLocaleString(undefined,{maximumFractionDigits:1})+'%';
+  return `<span class="${p>=0?'pos':'neg'}">${t}</span>`; }
+function colval(e,k){ if(!k)return null; if(k==='totalpct') return totalPct(e); if(k==='optstr') return e.opt ? [e.opt.algo,e.opt.param_set,e.opt.holdout].join(' ') : ''; if(k.startsWith('s.')) return e.stats[k.slice(2)]; return e[k]; }
 document.querySelectorAll('#bt th').forEach((th,i)=>{
   th.onclick = ()=>{ if(!COLKEYS[i])return;
-    sortDir = (sortKey===COLKEYS[i])?-sortDir:-1; sortKey=COLKEYS[i]; render(); };
+    sortDir = (sortKey===COLKEYS[i])?-sortDir:-1; sortKey=COLKEYS[i];
+    localStorage.setItem('btSortKey', sortKey); localStorage.setItem('btSortDir', sortDir);
+    render(); };
 });
 function gapBadge(e){
   const g = e.gap_handling;
@@ -244,27 +287,57 @@ function render(){
       return sortDir*((va??-1e18)-(vb??-1e18));
     });
   }
-  tb.innerHTML = order.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}">
+  tb.innerHTML = order.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
     <td>${e.name}</td><td>${e.kind||''}</td><td>${stratName(e.strategy)}</td>
     <td><span class="pill ${e.mode}">${e.mode||''}</span></td><td>${e.method||''}</td>
     <td class="hint" style="font-size:11.5px">${e.opt ? [e.opt.algo, e.opt.param_set, 'holdout: '+e.opt.holdout, e.opt.max_dd!=null?('DD≤'+Math.round(100*e.opt.max_dd)+'%'):(e.mode==='lev'?'DD≤80%':'DD≤50%'), e.opt.max_hold_days?('≤'+e.opt.max_hold_days+'d in trade'):null, e.opt.gap_mode?('gaps: '+e.opt.gap_mode.replace('skip_','')):null, e.opt.lockbox?('lockbox '+e.opt.lockbox):null, (e.opt.scoring&&e.opt.scoring!=='classic')?('scoring: '+e.opt.scoring.replace('_','-')):null, e.opt.anchor?('anchored ('+e.opt.anchor+(e.opt.anchor_strength?(', λ'+e.opt.anchor_strength):'')+')'):null, e.opt.evaluated?(e.opt.evaluated.toLocaleString()+' evals'):null].filter(Boolean).join(' · ') : '—'}</td>
     <td class="${s.monthly_growth_pct>=0?'pos':'neg'}">${fp(s.monthly_growth_pct)}</td>
+    <td>${fTotalPct(e)}</td>
     <td>${fm(s.total_mult)}</td>
     <td class="${s.liq?'neg':'pos'}">${s.liq?'LIQ':'no'}</td>
     <td class="${(s.maxdd_mtm||0)>0.5?'warn':''}">${(100*(s.maxdd_mtm??0)).toFixed(1)}%</td>
     <td>${s.sl_hits??0}</td><td>${s.n??''}</td><td>${(100*(s.win||0)).toFixed(0)}%</td>
     <td>${gapBadge(e)}</td>
     <td class="hint">${e.created||''}</td>
-    <td><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+    <td><span class="rstars r${e.rating||0}" title="quality rating — independent of the ★ best mark">${[1,2,3].map(k=>
+      `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
+    <td style="white-space:nowrap"><input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page"><button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
     if(row){
-      row.insertAdjacentHTML('afterend', `<tr class="detailrow"><td colspan="16" id="detailCell" style="background:var(--bg)"></td></tr>`);
+      row.insertAdjacentHTML('afterend', `<tr class="detailrow"><td colspan="18" id="detailCell" style="background:var(--bg)"></td></tr>`);
       document.getElementById('detailCell').appendChild(holder);
       holder.style.display='';
     }
   }
+  tb.querySelectorAll('input.cmbSel').forEach(cb=>cb.onclick=ev=>{
+    ev.stopPropagation();
+    if(cb.checked) CMBSEL.add(cb.dataset.name); else CMBSEL.delete(cb.dataset.name);
+    updateCmbBar();
+  });
+  tb.querySelectorAll('.rstars span[data-rname]').forEach(sp=>sp.onclick=async ev=>{
+    ev.stopPropagation();
+    const e = BT.find(x=>x.name===sp.dataset.rname); if(!e) return;
+    try{
+      const r = await fetch('/api/backtests/rate',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({name:e.name,rating:+sp.dataset.rv})});
+      if(!r.ok){ alert('rating failed'); return; }
+      if(+sp.dataset.rv) e.rating = +sp.dataset.rv; else delete e.rating;
+      render();
+    }catch(err){alert('Rating needs the control-panel server (open this page via http://127.0.0.1:8800)');}
+  });
+  tb.querySelectorAll('button.star').forEach(b=>b.onclick=async ev=>{
+    ev.stopPropagation();
+    const e = BT.find(x=>x.name===b.dataset.name); if(!e) return;
+    try{
+      const r = await fetch('/api/backtests/mark',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({name:e.name,best:!e.best})});
+      if(!r.ok){ alert('mark failed'); return; }
+      if(!e.best) e.best = true; else delete e.best;
+      render();
+    }catch(err){alert('Marking needs the control-panel server (open this page via http://127.0.0.1:8800)');}
+  });
   tb.querySelectorAll('button.del').forEach(b=>b.onclick=async ev=>{
     ev.stopPropagation();
     if(!confirm(`Delete backtest entry "${b.dataset.name}"?`))return;
@@ -290,7 +363,15 @@ function select(i){
   sel=i; render();
   if(i===null){ if(chart){chart.destroy();chart=null;} return; }
   const e = BT[i];
-  document.getElementById('ct').innerHTML = `<b>${e.name}</b> · ${stratName(e.strategy)}
+  const tm = e.stats && e.stats.total_mult;
+  let totalHtml = '';
+  if(!e.stats.liq && tm!=null && isFinite(tm)){
+    const pct = (tm-1)*100;
+    const ptxt = Math.abs(pct)>=10000 ? (pct>=0?'+':'')+pct.toExponential(2)+'%'
+               : (pct>=0?'+':'')+pct.toLocaleString(undefined,{maximumFractionDigits:1})+'%';
+    totalHtml = ` · <span class="${pct>=0?'pos':'neg'}" title="total gain over the whole backtest: final equity ÷ starting equity − 1">total ${ptxt}</span>`;
+  }
+  document.getElementById('ct').innerHTML = `<b>${e.name}</b> · ${stratName(e.strategy)}${totalHtml}
     <button style="margin-left:12px;padding:3px 10px;font-size:12px;cursor:pointer;border-radius:6px"
       title="Open the Optimize page with this configuration loaded — continue improving it"
       onclick="optimizeThis()">⚙ Optimize this →</button>`;
@@ -316,18 +397,23 @@ function select(i){
     `<span class="${o.at==='end of data'?'neg':'hint'}" style="font-weight:600">⚠ OPEN POSITION at ${o.at}: ${o.dir.toUpperCase()} entered ${o.entry_t} @ $${o.entry.toFixed(2)} · ` +
     `mark $${o.mark.toFixed(2)} (${(100*o.move_pct).toFixed(1)}% ${o.move_pct<0?'underwater':'in profit'} at ${o.lev.toFixed(1)}×, ` +
     `unrealized ${o.unreal>=0?'+':''}$${o.unreal.toFixed(0)}) as of ${o.as_of}. Not included in the stats above.</span>`).join('<br>');
+  const fpc = (pct,lev)=>`<span class="${pct>=0?'pos':'neg'}" title="price move ${(pct>=0?'+':'')+pct.toFixed(2)}%${lev>1?` · ×${lev.toFixed(1)} leverage = ${(pct*lev>=0?'+':'')+(pct*lev).toFixed(2)}% equity impact`:''}">${(pct>=0?'+':'')+pct.toFixed(2)}%</span>`;
   const openRows = ops.map(o=>`<tr style="background:rgba(248,81,73,.08)">
     <td>${o.entry_t}</td><td><b>OPEN</b> (${o.at==='end of data'?'end of data':'gap'})</td><td>${o.dir}</td>
     <td>${o.entry.toFixed(3)}</td><td>${o.mark.toFixed(3)} <span class="hint">mark</span></td>
+    <td>${fpc(100*o.move_pct, o.lev)} <span class="hint">unrealized</span></td>
     <td class="${o.unreal>=0?'pos':'neg'}">${o.unreal.toFixed(2)} <span class="hint">unrealized</span></td>
-    <td>${(100*o.move_pct).toFixed(2)}%</td>
+    <td>—</td>
     <td class="neg">still open</td><td>${o.lev.toFixed(1)}×</td></tr>`).join('');
-  tt.innerHTML = openRows + tr.slice().reverse().map(t=>`<tr>
+  tt.innerHTML = openRows + tr.slice().reverse().map(t=>{
+    const pct = 100*(t.exit/t.entry-1)*(t.dir==='long'?1:-1);
+    return `<tr>
     <td>${(t.entry_t||'').slice(0,16)}</td><td>${(t.exit_t||'').slice(0,16)}</td><td>${t.dir}</td>
     <td>${t.entry.toFixed(3)}</td><td>${t.exit.toFixed(3)}</td>
+    <td>${fpc(pct, t.lev)}</td>
     <td class="${t.net>=0?'pos':'neg'}">${t.net.toFixed(2)}</td>
     <td>${(100*t.mae).toFixed(2)}%</td>
-    <td class="${t.reason==='profit_target'?'':'neg'}">${t.reason}</td><td>${t.lev.toFixed(1)}×</td></tr>`).join('');
+    <td class="${t.reason==='profit_target'?'':'neg'}">${t.reason}</td><td>${t.lev.toFixed(1)}×</td></tr>`}).join('');
   const g = e.gap_handling;
   const gm = e.gap_mode ? ` Gap mode: <b>${e.gap_mode}</b>${e.gap_mode==='skip_contaminated'?` — entries were additionally suppressed on ${(e.suppressed_bars||0).toLocaleString()} bars while indicators re-converged after small in-segment gaps`:''}.` : '';
   document.getElementById('gapinfo').innerHTML = g ?
@@ -339,15 +425,13 @@ function select(i){
 }
 (function(){
   if(!BT.length){ render(); return; }
+  // only auto-expand when a specific backtest was linked to (?sel=name)
   const want = new URLSearchParams(location.search).get('sel');
-  let idx = want ? BT.findIndex(e=>e.name===want) : -1;
-  if(idx < 0){
-    idx = 0;
-    for(let i=1;i<BT.length;i++) if((BT[i].created||'') > (BT[idx].created||'')) idx = i;
-  }
+  const idx = want ? BT.findIndex(e=>e.name===want) : -1;
+  if(idx < 0){ render(); return; }
   select(idx);
   const row = tb.querySelector(`tr[data-i="${idx}"]`);
-  if(row && want) row.scrollIntoView({block:'center'});
+  if(row) row.scrollIntoView({block:'center'});
 })();
 </script>
 </body>

@@ -118,6 +118,119 @@ continuous backtest, actively trading through 2026)
 Both come from run **auto_v7_D_vol3_te0901_mh7** (v7 · lev · vol3 · train-end 2025-09-01 ·
 max-hold 7d · max-DD 60% · underwater scoring · anchored to live defaults λ0.3 · 500k evals).
 
+# SPOT Campaign — day-trade/scalp, long-only 1x (Adrian, 2026-07-12)
+
+**Mission**: spot-mode configs that day-trade/scalp toward ~1%/day equivalent.
+Tiers: STRETCH ≥~35%/mo · STRONG ≥10%/mo · MEANINGFUL ≥3%/mo and beats buy-and-hold
+with lower DD. 14 procs; budget ladder 10k → 100k → 500k → 1M as results warrant.
+
+**Benchmarks (buy-and-hold SOL over our data)**: −0.9%/mo overall; −2.6%/mo
+(Nov-24..Nov-25) and −9.6%/mo (Nov-25..Jul-26) in the last 19 months; holdout
+window (after 2025-09-01) is deep bear. ANY positive holdout %/mo is real alpha.
+Spot economics: 0.10% round-trip fees → a 0.4% scalp keeps ~75% of gross;
+long-only → must be OUT of the market most of the bear tape (trend3's down-regime
+can disable longs — key lever).
+
+**Context**: spot spaces are now separate (@spot, wide exits after the pinned-walls
+diagnosis) and the spot leverage/shorts mutation leak is fixed — all pre-fix flat
+spot results were invalid. Clean prior art: __macdx_spotspace_test OOS-best
++2.1%/mo full-history, no liq (swing character, PT 8-11%).
+
+## Wave 1 — scouting at 10k evals (all: spot · 14 procs · train-end 2025-09-01 ·
+genetic · classic scoring · skip_contaminated · wide @spot spaces)
+
+| run | strategy | regime | rationale |
+|---|---|---|---|
+| spotcamp_A_macdx_vol3_10k | macdx | vol3 | crossover system, volatility-keyed params |
+| spotcamp_B_macdx_trend3_10k | macdx | trend3 | H: long-only needs down-regime long-blocking |
+| spotcamp_C_scalpx2_vol3_10k | scalpx2 | vol3 | scalp family, full-param variants |
+| spotcamp_D_scalpx2_trend3_10k | scalpx2 | trend3 | scalp + direction awareness |
+| spotcamp_E_prime_trend3_10k | prime | trend3 | dip system + down-regime blocking |
+
+### Wave 1 results (10k each; holdout = after 2025-09-01, deep bear, B&H ≈ −13%/mo)
+
+- **E prime·trend3 — WINNER.** Only positive holdout: OOS-best +0.8%/mo (dd 21%,
+  tpm 15.4, in-market 29%). Full backtest +6.6%/mo, ×4.8, no liq. Day-trade cadence,
+  mostly OUT of the market — the trend3 long-blocking hypothesis works on spot.
+- A macdx·vol3 — full +3.2–3.6%/mo but holdout −1.3%/mo (in-sample flattered). Keep.
+- B macdx·trend3 — holdout −2.4, full +2.1. C scalpx2·vol3 — worst (holdout −7.5,
+  dd 58%). D scalpx2·trend3 — holdout −2.3, full +1.9. Scalp family struggles with
+  spot fees; prime's dip-buy + trend gate fits the tape better.
+
+**Wave 2**: scale E and A to 100k evals, same recipes (budget is the only change).
+
+### Wave 2 results (100k) + the spot pool-scan fix
+
+Raw 100k finalize looked WORSE (both holdouts negative) — cause found: the finalize
+scan's early-stop ("stop after 10 non-liquidated") degenerates on spot, where nothing
+can liquidate, to "scan only the top-10 in-sample". FIXED: spot scans the whole
+pool + reservoir. Re-finalized both runs; true OOS-bests were deep in the reservoir
+(train-ranks #525 and #506), consistent with the lev-campaign reservoir doctrine.
+
+- **E2 prime·trend3 100k, OOS-best #525**: holdout +3.3%/mo dd 0%; full backtest
+  +3.6%/mo, ×2.41. Clean 1x long-only.
+- **A2 macdx·vol3 100k, OOS-best #506**: holdout +0.6%/mo dd 20%; full backtest
+  +5.2%/mo, ×3.49.
+Both beat B&H (−0.9%/mo overall, −13%/mo holdout window) with far lower DD ->
+MEANINGFUL tier cleared. E-anatomy (10k OOS-best): 98% win rate, +0.72% avg win,
+median hold 1.2h, but 8 stop-losses averaging −11.3% = all the bleed months.
+
+**Wave 3**: 500k on both recipes; plus two tail-cutting variants at 100k on E
+(underwater scoring · max-hold 2d) aimed at the −11% stop-riders.
+
+### Wave 3 results — plateau found, hypotheses settled
+
+- **500k adds nothing over 100k** (E3 OOS +2.9%/mo ≈ E2's +3.3; A3 OOS-best =
+  literally A2's pick). 100k evals is the budget sweet spot for spot searches.
+- **Tail-cutting REJECTED both ways**: underwater scoring (E4) halved the holdout
+  (+1.7 vs +3.3); max-hold 2d (E5) killed the edge (−0.3). The rare −11% stops are
+  the price of the 98%-win dip-buying character, not removable inefficiency.
+
+### Addendum — V4 ROC/SMA (rocx) ported and campaigned (2026-07-12)
+
+New strategy ported from Adrian's pine: long-only, entries only on new 45-min
+buckets when sampled 1-min ROC(low) falls toward the present AND the 45-min SMA
+slope is up; TP vs signal close; pine-exact "trailing" stop that FOLLOWS the
+close both directions (fires only on a single-close 2% drop). Engine validated
+11/13 vs the TV export (1 sub-tick feed diff, 1 beyond-data exit); wired in as
+rocx_original (quick backtest) + rocx (optimizer, per-regime, ROC/SMA length
+variant menus, spot/lev spaces).
+
+Campaign (spot, train-end 2025-09-01, full pool scans):
+- defaults (pine values): −2.3%/mo full history, ×0.56 — loses.
+- R1 vol3 10k: OOS-best −0.4%/mo holdout; R2 trend3 10k: −0.8.
+- R3 vol3 100k / R4 trend3 100k: NO positive-holdout candidate in either full
+  600-scan (best −2.6%/mo). More budget made it worse (deeper in-sample fit).
+**Verdict: rocx has no spot edge in the bear holdout — its dip-buy needs the
+45-min uptrend that the holdout doesn't have. Does NOT displace E2/A2.**
+Full-history OOS-config numbers (+1.6..+4.1%/mo) are in-sample-era earnings;
+holdout says don't trust them.
+
+## SPOT CAMPAIGN — FINAL RESULT
+
+Winners (both clean 1x long-only, positive holdout in a −13%/mo B&H window):
+1. **spotcamp_A2_macdx_vol3_100k_oosbest_full** — +5.2%/mo full history (×3.5),
+   holdout +0.6%/mo dd 20%. Character: 63% win, symmetric ±3.9%, ~11h holds,
+   PT 6–10%, SL ~4.5%. 6 neg months / 23.
+2. **spotcamp_E2_prime_trend3_100k_oosbest_full** — +3.6%/mo full (×2.4), holdout
+   **+3.3%/mo dd 0%**. Character: 98% win, +0.72% avg, 1.2h median holds,
+   in-market 29%; bleed = 8 stops averaging −11%.
+3. **50/50 blend** (monthly corr 0.16): **+4.5%/mo, worst month −4.0%, 4 neg
+   months / 23** — the drawdown halves while keeping most of the return.
+
+vs mission tiers: MEANINGFUL cleared decisively (beat B&H by ~5-6%/mo with a
+fraction of the DD); STRONG (≥10%/mo) not reached; STRETCH 1%/day (~35%/mo) is
+not achievable on 1x long-only spot with these engines — best observed ≈0.17%/day
+equivalent. The honest lever for more: leverage (lev mode already delivers this),
+or new entry signals, not more optimization budget.
+
+Machinery fixed during the campaign: spot mutation leverage/shorts leak;
+spot pool-scan early-stop (now scans all pool+reservoir on spot).
+Next candidates (not run): walk-forward validation of A2/E2 before any live use;
+portfolio backtest feature for the blend.
+
+---
+
 ## Why this recipe worked (and the others didn't)
 
 - **Continuous training is non-negotiable for no-liq.** Every blocked evaluation

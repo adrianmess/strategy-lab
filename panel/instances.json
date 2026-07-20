@@ -1,0 +1,7 @@
+{
+ "1": {
+  "cfg": "config.json",
+  "port": 5002,
+  "headless": true
+ }
+}

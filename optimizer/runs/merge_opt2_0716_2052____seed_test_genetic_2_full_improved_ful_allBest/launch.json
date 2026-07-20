@@ -1,0 +1,17 @@
+[
+ {
+  "at": "2026-07-17 12:59:12",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --algo genetic --mode lev --method vol3 --procs 14 --batch 100 --name merge_opt2_0716_2052____seed_test_genetic_2_full_improved_ful_allBest --total 100000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated --resume-from runs/merge_opt2_0716_2052____seed_test_genetic_2_full_improved_full_3best,runs/auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2_stop1.15,runs/auto_v7_D_vol3_te0901_mh10_1mil_stop1.15,runs/__seed_test_genetic_2_full_improved_full,runs/auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2,runs/auto_v7_D_vol3_te0901_mh7_eval-1mil,runs/auto_v7_D_vol3_te0901_mh7,runs/10_000 --merge-mode breed",
+  "resume_from": [
+   "runs/merge_opt2_0716_2052____seed_test_genetic_2_full_improved_full_3best",
+   "runs/auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2_stop1.15",
+   "runs/auto_v7_D_vol3_te0901_mh10_1mil_stop1.15",
+   "runs/__seed_test_genetic_2_full_improved_full",
+   "runs/auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2",
+   "runs/auto_v7_D_vol3_te0901_mh7_eval-1mil",
+   "runs/auto_v7_D_vol3_te0901_mh7",
+   "runs/10_000"
+  ],
+  "merge_mode": "breed"
+ }
+]

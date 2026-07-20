@@ -1,0 +1,1 @@
+{"cand": {"rocNumBars": 3, "smaNumBars": 2, "vRoc": 2, "vSma": 1, "profitTargetPct": 0.03, "trailStopPct": 0.02, "leverage": 1.0, "enableLong": 1.0}, "strategy": "rocx_original", "mode": "spot", "method": "none", "kind": "quick backtest (no optimizer)"}

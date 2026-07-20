@@ -27,3 +27,23 @@ tr.sel td{background:var(--sel)!important}
 #themeToggle{margin-left:18px;cursor:pointer;background:none!important;border:1px solid var(--border)!important;
   border-radius:14px;padding:3px 10px;font-size:12px;color:var(--dim)!important}
 #themeToggle:hover{color:var(--fg)!important}
+
+/* --- interaction feedback: buttons visibly depress, forms glow on focus --- */
+button{transition:background .12s,border-color .12s,transform .05s,box-shadow .12s,filter .05s;
+  box-shadow:0 1px 2px rgba(0,0,0,.3)}
+button:hover{border-color:#8b949e66!important}
+button:active{transform:translateY(1px) scale(.98);filter:brightness(.88);
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.4)!important}
+button:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+button:disabled{opacity:.5;cursor:not-allowed;transform:none;filter:none}
+select,input:not([type=checkbox]):not([type=radio]){
+  transition:border-color .12s,box-shadow .12s;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.25);border-radius:6px!important}
+select:hover,input:hover{border-color:#8b949e!important}
+select:focus,input:focus{border-color:var(--blue)!important;outline:none!important;
+  box-shadow:0 0 0 3px rgba(88,166,255,.18),inset 0 1px 2px rgba(0,0,0,.25)!important}
+input::placeholder{color:var(--dim);opacity:.65}
+select{cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:26px!important;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%238b949e' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>")!important;
+  background-repeat:no-repeat!important;background-position:right 9px center!important}
+input[type=checkbox]{accent-color:var(--blue);cursor:pointer;box-shadow:none}

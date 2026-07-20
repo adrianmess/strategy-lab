@@ -24,7 +24,7 @@ Notes:
 Resumable: same --name continues. Output: runs/<name>/best_config.json
 """
 import _bootstrap as B
-import argparse, json, os, signal, time
+import argparse, json, os, signal, sys, time
 import multiprocessing as mp
 import numpy as np
 
@@ -71,9 +71,10 @@ def worker(args):
         for _s, _c, _m in res:
             _c["strategy"] = strategy
         return _apply_anchor(res, payload, space, strategy)
-    # flat-candidate strategies (prime / v6 / scalpx) via the wf2 engine
+    # flat-candidate strategies (prime / v6 / scalpx / macdx) via the wf2 engine
     import wf2 as W
-    G = W.load_globals(("v6",) if strategy == "prime" else (strategy,))
+    G = W.load_globals({"prime": ("v6",), "macdx": ("v6", "macdx"),
+                        "rocx": ("v6", "rocx")}.get(strategy, (strategy,)))
     R = G["nreg"][payload["method"]]
     strip = lambda res: [(s, c, {k: v for k, v in m.items() if k != "trades"})
                          for s, c, m in res]
@@ -93,7 +94,8 @@ def worker(args):
                                          max_hold=payload["max_hold"],
                                          gap_mode=payload["gap_mode"],
                                          scoring=payload["scoring"])), payload, space, strategy)
-    sampler = {"v6": W.sample_v6, "prime": W.sample_prime,
+    sampler = {"v6": W.sample_v6, "prime": W.sample_prime, "macdx": W.sample_macdx,
+               "rocx": W.sample_rocx,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
     out = []
     for _ in range(payload["n"]):
@@ -173,6 +175,31 @@ def build_anchor_defaults(strategy, mode, R, space):
             c.update(vR=[float(I["rsi"])] * R, vC=[float(I["cvd"])] * R,
                      vP=[float(I["poc"])] * R, vE=[float(I["emaS"])] * R)
         return c
+    if strategy == "macdx":
+        from macdx_engine import MACDX_DEFAULTS as D
+        return dict(strategy="macdx",
+                    tpL=[D["takeProfitLongPct"]] * R, tpS=[D["takeProfitShortPct"]] * R,
+                    slL=[D["stopLossLongPct"]] * R, slS=[D["stopLossShortPct"]] * R,
+                    minT=[float(D["minTimeBetweenOrders"])] * R,
+                    mMinS=[D["macdMinForShort"]] * R, mMaxL=[D["macdMaxForLong"]] * R,
+                    hrb=[float(D["histRisingBars"])] * R,
+                    reqH=[D["requireHistAboveZero"]] * R,
+                    a1L=[D["apt1Long"]] * R, a2L=[D["apt2Long"]] * R,
+                    d1L=[D["dur1Long"]] * R, d2L=[D["dur2Long"]] * R,
+                    cdPL=[D["cdPctLong"]] * R, cdTL=[D["cdPeriodLong"]] * R,
+                    a1S=[D["apt1Short"]] * R, a2S=[D["apt2Short"]] * R,
+                    d1S=[D["dur1Short"]] * R, d2S=[D["dur2Short"]] * R,
+                    cdPS=[D["cdPctShort"]] * R, cdTS=[D["cdPeriodShort"]] * R,
+                    eL=[1.0] * R, eS=[0.0 if mode == "spot" else 1.0] * R,
+                    lev=[1.0 if mode == "spot" else float(D["leverage"])] * R)
+    if strategy == "rocx":
+        from rocx_engine import ROCX_DEFAULTS as D
+        return dict(strategy="rocx",
+                    pt=[D["profitTargetPct"]] * R, tsl=[D["trailStopPct"]] * R,
+                    rocN=[float(D["rocNumBars"])] * R, smaN=[float(D["smaNumBars"])] * R,
+                    vRoc=[float(D["vRoc"])] * R, vSma=[float(D["vSma"])] * R,
+                    eL=[1.0] * R, tslm=[float(D["tslMode"])] * R,
+                    lev=[1.0 if mode == "spot" else float(D["leverage"])] * R)
     raise SystemExit(f"--anchor defaults: {strategy} has no stored live defaults — "
                      f"anchor to a published backtest instead.")
 
@@ -395,6 +422,10 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
             best = f"best {pool[0][0]:.4f}" if pool else "no feasible yet"
             print(f"[{label}] gen {gen} | evaluated {done} | feasible {len(pool)} | {best}",
                   flush=True)
+            if args.stop_score is not None and pool and pool[0][0] >= args.stop_score:
+                print(f"[{label}] stop-score reached: best {pool[0][0]:.4f} >= "
+                      f"{args.stop_score:g} — ending this phase.", flush=True)
+                break
         return pool, reservoir
 
     def cross_score(pool, alt_opposite, label):
@@ -586,7 +617,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", default="v7",
-                    choices=["v7", "prime7", "v6", "scalpx", "scalpx2", "prime"])
+                    choices=["v7", "prime7", "v6", "scalpx", "scalpx2", "prime",
+                             "macdx", "rocx"])
     ap.add_argument("--algo", default="genetic",
                     choices=["random", "genetic", "refine", "crossfit"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
@@ -627,10 +659,22 @@ def main():
     ap.add_argument("--max-hold-days", type=float, default=None,
                     help="throw out any candidate whose simulation ever holds a "
                          "position longer than this many days (blank = unlimited)")
+    ap.add_argument("--stop-score", type=float, default=None,
+                    help="stop the search early once the best TRAIN score reaches "
+                         "this value (finalize normally: holdout scan, configs, "
+                         "auto-backtests). The score is the training score — "
+                         "reaching it says nothing about out-of-sample survival.")
     ap.add_argument("--max-dd", type=float, default=None,
                     help="max drawdown cap as a fraction (default 0.80 lev / 0.50 spot)")
     ap.add_argument("--space", default=os.path.join(B.OPT_DIR, "param_space.json"))
-    ap.add_argument("--resume-from", default=None, help="seed pool from another run dir")
+    ap.add_argument("--resume-from", default=None,
+                    help="seed pool from another run dir; a comma-separated list "
+                         "MERGES several runs — every imported candidate is "
+                         "re-evaluated under THIS run's window/scoring/gates")
+    ap.add_argument("--merge-mode", default="merge", choices=["merge", "breed"],
+                    help="with 2+ --resume-from runs: 'merge' just combines pools; "
+                         "'breed' also balances genetic parents across the source "
+                         "runs so cross-run hybrids get bred")
     ap.add_argument("--name", required=True)
     args = ap.parse_args()
     if args.hours is None and args.total is None:
@@ -644,14 +688,42 @@ def main():
             args.holdout_days = 21.0   # default fold size
     run_dir = B.enter_run_dir(args.name)
     print(f"run dir: {run_dir} | algo: {args.algo} | procs: {args.procs}", flush=True)
-    space = json.load(open(args.space)).get(args.strategy) or {}
+    # provenance: append every launch (incl. resumes/merges) to launch.json so
+    # a run's exact origin survives panel restarts
+    try:
+        launches = []
+        if os.path.exists("launch.json"):
+            try:
+                launches = json.load(open("launch.json"))
+            except Exception:
+                launches = []
+        launches.append(dict(
+            at=time.strftime("%Y-%m-%d %H:%M:%S"),
+            cmd="python3 " + " ".join([os.path.basename(sys.argv[0])]
+                                      + [a if " " not in a else repr(a)
+                                         for a in sys.argv[1:]]),
+            resume_from=([s.strip() for s in args.resume_from.split(",") if s.strip()]
+                         if args.resume_from else []),
+            merge_mode=(args.merge_mode if args.resume_from
+                        and "," in args.resume_from else None)))
+        json.dump(launches, open("launch.json", "w"), indent=1)
+    except Exception as _e:
+        print(f"launch.json not written: {_e}", flush=True)
+    _sp_all = json.load(open(args.space))
+    space = None
+    if args.mode == "spot" and _sp_all.get(f"{args.strategy}@spot"):
+        space = _sp_all[f"{args.strategy}@spot"]
+        print("parameter space: SPOT ranges "
+              f"({args.strategy}@spot in param_space.json)", flush=True)
+    space = space or _sp_all.get(args.strategy) or {}
     flat = args.strategy not in ("v7", "prime7")
 
     if flat:
         # shared precompute caches (instead of per-run copies)
         os.environ.setdefault("WF2_CACHE_DIR", os.path.join(B.OPT_DIR, "cache"))
         import wf2 as W
-        G = W.load_globals(("v6",) if args.strategy == "prime" else (args.strategy,))
+        G = W.load_globals({"prime": ("v6",), "macdx": ("v6", "macdx"),
+                            "rocx": ("v6", "rocx")}.get(args.strategy, (args.strategy,)))
         R = G["nreg"][args.method]
         if args.single_set:
             print("note: --single-set applies to V7 only; "
@@ -660,6 +732,9 @@ def main():
             alt = (args.holdout_days, part) if args.holdout_days else None
             return W.eval_config(cand, args.method, args.mode, t0, t1, alt=alt,
                                  gap_mode=args.gap_mode, scoring=_scoring(args))
+        def feas_any(m, c):
+            return W.feasible(m, args.mode, cand=c, max_dd=args.max_dd,
+                              max_hold=args.max_hold_days)
     else:
         import optimizer2 as O
         O.load_g3()
@@ -668,6 +743,9 @@ def main():
             alt = (args.holdout_days, part) if args.holdout_days else None
             return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode,
                            scoring=_scoring(args))
+        def feas_any(m, c):
+            return O.feasible3(m, args.mode, cand=c, max_dd=args.max_dd,
+                               max_hold=args.max_hold_days)
 
     per_regime = not args.single_set
     anchor_cand = None
@@ -717,6 +795,7 @@ def main():
     pool, evaluated, seed_base, runtime_s = [], 0, 0, 0.0
     reservoir, res_seen = [], [0]
     _res_rng = np.random.default_rng(12345)
+    _ckey = lambda c: json.dumps(c, sort_keys=True, default=float)
     if os.path.exists("pool2.json"):
         d = json.load(open("pool2.json"))
         pool, evaluated, seed_base = d["pool"], d["evaluated"], d["seed_base"]
@@ -724,12 +803,88 @@ def main():
         reservoir = d.get("reservoir", [])
         res_seen = [d.get("res_seen", len(reservoir))]
         print(f"resuming: {len(pool)} feasible / {evaluated} evaluated", flush=True)
+    merge_origins = {}
+    if os.path.exists("merge_origins.json"):   # resumed breed-mode run
+        try:
+            merge_origins = json.load(open("merge_origins.json"))
+        except Exception:
+            merge_origins = {}
     if args.resume_from:
-        src = os.path.join(B.OPT_DIR, args.resume_from, "pool2.json") \
-            if not os.path.isabs(args.resume_from) else os.path.join(args.resume_from, "pool2.json")
-        if os.path.exists(src):
-            pool.extend(json.load(open(src))["pool"])
-            print(f"seeded {len(pool)} candidates from {args.resume_from}", flush=True)
+        sources = [s.strip() for s in args.resume_from.split(",") if s.strip()]
+        if len(sources) == 1:
+            src = os.path.join(B.OPT_DIR, sources[0], "pool2.json") \
+                if not os.path.isabs(sources[0]) else os.path.join(sources[0], "pool2.json")
+            if os.path.exists(src):
+                pool.extend(json.load(open(src))["pool"])
+                print(f"seeded {len(pool)} candidates from {sources[0]}", flush=True)
+        else:
+            # MERGE several runs: import each run's pool AND reservoir, then
+            # re-evaluate every candidate under THIS run's train window, scoring
+            # and gates — imported scores were computed under possibly different
+            # rules and are not comparable as-is.
+            def _int_leverage(c):
+                """Round leverage to MEXC-executable integers (both genome
+                shapes) BEFORE re-evaluation, so merged-in candidates are
+                scored exactly as the live executor would trade them."""
+                if c.get("mode") == "spot":
+                    return c
+                if isinstance(c.get("lev"), list):
+                    c["lev"] = [max(1.0, float(int(x))) for x in c["lev"]]
+                for reg in c.get("regs", []) or []:
+                    if "leverage" in reg:
+                        reg["leverage"] = max(1.0, float(int(reg["leverage"])))
+                return c
+            seen = {_ckey(c) for _, c, _ in pool}
+            imported = []
+            for src in sources:
+                base = src if os.path.isabs(src) else os.path.join(B.OPT_DIR, src)
+                pp = os.path.join(base, "pool2.json")
+                if not os.path.exists(pp):
+                    print(f"merge: {src}: no pool2.json — skipped", flush=True)
+                    continue
+                sd = json.load(open(pp))
+                n0 = 0
+                for entry in list(sd.get("pool", [])) + list(sd.get("reservoir", [])):
+                    c = dict(entry[1])
+                    c["mode"] = args.mode
+                    c = _int_leverage(c)
+                    k = _ckey(c)
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    imported.append((c, os.path.basename(base.rstrip("/"))))
+                    n0 += 1
+                print(f"merge: {n0} unique candidates from {src}", flush=True)
+            print(f"merge: re-evaluating {len(imported)} imported candidates under "
+                  "current settings…", flush=True)
+            kept = 0
+            for i, (c, origin) in enumerate(imported, 1):
+                try:
+                    m = eval_any(c, None, args.train_end)
+                except Exception:
+                    m = None
+                if m is not None and feas_any(m, c):
+                    sc = m["score"]
+                    if anchor_cand is not None and (args.anchor_strength or 0) > 0:
+                        sc -= args.anchor_strength * anchor_distance(
+                            c, anchor_cand, space, args.strategy)
+                    ent = [sc, c, m]
+                    pool.append(ent)
+                    reservoir_add(reservoir, res_seen, [ent], _res_rng)
+                    merge_origins[_ckey(c)] = origin
+                    kept += 1
+                if i % 100 == 0:
+                    print(f"  …{i}/{len(imported)} re-evaluated, {kept} feasible",
+                          flush=True)
+            pool.sort(key=lambda x: -x[0])
+            print(f"merge: {kept}/{len(imported)} imported candidates feasible under "
+                  "current settings (the rest were dropped at the door)", flush=True)
+            if args.merge_mode == "breed" and merge_origins:
+                json.dump(merge_origins, open("merge_origins.json", "w"))
+                print("merge: BREED mode — genetic parents stay balanced across "
+                      "source runs until hybrids take over the pool", flush=True)
+            else:
+                merge_origins = {}
 
     if anchor_cand is not None:
         try:
@@ -790,6 +945,20 @@ def main():
                 jobs = [("random", dict(payload, seed=seed_base + k)) for k in range(args.procs)]
             elif args.algo == "genetic":
                 parents = [c for _, c, _ in pool[:24]]
+                if merge_origins:
+                    # breed mode: draw parents from EACH source run (best-first)
+                    # so cross-run hybrids get bred even when one run's scores
+                    # dominate. Offspring have no origin tag; once hybrids own
+                    # the top of the pool this falls back to normal top-24.
+                    by = {}
+                    for _s, _c, _m in pool:
+                        by.setdefault(merge_origins.get(_ckey(_c)), []).append(_c)
+                    named = [o for o in by if o is not None]
+                    if len(named) >= 2:
+                        parents = []
+                        for o in named:
+                            parents += by[o][:max(6, 24 // len(named))]
+                        parents += by.get(None, [])[:max(0, 24 - len(parents))]
                 jobs = [("offspring", dict(payload, parents=parents, seed=seed_base + k))
                         for k in range(args.procs)]
                 # keep 1 worker exploring randomly to avoid inbreeding
@@ -814,6 +983,11 @@ def main():
                 print(f"gen {gen} | evaluated {evaluated} | feasible {len(pool)} | "
                       f"best score {pool[0][0]:.4f} eq {b['eq']:.0f} dd {b['maxdd']:.2f} "
                       f"tpm {b['tpm']:.1f}", flush=True)
+                if args.stop_score is not None and pool[0][0] >= args.stop_score:
+                    print(f"stop-score reached: best train score {pool[0][0]:.4f} >= "
+                          f"{args.stop_score:g} — stopping the search and finalizing.",
+                          flush=True)
+                    break
             else:
                 print(f"gen {gen} | evaluated {evaluated} | no feasible yet", flush=True)
 
@@ -865,7 +1039,12 @@ def main():
         scan = list(holdouts)
         surv_n = sum(1 for h in scan if h and not h["liq"])
         TARGET_SURV = 10
-        while len(scan) < len(scan_src) and surv_n < TARGET_SURV:
+        # Lev mode: most candidates die by liquidation, so stopping after 10
+        # survivors is a cheap shortcut. SPOT mode: nothing can liquidate, so
+        # that shortcut degenerates to "scan only the first 10" and the
+        # reservoir generalizers never get their holdout shot -> scan them all.
+        scan_all = (args.mode == "spot")
+        while len(scan) < len(scan_src) and (scan_all or surv_n < TARGET_SURV):
             try:
                 hm = eval_any(scan_src[len(scan)][1], args.train_end, None, part="holdout")
             except Exception:

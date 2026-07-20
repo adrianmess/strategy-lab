@@ -144,6 +144,36 @@ def load_globals(need=("v6", "scalpx")):
         _G["scalp"] = sc
         _G["regimes_sc"] = {m: [make_regimes(f, m)[0] for _, f in sc] for m in REGIME_METHODS}
         _G.setdefault("nreg", {m: make_regimes(sc[0][1], m)[1] for m in REGIME_METHODS})
+    if "rocx" in need and "rocx" not in _G:
+        rx = None
+        if os.path.exists(_cache_path("rocx_pre.pkl")):
+            try:
+                rx = pickle.load(open(_cache_path("rocx_pre.pkl"), "rb"))
+            except Exception as e:
+                print(f"rocx_pre.pkl unreadable ({e}); rebuilding...")
+                try: os.remove(_cache_path("rocx_pre.pkl"))
+                except OSError: pass
+        if rx is None:
+            segs = segs or load_segments()
+            from rocx_engine import precompute_rocx
+            rx = [precompute_rocx(g, d1) for g, d1 in segs]
+            pickle.dump(rx, open(_cache_path("rocx_pre.pkl"), "wb"))
+        _G["rocx"] = rx
+    if "macdx" in need and "macdx" not in _G:
+        mx = None
+        if os.path.exists(_cache_path("macdx_pre.pkl")):
+            try:
+                mx = pickle.load(open(_cache_path("macdx_pre.pkl"), "rb"))
+            except Exception as e:
+                print(f"macdx_pre.pkl unreadable ({e}); rebuilding...")
+                try: os.remove(_cache_path("macdx_pre.pkl"))
+                except OSError: pass
+        if mx is None:
+            segs = segs or load_segments()
+            from macdx_engine import MACDX_DEFAULTS, precompute_macdx
+            mx = [precompute_macdx(g, d1, MACDX_DEFAULTS) for g, d1 in segs]
+            pickle.dump(mx, open(_cache_path("macdx_pre.pkl"), "wb"))
+        _G["macdx"] = mx
     return _G
 
 # ---------------- candidate samplers ----------------
@@ -315,9 +345,99 @@ def build_P_prime(c, R):
     return np.vstack(rows)
 
 
+# MACD Crossover standalone (macdx): the user's pine, reversal entries.
+# MACD lengths stay at the pine's 12/26/9 (one precompute, cached).
+def sample_macdx(rng, R, mode, space=None):
+    s = space or {}
+    g = lambda k, d: _per_regime(rng, *_rng_range(s, k, d), R)
+    c = dict(
+        strategy="macdx",
+        tpL=g("tpL", (0.003, 0.03)), tpS=g("tpS", (0.003, 0.03)),
+        slL=g("slL", (0.004, 0.04)), slS=g("slS", (0.004, 0.04)),
+        minT=g("minT", (1, 45)),
+        mMinS=g("mMinS", (-0.2, 0.5)), mMaxL=g("mMaxL", (-0.5, 0.2)),
+        hrb=[float(rng.integers(1, 7)) for _ in range(R)],
+        reqH=[1.0] * R,
+        a1L=g("a1L", (0.001, 0.02)), a2L=g("a2L", (0.0, 0.015)),
+        d1L=g("d1L", (0.5, 48)), d2L=g("d2L", (4, 120)),
+        cdPL=g("cdPL", (0.0005, 0.012)), cdTL=g("cdTL", (10, 240)),
+        a1S=g("a1S", (0.001, 0.02)), a2S=g("a2S", (0.0, 0.015)),
+        d1S=g("d1S", (0.5, 48)), d2S=g("d2S", (4, 120)),
+        cdPS=g("cdPS", (0.0005, 0.012)), cdTS=g("cdTS", (10, 240)),
+        eL=[1.0] * R, eS=[1.0] * R,
+    )
+    if rng.random() < 0.3:
+        c["reqH"] = rng.choice([0.0, 1.0], R, p=[0.35, 0.65]).tolist()
+    if mode == "lev":
+        c["lev"] = g("leverage", (1.2, 10.0))
+        if rng.random() < 0.35:
+            c["eS"] = rng.choice([0.0, 1.0], R, p=[0.25, 0.75]).tolist()
+    else:
+        c["lev"] = [1.0] * R
+        c["eS"] = [0.0] * R
+    return _normalize_flat(c)
+
+def build_P_macdx(c, R):
+    from macdx_engine import MACDX_PNAMES
+    rows = []
+    for r in range(R):
+        row = []
+        for pn in MACDX_PNAMES:
+            v = c["lev"] if pn == "lev" else c[pn]
+            row.append(float(v[r] if isinstance(v, list) else v))
+        rows.append(row)
+    return np.array(rows)
+
+
+# V4 ROC/SMA standalone (rocx): long-only dip-entry on 45-min boundaries.
+def sample_rocx(rng, R, mode, space=None):
+    s = space or {}
+    g = lambda k, d: _per_regime(rng, *_rng_range(s, k, d), R)
+    menus = s.get("menus", {})
+    from rocx_engine import ROCX_ROC_LENGTHS, ROCX_SMA_LENGTHS
+    oR = (menus.get("vRoc", {}) or {}).get("options") or list(range(len(ROCX_ROC_LENGTHS)))
+    oS = (menus.get("vSma", {}) or {}).get("options") or list(range(len(ROCX_SMA_LENGTHS)))
+    # tslm is OPT-IN: unless the space's menu lists other options, always 0 (pine)
+    oT = (menus.get("tslm", {}) or {}).get("options") or [0.0]
+    c = dict(
+        strategy="rocx",
+        pt=g("pt", (0.005, 0.06)), tsl=g("tsl", (0.005, 0.05)),
+        rocN=[float(rng.integers(2, 7)) for _ in range(R)],
+        smaN=[float(rng.integers(1, 7)) for _ in range(R)],
+        vRoc=[float(rng.choice(oR)) for _ in range(R)],
+        vSma=[float(rng.choice(oS)) for _ in range(R)],
+        eL=[1.0] * R,
+        tslm=[float(rng.choice(oT)) for _ in range(R)],
+    )
+    if mode == "lev":
+        c["lev"] = g("leverage", (1.2, 10.0))
+        if rng.random() < 0.25:
+            c["eL"] = rng.choice([0.0, 1.0], R, p=[0.2, 0.8]).tolist()
+    else:
+        c["lev"] = [1.0] * R
+    return _normalize_flat(c)
+
+def build_P_rocx(c, R):
+    from rocx_engine import ROCX_PNAMES
+    rows = []
+    for r in range(R):
+        row = []
+        for pn in ROCX_PNAMES:
+            if pn == "lev":
+                v = c["lev"]
+            elif pn == "tslm":
+                v = c.get("tslm", 0.0)     # pre-tslMode candidates default to pine
+            else:
+                v = c[pn]
+            row.append(float(v[r] if isinstance(v, list) else v))
+        rows.append(row)
+    return np.array(rows)
+
+
 # ---------------- generic genome ops for flat candidates (v6/prime/scalpx) ----
-FLAT_FLAG_KEYS = {"eL3", "eS3", "eXL", "eXS", "eL", "eS", "useCvd", "useEma"}
-FLAT_MENU_KEYS = {"vR": "rsi", "vC": "cvd", "vP": "poc", "vE": "emaS"}  # scalpx2 variant indexes
+FLAT_FLAG_KEYS = {"eL3", "eS3", "eXL", "eXS", "eL", "eS", "useCvd", "useEma", "reqH"}
+FLAT_MENU_KEYS = {"vR": "rsi", "vC": "cvd", "vP": "poc", "vE": "emaS",   # scalpx2
+                  "vRoc": "rocx_roc", "vSma": "rocx_sma"}                # rocx
 FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
     "prime": dict(rsiL="rsiValLong", rsiS="rsiValShort", ptL="ptLong", a1L="apt1Long",
                   a2L="apt2Long", d1L="dur1Long", d2L="dur2Long", ptS="ptShort",
@@ -329,10 +449,40 @@ FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
                ptScale="ptScale"),
     "scalpx": dict(lev="leverage", tpL="tpL", tpS="tpS", rsiOB="rsiOB", rsiOS="rsiOS"),
     "scalpx2": dict(lev="leverage", tpL="tpL", tpS="tpS", rsiOB="rsiOB", rsiOS="rsiOS"),
+    "macdx": dict(lev="leverage", tpL="tpL", tpS="tpS", slL="slL", slS="slS",
+                  minT="minT", mMinS="mMinS", mMaxL="mMaxL", hrb="hrb",
+                  a1L="a1L", a2L="a2L", d1L="d1L", d2L="d2L",
+                  cdPL="cdPL", cdTL="cdTL", a1S="a1S", a2S="a2S",
+                  d1S="d1S", d2S="d2S", cdPS="cdPS", cdTS="cdTS"),
+    "rocx": dict(lev="leverage", pt="pt", tsl="tsl", rocN="rocN", smaN="smaN"),
 }
 
 def _normalize_flat(c):
     """Re-impose per-strategy ordering constraints after crossover/mutation."""
+    # INTEGER LEVERAGE: MEXC only accepts whole-number leverage, and the live
+    # executor sets it per order — so search only configs that are executable
+    # exactly as backtested. (Spot lev is 1.0 and unaffected.)
+    if isinstance(c.get("lev"), list):
+        c["lev"] = [max(1.0, float(int(x))) for x in c["lev"]]   # floor: never MORE lev than scored
+    if c.get("strategy") == "rocx":
+        from rocx_engine import ROCX_ROC_LENGTHS, ROCX_SMA_LENGTHS
+        c.setdefault("tslm", [0.0] * len(c["pt"]))   # pre-tslMode candidates
+        for r in range(len(c["pt"])):
+            c["rocN"][r] = float(max(2, min(8, round(c["rocN"][r]))))
+            c["smaN"][r] = float(max(1, min(8, round(c["smaN"][r]))))
+            c["vRoc"][r] = float(max(0, min(len(ROCX_ROC_LENGTHS) - 1, round(c["vRoc"][r]))))
+            c["vSma"][r] = float(max(0, min(len(ROCX_SMA_LENGTHS) - 1, round(c["vSma"][r]))))
+            c["tslm"][r] = 1.0 if round(c["tslm"][r]) >= 1 else 0.0
+    if c.get("strategy") == "macdx":
+        R = len(c["tpL"])
+        for r in range(R):
+            if c["a1L"][r] > c["tpL"][r]: c["a1L"][r] = c["tpL"][r] * 0.7
+            if c["a2L"][r] > c["a1L"][r]: c["a2L"][r] = c["a1L"][r] * 0.6
+            if c["a1S"][r] > c["tpS"][r]: c["a1S"][r] = c["tpS"][r] * 0.7
+            if c["a2S"][r] > c["a1S"][r]: c["a2S"][r] = c["a1S"][r] * 0.6
+            if c["d2L"][r] < c["d1L"][r]: c["d1L"][r], c["d2L"][r] = c["d2L"][r], c["d1L"][r]
+            if c["d2S"][r] < c["d1S"][r]: c["d1S"][r], c["d2S"][r] = c["d2S"][r], c["d1S"][r]
+            c["hrb"][r] = float(max(1, min(12, round(c["hrb"][r]))))
     if c.get("strategy") == "prime":
         R = len(c["zL"])
         for r in range(R):
@@ -370,6 +520,14 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
             continue
         if not isinstance(v, list):
             continue
+        if k == "tslm":
+            # OPT-IN: only mutate if the space's menu offers more than one option;
+            # default stays pinned at 0 (pine trail) so classic searches are unchanged
+            opts = ((s or {}).get("menus", {}).get("tslm", {}) or {}).get("options") or [0.0]
+            for r in range(len(v)):
+                if rng.random() < 0.10:
+                    v[r] = float(rng.choice(opts))
+            continue
         if k in FLAT_MENU_KEYS:
             menus = (s or {}).get("menus", {})
             opts = (menus.get(k, {}) or {}).get("options") \
@@ -395,6 +553,16 @@ def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10
                 v[r] = float(np.clip(v[r] + rng.normal(0, sigma * (hi - lo)), lo, hi))
             else:
                 v[r] = float(v[r] + rng.normal(0, sigma * (abs(v[r]) + 1e-9)))
+    if mode == "spot":
+        # re-impose spot invariants (mutation/crossover must never undo them):
+        # 1x leverage, long-only, stops stay on
+        if isinstance(c.get("lev"), list):
+            c["lev"] = [1.0] * len(c["lev"])
+        for k in ("eS", "eS3", "eXS"):
+            if isinstance(c.get(k), list):
+                c[k] = [0.0] * len(c[k])
+        if "slOn" in c:
+            c["slOn"] = 1.0
     return _normalize_flat(c)
 
 def batch_offspring_flat(rng, parents, mode, space, sampler, R, method, n, t0, t1,
@@ -555,7 +723,8 @@ def _clip_indices(t_arr, t0, t1):
 
 def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 gap_mode=None, scoring=None):
-    need = {"prime": ("v6",)}.get(cand["strategy"], (cand["strategy"],))
+    need = {"prime": ("v6",), "macdx": ("v6", "macdx"),
+            "rocx": ("v6", "rocx")}.get(cand["strategy"], (cand["strategy"],))
     G = load_globals(need)
     R = G["nreg"][method]
     warmup = 3000
@@ -589,6 +758,77 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
                                            return_open=True,
                                            no_entry=(cm[w0:b] if cm is not None else None))
+                total_bars += (b - a)
+                if len(tr):
+                    max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
+                                   * 3.0 / 1440.0)
+                    held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
+                if op:
+                    op_held = len(sp["c"]) - 1 - op["entry_idx"]
+                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    held_bars += op_held
+                months += (b - a) / (DAY * 30.4)
+                all_tr.append(tr)
+                if mode == "lev" and len(tr):
+                    _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                    mtm_dd = max(mtm_dd, dseg)
+                if liq: liq_any = True; break
+            if liq_any: break
+    elif cand["strategy"] == "rocx":
+        from rocx_engine import run_rocx_P
+        P = build_P_rocx(cand, R)
+        regs = G["regimes_v6"][method]
+        for pre, reg in zip(G["rocx"], regs):
+            i0, i1 = _clip_indices(pre["t"], t0, t1)
+            i0 = max(i0, warmup)
+            if i1 - i0 < 200: continue
+            cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
+            ivs = eval_intervals(pre["t"], i0, i1, alt)
+            for a, b in ivs:
+                w0 = max(0, a - warmup)
+                sp = {k: (v[:, w0:b] if getattr(v, "ndim", 1) == 2 else v[w0:b])
+                      for k, v in pre.items()}
+                eq_before = eq
+                tr, eq, liq, op = run_rocx_P(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                             initial_capital=eq,
+                                             commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                             no_entry=(cm[w0:b] if cm is not None else None),
+                                             return_open=True)
+                total_bars += (b - a)
+                if len(tr):
+                    max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
+                                   * 3.0 / 1440.0)
+                    held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
+                if op:
+                    op_held = len(sp["c"]) - 1 - op["entry_idx"]
+                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    held_bars += op_held
+                months += (b - a) / (DAY * 30.4)
+                all_tr.append(tr)
+                if mode == "lev" and len(tr):
+                    _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                    mtm_dd = max(mtm_dd, dseg)
+                if liq: liq_any = True; break
+            if liq_any: break
+    elif cand["strategy"] == "macdx":
+        from macdx_engine import run_macdx_P
+        P = build_P_macdx(cand, R)
+        regs = G["regimes_v6"][method]     # same segments, same regime features
+        for pre, reg in zip(G["macdx"], regs):
+            i0, i1 = _clip_indices(pre["t"], t0, t1)
+            i0 = max(i0, warmup)   # never trade unconverged indicators
+            if i1 - i0 < 200: continue
+            cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
+            ivs = eval_intervals(pre["t"], i0, i1, alt)
+            for a, b in ivs:
+                w0 = max(0, a - warmup)
+                sp = {k: v[w0:b] for k, v in pre.items()}
+                eq_before = eq
+                tr, eq, liq, op = run_macdx_P(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                              initial_capital=eq,
+                                              commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                              no_entry=(cm[w0:b] if cm is not None else None),
+                                              return_open=True)
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())

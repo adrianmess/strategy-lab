@@ -16,6 +16,21 @@ pip install -r adaptive_trader/requirements.txt
 python3 panel/server.py          # -> http://127.0.0.1:8800
 ```
 
+### Stop or kill
+
+```bash
+pkill -f panel/server.py
+```
+
+### To-do
+
+- **Production mode for the panel** — run under waitress instead of Flask's dev
+  server: `pip3 install waitress`, then from `panel/`:
+  `python3 -m waitress --listen=127.0.0.1:8800 server:app`.
+  Option: add a `--production` flag to `panel/server.py` that uses waitress when
+  installed. Must stay a SINGLE process (the panel holds the executor process
+  handle and running-job state in memory — no multi-worker gunicorn).
+
 Everything is done from the site:
 
 | Page | What it does |

@@ -89,7 +89,10 @@ class Executor:
             return None, 0
         action = "open_long" if direction > 0 else "open_short"
         res = self._post({"action": action, "symbol": cfg["symbol"],
-                          "leverage": max(1, int(round(lev))), "quantity": qty})
+                          # FLOOR, never round up: a fractional-leverage config
+                          # (pre-integer-search) must not trade at MORE leverage
+                          # than it was backtested with
+                          "leverage": max(1, int(lev)), "quantity": qty})
         return res, qty
 
     def close_position(self):
@@ -120,19 +123,38 @@ def main():
     feed.backfill()
     last_closed = None
 
+    check = getattr(strat, "intrabar_check", None) or strat.intrabar_stop
+
+    def protective_check():
+        """Run the intra-bar protective/emergency stop against the LIVE price.
+        Returns True if it closed the position. Single-threaded (called only
+        from the main loop) so it can never race the bar-close order logic."""
+        if not state.get("position"):
+            return False
+        price = feed.last_price()
+        act = check(price)
+        if act:
+            log.warning("INTRABAR STOP at %.3f (%s price): %s",
+                        price, feed.price_source(), act)
+            ex.close_position()
+            state["position"] = None
+            save_state(cfg, state)
+            return True
+        return False
+
+    # How often to re-check the protective stop against live ticks, in seconds.
+    # Defaults to 0.5s (near-live); heavy work (kline fetch + bar-close eval)
+    # still runs once per poll_seconds. Set protect_poll_seconds <= 0 to restore
+    # the old single-check-per-poll behavior.
+    protect_dt = cfg.get("protect_poll_seconds", 0.5)
+
     while True:
         try:
             feed.update()
             price = feed.last_price()
 
-            # 1) intra-bar protective check (every poll)
-            check = getattr(strat, "intrabar_check", None) or strat.intrabar_stop
-            act = check(price)
-            if act:
-                log.warning("INTRABAR STOP at %.3f: %s", price, act)
-                ex.close_position()
-                state["position"] = None
-                save_state(cfg, state)
+            # 1) intra-bar protective check (live price)
+            protective_check()
 
             # 2) new closed bar?
             closed = feed.closed_bars()
@@ -160,7 +182,17 @@ def main():
                                      a["lev"], qty, a["sl_price"], a["regime"])
                 save_state(cfg, state)
 
-            time.sleep(cfg["poll_seconds"])
+            # 3) fast protective sub-loop: keep watching the LIVE price between
+            # heavy polls so an adverse move is caught within ~protect_dt, not
+            # after the full poll interval.
+            if protect_dt and protect_dt > 0:
+                t_end = time.time() + cfg["poll_seconds"]
+                while time.time() < t_end:
+                    time.sleep(min(protect_dt, max(0.0, t_end - time.time())))
+                    if protective_check():
+                        break
+            else:
+                time.sleep(cfg["poll_seconds"])
         except KeyboardInterrupt:
             log.info("stopped by user")
             break

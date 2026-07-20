@@ -38,10 +38,24 @@ def contamination_mask(t, warmup):
     return _cm(t, warmup)
 
 
-ORIGINAL_STRATEGIES = ("v5_original", "prime_original")
+ORIGINAL_STRATEGIES = ("v5_original", "prime_original", "macdx_original",
+                       "rocx_original")
 
 def original_defaults(strategy, mode):
     """Every pine input of the ORIGINAL script, unmodified logic, single set."""
+    if strategy == "rocx_original":
+        from rocx_engine import ROCX_DEFAULTS
+        p = dict(ROCX_DEFAULTS)
+        if mode == "spot":
+            p["leverage"] = 1.0
+        return p
+    if strategy == "macdx_original":
+        from macdx_engine import MACDX_DEFAULTS
+        p = dict(MACDX_DEFAULTS)
+        if mode == "spot":
+            p["leverage"] = 1.0
+            p["enableShort"] = 0.0
+        return p
     from engine import DEFAULT_PARAMS
     p = {k: (1.0 if v is True else 0.0 if v is False else v)
          for k, v in DEFAULT_PARAMS.items()
@@ -64,6 +78,311 @@ def original_defaults(strategy, mode):
         p["enableShort3m"] = 0.0
         p["enableShortX"] = 0.0
     return p
+
+
+def run_single_macdx(cfg, oos_start=None, holdout_days=None,
+                     gap_mode="skip_contaminated"):
+    """The standalone MACD Crossover pine (TP/SL/time/thresholds/histogram),
+    reproduced exactly (reversal entries, shared order timer). Validated
+    against the 2026-07-12 TradingView export."""
+    from macdx_engine import MACDX_DEFAULTS, precompute_macdx, run_macdx
+    from common import load_segments
+    from wf2 import mtm_curve, contamination_mask, eval_intervals, FUT_COMM, SPOT_COMM
+    mode = cfg.get("mode", "spot")
+    p = dict(MACDX_DEFAULTS)
+    p.update({k: v for k, v in cfg["cand"].items() if k in MACDX_DEFAULTS})
+    warmup = 3000
+    eq = 1000.0
+    trades, curve, open_positions = [], [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    suppressed = 0
+    segs = load_segments()
+    n_segs = len(segs)
+    for si, (g, d1) in enumerate(segs):
+        print(f"precomputing indicators, segment {si + 1}/{n_segs} ...", flush=True)
+        pre = precompute_macdx(g, d1, p)
+        t = pre["t"]
+        seg_mask = (contamination_mask(t, warmup)
+                    if gap_mode == "skip_contaminated" else None)
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        ivs = [(i0, i1)] if not holdout_days else eval_intervals(t, i0, i1,
+                dict(days=holdout_days, part="holdout"))
+        for iv_i, (a, b) in enumerate(ivs):
+            w0 = max(0, a - warmup)
+            sp = {k: v[w0:b] for k, v in pre.items()}
+            eq0 = eq
+            tr, eq, liq, op = run_macdx(sp, p, warmup=a - w0, initial_capital=eq,
+                                        commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                        no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                        return_open=True)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir=("long" if op["dir"] > 0 else "short"),
+                        entry_t=op["entry_t"], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
+                        move_pct=float((mark / op["entry"] - 1) * op["dir"]),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy="macdx_original", mode=mode, method="none",
+                                        kind=("original engine (full pine logic)"
+                                              if oos_start is None else f"original, from {oos_start}"),
+                                        config=cfg["cand"]))
+
+
+def run_single_rocx(cfg, oos_start=None, holdout_days=None,
+                    gap_mode="skip_contaminated"):
+    """The ORIGINAL V4 ROC/SMA pine, every input adjustable. Validated 11/13
+    (2 data-edge cases) against the 2026-07-12 TradingView export."""
+    from rocx_engine import ROCX_DEFAULTS, precompute_rocx, run_rocx
+    from common import load_segments
+    from wf2 import mtm_curve, contamination_mask, eval_intervals, FUT_COMM, SPOT_COMM
+    mode = cfg.get("mode", "spot")
+    p = dict(ROCX_DEFAULTS)
+    p.update({k: v for k, v in cfg["cand"].items() if k in ROCX_DEFAULTS})
+    warmup = 3000
+    eq = 1000.0
+    trades, curve, open_positions = [], [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    suppressed = 0
+    segs = load_segments()
+    n_segs = len(segs)
+    for si, (g, d1) in enumerate(segs):
+        print(f"precomputing indicators, segment {si + 1}/{n_segs} ...", flush=True)
+        pre = precompute_rocx(g, d1)
+        t = pre["t"]
+        seg_mask = (contamination_mask(t, warmup)
+                    if gap_mode == "skip_contaminated" else None)
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        ivs = [(i0, i1)] if not holdout_days else eval_intervals(t, i0, i1,
+                dict(days=holdout_days, part="holdout"))
+        for iv_i, (a, b) in enumerate(ivs):
+            w0 = max(0, a - warmup)
+            sp = {k: (v[:, w0:b] if getattr(v, "ndim", 1) == 2 else v[w0:b])
+                  for k, v in pre.items()}
+            eq0 = eq
+            tr, eq, liq, op = run_rocx(sp, p, warmup=a - w0, initial_capital=eq,
+                                       commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                       no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                       return_open=True)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir="long", entry_t=op["entry_t"], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"])),
+                        move_pct=float(mark / op["entry"] - 1),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy="rocx_original", mode=mode, method="none",
+                                        kind=("original engine (full pine logic)"
+                                              if oos_start is None else f"original, from {oos_start}"),
+                                        config=cfg["cand"]))
+
+
+def run_single_rocx_opt(cfg, oos_start=None, holdout_days=None,
+                        gap_mode="skip_contaminated"):
+    """Full backtest of an OPTIMIZED rocx candidate (per-regime genome)."""
+    from wf2 import (load_globals, build_P_rocx, mtm_curve, contamination_mask,
+                     eval_intervals, FUT_COMM, SPOT_COMM)
+    from rocx_engine import run_rocx_P
+    cand = cfg["cand"]
+    mode = cfg.get("mode", "spot")
+    method = cfg.get("method", "vol3")
+    G = load_globals(("v6", "rocx"))
+    R = G["nreg"][method]
+    P = build_P_rocx(cand, R)
+    regs = G["regimes_v6"][method]
+    warmup = 3000
+    eq = 1000.0
+    trades, curve, open_positions = [], [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    suppressed = 0
+    n_segs = len(G["rocx"])
+    for si, (pre, reg) in enumerate(zip(G["rocx"], regs)):
+        t = pre["t"]
+        seg_mask = (contamination_mask(t, warmup)
+                    if gap_mode == "skip_contaminated" else None)
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        ivs = [(i0, i1)] if not holdout_days else eval_intervals(t, i0, i1,
+                dict(days=holdout_days, part="holdout"))
+        for iv_i, (a, b) in enumerate(ivs):
+            w0 = max(0, a - warmup)
+            sp = {k: (v[:, w0:b] if getattr(v, "ndim", 1) == 2 else v[w0:b])
+                  for k, v in pre.items()}
+            eq0 = eq
+            tr, eq, liq, op = run_rocx_P(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                         initial_capital=eq,
+                                         commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                         no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                         return_open=True)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir="long", entry_t=op["entry_t"], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"])),
+                        move_pct=float(mark / op["entry"] - 1),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy="rocx", mode=mode, method=method,
+                                        kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days
+                                              else "full-history (in-sample fit)" if oos_start is None
+                                              else f"from {oos_start}"),
+                                        config=cand))
+
+
+def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
+                         gap_mode="skip_contaminated"):
+    """Full backtest of an OPTIMIZED macdx candidate (per-regime genome)."""
+    from wf2 import (load_globals, build_P_macdx, mtm_curve, contamination_mask,
+                     eval_intervals, FUT_COMM, SPOT_COMM)
+    from macdx_engine import run_macdx_P
+    cand = cfg["cand"]
+    mode = cfg.get("mode", "spot")
+    method = cfg.get("method", "vol3")
+    G = load_globals(("v6", "macdx"))
+    R = G["nreg"][method]
+    P = build_P_macdx(cand, R)
+    regs = G["regimes_v6"][method]
+    warmup = 3000
+    eq = 1000.0
+    trades, curve, open_positions = [], [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    suppressed = 0
+    n_segs = len(G["macdx"])
+    for si, (pre, reg) in enumerate(zip(G["macdx"], regs)):
+        t = pre["t"]
+        seg_mask = (contamination_mask(t, warmup)
+                    if gap_mode == "skip_contaminated" else None)
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        ivs = [(i0, i1)] if not holdout_days else eval_intervals(t, i0, i1,
+                dict(days=holdout_days, part="holdout"))
+        for iv_i, (a, b) in enumerate(ivs):
+            w0 = max(0, a - warmup)
+            sp = {k: v[w0:b] for k, v in pre.items()}
+            eq0 = eq
+            tr, eq, liq, op = run_macdx_P(sp, P, regime=reg[w0:b], warmup=a - w0,
+                                          initial_capital=eq,
+                                          commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                          no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                          return_open=True)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir=("long" if op["dir"] > 0 else "short"),
+                        entry_t=op["entry_t"], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
+                        move_pct=float((mark / op["entry"] - 1) * op["dir"]),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
+            months += (b - a) / (480 * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy="macdx", mode=mode, method=method,
+                                        kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days
+                                              else "full-history (in-sample fit)" if oos_start is None
+                                              else f"from {oos_start}"),
+                                        config=cand))
 
 
 def run_single_original(cfg, oos_start=None, holdout_days=None,
@@ -249,9 +568,21 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
     if not cand:
         raise SystemExit("This run produced NO surviving candidate (see its report) — "
                          "there is nothing to backtest.")
+    if cfg.get("strategy") == "macdx_original":
+        return run_single_macdx(cfg, oos_start, holdout_days=holdout_days,
+                                gap_mode=gap_mode)
+    if cfg.get("strategy") == "rocx_original":
+        return run_single_rocx(cfg, oos_start, holdout_days=holdout_days,
+                               gap_mode=gap_mode)
+    if cfg.get("strategy") == "rocx" or cand.get("strategy") == "rocx":
+        return run_single_rocx_opt(cfg, oos_start, holdout_days=holdout_days,
+                                   gap_mode=gap_mode)
     if cfg.get("strategy") in ORIGINAL_STRATEGIES:
         return run_single_original(cfg, oos_start, holdout_days=holdout_days,
                                    gap_mode=gap_mode)
+    if cfg.get("strategy") == "macdx" or cand.get("strategy") == "macdx":
+        return run_single_macdx_opt(cfg, oos_start, holdout_days=holdout_days,
+                                    gap_mode=gap_mode)
     if cfg.get("strategy") in ("v7", "prime7") or cand.get("strategy") in ("v7", "prime7") \
             or "regs" in cand:
         return run_single_v7(cfg, oos_start, holdout_days=holdout_days, gap_mode=gap_mode)
@@ -362,7 +693,8 @@ def build_entry(tr, eq, months, mdd, liq, curve, label_extra, open_positions=Non
                            dir=("long" if r["dir"] > 0 else "short"),
                            entry=float(r["entry"]), exit=float(r["exit"]),
                            net=float(r["net"]), mae=float(r["mae"]),
-                           reason={0: "profit_target", 1: "stop_loss", 2: "LIQUIDATED"}.get(int(r["reason"]), "?"),
+                           reason={0: "profit_target", 1: "stop_loss", 2: "LIQUIDATED",
+                                   3: "reversal"}.get(int(r["reason"]), "?"),
                            lev=float(r.get("lev", 1.0))))
         mo = (pd.to_datetime(tr["exit_t"]).dt.to_period("M").astype(str)
               if "exit_t" in tr else None)
@@ -436,6 +768,7 @@ def main():
             flags[key] = dict(source=os.path.basename(path), kind=entry.get("kind"),
                               liq=bool(entry["stats"]["liq"]),
                               growth_pct=float(entry["stats"]["monthly_growth_pct"]),
+                              total_mult=float(entry["stats"].get("total_mult", 0)) or None,
                               gap_mode=args.gap_mode, backtest=args.name,
                               at=time.strftime("%Y-%m-%d %H:%M"))
             json.dump(flags, open(fp, "w"), indent=1)

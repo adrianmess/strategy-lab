@@ -1,7 +1,7 @@
 {
  "symbol": "SOL_USDT",
  "contract_size": 0.1,
- "webhook_url": "http://127.0.0.1:5001/webhook",
+ "webhook_url": "http://127.0.0.1:5002/webhook",
  "dry_run": true,
  "poll_seconds": 10,
  "equity_usdt": 1000.0,

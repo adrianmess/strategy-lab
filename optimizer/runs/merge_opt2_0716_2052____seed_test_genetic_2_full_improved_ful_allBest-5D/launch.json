@@ -1,0 +1,14 @@
+[
+ {
+  "at": "2026-07-17 13:05:21",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --algo genetic --mode lev --method vol3 --procs 14 --batch 100 --name merge_opt2_0716_2052____seed_test_genetic_2_full_improved_ful_allBest-5D --total 100000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 5 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ },
+ {
+  "at": "2026-07-17 13:07:11",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --algo genetic --mode lev --method vol3 --procs 14 --batch 100 --name merge_opt2_0716_2052____seed_test_genetic_2_full_improved_ful_allBest-5D --total 100000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

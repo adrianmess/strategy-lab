@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-16/17 20:52:42 (backfilled)",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --algo genetic --mode lev --method vol3 --procs 14 --batch 100 --name opt2_0716_2052 --total 100000 --train-end 2025-09-01 --max-hold-days 7 --gap-mode skip_contaminated --scoring underwater",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

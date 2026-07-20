@@ -1,0 +1,22 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": true,
+  "growth_pct": -80.31464476969438,
+  "total_mult": null,
+  "gap_mode": "skip_contaminated",
+  "backtest": "__seed_test_genetic_2_full_improved-50_DD_full",
+  "at": "2026-07-11 18:16"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 7.920927208120077,
+  "total_mult": 6.459475331555051,
+  "gap_mode": "skip_contaminated",
+  "backtest": "__seed_test_genetic_2_full_improved-50_DD_oosbest_full",
+  "at": "2026-07-11 18:16"
+ }
+}

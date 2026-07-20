@@ -1,0 +1,13 @@
+[
+ {
+  "at": "2026-07-16/17 22:36:32 (backfilled)",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --algo genetic --mode lev --method vol3 --procs 14 --batch 100 --name merge_opt2_0713_0232____seed_test_genetic_2_full_improved_fu --total 200000 --train-end 2025-09-01 --max-hold-days 7 --gap-mode skip_contaminated --scoring underwater --resume-from runs/opt2_0713_0232,runs/__seed_test_genetic_2_full_improved_full,runs/auto_v7_D_vol3_te0901_mh10_1mil_stop1.15,runs/auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2_stop1.15 --merge-mode merge",
+  "resume_from": [
+   "runs/opt2_0713_0232",
+   "runs/__seed_test_genetic_2_full_improved_full",
+   "runs/auto_v7_D_vol3_te0901_mh10_1mil_stop1.15",
+   "runs/auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2_stop1.15"
+  ],
+  "merge_mode": "merge"
+ }
+]

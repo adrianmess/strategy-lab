@@ -22,3 +22,4 @@ cache/
 
 # OS
 .DS_Store
+proxy_config.json

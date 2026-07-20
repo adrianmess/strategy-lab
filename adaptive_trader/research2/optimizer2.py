@@ -84,6 +84,10 @@ def sample_regime_params(rng, space, mode):
     if mode == "spot":
         d["leverage"] = 1.0
         d["eS3"] = 0.0; d["eXS"] = 0.0
+    else:
+        # INTEGER LEVERAGE: MEXC only accepts whole numbers; search only
+        # configs the executor can set exactly as backtested
+        d["leverage"] = max(1.0, float(int(d["leverage"])))   # floor
     return d
 
 def sample_candidate(rng, space, R, mode, per_regime=True):
@@ -98,8 +102,11 @@ def crossover(rng, a, b):
     child = dict(strategy="v7", mode=a["mode"], regs=[])
     for ra, rb in zip(a["regs"], b["regs"]):
         keys = set(ra) | set(rb)
-        child["regs"].append({k: (ra[k] if (k not in rb or (k in ra and rng.random() < 0.5))
-                                  else rb[k]) for k in keys})
+        d = {k: (ra[k] if (k not in rb or (k in ra and rng.random() < 0.5))
+                 else rb[k]) for k in keys}
+        if a["mode"] != "spot" and "leverage" in d:   # integer leverage (see sampler)
+            d["leverage"] = max(1.0, float(int(d["leverage"])))   # floor
+        child["regs"].append(d)
     return child
 
 def mutate(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):
@@ -121,6 +128,8 @@ def mutate(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):
                 d[k] = 1.0 - d[k]
         if mode == "spot":
             d["leverage"] = 1.0; d["eS3"] = 0.0; d["eXS"] = 0.0
+        else:
+            d["leverage"] = max(1.0, float(int(d["leverage"])))  # integer leverage (floor)
         out["regs"].append(d)
     return out
 

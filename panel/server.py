@@ -21,8 +21,61 @@ JOBS_DIR = os.path.join(HERE, "jobs")
 os.makedirs(JOBS_DIR, exist_ok=True)
 
 app = Flask(__name__)
-trader = {"proc": None, "config": None, "live": False, "started": None}
 jobs = {}  # id -> dict(proc, cmd, log, name, kind, started)
+
+# ---------------- instance registry ----------------
+# An "instance" = one executor (own browser profile + port) + one trader (own
+# config file, which carries its own state_file/log_file/webhook_url).
+# Instance "1" is the classic setup. Metadata persists in panel/instances.json;
+# processes do not survive a panel restart (same as before).
+INSTANCES_FILE = os.path.join(HERE, "instances.json")
+
+def _new_instance(i):
+    return dict(
+        trader=dict(proc=None, config=None, live=False, started=None),
+        webhook=dict(proc=None, started=None, port=None, headless=False),
+        cfg="config.json", port=5000 + int(i), headless=False)
+
+def _load_instances():
+    out = {}
+    try:
+        meta = json.load(open(INSTANCES_FILE))
+    except Exception:
+        meta = {"1": {}}
+    for i, m in sorted(meta.items(), key=lambda kv: int(kv[0])):
+        d = _new_instance(i)
+        d["cfg"] = m.get("cfg") or d["cfg"]
+        d["port"] = m.get("port") or d["port"]
+        d["headless"] = bool(m.get("headless"))
+        out[str(i)] = d
+    if "1" not in out:
+        out["1"] = _new_instance(1)
+    return out
+
+instances = _load_instances()
+
+def _save_instances():
+    json.dump({i: dict(cfg=d.get("cfg"), port=d.get("port"),
+                       headless=d.get("headless", False))
+               for i, d in instances.items()},
+              open(INSTANCES_FILE, "w"), indent=1)
+
+def _inst():
+    """Resolve the instance addressed by the current request (default '1')."""
+    i = str(request.args.get("instance")
+            or (request.get_json(silent=True) or {}).get("instance") or "1")
+    if i not in instances:
+        instances[i] = _new_instance(i)
+        _save_instances()
+    return i, instances[i]
+
+def _webhook_log(i):
+    return os.path.join(JOBS_DIR, "webhook_server.log" if i == "1"
+                        else f"webhook_server_i{i}.log")
+
+# instance-1 aliases: any legacy code path keeps working
+trader = instances["1"]["trader"]
+webhook = instances["1"]["webhook"]
 
 
 def tail(path, lines=80):
@@ -81,16 +134,19 @@ def dash(p):
 # ---------------- trader ----------------
 @app.route("/api/status")
 def status():
-    p = trader["proc"]
+    i, I = _inst()
+    t = I["trader"]
+    p = t["proc"]
     running = p is not None and p.poll() is None
-    cfg_name = trader["config"] or "config.json"
+    cfg_name = t["config"] or I["cfg"] or "config.json"
     cfg_path = os.path.join(AT, cfg_name)
     cfg = json.load(open(cfg_path)) if os.path.exists(cfg_path) else {}
     state_file = os.path.join(AT, cfg.get("state_file", "trader_state.json"))
     state = json.load(open(state_file)) if os.path.exists(state_file) else {}
     return jsonify(dict(
-        running=running, live=trader["live"] if running else False,
-        config=cfg_name, started=trader["started"] if running else None,
+        instance=i,
+        running=running, live=t["live"] if running else False,
+        config=cfg_name, started=t["started"] if running else None,
         exit_code=(None if running or p is None else p.poll()),
         mode=cfg.get("mode"), method=cfg.get("method"),
         equity_usdt=cfg.get("equity_usdt"),
@@ -99,28 +155,52 @@ def status():
         log=tail(os.path.join(AT, cfg.get("log_file", "trader.log")), 60),
     ))
 
+def _state_file_of(cfg_name):
+    try:
+        c = json.load(open(os.path.join(AT, cfg_name)))
+        return c.get("state_file", "trader_state.json")
+    except Exception:
+        return None
+
 @app.route("/api/trader/start", methods=["POST"])
 def trader_start():
     d = request.get_json(force=True)
-    if trader["proc"] is not None and trader["proc"].poll() is None:
-        return jsonify(error="trader already running"), 400
-    cfg_name = d.get("config", "config.json")
+    i, I = _inst()
+    t = I["trader"]
+    if t["proc"] is not None and t["proc"].poll() is None:
+        return jsonify(error=f"instance {i}: trader already running"), 400
+    cfg_name = d.get("config", I["cfg"] or "config.json")
     live = bool(d.get("live"))
     if live and d.get("confirm") != "LIVE":
         return jsonify(error="live start requires confirm='LIVE'"), 400
+    # SAFETY: two traders sharing one state file corrupt each other. Refuse.
+    mine = _state_file_of(cfg_name)
+    for j, J in instances.items():
+        tj = J["trader"]
+        if j != i and tj["proc"] is not None and tj["proc"].poll() is None:
+            theirs = _state_file_of(tj["config"] or J["cfg"] or "config.json")
+            if mine and theirs and mine == theirs:
+                return jsonify(error=(
+                    f"instance {j}'s running trader uses the same state file "
+                    f"('{mine}') as {cfg_name}. Give this instance its own config "
+                    f"with distinct state_file/log_file/webhook_url.")), 400
     cmd = [sys.executable, "trader.py"] + (["--live"] if live else [])
     # trader logs to its own file already; also capture stdout
-    log = os.path.join(JOBS_DIR, "trader_stdout.log")
+    log = os.path.join(JOBS_DIR, "trader_stdout.log" if i == "1"
+                       else f"trader_stdout_i{i}.log")
     with open(log, "a") as lf:
         proc = subprocess.Popen(cmd, cwd=AT, stdout=lf, stderr=subprocess.STDOUT,
                                 env={**os.environ, "TRADER_CONFIG": cfg_name})
-    trader.update(proc=proc, config=cfg_name, live=live,
-                  started=time.strftime("%Y-%m-%d %H:%M:%S"))
-    return jsonify(ok=True)
+    t.update(proc=proc, config=cfg_name, live=live,
+             started=time.strftime("%Y-%m-%d %H:%M:%S"))
+    I["cfg"] = cfg_name
+    _save_instances()
+    return jsonify(ok=True, instance=i)
 
 @app.route("/api/trader/stop", methods=["POST"])
 def trader_stop():
-    p = trader["proc"]
+    i, I = _inst()
+    p = I["trader"]["proc"]
     if p is None or p.poll() is not None:
         return jsonify(error="not running"), 400
     p.send_signal(signal.SIGINT)
@@ -173,7 +253,9 @@ def api_defaults():
         code = (
             "import _bootstrap as B, json\n"
             "from optimize2_cli import build_anchor_defaults\n"
-            f"space = json.load(open(B.OPT_DIR + '/param_space.json')).get({strategy!r}) or {{}}\n"
+            "sp = json.load(open(B.OPT_DIR + '/param_space.json'))\n"
+            f"space = (sp.get({strategy!r} + '@spot') if {mode!r} == 'spot' else None) "
+            f"or sp.get({strategy!r}) or {{}}\n"
             f"print(json.dumps(build_anchor_defaults({strategy!r}, {mode!r}, {R}, space), default=float))"
         )
     try:
@@ -261,7 +343,7 @@ def job_stop(jid):
 
 
 # ---------------- webhook executor (Playwright) ----------------
-webhook = {"proc": None, "started": None, "port": None}
+# (webhook state now lives per-instance; see the instance registry at the top)
 
 def _port_free(port):
     """The executor binds 0.0.0.0, so test exactly that, WITHOUT SO_REUSEADDR
@@ -296,34 +378,43 @@ def _port_owner(port):
         pass
     return None
 
-def _sync_webhook_url(port):
-    """Keep every trader config pointing at the executor's actual port."""
+def _sync_webhook_url(port, cfg_files=None):
+    """Point trader config(s) at the executor's actual port. With multiple
+    instances only THIS instance's config is rewritten (cfg_files list);
+    None = legacy behavior (all config*.json) used when only instance 1 exists."""
     changed = []
-    for f in os.listdir(AT):
-        if f.startswith("config") and f.endswith(".json"):
-            p = os.path.join(AT, f)
-            try:
-                c = json.load(open(p))
-            except Exception:
-                continue
-            url = f"http://127.0.0.1:{port}/webhook"
-            if c.get("webhook_url") != url:
-                c["webhook_url"] = url
-                json.dump(c, open(p, "w"), indent=1)
-                changed.append(f)
+    files = cfg_files if cfg_files is not None else \
+        [f for f in os.listdir(AT) if f.startswith("config") and f.endswith(".json")]
+    for f in files:
+        p = os.path.join(AT, f)
+        try:
+            c = json.load(open(p))
+        except Exception:
+            continue
+        url = f"http://127.0.0.1:{port}/webhook"
+        if c.get("webhook_url") != url:
+            c["webhook_url"] = url
+            json.dump(c, open(p, "w"), indent=1)
+            changed.append(f)
     return changed
 
 @app.route("/api/webhook/start", methods=["POST"])
 def webhook_start():
-    if webhook["proc"] is not None and webhook["proc"].poll() is None:
-        return jsonify(error="webhook server already running"), 400
+    i, I = _inst()
+    wh = I["webhook"]
+    if wh["proc"] is not None and wh["proc"].poll() is None:
+        return jsonify(error=f"instance {i}: executor already running"), 400
     d = request.get_json(force=True) or {}
-    want = int(d.get("port", 5001))
+    want = int(d.get("port", I["port"] or 5001))
     if want == 5000:
         want = 5001   # port 5000 is reserved by macOS AirPlay; never use it
+    # ports used by OTHER instances' running executors are off limits
+    taken = {J["webhook"].get("port") for j, J in instances.items()
+             if j != i and J["webhook"]["proc"] is not None
+             and J["webhook"]["proc"].poll() is None}
     port = None
     for cand in [want] + [p for p in range(5001, 5012) if p != want]:
-        if _port_free(cand):
+        if cand not in taken and _port_free(cand):
             port = cand
             break
     if port is None:
@@ -332,36 +423,284 @@ def webhook_start():
     if port != want:
         owner = _port_owner(want)
         who = f"It's held by: {owner}. " if owner else ""
-        hint = ("That's an old executor still running — stop it or let this one use the new port. "
+        hint = ("That's an old executor still running — stop it (or Force stop all) "
+                "or let this one use the new port. "
                 if owner and "ython" in owner else
                 "On macOS, ControlCenter on port 5000 = the AirPlay Receiver "
                 "(System Settings > General > AirDrop & Handoff). ")
         note = (f"Port {want} was busy. {who}{hint}"
-                f"Started on port {port} instead and updated the trader configs to match.")
-    changed = _sync_webhook_url(port)
-    log = os.path.join(JOBS_DIR, "webhook_server.log")
-    with open(log, "a") as lf:
-        proc = subprocess.Popen([sys.executable, "webhook_server.py",
-                                 "--instance", "1", "--port", str(port)],
-                                cwd=REPO, stdout=lf, stderr=subprocess.STDOUT)
-    webhook.update(proc=proc, started=time.strftime("%H:%M:%S"), port=port)
-    return jsonify(ok=True, port=port, note=note, configs_updated=changed)
+                f"Started on port {port} instead and updated this instance's "
+                f"trader config to match.")
+    # single classic instance: legacy behavior (sync every config file);
+    # multiple instances: only this instance's chosen config follows the port
+    only_mine = [I["cfg"]] if len(instances) > 1 else None
+    changed = _sync_webhook_url(port, only_mine)
+    log = _webhook_log(i)
+    cmd = [sys.executable, "webhook_server.py", "--instance", i, "--port", str(port)]
+    if d.get("headless"):
+        cmd.append("--headless")
+    with open(log, "w") as lf:   # truncate so status reads only THIS run's log
+        proc = subprocess.Popen(cmd, cwd=REPO, stdout=lf, stderr=subprocess.STDOUT)
+    wh.update(proc=proc, started=time.strftime("%H:%M:%S"), port=port,
+              headless=bool(d.get("headless")))
+    I["port"] = port
+    I["headless"] = bool(d.get("headless"))
+    _save_instances()
+    return jsonify(ok=True, instance=i, port=port, note=note,
+                   configs_updated=changed, headless=bool(d.get("headless")))
 
 @app.route("/api/webhook/stop", methods=["POST"])
 def webhook_stop():
-    p = webhook["proc"]
+    i, I = _inst()
+    p = I["webhook"]["proc"]
     if p is None or p.poll() is not None:
         return jsonify(error="not running"), 400
     p.terminate()
     return jsonify(ok=True)
 
+@app.route("/api/webhook/force_stop", methods=["POST"])
+def webhook_force_stop():
+    """Kill EVERY executor: the panel's own child, terminal-started ones holding
+    ports 5001-5011 (the normal Stop can't reach those), and any orphaned
+    executor Chromium. Non-executor port holders are reported but left alone."""
+    import signal
+    killed, skipped = [], []
+    for j, J in instances.items():
+        p = J["webhook"]["proc"]
+        if p is not None and p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(timeout=3)
+            except Exception:
+                p.kill()
+            killed.append(f"panel-started executor, instance {j} (pid {p.pid})")
+    for port in range(5001, 5012):
+        try:
+            out = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+                                 capture_output=True, text=True, timeout=5).stdout
+        except Exception:
+            continue
+        for pid in {int(x) for x in out.split()}:
+            try:
+                cmd = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
+                                     capture_output=True, text=True, timeout=5).stdout.strip()
+            except Exception:
+                cmd = ""
+            if "webhook_server.py" not in cmd:
+                skipped.append(f"port {port}: pid {pid} "
+                               f"({cmd.split()[0].rsplit('/', 1)[-1] if cmd else '?'}) "
+                               f"— not an executor, left alone")
+                continue
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                continue
+            deadline = time.time() + 3
+            while time.time() < deadline:
+                time.sleep(0.1)
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+            try:
+                os.kill(pid, 0)
+                os.kill(pid, signal.SIGKILL)   # still alive after 3s
+            except ProcessLookupError:
+                pass
+            killed.append(f"executor pid {pid} (port {port})")
+    # orphaned Playwright Chromium still holding the persistent profile
+    r = subprocess.run(["pkill", "-f", "chrome_user_data/instance_"],
+                       capture_output=True)
+    if r.returncode == 0:
+        killed.append("orphaned executor browser (Chromium)")
+    for J in instances.values():
+        J["webhook"].update(proc=None, started=None)
+    return jsonify(ok=True, killed=killed, skipped=skipped)
+
+def _proxy_state(logtext):
+    """Parse the executor log for the browser's egress-IP self-check."""
+    lines = logtext.splitlines() if isinstance(logtext, str) else list(logtext or [])
+    for line in reversed(lines):
+        if "PROXY LEAK" in line:
+            return dict(state="leak", ip=None)
+        if "PROXY OK" in line:
+            import re
+            m = re.search(r"egress IP:\s*([0-9a-fA-F:.]+)", line)
+            return dict(state="ok", ip=(m.group(1) if m else None))
+        if "running WITHOUT proxy" in line:
+            return dict(state="none", ip=None)
+    return dict(state="unknown", ip=None)
+
+
 @app.route("/api/webhook/status")
 def webhook_status():
-    p = webhook["proc"]
+    i, I = _inst()
+    wh = I["webhook"]
+    p = wh["proc"]
     running = p is not None and p.poll() is None
-    return jsonify(running=running, started=webhook["started"] if running else None,
-                   port=webhook.get("port"),
-                   log=tail(os.path.join(JOBS_DIR, "webhook_server.log"), 20))
+    logtext = tail(_webhook_log(i), 40)
+    return jsonify(instance=i,
+                   running=running, started=wh["started"] if running else None,
+                   port=wh.get("port"),
+                   headless=wh.get("headless", False),
+                   proxy=_proxy_state(logtext),
+                   log=logtext)
+
+
+@app.route("/api/webhook/screenshot")
+def webhook_screenshot():
+    """Proxy a live screenshot from the executor (works in headless mode too)."""
+    import urllib.request
+    i, I = _inst()
+    port = I["webhook"].get("port") or I["port"] or 5001
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/screenshot", timeout=15) as r:
+            data = r.read()
+        from flask import Response
+        return Response(data, mimetype="image/png",
+                        headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        return jsonify(error=f"could not get screenshot: {e}"), 502
+
+
+# ---------------- instances ----------------
+@app.route("/api/instances")
+def instances_list():
+    out = []
+    for i, I in sorted(instances.items(), key=lambda kv: int(kv[0])):
+        t, w = I["trader"], I["webhook"]
+        out.append(dict(
+            id=i, cfg=I["cfg"], port=I["port"], headless=I["headless"],
+            trader_running=(t["proc"] is not None and t["proc"].poll() is None),
+            trader_live=t["live"],
+            webhook_running=(w["proc"] is not None and w["proc"].poll() is None)))
+    return jsonify(out)
+
+@app.route("/api/instances/add", methods=["POST"])
+def instances_add():
+    nxt = str(max((int(k) for k in instances), default=0) + 1)
+    instances[nxt] = _new_instance(nxt)
+    _save_instances()
+    return jsonify(ok=True, id=nxt)
+
+@app.route("/api/instances/remove", methods=["POST"])
+def instances_remove():
+    d = request.get_json(force=True)
+    i = str(d.get("id", ""))
+    if i == "1":
+        return jsonify(error="instance 1 can't be removed"), 400
+    I = instances.get(i)
+    if not I:
+        return jsonify(error=f"no instance {i}"), 404
+    for kind in ("trader", "webhook"):
+        p = I[kind]["proc"]
+        if p is not None and p.poll() is None:
+            return jsonify(error=f"instance {i}'s {kind} is running — stop it first"), 400
+    del instances[i]
+    _save_instances()
+    return jsonify(ok=True)
+
+
+# ---------------- process viewer ----------------
+_PROC_KINDS = {"trader.py": "trader", "webhook_server.py": "executor",
+               "optimize2_cli.py": "optimizer", "backtest_cli.py": "backtest",
+               "walkforward_cli.py": "walk-forward", "refit.py": "refit",
+               "update_data.py": "data-update", "panel/server.py": "panel"}
+
+def _scan_processes():
+    out = []
+    try:
+        ps = subprocess.run(["ps", "-axo", "pid=,lstart=,command="],
+                            capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return out
+    known = set()   # pids the panel started itself
+    for I in instances.values():
+        for kind in ("trader", "webhook"):
+            p = I[kind]["proc"]
+            if p is not None and p.poll() is None:
+                known.add(p.pid)
+    for j in jobs.values():
+        if j["proc"].poll() is None:
+            known.add(j["proc"].pid)
+    me = os.getpid()
+    for line in ps.splitlines():
+        parts = line.strip().split(None, 6)
+        if len(parts) < 7:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        started = " ".join(parts[1:6])
+        cmd = parts[6]
+        if "python" not in cmd.lower() or "grep" in cmd:
+            continue
+        # skip shell wrappers (zsh/bash -c "... python3 panel/server.py ...")
+        if cmd.split()[0].rsplit("/", 1)[-1] in ("sh", "bash", "zsh", "dash"):
+            continue
+        hit = next((k for k in _PROC_KINDS if k in cmd), None)
+        if not hit:
+            continue
+        out.append(dict(pid=pid, kind=_PROC_KINDS[hit], started=started,
+                        live=("--live" in cmd), me=(pid == me),
+                        panel_child=(pid in known), cmd=cmd[:220]))
+    return out
+
+@app.route("/api/processes")
+def processes():
+    """EVERY strategy-lab process on this machine — including ones this panel
+    didn't start (terminal-started, orphaned). The defense against hidden
+    duplicate traders/executors."""
+    out = _scan_processes()
+    n_traders = sum(1 for p in out if p["kind"] == "trader")
+    n_exec = sum(1 for p in out if p["kind"] == "executor")
+    warns = []
+    if n_traders > 1:
+        warns.append(f"{n_traders} traders are running — they may share a state "
+                     "file and corrupt each other. Kill the ones you don't want.")
+    if n_exec > 1:
+        warns.append(f"{n_exec} executors are running — make sure each belongs "
+                     "to an instance (different --instance and port).")
+    return jsonify(processes=out, warnings=warns)
+
+@app.route("/api/processes/kill", methods=["POST"])
+def processes_kill():
+    """Kill one scanned process by pid. Only pids from the scan are allowed,
+    and never this panel itself."""
+    import signal as _sig
+    d = request.get_json(force=True)
+    pid = int(d.get("pid", 0))
+    target = next((p for p in _scan_processes() if p["pid"] == pid), None)
+    if target is None:
+        return jsonify(error=f"pid {pid} is not a strategy-lab process (rescan?)"), 400
+    if target["me"]:
+        return jsonify(error="that's this panel — not killing myself"), 400
+    try:
+        os.kill(pid, _sig.SIGTERM)
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            time.sleep(0.1)
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, _sig.SIGKILL)
+        except ProcessLookupError:
+            pass
+    except ProcessLookupError:
+        pass
+    except PermissionError as e:
+        return jsonify(error=str(e)), 500
+    # clear any panel bookkeeping that pointed at this pid
+    for I in instances.values():
+        for kind in ("trader", "webhook"):
+            p = I[kind]["proc"]
+            if p is not None and p.pid == pid:
+                I[kind].update(proc=None, started=None)
+    return jsonify(ok=True, killed=dict(pid=pid, kind=target["kind"]))
 
 
 # ---------------- manual test orders ----------------
@@ -374,7 +713,8 @@ def manual_order():
     if action not in ("open_long", "open_short", "close_long", "close_short",
                       "close_position"):
         return jsonify(error=f"unknown action {action}"), 400
-    port = webhook.get("port") or 5001
+    i, I = _inst()
+    port = I["webhook"].get("port") or I["port"] or 5001
     url = d.get("url") or f"http://127.0.0.1:{port}/webhook"
     payload = dict(action=action, symbol=d.get("symbol", "SOL_USDT"))
     if action.startswith("open"):
@@ -413,7 +753,16 @@ def _config_entries():
         for d in sorted(os.listdir(runs_dir)):
             p = os.path.join(runs_dir, d, "best_config.json")
             if os.path.exists(p):
-                out.append(dict(path=p, label=f"optimizer run: {d}", kind="run"))
+                best = os.path.exists(os.path.join(runs_dir, d, "marked_best"))
+                try:
+                    rp = os.path.join(runs_dir, d, "rating")
+                    rating = int(open(rp).read().strip()) if os.path.exists(rp) else 0
+                except Exception:
+                    rating = 0
+                out.append(dict(path=p, label=f"optimizer run: {d}", kind="run",
+                                best=best, rating=rating))
+    # starred/rated first, like on the Optimize page
+    out.sort(key=lambda e: (-(e.get("best") and 1 or 0), -(e.get("rating") or 0)))
     return out
 
 @app.route("/api/configs")
@@ -527,7 +876,10 @@ def job_optimize2():
     if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     if d.get("lockbox"): cmd += ["--lockbox", d["lockbox"]]
     if d.get("scoring"): cmd += ["--scoring", d["scoring"]]
+    if d.get("stop_score") is not None and d.get("stop_score") != "":
+        cmd += ["--stop-score", str(d["stop_score"])]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
+    if d.get("merge_mode"): cmd += ["--merge-mode", d["merge_mode"]]
     if d.get("seed_cand"):
         run_dir = os.path.join(OPT, "runs", name)
         os.makedirs(run_dir, exist_ok=True)
@@ -578,6 +930,8 @@ def _scrub(o):
 def runs2():
     out = []
     runs_dir = os.path.join(OPT, "runs")
+    running_names = {j.get("name") for j in jobs.values()
+                     if j["proc"].poll() is None and "optimize" in j.get("kind", "")}
     for d in sorted(os.listdir(runs_dir)):
         pool_p = os.path.join(runs_dir, d, "pool2.json")
         if not os.path.exists(pool_p):
@@ -585,9 +939,37 @@ def runs2():
         best_p = os.path.join(runs_dir, d, "best_config.json")
         if not os.path.exists(pool_p):
             continue
+        rating_p = os.path.join(runs_dir, d, "rating")
+        try:
+            rating = int(open(rating_p).read().strip()) if os.path.exists(rating_p) else 0
+        except Exception:
+            rating = 0
+        launches = []
+        launch_p = os.path.join(runs_dir, d, "launch.json")
+        if os.path.exists(launch_p):
+            try:
+                launches = json.load(open(launch_p))
+            except Exception:
+                launches = []
         e = dict(name=d, run=f"runs/{d}",
+                 best=os.path.exists(os.path.join(runs_dir, d, "marked_best")),
+                 rating=rating, launches=launches,
+                 running=(d in running_names),
                  last_run=time.strftime("%Y-%m-%d %H:%M",
                                         time.localtime(os.path.getmtime(pool_p))))
+        if d in running_names:
+            prog_p = os.path.join(runs_dir, d, "progress.json")
+            if os.path.exists(prog_p):
+                try:
+                    pr = json.load(open(prog_p))
+                    if time.time() - pr.get("updated", 0) < 900:
+                        e["progress"] = dict(
+                            pct=pr.get("pct"), eta_s=pr.get("eta_s"),
+                            evaluated_session=pr.get("evaluated_session"),
+                            budget=pr.get("budget"), budget_type=pr.get("budget_type"),
+                            phase=pr.get("phase"))
+                except Exception:
+                    pass
         try:
             pd_ = json.load(open(pool_p))
             e["evaluated"] = pd_.get("evaluated")
@@ -706,6 +1088,94 @@ def runs2_delete():
     except Exception as e:
         return jsonify(error=f"delete failed: {e}"), 500
     return jsonify(ok=True, deleted=name)
+
+
+@app.route("/api/runs2/mark", methods=["POST"])
+def runs2_mark():
+    """Toggle the 'best' star on an optimizer run (marker file inside the run dir,
+    so it follows renames and disappears with deletes)."""
+    d = request.get_json(force=True)
+    name = os.path.basename(d.get("name", ""))
+    best = bool(d.get("best"))
+    run_dir = os.path.join(OPT, "runs", name)
+    if not name or not os.path.isdir(run_dir):
+        return jsonify(error=f"run '{name}' not found"), 404
+    marker = os.path.join(run_dir, "marked_best")
+    if best:
+        open(marker, "w").write(time.strftime("%Y-%m-%d %H:%M"))
+    elif os.path.exists(marker):
+        os.remove(marker)
+    return jsonify(ok=True, name=name, best=best)
+
+
+@app.route("/api/runs2/rate", methods=["POST"])
+def runs2_rate():
+    """Set a 1-3 star rating on an optimizer run (0 clears). Stored as a marker
+    file inside the run dir, like marked_best."""
+    d = request.get_json(force=True)
+    name = os.path.basename(d.get("name", ""))
+    rating = max(0, min(3, int(d.get("rating", 0))))
+    run_dir = os.path.join(OPT, "runs", name)
+    if not name or not os.path.isdir(run_dir):
+        return jsonify(error=f"run '{name}' not found"), 404
+    marker = os.path.join(run_dir, "rating")
+    if rating:
+        open(marker, "w").write(str(rating))
+    elif os.path.exists(marker):
+        os.remove(marker)
+    return jsonify(ok=True, name=name, rating=rating)
+
+
+@app.route("/api/backtests/mark", methods=["POST"])
+def backtests_mark():
+    """Toggle the 'best' star on a published backtest entry."""
+    d = request.get_json(force=True)
+    name = d.get("name")
+    best = bool(d.get("best"))
+    path = os.path.join(DASH, "backtests.js")
+    txt = open(path).read()
+    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
+    hit = False
+    for e in entries:
+        if e.get("name") == name:
+            if best:
+                e["best"] = True
+            else:
+                e.pop("best", None)
+            hit = True
+    if not hit:
+        return jsonify(error=f"backtest '{name}' not found"), 404
+    with open(path, "w") as f:
+        f.write("window.BACKTESTS = ")
+        json.dump(entries, f, default=float)
+        f.write(";")
+    return jsonify(ok=True, name=name, best=best)
+
+
+@app.route("/api/backtests/rate", methods=["POST"])
+def backtests_rate():
+    """Set a 1-3 star rating on a published backtest entry (0 clears)."""
+    d = request.get_json(force=True)
+    name = d.get("name")
+    rating = max(0, min(3, int(d.get("rating", 0))))
+    path = os.path.join(DASH, "backtests.js")
+    txt = open(path).read()
+    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
+    hit = False
+    for e in entries:
+        if e.get("name") == name:
+            if rating:
+                e["rating"] = rating
+            else:
+                e.pop("rating", None)
+            hit = True
+    if not hit:
+        return jsonify(error=f"backtest '{name}' not found"), 404
+    with open(path, "w") as f:
+        f.write("window.BACKTESTS = ")
+        json.dump(entries, f, default=float)
+        f.write(";")
+    return jsonify(ok=True, name=name, rating=rating)
 
 
 @app.route("/api/backtests/delete", methods=["POST"])

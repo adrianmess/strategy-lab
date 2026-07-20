@@ -12,7 +12,7 @@ header{padding:14px 28px;border-bottom:1px solid var(--border);background:var(--
 h1{margin:0;font-size:18px}
 nav a{color:var(--dim);text-decoration:none;margin-left:18px;font-weight:600}
 nav a.here,nav a:hover{color:var(--blue)}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;max-width:1900px;margin:0 auto;padding:22px 24px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;padding:22px 24px}
 @media(max-width:1100px){.layout{grid-template-columns:1fr}}
 h2{font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin:24px 0 10px}
 h2:first-child{margin-top:0}
@@ -33,6 +33,22 @@ th{color:var(--dim);cursor:pointer;user-select:none;position:sticky;top:0;backgr
 th:hover{color:var(--blue)}
 th .arrow{font-size:10px}
 .pos{color:var(--green)}.neg{color:var(--red)}.warn{color:var(--amber)}
+tr.rate1 td{background:rgba(210,153,34,.07)}
+tr.rate2 td{background:rgba(45,186,150,.07)}
+tr.rate3 td{background:rgba(63,185,80,.10)}
+tr.rate1 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+tr.rate2 td:first-child{box-shadow:inset 3px 0 0 rgb(45,186,150)}
+tr.rate3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tr.best td{background:rgba(63,185,80,.08)}
+tr.best td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+button.star{background:none;border:none;cursor:pointer;font-size:14px;color:var(--dim);padding:3px 5px}
+button.star:hover{color:var(--green)} button.star.on{color:var(--green)}
+.rstars{white-space:nowrap;font-size:14px;letter-spacing:1px;cursor:pointer;user-select:none}
+.rstars span{color:var(--dim);opacity:.4}
+.rstars span:hover{opacity:1}
+.rstars.r1 span.on{color:var(--amber);opacity:1}
+.rstars.r2 span.on{color:rgb(45,186,150);opacity:1}
+.rstars.r3 span.on{color:var(--green);opacity:1}
 .kv{color:var(--dim)}
 .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600}
 .b-green{background:rgba(63,185,80,.15);color:var(--green)}
@@ -101,6 +117,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
           <option value="scalpx2">Scalp family · ScalpX2 (full-param)</option>
           <option value="scalpx">Scalp family · ScalpX</option>
           <option value="v6">V5 family · V6 (z-score thresholds)</option>
+          <option value="macdx">MACD Crossover (TP/SL/Time/Hist, reversal)</option>
+          <option value="rocx">V4 ROC/SMA (long-only, 45-min entries)</option>
         </select></div>
       <div class="field"><label data-x="algorithm">Algorithm</label>
         <select id="algo" onchange="algoChanged()"><option>genetic</option><option>random</option><option>refine</option><option value="crossfit">cross-fit (genetic ×2 + merge)</option></select></div>
@@ -117,13 +135,14 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <span style="display:flex;gap:4px">
         <select id="budgetType" style="width:110px"><option value="hours">hours</option><option value="total">evaluations</option></select>
         <input id="budgetVal" value="2" style="width:70px"></span></div>
+      <div class="field"><label data-x="stopscore">Stop at score</label><input id="stopScore" value="" placeholder="off" style="width:60px"></div>
       <div class="field"><label data-x="maxdd">Max drawdown %</label><input id="maxDD" value="80" style="width:60px"></div>
       <div class="field"><label data-x="anchor">Anchor</label>
         <span style="display:flex;gap:4px">
         <select id="anchor" style="width:170px"><option value="">none (default)</option><option value="defaults">strategy live defaults</option></select>
         <input id="anchorStr" value="0" style="width:45px" title="anchor strength: 0 = seeding only; e.g. 0.3 also penalizes distance from the anchor"></span></div>
       <div class="field"><label data-x="scoring">Scoring</label>
-        <select id="scoring"><option value="classic">classic (default)</option><option value="worst_window">worst 3-month window</option><option value="underwater">time-in-trade penalty</option></select></div>
+        <select id="scoring"><option value="classic">classic (default)</option><option value="worst_window">worst 3-month window</option><option value="underwater">underwater (time-in-trade penalty)</option></select></div>
       <div class="field"><label data-x="maxhold">Max days in trade</label><input id="maxHold" value="" placeholder="∞" style="width:60px"></div>
       <div class="field" id="lockboxField" style="display:none"><label data-x="lockbox">Lockbox</label>
         <input id="lockbox" placeholder="2025-09-01.." style="width:190px" title="date ranges 'a..b', comma-separated; open sides allowed"></div>
@@ -137,6 +156,22 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px"></div>
       <button class="primary" onclick="launch()" style="height:34px">Start search</button>
       <span class="kv" id="launchMsg"></span>
+    </div>
+    <div class="row" style="align-items:flex-end;margin-top:10px">
+      <div class="field"><label data-x="combine">Combine runs</label>
+        <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <span id="cmbInputs" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <input class="cmbRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">
+        <span class="kv">+</span>
+        <input class="cmbRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">
+        </span>
+        <button class="small" style="height:30px" title="Add another run to the merge — combine any number of compatible runs (same strategy/mode/method)" onclick="addCombineInput()">+ run</button>
+        <datalist id="cmbRuns"></datalist>
+        <select id="cmbMode" style="width:160px">
+          <option value="merge">merge & continue</option>
+          <option value="breed">breed hybrids</option></select>
+        <button class="small" style="height:30px" onclick="combineRuns()">Arm combine →</button>
+        <span class="kv" id="cmbMsg"></span></span></div>
     </div>
   </div>
 
@@ -237,6 +272,8 @@ const X = {
  processes: ["Processes", `Parallel worker processes evaluating candidates. Set to your CPU core count (or cores−1 to keep the machine responsive). More processes = proportionally faster search.`],
  budget: ["Budget", `How long to search. <b>hours</b>: wall-clock time budget. <b>evaluations</b>: number of candidate backtests to run (each evaluation = one full backtest of one parameter set — a few milliseconds each; 10,000+ is a reasonable session). Runs checkpoint every generation and are resumable by launching again with the same name.`],
  hours: ["Hours", `Time budget. Progress checkpoints every generation, so you can stop anytime and continue later by launching with the same run name. Overnight runs are fine and often worth it.`],
+ combine: ["Combine runs", `Merge two finished runs of the SAME strategy/mode/regime into one new run. Every imported candidate (both pools + reservoirs) is re-evaluated under the settings above, so runs searched with different max-DD/scoring/windows combine honestly — anything failing the current gates is dropped at the door. <b>merge & continue</b>: one combined pool, search proceeds normally. <b>breed hybrids</b>: additionally forces genetic parents to be drawn from BOTH runs, so crossbreeds get made even if one run's scores dominate. Arming prefills the launch card (from the first run); set a name and budget, then Start search.`],
+ stopscore: ["Stop at score", `Optional early stop: end the search as soon as the best TRAIN score reaches this value (e.g. 1.2), even if the budget isn't spent. The run finalizes normally — holdout scan, configs, auto-backtests. Caution: this is the in-sample training score; a high value usually means MORE overfit, not better. Leave blank for off.`],
  maxdd: ["Max drawdown %", `Candidates whose worst peak-to-trough equity loss exceeds this are thrown away during the search. Default 80% for leveraged (drawdown is mark-to-market, so open-position pain counts), 50% for spot. Lower it for configs you could actually sit through — 80% means your $1000 became $200 at some point.`],
  lockbox: ["Lockbox", `Date ranges completely hidden from the cross-fit searches, used exactly once at the end to judge the finalists. Format: 'a..b' ranges, comma-separated, open sides allowed — '2025-09-01..' locks everything after Sep 2025; '..2024-11-01, 2025-07-01..' locks the first and last eras and searches the middle. With alternating-days as the fold size. Treat a lockbox verdict as spendable once: if you tune settings because of it and rerun, it's no longer unseen.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
@@ -272,6 +309,7 @@ async function launch(){
     name:$('name').value||undefined,
     max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
     max_hold_days:(+$('maxHold').value>0) ? +$('maxHold').value : undefined,
+    stop_score:($('stopScore').value.trim()!=='' && isFinite(+$('stopScore').value)) ? +$('stopScore').value : undefined,
     gap_mode:$('optGap').value,
     scoring:($('scoring').value!=='classic') ? $('scoring').value : undefined,
     anchor:($('anchor').value==='defaults') ? 'defaults' : undefined,
@@ -282,14 +320,94 @@ async function launch(){
     single_set: $('perreg').value==='1'};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
+  if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
+  saveLaunchSettings();
   const r = await api('jobs/optimize2', d);
   $('launchMsg').textContent = 'started job '+r.id;
+  if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed — arm again for another merge'; }
   refreshJobs(); setTimeout(refreshRuns, 3000);
+}
+// ---------- combine two runs ----------
+let COMBINE = null;
+function fillCombine(){
+  const dl=$('cmbRuns'); if(!dl) return;
+  dl.innerHTML = RUNS.filter(r=>r.name!=='_backtest_tmp')
+    .sort((a,b)=>(b.best?1:0)-(a.best?1:0))   // starred runs first
+    .map(r=>`<option value="${r.name}" label="${r.best?'★ best · ':''}${stratName(r.strategy)} · ${r.mode||'?'} · ${r.method||'?'}"></option>`).join('');
+}
+function applyCombineFromBacktests(){
+  let names = null;
+  try{ names = JSON.parse(localStorage.getItem('cmbFromBt')||'null'); }catch(e){}
+  if(!names || !names.length) return;
+  localStorage.removeItem('cmbFromBt');
+  const runs = [], missing = [];
+  for(const bn of names){
+    // map backtest -> source run: exact match via the run's backtest_flags,
+    // fallback: longest run name that prefixes the backtest name
+    const r = RUNS.find(x=>(x.backtest_flags||[]).some(f=>f.backtest===bn))
+           || RUNS.filter(x=>bn.startsWith(x.name)).sort((a,b)=>b.name.length-a.name.length)[0];
+    if(r){ if(!runs.includes(r.name)) runs.push(r.name); }
+    else missing.push(bn);
+  }
+  if(!runs.length){ $('cmbMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
+  runs.splice(8);   // combine caps at 8
+  while($('cmbInputs').querySelectorAll('.cmbRun').length < Math.max(2, runs.length))
+    $('cmbInputs').insertAdjacentHTML('beforeend',
+      '<span class="kv">+</span><input class="cmbRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
+  [...document.querySelectorAll('.cmbRun')].forEach((inp,i)=>inp.value = runs[i]||'');
+  $('cmbMsg').textContent = `${runs.length} run${runs.length>1?'s':''} loaded from the Backtests page`
+    + (missing.length?` — no run found for: ${missing.join(', ')}`:'')
+    + ' — pick merge/breed, then Arm combine';
+  document.querySelector('.cmbRun').scrollIntoView({behavior:'smooth', block:'center'});
+}
+function addCombineInput(){
+  const box = $('cmbInputs');
+  if(box.querySelectorAll('.cmbRun').length >= 8){ alert('8 runs max per merge'); return; }
+  box.insertAdjacentHTML('beforeend',
+    '<span class="kv">+</span><input class="cmbRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
+}
+function combineRuns(){
+  const names = [...document.querySelectorAll('.cmbRun')].map(i=>i.value.trim()).filter(Boolean);
+  if(names.length<2){ alert('pick at least two runs to combine'); return; }
+  if(new Set(names).size!==names.length){ alert('the same run is picked twice — every run must be different'); return; }
+  const recs = names.map(n=>RUNS.find(r=>r.name===n));
+  const missIdx = recs.findIndex(r=>!r);
+  if(missIdx>=0){ alert(`run not found: "${names[missIdx]}" — pick a name from the dropdown list`); return; }
+  const A = recs[0];
+  for(const B of recs.slice(1)){
+    for(const k of ['strategy','mode','method']){
+      if((A[k]||'')!==(B[k]||'')){
+        alert(`Can't combine: ${k} differs (${A.name}: ${A[k]||'?'} vs ${B.name}: ${B[k]||'?'}). Candidates from different ${k}s aren't the same genome.`); return;
+      }
+    }
+    if((A.per_regime===false)!==(B.per_regime===false)){
+      alert(`Can't combine: ${A.name} and ${B.name} differ (per-regime vs single-set) — different genome shapes.`); return;
+    }
+  }
+  loadRunSettings(names[0]);
+  COMBINE = {rf: names.map(n=>`runs/${n}`).join(','), mode:$('cmbMode').value};
+  // unique, non-stacking name: strip existing merge_ prefixes, then dedupe vs runs
+  const strip = s=>s.replace(/^(merge_)+/,'');
+  let nm = ('merge_'+names.map(strip).join('__')).slice(0,60);
+  const base = nm; let i = 2;
+  while(RUNS.some(r=>r.name===nm)) nm = `${base}_${i++}`;
+  $('name').value = nm;
+  $('cmbMsg').innerHTML = `<b>armed</b> (${names.length} runs, ${$('cmbMode').value==='breed'?'breed hybrids':'merge & continue'})`;
+  let msg = `combine armed: ${names.join(' + ')} — settings prefilled from ${names[0]}; adjust anything (incl. gates/scoring — imports are re-scored under what you set), then Start search.`;
+  if($('stopScore').value.trim()!=='')
+    msg += ` ⚠ Stop-at-score is set (${$('stopScore').value}): a merged pool usually starts ABOVE it, which ends the run after one generation — clear it unless intended.`;
+  $('launchMsg').textContent = msg;
 }
 // ---------- runs table ----------
 let RUNS=[], sortKey='last_run', sortDir=-1;
 $('liqFilter').value = localStorage.getItem('liqFilter') || 'all';
 function fpm(x){return (x>=0?'+':'')+(100*(Math.exp(x)-1)).toFixed(1)+'%/mo'}
+function fTotPct(p, scope){ if(p==null||!isFinite(p)) return '';
+  const t = Math.abs(p)>=10000 ? (p>=0?'+':'')+p.toExponential(1)+'%'
+          : (p>=0?'+':'')+p.toLocaleString(undefined,{maximumFractionDigits:1})+'%';
+  return ` <span class="${p>=0?'pos':'neg'}" title="total gain over ${scope||'the whole period'}">${t} tot</span>`; }
+function fTotM(m){ return (m && m.eq!=null) ? fTotPct((m.eq/1000-1)*100,
+  'the HOLDOUT window only — the full-history total on the Backtests page will be much larger (longer period, includes in-sample data)') : ''; }
 async function refreshRuns(){
   RUNS = await api('runs2');
   RUNS.forEach(r=>{
@@ -311,7 +429,8 @@ async function refreshRuns(){
       g = Math.max(g ?? -1e9, r.holdout_best.holdout.growth);
     r._hg = (r.holdout || r.holdout_best) ? (g === null ? -99 : g) : null;
   });
-  renderRuns();
+  renderRuns(); fillCombine();
+  if(RUNS.some(r=>r.running)) setTimeout(refreshRuns, 5000);  // live progress
 }
 function renderRuns(){
   const lf = $('liqFilter').value;
@@ -327,7 +446,7 @@ function renderRuns(){
     const h = r.holdout;
     if(r.no_survivors){
       const hs = r.holdout_scan;
-      return `<tr><td><b>${r.name}</b></td>
+      return `<tr class="${r.best?'best':''} rate${r.rating||0}"><td><b>${r.name}</b></td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
       <td>${r.method||''}</td>
@@ -339,24 +458,30 @@ function renderRuns(){
       <td><span class="badge b-red" title="Nothing survived — nothing to trade">✕</span></td>
       <td>—</td>
       <td>${r.crossfit?`<button class="small" onclick="toggleTop10('${r.name}')">Report</button>`:''}
+        <button class="small" title="Load this run's search settings into the launch card above" onclick="loadRunSettings('${r.name}')">Load setup</button>
+        <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
+        ${rateStars(r.name, r.rating)}
         <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${top10Row(r)}`;
     }
     let hcell = h ? (h.liq ? '<span class="badge b-red">LIQUIDATED</span>' :
-      `<span class="${h.growth>=0?'pos':'neg'}">${fpm(h.growth)}</span> <span class="kv">dd ${(100*h.maxdd).toFixed(0)}%</span>`)
+      `<span class="${h.growth>=0?'pos':'neg'}">${fpm(h.growth)}</span>${fTotM(h)} <span class="kv">dd ${(100*h.maxdd).toFixed(0)}%</span>`)
       : '<span class="kv">—</span>';
     if(r.holdout_best && r.holdout_best.holdout && !r.holdout_best.holdout.liq){
       const hb = r.holdout_best.holdout;
-      hcell += `<br><span class="kv" title="A lower train-rank candidate that generalizes better. Picked using the holdout, so re-verify before trusting.">OOS-best (#${r.holdout_best.rank}): <span class="pos">${fpm(hb.growth)}</span></span>`;
+      hcell += `<br><span class="kv" title="A lower train-rank candidate that generalizes better. Picked using the holdout, so re-verify before trusting.">OOS-best (#${r.holdout_best.rank}): <span class="pos">${fpm(hb.growth)}</span>${fTotM(hb)}</span>`;
     }
     for(const f of (r.backtest_flags||[])){
       const src_ = f.source==='holdout_best_config.json' ? 'OOS-best' : 'best';
       const kind = (f.kind||'').startsWith('full') ? 'full' : (f.kind||'');
       hcell += `<br><a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(f.backtest)}" title="Open this backtest on the Backtests page (${f.kind}, ${f.gap_mode||''}) — ${f.at}">bt ${src_} ${kind}: ${f.liq
         ? '<span class="badge b-red">LIQUIDATED</span>'
-        : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>`} ↗</a>`;
+        : `<span class="${f.growth_pct>=0?'pos':'neg'}">${(f.growth_pct>=0?'+':'')}${f.growth_pct.toFixed(1)}%/mo</span>${f.total_mult!=null?fTotPct((f.total_mult-1)*100,'this backtest’s full period'):''}`} ↗</a>`;
     }
     const clean = r._clean >= 2;
-    return `<tr><td><b>${r.name}</b>${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
+    const rowToggle = (r.running && runJob(r.name))
+      ? ` style="cursor:pointer" title="click to show/hide this run's live job"
+          onclick="if(['TD','B','TR'].includes(event.target.tagName)) toggleJobRow('${r.name.replace(/'/g,"\\'")}')"` : '';
+    return `<tr class="${r.best?'best':''} rate${r.rating||0}"${rowToggle}><td><b>${r.name}</b>${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
       <td>${r.method||''}</td>
@@ -380,8 +505,11 @@ function renderRuns(){
         ${(r.holdout_top10||r.crossfit)?`<button class="small" title="${r.crossfit?'Cross-fit report: folds, survivors, lockbox verdicts':'All top-10 candidates ranked survivors-first'}" onclick="toggleTop10('${r.name}')">${r.crossfit?'Report':'Top-10'}</button>`:''}
         <button class="small" data-x="btn_adopt" title="Copy these parameters into the live trader config (backup kept)" onclick="adopt('${r.best_config}','${r.mode}')">Adopt</button>`:''}
         <button class="small" data-x="btn_ai" title="Ask Claude to propose new candidates for this run (needs API key)" onclick="ai('${r.run}')">AI</button>
+        <button class="small" title="Load this run's search settings (strategy, holdout, scoring, anchor, …) into the launch card above" onclick="loadRunSettings('${r.name}')">Load setup</button>
+        <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
+        ${rateStars(r.name, r.rating)}
         <button class="small" title="Rename this run (published backtests from it are renamed too)" onclick="renameRun('${r.name}')">✎</button>
-        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${top10Row(r)}`;
+        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${jobRow(r)}${top10Row(r)}`;
   }).join('');
 }
 const OPEN10 = new Set();
@@ -402,7 +530,21 @@ function crossfitRow(r){
     ${fin}</td></tr>`;
 }
 function toggleTop10(name){ OPEN10.has(name) ? OPEN10.delete(name) : OPEN10.add(name); renderRuns(); }
+function progressCell(r){
+  const p = r.progress;
+  const pct = Math.max(0, Math.min(100, 100*(p.pct||0)));
+  const eta = (p.eta_s!=null) ? fmtEta(p.eta_s) : '—';
+  const budget = p.budget!=null ?
+    ` of ${p.budget_type==='hours' ? p.budget+'h' : (+p.budget).toLocaleString()+' evals'}` : '';
+  return `<div style="min-width:170px" title="live search progress (checkpoints every generation; the row fills in fully when the run finalizes)">
+    <div style="height:8px;border-radius:4px;background:rgba(88,166,255,.15);overflow:hidden;margin:2px 0">
+      <div style="height:100%;width:${pct}%;background:var(--blue);transition:width .5s"></div></div>
+    <span class="kv" style="font-size:11px">⏳ ${pct.toFixed(0)}%${budget}${p.phase?` · ${p.phase}`:''} ·
+      ${(p.evaluated_session||0).toLocaleString()} done · ETA ${eta}</span></div>`;
+}
 function optChips(r){
+  if(r.running && r.progress) return progressCell(r);
+  if(r.running) return '<span class="kv">⏳ running…</span>';
   if(!r.algo && r.max_dd==null && !r.holdout_days && !r.train_end) return '—';
   const ho = r.holdout_days ? `holdout ${r.holdout_days}d alt` :
              r.train_end ? `holdout after ${r.train_end}` : 'no holdout';
@@ -414,7 +556,72 @@ function optChips(r){
   const lb = r.lockbox ? `lockbox ${r.lockbox}` : null;
   const sc = (r.scoring && r.scoring!=='classic') ? `scoring: ${r.scoring.replace('_','-')}` : null;
   const an = r.anchor ? `anchored (${r.anchor}${r.anchor_strength?`, λ${r.anchor_strength}`:''})` : null;
-  return [r.algo||'?', ps, ho, dd, mh, gm, lb, sc, an].filter(Boolean).join(' · ');
+  return [r.algo||'?', ps, ho, dd, mh, gm, lb, sc, an].filter(Boolean).join(' · ')
+    + launchInfo(r);
+}
+const escH = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function launchInfo(r){
+  const L = r.launches||[];
+  if(!L.length) return '';
+  const last = L[L.length-1];
+  let out = '';
+  if(last.resume_from && last.resume_from.length){
+    const srcs = last.resume_from.map(s=>s.replace(/^runs\//,''));
+    out += `<br><span style="color:var(--amber)" title="this launch imported the pool + reservoir of these source runs${last.merge_mode?` (${last.merge_mode} mode)`:''}">⇐ ${srcs.length>1?(last.merge_mode||'merge'):'resumed from'}: ${srcs.join(' + ')}</span>`;
+  }
+  const all = L.map(l=>`[${l.at}]  ${l.cmd}`).join('\n\n');
+  const shown = last.cmd.length>130 ? last.cmd.slice(0,130)+'…' : last.cmd;
+  out += `<br><span title="${escH(all)}">cmd: <code style="font-size:10.5px">${escH(shown)}</code>${L.length>1?` <i>(${L.length} launches — hover for all)</i>`:''}</span>`;
+  return out;
+}
+function loadRunSettings(name){
+  const r = RUNS.find(x=>x.name===name); if(!r) return;
+  const setSel = (id,v)=>{ const el=$(id); if(v!=null && [...el.options].some(o=>o.value===String(v))) el.value=String(v); };
+  setSel('strat', r.strategy);
+  $('strat').onchange();                       // refresh anchors list, per-regime lock, param space
+  setSel('mode', r.mode);
+  setSel('method', r.method);
+  $('perreg').value = (r.per_regime===false) ? '1' : '';
+  setSel('algo', r.algo);
+  $('lockboxField').style.display = $('algo').value==='crossfit' ? '' : 'none';
+  if(r.holdout_days){ $('hoMode').value='alt'; $('hoDays').value=r.holdout_days; }
+  else if(r.train_end){ $('hoMode').value='date'; $('trainEnd').value=r.train_end; }
+  const alt = $('hoMode').value==='alt';
+  $('trainEnd').style.display = alt?'none':'';
+  $('hoDays').style.display = alt?'':'none';
+  $('maxDD').value = r.max_dd!=null ? Math.round(100*r.max_dd) : (r.mode==='spot'?50:80);
+  $('maxHold').value = r.max_hold_days || '';
+  setSel('optGap', r.gap_mode);
+  setSel('scoring', r.scoring || 'classic');
+  $('anchor').value = (r.anchor==='defaults') ? 'defaults' : '';
+  $('anchorStr').value = (r.anchor==='defaults' && r.anchor_strength) ? r.anchor_strength : 0;
+  $('lockbox').value = r.lockbox || '';
+  $('name').value = r.name;
+  if(SPACE) renderSpace();          // panel follows the loaded run's mode
+  $('launchMsg').textContent = `settings loaded from "${r.name}" — Start search RESUMES that run; change the name for a fresh one` +
+    (r.anchor==='file' ? ' (its file-based anchor can’t be reloaded — anchor set to none)' : '');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+async function markRun(name, best){
+  const r = await api('runs2/mark', {name, best});
+  if(r.error){ alert(r.error); return; }
+  const run = RUNS.find(x=>x.name===name);
+  if(run) run.best = best;
+  renderRuns();
+}
+function rateStars(name, rating){
+  const r = rating||0;
+  let s = '';
+  for(let i=1;i<=3;i++)
+    s += `<span class="${i<=r?'on':''}" title="${i===r?'clear rating':['','good (★)','very good (★★)','great (★★★)'][i]}" onclick="rateRun('${name}',${i===r?0:i})">${i<=r?'★':'☆'}</span>`;
+  return `<span class="rstars r${r}" title="quality rating — independent of the ★ best mark">${s}</span>`;
+}
+async function rateRun(name, rating){
+  const r = await api('runs2/rate', {name, rating});
+  if(r.error){ alert(r.error); return; }
+  const run = RUNS.find(x=>x.name===name);
+  if(run) run.rating = rating;
+  renderRuns();
 }
 async function renameRun(name){
   const nn = prompt('New name for "'+name+'" (slashes/spaces become _):', name);
@@ -433,7 +640,7 @@ function top10Row(r){
     const hm = t.holdout;
     const tag = !hm ? '<span class="kv">no data</span>'
       : hm.liq ? '<span class="badge b-red">LIQUIDATED</span>'
-      : `<span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span> <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span>`;
+      : `<span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span>${fTotM(hm)} <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span>`;
     return `<div class="prow"><span class="kv" style="width:110px">train-rank #${t.rank}</span>
       <span class="kv" style="width:90px">score ${t.train_score.toFixed(3)}</span>${tag}</div>`;
   }).join('');
@@ -442,7 +649,7 @@ function top10Row(r){
     const hm = t.holdout;
     return `<div class="prow"><span class="kv" style="width:110px">train-rank #${t.rank}</span>
       <span class="kv" style="width:90px">score ${t.train_score.toFixed(3)}</span>
-      <span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span> <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span></div>`;
+      <span class="${hm.growth>=0?'pos':'neg'}">${fpm(hm.growth)}</span>${fTotM(hm)} <span class="kv">dd ${(100*hm.maxdd).toFixed(0)}% · ${hm.n} trades</span></div>`;
   }).join('');
   return `<tr><td colspan="14" style="background:var(--bg)">
     <div class="kv" style="margin:4px 0">Top-10 train candidates ranked <b>survivors first</b> (best holdout at top; liquidated sink to the bottom):</div>
@@ -541,8 +748,44 @@ async function stopJob(id){
   if(r.note && r.graceful) $('launchMsg').textContent = r.note;
   refreshJobs();
 }
+// ---------- nested job rows (running optimize job shown under its run) ----------
+const JOBHIDE = new Set();          // run names whose nested job row is collapsed
+let OPTJOBS = [];
+function jobCellHTML(j){
+  const p = j.progress;
+  const bar = p ? `<div style="margin:6px 0 2px;height:6px;border-radius:3px;background:var(--hover);overflow:hidden">
+      <div style="height:100%;width:${Math.round(100*p.pct)}%;background:var(--blue);transition:width .5s"></div></div>
+    <span class="kv">${Math.round(100*p.pct)}% of ${p.budget.toLocaleString()} ${p.budget_type} · ${p.evaluated_session.toLocaleString()} done · ETA ${fmtEta(p.eta_s)}</span>` : '';
+  return `<div class="row" style="justify-content:space-between">
+    <span><b>live job</b> · <span class="pos">${j.status}</span> <span class="kv">since ${j.started}</span></span>
+    <span><button class="small" onclick="stopJob('${j.id}')">${j.stopping?'force stop':'stop'}</button>${j.stopping?' <span class="kv">finishing generation…</span>':''}
+    <button class="small" onclick="toggleJobRow('${j.name.replace(/'/g,"\\'")}')">hide ▲</button></span>
+  </div>${bar}<pre style="max-height:160px">${(j.log||[]).slice(-14).join('\n')}</pre>`;
+}
+function runJob(name){
+  return OPTJOBS.find(j=>j.status==='running' && (j.kind||'').startsWith('optimize') && j.name===name);
+}
+function jobRow(r){
+  if(!r.running || JOBHIDE.has(r.name)) return '';
+  const j = runJob(r.name);
+  if(!j) return '';
+  return `<tr><td colspan="14" style="background:var(--bg)" id="jobcell_${r.name}">${jobCellHTML(j)}</td></tr>`;
+}
+function toggleJobRow(name){
+  if(JOBHIDE.has(name)) JOBHIDE.delete(name); else JOBHIDE.add(name);
+  renderRuns();
+}
 async function refreshJobs(){
   const jobs = await api('jobs');
+  OPTJOBS = jobs;
+  // keep visible nested job rows fresh without a full table re-render
+  let missing = false;
+  jobs.filter(j=>j.status==='running' && (j.kind||'').startsWith('optimize')).forEach(j=>{
+    const cell = document.getElementById('jobcell_'+j.name);
+    if(cell) cell.innerHTML = jobCellHTML(j);
+    else if(!JOBHIDE.has(j.name) && RUNS.some(r=>r.name===j.name && r.running)) missing = true;
+  });
+  if(missing) renderRuns();
   const running = jobs.filter(j=>j.status==='running' && j.progress);
   $('jobsTitle').textContent = running.length
     ? '— ' + running.map(j=>`${j.name}: ${Math.round(100*j.progress.pct)}% · ETA ${fmtEta(j.progress.eta_s)}`).join(' · ')
@@ -565,11 +808,30 @@ async function loadSpace(){
   SPACE = await api('param_space');
   renderSpace();
 }
+// Separate parameter spaces per mode: the base entry is the LEV space, the
+// "<strategy>@spot" sibling is the SPOT space (created on first use as a copy).
+// Indicator-length libraries (variants) are engine-shared and live only on the base.
+function spaceKey(){
+  return $('mode').value==='spot' ? $('strat').value+'@spot' : $('strat').value;
+}
+function curSpace(){
+  const base = SPACE[$('strat').value] || SPACE.v7;
+  const k = spaceKey();
+  if(k === $('strat').value) return base;
+  if(!SPACE[k]){
+    const clone = JSON.parse(JSON.stringify(base));
+    delete clone.variants;
+    SPACE[k] = clone;
+  }
+  return SPACE[k];
+}
 function renderSpace(){
   const strat = $('strat').value;
-  const sp = SPACE[strat] || SPACE.v7;
+  const sp = curSpace();
+  const lib = sp.variants || (SPACE[strat]||{}).variants;
   $('spaceNote').textContent = sp.note || '';
-  $('spaceStrat').textContent = $('strat').selectedOptions[0].text;
+  $('spaceStrat').innerHTML = $('strat').selectedOptions[0].text +
+    ` <span class="badge ${$('mode').value==='spot'?'b-green':'b-red'}" title="Each strategy keeps two independent parameter spaces — one per mode. Switch the Mode dropdown to view/edit the other one.">${$('mode').value==='spot'?'SPOT ranges':'LEV ranges'}</span>`;
   const nm = (k,v)=>`${v.label||k} <span class="kv" style="font-size:10px">${k}</span>`;
   const VKEY = {vRsi:'rsi', vMacd:'macd', vBB:'bb', vEmaUp:'ema', vEmaDn:'ema',
     vX:'xmacd', vHistN:'histn', vR:'rsi', vC:'cvd', vP:'poc', vE:'emaS'};
@@ -594,13 +856,16 @@ function renderSpace(){
     }
     // menu: one row per choice, plus an add-choice row
     const vkey = VKEY[k];
-    const vals = (sp.variants && vkey && sp.variants[vkey]) ? sp.variants[vkey] : v.options;
+    // v.values = ALL available choices (fixed set, e.g. tslm modes); v.options = searched subset
+    const vals = (lib && vkey && lib[vkey]) ? lib[vkey] : (v.values || v.options);
     const shared = vkey && libOwner[vkey] && libOwner[vkey] !== k;
     if(vkey && !libOwner[vkey]) libOwner[vkey] = k;
     const rows = vals.map((val,i)=>{
-      const checked = v.options.includes(i) || (!vkey && v.options.includes(val));
+      const checked = v.values ? v.options.includes(val)
+        : (v.options.includes(i) || (!vkey && v.options.includes(val)));
       // menus whose choices are meanings (not lengths) show their label, e.g. "block z>3"
-      const meaning = (!vkey && v.labels && v.labels[v.options.indexOf(val)]) || null;
+      const meaning = (!vkey && v.labels &&
+        (v.values ? v.labels[i] : v.labels[v.options.indexOf(val)])) || null;
       return `<div class="prow">
         <span class="nm" style="padding-left:14px" onclick="$('gTitle').textContent=${JSON.stringify(v.label||k)};$('gBody').textContent=${JSON.stringify(doc)}">${v.label||k} — ${meaning || ('choice '+(i+1))}</span>
         <input data-mvk="${k}" data-mvi="${i}" value="${fmtOpt(val)}" ${shared?'disabled title="shared with the row above — edit it there"':''} style="${shared?'opacity:.5':''}">
@@ -625,7 +890,7 @@ function hoModeChanged(){
   explain('trainend');
 }
 function fixParam(k){
-  const sp = SPACE[$('strat').value] || SPACE.v7;
+  const sp = curSpace();
   const v = sp.continuous[k];
   if(v.range[0] === v.range[1]){          // unlock: restore a range around the default
     const c = v.default != null ? v.default : v.range[0];
@@ -639,7 +904,9 @@ function fixParam(k){
   $('spaceMsg').textContent = 'not saved yet — hit Save ranges';
 }
 async function saveSpace(){
-  const sp = SPACE[$('strat').value] || SPACE.v7;
+  const sp = curSpace();
+  // variant libraries are shared between modes -> edits always land on the base entry
+  const vroot = (sp.variants || !(SPACE[$('strat').value]||{}).variants) ? sp : SPACE[$('strat').value];
   document.querySelectorAll('#contGrid input[data-k]').forEach(inp=>{
     sp.continuous[inp.dataset.k].range[+inp.dataset.i] = parseFloat(inp.value);
   });
@@ -673,12 +940,21 @@ async function saveSpace(){
     if(!vals.length) continue;
     const checked = mc[k] || {};
     if(vk){
-      if(sp.variants && JSON.stringify(sp.variants[vk]) !== JSON.stringify(vals)){
-        rebuilt = true; sp.variants[vk] = vals;
+      if(vroot.variants && JSON.stringify(vroot.variants[vk]) !== JSON.stringify(vals)){
+        rebuilt = true; vroot.variants[vk] = vals;
       }
       const opts = oldIdx.map((oi,ni)=>checked[oi]!==false ? ni : null).filter(x=>x!==null);
       spec.options = opts.length ? opts : vals.map((_,i)=>i);
       spec.labels = vals.map(VLAB[vk] || (x=>String(x)));
+    } else if(spec.values){
+      // fixed-choice menu (e.g. tslm): rows = values, checkboxes pick the searched subset
+      const opts = oldIdx.filter(oi=>checked[oi]!==false).map(oi=>raw[oi]);
+      if(opts.length){
+        const oldLabels = spec.labels || [];
+        const all = [], allLabels = [];
+        raw.forEach((v,i)=>{ if(!bad(v)){ all.push(v); allLabels.push(oldLabels[i] || String(v)); } });
+        spec.values = all; spec.labels = allLabels; spec.options = opts;
+      }
     } else {
       const opts = oldIdx.filter(oi=>checked[oi]!==false).map(oi=>raw[oi]);
       if(opts.length){
@@ -690,7 +966,7 @@ async function saveSpace(){
     }
   }
   const r = await api('param_space', SPACE);
-  $('spaceMsg').textContent = r.ok ? ('saved ✓ (new runs use these ranges)' +
+  $('spaceMsg').textContent = r.ok ? (`saved ✓ (${$('mode').value==='spot'?'SPOT':'LEV'} ranges — new ${$('mode').value} runs use them)` +
     (rebuilt ? ' — length lists changed: the next run rebuilds the engine cache once' : '')) : 'error';
   if(rebuilt) renderSpace();
 }
@@ -700,6 +976,34 @@ async function aiKey(){
   b.textContent = 'AI advisor: ' + (r.configured?'key configured ✓':'no API key (add ANTHROPIC_API_KEY to repo .env)');
   b.className = 'badge ' + (r.configured?'b-green':'b-amber');
 }
+// ---------- persist launch settings (saved on Start search, restored on load) ----------
+const LAUNCH_IDS = ['strat','algo','mode','method','perreg','procs','budgetType','budgetVal',
+  'stopScore','maxDD','anchor','anchorStr','scoring','maxHold','lockbox','optGap',
+  'hoMode','trainEnd','hoDays','name'];
+function saveLaunchSettings(){
+  const o = {};
+  LAUNCH_IDS.forEach(id=>{ const el=$(id); if(el) o[id]=el.value; });
+  localStorage.setItem('optLaunchSettings', JSON.stringify(o));
+}
+let _savedAnchor = null;
+(function restoreLaunchSettings(){
+  let o = null; try{ o = JSON.parse(localStorage.getItem('optLaunchSettings')||'null'); }catch(e){}
+  if(!o) return;
+  LAUNCH_IDS.forEach(id=>{
+    if(o[id]===undefined) return;
+    const el = $(id); if(!el) return;
+    if(el.tagName==='SELECT' && ![...el.options].some(x=>x.value===o[id])){
+      if(id==='anchor') _savedAnchor = o[id];   // backtest anchors load async — applied in fillAnchors()
+      return;
+    }
+    el.value = o[id];
+  });
+  // sync visibility that normally follows onchange handlers
+  $('lockboxField').style.display = $('algo').value==='crossfit' ? '' : 'none';
+  const alt = $('hoMode').value==='alt';
+  $('trainEnd').style.display = alt?'none':'';
+  $('hoDays').style.display = alt?'':'none';
+})();
 // ---------- URL prefill (from Backtests page) ----------
 let SEED_CAND = null, SEED_NAME = null;
 (function(){
@@ -731,6 +1035,7 @@ $('mode').onchange = ()=>{
   const v = +$('maxDD').value;
   if($('mode').value==='spot' && v===80) $('maxDD').value = 50;
   if($('mode').value==='lev' && v===50) $('maxDD').value = 80;
+  if(SPACE) renderSpace();          // each mode has its own parameter space
   explain('mode');
 };
 let BT_ANCHORS = [];
@@ -746,6 +1051,9 @@ function fillAnchors(){
     BT_ANCHORS.filter(e=>e.config.strategy===strat)
       .map(e=>`<option value="bt:${e.name}">backtest: ${e.name}</option>`).join('');
   if([...sel.options].some(o=>o.value===keep)) sel.value = keep;
+  if(_savedAnchor && [...sel.options].some(o=>o.value===_savedAnchor)){
+    sel.value = _savedAnchor; _savedAnchor = null;
+  }
 }
 $('strat').onchange = ()=>{
   fillAnchors();
@@ -754,7 +1062,8 @@ $('strat').onchange = ()=>{
   if(SPACE) renderSpace();
   explain('strategy');
 };
-refreshRuns(); refreshJobs(); loadSpace(); aiKey();
+$('perreg').disabled = !['v7','prime7'].includes($('strat').value);  // sync after restore
+refreshRuns().then(applyCombineFromBacktests); refreshJobs(); loadSpace(); aiKey();
 setInterval(refreshJobs, 4000); setInterval(refreshRuns, 15000);
 </script>
 </body>

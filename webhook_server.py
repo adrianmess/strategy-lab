@@ -5,6 +5,8 @@ import logging
 import os
 import pickle
 import argparse
+import signal
+import subprocess
 import time
 from playwright.async_api import async_playwright
 from quart import Quart, request, jsonify
@@ -26,6 +28,14 @@ context = None
 page = None
 current_symbol = "SOL_USDT"  # Track the current symbol
 
+# Land on the "#info" tab by default: the order-entry panel stays fully
+# functional, but the chart component never mounts, so its kline stream and
+# chart bundle never load — meaningfully less data through a metered proxy.
+FUTURES_PAGE_HASH = "#info"
+
+def futures_url(symbol):
+    return f"https://www.mexc.com/futures/{symbol}?type=linear_swap{FUTURES_PAGE_HASH}"
+
 # Concurrency + stability controls (single page, so serialize actions)
 ACTION_LOCK = asyncio.Lock()
 BROWSER_LOCK = asyncio.Lock()
@@ -38,6 +48,18 @@ RELOAD_EVERY_SECONDS = 30 * 60   # 30 minutes
 RELOAD_EVERY_ACTIONS = 150       # refresh after N actions
 _periodic_reload_task = None     # background task for time-based reload
 ACTION_TIMEOUT_MS = 5000         # default timeout for locator actions/clicks
+
+# The Playwright *driver* (a long-lived Node.js process, separate from Chrome
+# itself) slowly accumulates memory over very long uptimes and can eventually
+# hit "JavaScript heap out of memory". A plain page.reload() never resets
+# this, because it's the same driver process/connection the whole time. So we
+# periodically do a *full* browser+driver restart to reclaim that memory
+# before it ever gets close to the crash ceiling.
+BROWSER_RESTART_EVERY_SECONDS = 6 * 60 * 60   # 6 hours
+LAST_BROWSER_RESTART_TS = 0.0
+
+_restart_in_progress = False     # reentrancy guard for restart_browser()
+_pending_restart_task = None     # background task used to react to crash/close immediately
 
 # Selectors that indicate the MEXC futures trading interface is loaded AND the user is logged in.
 # We combine the legacy id/class selectors with the modern data-testid attributes that the rest
@@ -63,40 +85,113 @@ def _looks_like_target_crash(exc: Exception) -> bool:
 
 async def restart_browser(reason: str):
     """Hard restart Playwright + browser context. Used after Target crashed/closed."""
-    global playwright_instance, context, page, NEEDS_BROWSER_RESTART, current_symbol
+    global playwright_instance, context, page, NEEDS_BROWSER_RESTART, current_symbol, _restart_in_progress
 
-    logger.warning(f"Restarting browser (reason={reason})")
-    NEEDS_BROWSER_RESTART = False
+    if _restart_in_progress:
+        # A restart triggered by our own context.close() below (which fires a
+        # "close" event on the old page) or an overlapping trigger. No-op.
+        logger.debug(f"Restart already in progress; ignoring duplicate trigger (reason={reason})")
+        return
+    _restart_in_progress = True
 
-    # Best-effort cookie save, but don't let it fail the restart.
     try:
-        if context:
-            cookies = await context.cookies()
-            cache_data["cookies"] = cookies
-            save_cache()
-    except Exception as e:
-        logger.debug(f"Could not save cookies before restart: {e}")
+        logger.warning(f"Restarting browser (reason={reason})")
+        NEEDS_BROWSER_RESTART = False
 
-    # Close existing context/page
+        # Best-effort cookie save, but don't let it fail the restart.
+        try:
+            if context:
+                cookies = await context.cookies()
+                cache_data["cookies"] = cookies
+                save_cache()
+        except Exception as e:
+            logger.debug(f"Could not save cookies before restart: {e}")
+
+        # Close existing context/page
+        try:
+            if context:
+                await context.close()
+        except Exception as e:
+            logger.debug(f"Context close during restart failed/ignored: {e}")
+
+        # Stop Playwright driver
+        try:
+            if playwright_instance:
+                await playwright_instance.stop()
+        except Exception as e:
+            logger.debug(f"Playwright stop during restart failed/ignored: {e}")
+
+        playwright_instance = None
+        context = None
+        page = None
+        current_symbol = None
+
+        await initialize_browser()
+    finally:
+        _restart_in_progress = False
+
+
+def _schedule_immediate_restart(reason: str):
+    """Fire off a restart as soon as the current in-flight action (if any) releases
+    ACTION_LOCK, instead of waiting for the next webhook call or the 30-minute
+    periodic loop. This is what actually fixes crashed/closed pages sitting blank
+    for a long time before anyone notices."""
+    global _pending_restart_task
+
+    if _pending_restart_task and not _pending_restart_task.done():
+        return
+
+    async def _do_restart():
+        async with ACTION_LOCK:
+            await ensure_browser_ready()
+
+    _pending_restart_task = asyncio.create_task(_do_restart())
+
+
+def _cleanup_stale_chrome_profile_lock(user_data_dir: str):
+    """Kill any leftover Chrome process still holding this profile and clear its
+    singleton lock files.
+
+    A Playwright driver crash (e.g. the Node heap OOM we've seen after long
+    uptimes) can leave the underlying Chrome process orphaned rather than
+    cleanly killed. That zombie process keeps holding the profile's
+    SingletonLock, so the next launch_persistent_context() either fails or the
+    OS hands the "open window" request off to the zombie process instead of
+    our new Playwright-controlled one — which is why a stale, logged-out,
+    blank window can show up after a crash/restart.
+    """
     try:
-        if context:
-            await context.close()
+        result = subprocess.run(
+            ["pgrep", "-f", f"--user-data-dir={user_data_dir}"],
+            capture_output=True, text=True, timeout=5
+        )
+        pids = [int(p) for p in result.stdout.split() if p.strip().isdigit()]
+        current_pid = os.getpid()
+        for pid in pids:
+            if pid == current_pid:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                logger.info(f"Killed stale Chrome process (pid={pid}) still holding profile lock")
+            except ProcessLookupError:
+                pass
+            except Exception as e:
+                logger.debug(f"Could not kill stale Chrome process {pid}: {e}")
+        if pids:
+            time.sleep(0.5)  # give the OS a moment to release the lock file
     except Exception as e:
-        logger.debug(f"Context close during restart failed/ignored: {e}")
+        logger.debug(f"Stale Chrome cleanup (pgrep) failed/skipped: {e}")
 
-    # Stop Playwright driver
-    try:
-        if playwright_instance:
-            await playwright_instance.stop()
-    except Exception as e:
-        logger.debug(f"Playwright stop during restart failed/ignored: {e}")
-
-    playwright_instance = None
-    context = None
-    page = None
-    current_symbol = None
-
-    await initialize_browser()
+    for lock_name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+        lock_path = os.path.join(user_data_dir, lock_name)
+        try:
+            if os.path.islink(lock_path) or os.path.exists(lock_path):
+                os.remove(lock_path)
+                logger.debug(f"Removed stale {lock_name} from {user_data_dir}")
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.debug(f"Could not remove {lock_path}: {e}")
 
 
 async def ensure_browser_ready():
@@ -147,6 +242,22 @@ async def maybe_reload_page(force: bool = False, reason: str = ""):
             f"actions_since_reload={ACTION_COUNT_SINCE_RELOAD}, "
             f"age_seconds={int(now - LAST_RELOAD_TS) if LAST_RELOAD_TS else 'n/a'})"
         )
+        # Bandwidth guard: if a manual session left the browser on the FULL trade
+        # UI (no #info hash -> chart, order book and every ticker stream mounted,
+        # ~2-3 GB/day through a metered proxy), point the URL back at the light
+        # #info variant BEFORE the hard reload so the fresh load stays light.
+        # Non-futures pages (login/captcha) are left alone.
+        try:
+            _cur = page.url or ""
+            if "/futures/" in _cur and FUTURES_PAGE_HASH not in _cur:
+                _sym = current_symbol or \
+                    _cur.split("/futures/")[1].split("?")[0].split("#")[0] or "SOL_USDT"
+                _light = futures_url(_sym)
+                logger.info(f"Reload returns to the bandwidth-light page: {_light}")
+                await page.goto(_light, wait_until="domcontentloaded", timeout=60000)
+        except Exception as e:
+            logger.debug(f"light-page redirect skipped: {e}")
+
         # Hard-reload equivalent (Cmd+Shift+R): temporarily disable cache and reload.
         # Playwright doesn't expose an explicit "bypass cache" flag for reload, so we
         # use the Chromium DevTools Protocol (CDP) Network domain.
@@ -166,6 +277,13 @@ async def maybe_reload_page(force: bool = False, reason: str = ""):
                     await cdp.send("Network.setCacheDisabled", {"cacheDisabled": False})
                 except Exception:
                     pass
+                # Detach the CDP session explicitly — otherwise these accumulate in
+                # the Playwright driver process over hundreds of reloads and
+                # contribute to the slow Node.js heap growth that eventually OOMs.
+                try:
+                    await cdp.detach()
+                except Exception:
+                    pass
         await asyncio.sleep(1)
         current_symbol = None  # force ensure_symbol_page() to re-validate
         LAST_RELOAD_TS = now
@@ -177,10 +295,10 @@ async def maybe_reload_page(force: bool = False, reason: str = ""):
 
 
 async def _periodic_reload_loop():
-    """Background task: reload the MEXC page every 30 minutes to prevent SPA slowdown.
-
-    After each reload, verify the session is still logged in and re-login
-    automatically if MEXC has expired the session.
+    """Background task: reload the MEXC page every 30 minutes to prevent SPA slowdown,
+    and do a full browser+driver restart every BROWSER_RESTART_EVERY_SECONDS to reclaim
+    the Playwright driver's memory before it can grow large enough to OOM (which we've
+    seen happen after ~2 days of continuous uptime).
     """
     global _periodic_reload_task
     while True:
@@ -188,7 +306,14 @@ async def _periodic_reload_loop():
             await asyncio.sleep(RELOAD_EVERY_SECONDS)
             async with ACTION_LOCK:
                 await ensure_browser_ready()
-                await maybe_reload_page(force=True, reason="periodic_timer")
+                due_for_hard_restart = (
+                    LAST_BROWSER_RESTART_TS
+                    and (time.time() - LAST_BROWSER_RESTART_TS) > BROWSER_RESTART_EVERY_SECONDS
+                )
+                if due_for_hard_restart:
+                    await restart_browser("periodic_hard_restart")
+                else:
+                    await maybe_reload_page(force=True, reason="periodic_timer")
         except asyncio.CancelledError:
             logger.info("Periodic reload task cancelled")
             break
@@ -200,6 +325,13 @@ async def _periodic_reload_loop():
 INSTANCE_ID = None
 PORT = None
 DEBUG_MODE = False  # enabled with --debug flag; adds screenshots and form-state logging
+
+# Browser networking / rendering (set from CLI args or env in __main__)
+PROXY = None          # dict(server=..., username=..., password=...) or None
+HEADLESS = False      # --headless; view the live page any time at /view
+BLOCK_HEAVY = None    # abort image/media/font requests to save proxy bandwidth;
+                      # None = auto (on when a proxy is configured).
+                      # Captcha/verification/login URLs are always exempt.
 
 # Cache configuration
 CACHE_DIR = None
@@ -255,7 +387,7 @@ def save_cache():
 
 async def initialize_browser():
     """Initialize the browser and page for Playwright."""
-    global playwright_instance, context, page, LAST_RELOAD_TS, ACTION_COUNT_SINCE_RELOAD, NEEDS_BROWSER_RESTART
+    global playwright_instance, context, page, LAST_RELOAD_TS, ACTION_COUNT_SINCE_RELOAD, NEEDS_BROWSER_RESTART, LAST_BROWSER_RESTART_TS
 
     # Load cache
     load_cache()
@@ -278,6 +410,10 @@ async def initialize_browser():
 
     logger.info(f"Using Chrome user data directory: {user_data_dir}")
 
+    # Make sure no orphaned Chrome process from a previous driver crash is still
+    # holding this profile's lock before we try to launch into it.
+    _cleanup_stale_chrome_profile_lock(user_data_dir)
+
     try:
         # If Playwright is already started (e.g. restart path), stop it first.
         if playwright_instance:
@@ -297,6 +433,11 @@ async def initialize_browser():
         launch_args = [
             '--no-first-run',
             '--no-default-browser-check',
+            # Full desktop render size so the whole trading UI is laid out and
+            # captured — headless otherwise defaults to a small window and the
+            # /screenshot view gets clipped.
+            '--window-size=1600,1000',
+            '--force-device-scale-factor=1',
             '--disable-gpu',
             '--disable-dev-shm-usage',
             '--disable-setuid-sandbox',
@@ -307,6 +448,23 @@ async def initialize_browser():
             '--disable-blink-features=AutomationControlled',
         ]
 
+        if PROXY:
+            # IMPORTANT: launch_persistent_context() silently IGNORES the proxy=
+            # dict for Chromium in several Playwright versions, so Chrome went
+            # straight to the real IP. Passing --proxy-server explicitly is the
+            # reliable fix; the proxy= dict below still supplies the credentials.
+            _proxy_server = PROXY['server']
+            launch_args.extend([
+                f'--proxy-server={_proxy_server}',
+                # never send localhost/loopback through the proxy
+                '--proxy-bypass-list=<-loopback>',
+                # No proxy bypass paths: WebRTC/STUN can leak the real IP over UDP
+                # and QUIC is UDP-based — force everything onto the proxied TCP path.
+                '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+                '--webrtc-ip-handling-policy=disable_non_proxied_udp',
+                '--disable-quic',
+            ])
+
         # Add uBlock Origin if available
         if use_ublock:
             launch_args.extend([
@@ -314,9 +472,13 @@ async def initialize_browser():
                 f'--load-extension={ublock_path}'
             ])
 
+        if PROXY:
+            logger.info(f"Routing browser traffic through proxy {PROXY['server']}"
+                        f"{' (authenticated)' if PROXY.get('username') else ''}")
         context = await playwright_instance.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
-            headless=False,
+            headless=HEADLESS,
+            proxy=(PROXY or None),
             args=launch_args,
             # Modern Chrome UA — older UAs are flagged by GeeTest / reCAPTCHA
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -326,6 +488,62 @@ async def initialize_browser():
             no_viewport=True
         )
         logger.info("Browser launched successfully")
+
+        if PROXY:
+            # Trust-but-verify: compare the BROWSER's egress IP against this
+            # machine's real (direct) IP. If they match, the proxy isn't being
+            # applied — log it LOUD so it can never slip through to live trading.
+            try:
+                import urllib.request
+                try:
+                    direct_ip = urllib.request.urlopen(
+                        "https://api.ipify.org", timeout=10).read().decode().strip()
+                except Exception:
+                    direct_ip = None
+                _p = await context.new_page()
+                await _p.goto("https://api.ipify.org?format=text", timeout=20000)
+                egress = (await _p.inner_text("body")).strip()
+                await _p.close()
+                if direct_ip and egress == direct_ip:
+                    logger.error("=" * 68)
+                    logger.error(f"PROXY LEAK: browser egress IP {egress} == your REAL IP. "
+                                 "Proxy is NOT being used. DO NOT trade live.")
+                    logger.error("=" * 68)
+                else:
+                    logger.info("=" * 68)
+                    logger.info(f"PROXY OK — browser egress IP: {egress}"
+                                + (f" (real IP {direct_ip} is hidden)" if direct_ip else ""))
+                    logger.info("=" * 68)
+            except Exception as e:
+                logger.warning(f"PROXY CHECK failed (could not fetch egress IP): {e}")
+
+        # Bandwidth saver (mainly for metered residential proxies): abort images,
+        # media and fonts. NEVER blocks captcha/verification/login resources —
+        # the manual login slider needs its puzzle images.
+        block_heavy = BLOCK_HEAVY if BLOCK_HEAVY is not None else bool(PROXY)
+        if block_heavy:
+            _exempt = ("captcha", "geetest", "verify", "login", "signin", "gee")
+
+            async def _block_heavy_route(route):
+                try:
+                    req = route.request
+                    u = req.url.lower()
+                    if any(s in u for s in _exempt):
+                        await route.continue_()
+                        return
+                    if req.resource_type in ("image", "media", "font"):
+                        await route.abort()
+                        return
+                    await route.continue_()
+                except Exception:
+                    try:
+                        await route.continue_()
+                    except Exception:
+                        pass
+
+            await context.route("**/*", _block_heavy_route)
+            logger.info("Heavy-resource blocking ON (images/media/fonts aborted; "
+                        "captcha/login URLs exempt)")
 
         # Inject stealth script into every new page/frame to hide common Playwright tells
         # (navigator.webdriver, missing chrome runtime, permission query quirk, etc.)
@@ -374,12 +592,14 @@ async def initialize_browser():
         def _on_page_crash():
             global NEEDS_BROWSER_RESTART
             NEEDS_BROWSER_RESTART = True
-            logger.error("Playwright page crashed; will restart on next request")
+            logger.error("Playwright page crashed; restarting now")
+            _schedule_immediate_restart("page crashed")
 
         def _on_page_close():
             global NEEDS_BROWSER_RESTART
             NEEDS_BROWSER_RESTART = True
-            logger.error("Playwright page closed; will restart on next request")
+            logger.error("Playwright page closed; restarting now")
+            _schedule_immediate_restart("page closed")
 
         try:
             page.on("crash", _on_page_crash)
@@ -391,7 +611,7 @@ async def initialize_browser():
         logger.info("Navigating to MEXC...")
         try:
             # Navigate directly to the futures page
-            await page.goto("https://www.mexc.com/futures/SOL_USDT?type=linear_swap",
+            await page.goto(futures_url("SOL_USDT"),
                           timeout=60000,
                           wait_until="domcontentloaded")
             logger.info("Futures page loaded successfully")
@@ -451,6 +671,7 @@ async def initialize_browser():
         cache_data["last_symbol"] = "SOL_USDT"
         current_symbol = "SOL_USDT"
         LAST_RELOAD_TS = time.time()
+        LAST_BROWSER_RESTART_TS = time.time()
         ACTION_COUNT_SINCE_RELOAD = 0
         NEEDS_BROWSER_RESTART = False
 
@@ -476,7 +697,7 @@ async def initialize_browser():
 async def verify_url():
     """Verify that the current page URL matches the required URL before taking actions."""
     global current_symbol
-    required_url = "https://www.mexc.com/futures/SOL_USDT?type=linear_swap"
+    required_url = futures_url("SOL_USDT")
     try:
         current_url = page.url
         logger.info(f"Current URL: {current_url}")
@@ -668,7 +889,7 @@ async def ensure_symbol_page(symbol):
     global current_symbol
 
     # Check if we've already visited this symbol page
-    url = f"https://www.mexc.com/futures/{symbol}?type=linear_swap"
+    url = futures_url(symbol)
     current_url = page.url if page else ""
     already_on_symbol_url = current_url.startswith(f"https://www.mexc.com/futures/{symbol}")
 
@@ -744,6 +965,73 @@ async def _log_form_state(label: str):
         logger.debug(f"Could not read form state '{label}': {e}")
 
 
+# ---- leverage control (selectors verified against the live DOM 2026-07-18) ----
+# The order strip shows two identical-looking controls: LeverageEdit_long = the
+# margin-mode button ("Isolated"), LeverageEdit_short = the LEVERAGE button
+# ("9X"). Clicking the wrong one opens the margin-mode dialog.
+LEVERAGE_BTN_SEL = 'div[class*="LeverageEdit_short"]'
+LEVERAGE_INPUT_SEL = 'input[class*="LeverageProgress_leverageInput"]'
+
+
+async def get_current_leverage():
+    """Read the leverage shown on the order strip (e.g. '9X' -> 9), or None."""
+    import re as _re
+    try:
+        t = (await page.locator(LEVERAGE_BTN_SEL).first.inner_text(timeout=5000)).strip()
+        m = _re.search(r"(\d+)\s*X", t, _re.I)
+        return int(m.group(1)) if m else None
+    except Exception:
+        return None
+
+
+async def set_leverage(target):
+    """Set the futures leverage for the current symbol via the leverage dialog.
+    No-op if the strip already shows the target. Fails LOUDLY (and closes the
+    dialog) rather than leaving the account on the wrong leverage."""
+    target = max(1, int(target))
+    cur = await get_current_leverage()
+    if cur == target:
+        return {"status": "success", "message": f"leverage already {target}X",
+                "leverage": target}
+    logger.info(f"Setting leverage: {cur}X -> {target}X")
+    try:
+        await close_popovers()
+        await page.locator(LEVERAGE_BTN_SEL).first.click()
+        inp = page.locator(LEVERAGE_INPUT_SEL).first
+        await inp.wait_for(state="visible", timeout=10000)
+        await inp.fill(str(target))
+        await asyncio.sleep(0.2)
+        if (await inp.input_value()).strip() != str(target):
+            # React-controlled input rejected fill: select-all + retype
+            await inp.click(click_count=3)
+            await page.keyboard.type(str(target))
+            await asyncio.sleep(0.2)
+            if (await inp.input_value()).strip() != str(target):
+                raise RuntimeError(
+                    f"leverage input shows '{await inp.input_value()}' not '{target}'")
+        confirm = page.locator(
+            '.ant-modal-wrap:visible button:has-text("Confirm")').last
+        await confirm.click()
+        await inp.wait_for(state="hidden", timeout=10000)   # dialog closed
+        await asyncio.sleep(0.3)
+        got = await get_current_leverage()
+        if got != target:
+            raise RuntimeError(f"strip shows {got}X after confirm")
+        logger.info(f"Leverage set to {target}X")
+        return {"status": "success", "message": f"leverage set to {target}X",
+                "leverage": target}
+    except Exception as e:
+        logger.error(f"set_leverage({target}) failed: {e}")
+        # never leave the dialog open — it would block the order buttons
+        try:
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(0.3)
+        except Exception:
+            pass
+        await _debug_screenshot("set_leverage_error")
+        return {"status": "error", "message": f"set_leverage failed: {e}"}
+
+
 async def open_long(symbol="SOL_USDT", leverage=1, quantity=100):
     """Open a long position using Playwright clicks."""
     try:
@@ -767,10 +1055,12 @@ async def open_long(symbol="SOL_USDT", leverage=1, quantity=100):
         await market_tab.click(force=True)
         await asyncio.sleep(0.1)
 
-        if leverage > 1:
-            await page.click(".leverage-selector", force=True)
-            await page.click(f"text={leverage}x", force=True)
-            await asyncio.sleep(0.1)
+        if leverage >= 1:
+            lev_res = await set_leverage(leverage)
+            if lev_res["status"] != "success":
+                # do NOT open at whatever leverage happens to be set
+                return {"status": "error",
+                        "message": f"entry aborted — {lev_res['message']}"}
 
         await _debug_screenshot("open_long_2_after_tabs")
 
@@ -818,10 +1108,12 @@ async def open_short(symbol="SOL_USDT", leverage=1, quantity=100):
         await market_tab.click(force=True)
         await asyncio.sleep(0.1)
 
-        if leverage > 1:
-            await page.click(".leverage-selector", force=True)
-            await page.click(f"text={leverage}x", force=True)
-            await asyncio.sleep(0.1)
+        if leverage >= 1:
+            lev_res = await set_leverage(leverage)
+            if lev_res["status"] != "success":
+                # do NOT open at whatever leverage happens to be set
+                return {"status": "error",
+                        "message": f"entry aborted — {lev_res['message']}"}
 
         await _debug_screenshot("open_short_2_after_tabs")
 
@@ -1207,6 +1499,64 @@ async def shutdown():
     finally:
         playwright_instance = None
 
+@app.route('/screenshot', methods=['GET'])
+async def screenshot_route():
+    """Current page as PNG — lets you 'see the Chrome window' while headless."""
+    try:
+        if page is None:
+            return jsonify({"status": "error", "message": "no page yet"}), 503
+        png = await page.screenshot(full_page=False)
+        from quart import Response
+        return Response(png, mimetype="image/png",
+                        headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/view', methods=['GET'])
+async def view_route():
+    """Live view of the (possibly headless) browser: auto-refreshing screenshot."""
+    return ("""<!doctype html><title>MEXC executor — live view</title>
+<body style="margin:0;background:#0d1117;color:#c9d1d9;font:13px sans-serif">
+<div style="padding:6px 10px">MEXC executor instance — live view (refreshes every 2s).
+Headless browser screenshot; to interact (e.g. login captcha), restart the server
+without --headless.</div>
+<img id=s src="/screenshot" style="max-width:100%;display:block">
+<script>setInterval(()=>{document.getElementById('s').src='/screenshot?t='+Date.now()},2000)</script>
+</body>""", 200, {"Content-Type": "text/html"})
+
+
+@app.route('/set_leverage', methods=['POST'])
+async def set_leverage_route():
+    """Manually set the leverage (testing / recovery): {"leverage": 8}"""
+    data = await request.get_json()
+    lev = int((data or {}).get("leverage", 0))
+    if lev < 1:
+        return jsonify({"status": "error", "message": "leverage must be >= 1"}), 400
+    async with ACTION_LOCK:
+        await ensure_browser_ready()
+        result = await set_leverage(lev)
+    return jsonify(result), (200 if result["status"] == "success" else 500)
+
+
+@app.route('/debug/eval', methods=['POST'])
+async def debug_eval():
+    """Localhost-only maintenance hatch: evaluate JS on the live page and return
+    the result. Used to verify selectors against MEXC's real DOM before trusting
+    them in the order path."""
+    data = await request.get_json()
+    js = (data or {}).get("js", "")
+    if not js:
+        return jsonify({"status": "error", "message": "no js"}), 400
+    async with ACTION_LOCK:
+        await ensure_browser_ready()
+        try:
+            res = await page.evaluate(js)
+            return jsonify({"status": "success", "result": res})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     """Handle incoming webhook requests."""
@@ -1327,6 +1677,21 @@ if __name__ == "__main__":
     parser.add_argument('--instance', type=int, required=True, help='Instance ID (1, 2, 3, etc.)')
     parser.add_argument('--port', type=int, required=True, help='Port number for this instance')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode (screenshots, form-state logging)')
+    parser.add_argument('--headless', action='store_true',
+                        help='Run Chrome headless (watch it live at http://127.0.0.1:<port>/view). '
+                             'Run WITHOUT this flag when you need to log in (captcha slider needs a real window).')
+    parser.add_argument('--proxy-server', default=os.environ.get('MEXC_PROXY_SERVER'),
+                        help='Proxy for ALL browser traffic, e.g. http://isp.decodo.com:10001 '
+                             '(or set MEXC_PROXY_SERVER)')
+    parser.add_argument('--proxy-username', default=os.environ.get('MEXC_PROXY_USERNAME'),
+                        help='Proxy auth username (or MEXC_PROXY_USERNAME)')
+    parser.add_argument('--proxy-password', default=os.environ.get('MEXC_PROXY_PASSWORD'),
+                        help='Proxy auth password (or MEXC_PROXY_PASSWORD)')
+    parser.add_argument('--block-heavy', dest='block_heavy', action='store_true', default=None,
+                        help='Abort image/media/font requests to save proxy bandwidth '
+                             '(default: on when a proxy is set; captcha/login always exempt)')
+    parser.add_argument('--no-block-heavy', dest='block_heavy', action='store_false',
+                        help='Disable heavy-resource blocking')
     args = parser.parse_args()
 
     # Initialize instance configuration
@@ -1335,6 +1700,38 @@ if __name__ == "__main__":
     if args.debug:
         DEBUG_MODE = True
         logger.info("Debug mode enabled: screenshots and form-state logging are active")
+
+    HEADLESS = args.headless
+    BLOCK_HEAVY = args.block_heavy
+    if args.proxy_server:
+        PROXY = dict(server=args.proxy_server)
+        if args.proxy_username:
+            PROXY["username"] = args.proxy_username
+        if args.proxy_password:
+            PROXY["password"] = args.proxy_password
+    else:
+        # Fallback: proxy_config.json next to this file (gitignored).
+        _pc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "proxy_config.json")
+        if os.path.exists(_pc_path):
+            try:
+                with open(_pc_path) as _f:
+                    _pc = json.load(_f)
+                # Only inspect the actual credential fields — NOT the _readme,
+                # whose help text contains the word "FILL_IN".
+                _filled = _pc.get("server") and not any(
+                    "FILL_IN" in str(_pc.get(k, "")) for k in ("server", "username", "password"))
+                if _filled:
+                    PROXY = {k: _pc[k] for k in ("server", "username", "password")
+                             if _pc.get(k)}
+                    logger.info(f"Proxy loaded from {_pc_path}")
+                else:
+                    logger.warning(f"{_pc_path} present but not filled in — "
+                                   "running WITHOUT proxy")
+            except Exception as _e:
+                logger.error(f"Could not read {_pc_path}: {_e} — running WITHOUT proxy")
+    if HEADLESS:
+        logger.info(f"Headless mode: live view at http://127.0.0.1:{args.port}/view")
 
     config = Config()
     config.bind = [f"0.0.0.0:{PORT}"]

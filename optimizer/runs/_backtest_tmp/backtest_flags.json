@@ -70,5 +70,45 @@
   "gap_mode": "skip_contaminated",
   "backtest": "prime_original_defaults_lev",
   "at": "2026-07-09 21:14"
+ },
+ "quick___macdx_spot_test.json|original engine (full pine logic)": {
+  "source": "quick___macdx_spot_test.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": -16.248114815466785,
+  "total_mult": 0.013044920691480345,
+  "gap_mode": "skip_contaminated",
+  "backtest": "__macdx_spot_test",
+  "at": "2026-07-12 15:47"
+ },
+ "quick_macdx_original_defaults_lev.json|original engine (full pine logic)": {
+  "source": "quick_macdx_original_defaults_lev.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": -67.66558097191945,
+  "total_mult": 1.4814032159190927e-14,
+  "gap_mode": "skip_contaminated",
+  "backtest": "macdx_original_defaults_lev",
+  "at": "2026-07-12 15:49"
+ },
+ "quick_macdx_original_defaults_spot.json|original engine (full pine logic)": {
+  "source": "quick_macdx_original_defaults_spot.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": -16.248114815466785,
+  "total_mult": 0.013044920691480345,
+  "gap_mode": "skip_contaminated",
+  "backtest": "macdx_original_defaults_spot",
+  "at": "2026-07-12 15:50"
+ },
+ "quick_rocx_defaults_spot.json|original engine (full pine logic)": {
+  "source": "quick_rocx_defaults_spot.json",
+  "kind": "original engine (full pine logic)",
+  "liq": false,
+  "growth_pct": -2.3372761483895887,
+  "total_mult": 0.5605741040956748,
+  "gap_mode": "skip_contaminated",
+  "backtest": "rocx_original_defaults_spot",
+  "at": "2026-07-12 21:07"
  }
 }
