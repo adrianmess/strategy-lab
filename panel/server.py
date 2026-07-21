@@ -1063,9 +1063,16 @@ def runs2():
                 launches = json.load(open(launch_p))
             except Exception:
                 launches = []
+        wf = None
+        wf_p = os.path.join(runs_dir, d, "walkforward.json")
+        if os.path.exists(wf_p):
+            try:
+                wf = json.load(open(wf_p))
+            except Exception:
+                wf = None
         e = dict(name=d, run=f"runs/{d}",
                  best=os.path.exists(os.path.join(runs_dir, d, "marked_best")),
-                 rating=rating, launches=launches,
+                 rating=rating, launches=launches, walkforward=wf,
                  running=(d in running_names),
                  last_run=time.strftime("%Y-%m-%d %H:%M",
                                         time.localtime(os.path.getmtime(pool_p))))

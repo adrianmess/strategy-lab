@@ -521,6 +521,9 @@ function renderRuns(){
       <td>${hcell}</td>
       <td>${r.strategy==='metax'?`
         <span class="kv" title="Router runs are built/validated by metax_cli (campaign card); their backtests are linked in the holdout column.">router</span>
+        ${r.walkforward
+          ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="chronological walk-forward: chained out-of-sample ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
+          : `<span class="badge b-amber" title="no chronological walk-forward yet — the honest gate before adopting. Runs automatically as campaign wave 3; or: python3 metax_cli.py --walkforward runs/${r.name}">no WF</span>`}
         <button class="small" title="Adopt this ROUTER into its own trader config (config_${r.name}.json — created if missing, own state/log, dry-run). Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adoptRouter('${r.name}','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}

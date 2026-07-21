@@ -375,6 +375,9 @@ class Campaign:
             return [sys.executable, "metax_cli.py",
                     "--refine", f"runs/{spec['run_override']}",
                     "--iters", str(spec.get("iters", 400))]
+        if spec.get("kind") == "metax_wf":
+            return [sys.executable, "metax_cli.py",
+                    "--walkforward", f"runs/{spec['run_override']}"]
         cmd = [sys.executable, "optimize2_cli.py",
                "--strategy", spec["strategy"], "--mode", spec["mode"],
                "--method", spec["method"], "--algo", spec.get("algo", "genetic"),
@@ -508,9 +511,24 @@ class Campaign:
 
     def gen_wave3(self):
         if self.plan.get("matrix") == "meta":
-            self.plan["wave"] = 3   # metax publishes its own full backtests
+            # wave 3 = chronological WALK-FORWARD for EVERY router produced —
+            # the honest gate is part of the pipeline, not an afterthought
+            have = {s["id"] for s in self.plan["specs"]}
+            new = []
+            for s in self.plan["specs"]:
+                if s.get("kind") == "metax" and s["status"] == "done" \
+                        and (s.get("result") or {}).get("ok") \
+                        and f"w3_wf_{s['id']}" not in have:
+                    new.append(dict(id=f"w3_wf_{s['id']}", wave=3,
+                                    kind="metax_wf", status="pending",
+                                    strategy="metax", mode=s["mode"],
+                                    method=s["method"],
+                                    run_override=run_name(self.name, s)))
+            self.plan["specs"] += new
+            self.plan["wave"] = 3
             self.save()
-            return []
+            print(f"wave 3 (meta): {len(new)} walk-forward validations", flush=True)
+            return new
         new = []
         for s in self.plan["specs"]:
             if s["wave"] in (1, 2) and s["status"] == "done" and s.get("result", {}).get("ok"):
@@ -570,6 +588,8 @@ class Campaign:
             if not pending:
                 if self.plan.get("matrix") == "meta":
                     if self.gen_wave2():
+                        continue
+                    if self.gen_wave3():
                         continue
                     break
                 cur = self.plan.get("wave", 1)

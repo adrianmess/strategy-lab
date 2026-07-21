@@ -465,7 +465,11 @@ def walkforward(run_dir, step_days=42, total=8000, seed=5):
     S = rows_stats(np.array(chained) if chained else np.zeros((0, 8)))
     name = os.path.basename(run_dir.rstrip("/"))
     if not S:
-        print("WALK-FORWARD VERDICT: no OOS trades at all — FAIL", flush=True)
+        print("WALK-FORWARD VERDICT: no OOS trades at all — NO-TRADES", flush=True)
+        json.dump(dict(verdict="NO-TRADES", oos_pct_mo=0.0, maxdd=0.0, n=0,
+                       folds=folds, step_days=step_days,
+                       at=time.strftime("%Y-%m-%d %H:%M")),
+                  open(os.path.join(run_dir, "walkforward.json"), "w"), indent=1)
         return
     pct = 100 * (math.exp(S["growth"]) - 1)
     verdict = "PASS" if (pct > 0 and not S["liq"] and S["maxdd"] <= MAX_DD) \
