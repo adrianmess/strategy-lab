@@ -6,8 +6,8 @@
  "poll_seconds": 3,
  "protect_poll_seconds": 0.5,
  "equity_usdt": 1000.0,
- "state_file": "trader_state_router_lev.json",
- "log_file": "trader_router_lev.log",
+ "state_file": "trader_state_camp_c4_m_lev_vol3_v2.json",
+ "log_file": "trader_camp_c4_m_lev_vol3_v2.log",
  "engine": "v6",
  "mode": "lev",
  "method": "vol3",
@@ -296,6 +296,6 @@
  },
  "adopted_from": {
   "source": "/Users/adrian/Code/strategy-lab/optimizer/runs/camp_c4_m_lev_vol3_v2/best_config.json",
-  "at": "2026-07-21 11:18"
+  "at": "2026-07-21 15:10"
  }
 }

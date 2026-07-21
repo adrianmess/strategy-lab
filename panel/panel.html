@@ -88,7 +88,7 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
 
 <h2>Trader settings <span class="note">(applies on next trader start)</span></h2>
 <div class="card row" id="settings">
-  <label>file</label><select id="sFile" onchange="loadSettings()"><option>config.json</option><option>config_spot.json</option></select>
+  <label>file</label><select id="sFile" onchange="loadSettings()"></select>
   <label>equity $</label><input id="sEquity">
   <label>poll s</label><input id="sPoll">
   <label>webhook</label><input class="wide" id="sHook">
@@ -101,7 +101,7 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
 <div class="card">
   <table id="cfgT"><thead><tr><th></th><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
   <div class="note" style="margin-top:6px">“Backtest” publishes to the Backtests page. “Adopt” copies the parameters into the selected trader config (with automatic backup).
-  Adopt target: <select id="adoptTarget"><option>config.json</option><option>config_spot.json</option></select></div>
+  Adopt target: <select id="adoptTarget"></select></div>
 </div>
 
 <h2>Run a backtest</h2>
@@ -267,6 +267,15 @@ function cfgChanged(i){
   updateCfgSummary(i);
 }
 function fillCfgSelects(){
+  // shared dropdowns (Trader settings file + Adopt target) follow the actual
+  // config*.json files on disk — run-named router configs included
+  ['sFile','adoptTarget'].forEach(id=>{
+    const sel = $(id); if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = TCONFIGS.map(c=>`<option value="${c.file}">${c.file}</option>`).join('');
+    if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    else if(id==='sFile' && sel.options.length && !cur) loadSettings();
+  });
   INSTS.forEach(x=>{
     const sel = $('tcfg_'+x.id); if(!sel) return;
     const cur = sel.value || x.cfg;
