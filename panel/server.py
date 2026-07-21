@@ -845,6 +845,42 @@ def adopt():
         src = os.path.join(OPT, src)
     target = os.path.join(AT, d.get("target", "config.json"))
     best = json.load(open(src))
+    if best.get("strategy") == "metax" \
+            or (best.get("cand") or {}).get("strategy") == "metax":
+        # ROUTER adopt: embed the resolved component configs so the trader
+        # candidate is self-contained (components live in strategy_metax)
+        sys.path.insert(0, AT)
+        from strategy_metax import resolve_candidate
+        try:
+            rc = resolve_candidate(best, os.path.join(OPT, "runs"))
+        except Exception as e:
+            return jsonify(error=f"router adopt failed: {e}"), 400
+        bad = {rc["components"][a]["strategy"] for a in rc["assign"]
+               if a is not None and a >= 0} - {"macdx", "scalpx"}
+        if bad:
+            return jsonify(error=(
+                f"router assigns component families with no live runner yet: "
+                f"{sorted(bad)}")), 400
+        target = os.path.join(AT, d.get("target", "config.json"))
+        cfg = json.load(open(target))
+        if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:
+            if not d.get("force"):
+                right = ("config_spot.json" if best["mode"] == "spot"
+                         else "config.json")
+                return jsonify(error=(
+                    f"This is a {best['mode']}-mode router but "
+                    f"{os.path.basename(target)} is the {cfg['mode']}-mode "
+                    f"config. Choose '{right}' instead.")), 400
+        import shutil
+        shutil.copy(target, target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+        cfg["candidate"] = rc
+        cfg["mode"] = best["mode"]
+        cfg["method"] = best.get("method", "vol3")
+        cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
+        json.dump(cfg, open(target, "w"), indent=1)
+        return jsonify(ok=True, target=os.path.basename(target),
+                       note=("ROUTER adopted. Run the parity test "
+                             "(test_parity_metax.py), then dry-run before LIVE."))
     cfg = json.load(open(target))
     if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:
         if not d.get("force"):

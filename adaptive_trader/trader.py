@@ -30,6 +30,9 @@ def make_strategy(cfg, state):
     """Route by candidate format: V7 (engine3 full-param, 'regs' list),
     V6 (wf2 format), or legacy params dict."""
     cand = cfg.get("candidate")
+    if cand and cand.get("strategy") == "metax":
+        from strategy_metax import StrategyMetax
+        return StrategyMetax(cfg, state)
     if cand and (cand.get("strategy") == "v7" or "regs" in cand):
         from strategy_v7 import StrategyV7
         return StrategyV7(cfg, state)
