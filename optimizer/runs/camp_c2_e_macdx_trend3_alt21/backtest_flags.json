@@ -1,0 +1,12 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 34.09777642480483,
+  "total_mult": 1313.3994663724072,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c2_e_macdx_trend3_alt21_full",
+  "at": "2026-07-20 20:57"
+ }
+}

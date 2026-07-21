@@ -1,0 +1,85 @@
+{
+ "strategy": "metax",
+ "mode": "lev",
+ "method": "vol3",
+ "algo": "router",
+ "per_regime": true,
+ "cand": {
+  "strategy": "metax",
+  "mode": "lev",
+  "buckets": "vol3",
+  "assign": [
+   1,
+   6,
+   3
+  ],
+  "components": [
+   {
+    "run": "camp_c2_e_v7_vol3_ts2509",
+    "file": "holdout_best_config.json",
+    "strategy": "v7"
+   },
+   {
+    "run": "camp_c2_e_v7_vol3_ts2501",
+    "file": "holdout_best_config.json",
+    "strategy": "v7"
+   },
+   {
+    "run": "camp_c2_e_scalp_vol3_ts2509",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx2"
+   },
+   {
+    "run": "camp_c2_e_macdx_vol3_xfit",
+    "file": "best_config.json",
+    "strategy": "macdx"
+   },
+   {
+    "run": "camp_c2_e_prime_trend3_alt21rec",
+    "file": "holdout_best_config.json",
+    "strategy": "prime"
+   },
+   {
+    "run": "camp_c3_w2_merge_scalpx2_lev_vol3",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx2"
+   },
+   {
+    "run": "camp_c2_w2_merge_prime_lev_trend3",
+    "file": "holdout_best_config.json",
+    "strategy": "prime"
+   },
+   {
+    "run": "camp_c3_s_macdx_vol3_xfit_lev6",
+    "file": "best_config.json",
+    "strategy": "macdx"
+   }
+  ],
+  "live_replication": "run every component's signal state machine virtually; mirror real orders only when the entry bar's bucket is assigned to that component and the single slot is free"
+ },
+ "metrics": {
+  "growth": 0.14258364281094887,
+  "score": 0.09845775632049296,
+  "eq": 26560.46374280627,
+  "maxdd": 0.47894548068049936,
+  "n": 60,
+  "months": 15.431415626368812,
+  "tpm": 3.8881721193144148,
+  "max_hold_days": 3.8833333333333333,
+  "liq": false
+ },
+ "holdout": {
+  "growth": 0.12032995277739927,
+  "score": 0.09178655944819676,
+  "eq": 12515.013559279561,
+  "maxdd": 0.4800000000000004,
+  "n": 40,
+  "months": 15.431415626368812,
+  "tpm": 2.5921147462096097,
+  "max_hold_days": 3.8833333333333333,
+  "liq": false
+ },
+ "seasonal_flag": false,
+ "evaluated": 30000,
+ "generated": "2026-07-21 01:12"
+}

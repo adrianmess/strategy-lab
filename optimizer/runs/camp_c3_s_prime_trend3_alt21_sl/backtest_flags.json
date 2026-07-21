@@ -1,0 +1,12 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": -0.486021968971484,
+  "total_mult": 0.8870071418891979,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c3_s_prime_trend3_alt21_sl_full",
+  "at": "2026-07-21 00:31"
+ }
+}

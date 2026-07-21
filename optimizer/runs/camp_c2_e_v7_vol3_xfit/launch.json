@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-20 21:50:48",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo crossfit --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c2_e_v7_vol3_xfit --holdout-days 21 --lockbox 2026-04-01..",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

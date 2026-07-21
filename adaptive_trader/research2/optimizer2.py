@@ -146,7 +146,12 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None,
     if P.shape[0] != R:  # allow single-set candidates on any method
         P = np.vstack([P[min(i, P.shape[0] - 1)] for i in range(R)])
     mode = cand["mode"]
-    use_sl = (mode == "spot")
+    # OPT-IN lev stops (campaign c3 "survival"): stops active despite leverage.
+    # The flag is stamped onto every evaluated candidate so saved configs
+    # backtest/trade exactly as they were scored.
+    if os.environ.get("LEV_STOPS") == "1" and mode == "lev":
+        cand["lev_stops"] = True
+    use_sl = (mode == "spot") or bool(cand.get("lev_stops"))
     comm = FUT_COMM if mode == "lev" else SPOT_COMM
     eq = 1000.0
     months = 0.0
@@ -219,6 +224,13 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None,
         out["score"] = float(rw.min()) if len(rw) else out["score"]
     elif scoring == "underwater":
         out["score"] = out["score"] - 0.5 * out["in_market"]
+    elif scoring == "recent":
+        # recency-weighted monthly growth (half-life 3 months): the newest
+        # market character dominates the score, so configs must still work in
+        # the LATEST era, not just the bull that opened the dataset
+        if len(gm) >= 2:
+            w = 0.5 ** (np.arange(len(gm))[::-1] / 3.0)
+            out["score"] = float(np.average(gm.to_numpy(), weights=w)) - 0.25 * g_std
     for _k, _v in out.items():   # NaN/inf breaks JSON in browsers
         if isinstance(_v, float) and not np.isfinite(_v):
             out[_k] = 0.0

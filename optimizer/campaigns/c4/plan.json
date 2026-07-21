@@ -1,0 +1,184 @@
+{
+ "name": "c4",
+ "created": "2026-07-21 01:12",
+ "procs": 14,
+ "specs": [
+  {
+   "id": "m_lev_vt9",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "lev",
+   "method": "vt9",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "done",
+   "started": "2026-07-21 01:12:22",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": -0.031765492706896485,
+     "pct_mo": -3.13,
+     "maxdd": 0.9554028240770592,
+     "n": 40,
+     "tpm": 2.5921147462096097,
+     "max_hold_days": 3.8833333333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "m_lev_vol3",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "lev",
+   "method": "vol3",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "done",
+   "started": "2026-07-21 01:12:37",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.12032995277739927,
+     "pct_mo": 12.79,
+     "maxdd": 0.4800000000000004,
+     "n": 40,
+     "tpm": 2.5921147462096097,
+     "max_hold_days": 3.8833333333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "m_lev_trend3",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "lev",
+   "method": "trend3",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "done",
+   "started": "2026-07-21 01:12:53",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.060296698604893194,
+     "pct_mo": 6.22,
+     "maxdd": 0.4018299676146885,
+     "n": 63,
+     "tpm": 4.089700060867518,
+     "max_hold_days": 6.05625
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "m_lev_month12",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "lev",
+   "method": "month12",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "done",
+   "started": "2026-07-21 01:13:08",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": -0.336831402266315,
+     "pct_mo": -28.6,
+     "maxdd": 0.9463735151942747,
+     "n": 12,
+     "tpm": 1.0918207349195772,
+     "max_hold_days": 2.4604166666666667
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "m_spot_vt9",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "vt9",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "running",
+   "started": "2026-07-21 01:13:23"
+  },
+  {
+   "id": "m_spot_vol3",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "vol3",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "pending"
+  },
+  {
+   "id": "m_spot_trend3",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "trend3",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "pending"
+  },
+  {
+   "id": "m_spot_month12",
+   "wave": 1,
+   "kind": "metax",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "month12",
+   "scoring": "classic",
+   "space": "default",
+   "total": 30000,
+   "mh": 7,
+   "status": "pending"
+  }
+ ],
+ "wave": 1,
+ "matrix": "meta",
+ "note": "wave-2/3 specs are appended automatically",
+ "updated": "2026-07-21 01:13:23"
+}

@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-21 00:39:28",
+  "cmd": "python3 optimize2_cli.py --strategy v6 --mode lev --method vol3 --algo genetic --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c3/spaces/levsafe.json --name camp_c3_s_v6_vol3_alt21_sl --holdout-days 21 --max-dd 0.4 --lev-stops",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

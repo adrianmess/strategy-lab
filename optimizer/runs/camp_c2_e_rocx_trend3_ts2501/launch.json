@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-20 21:29:26",
+  "cmd": "python3 optimize2_cli.py --strategy rocx --mode lev --method trend3 --algo genetic --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c2/spaces/ratchet_both.json --name camp_c2_e_rocx_trend3_ts2501 --train-end 2026-03-01 --train-start 2025-01-01",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

@@ -1,0 +1,10 @@
+[
+ {
+  "at": "2026-07-20 21:53:48",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo refine --procs 14 --batch 100 --total 50000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c2_w2_ref_7_vol3_ts2509 --train-end 2026-04-01 --train-start 2025-09-01 --resume-from runs/camp_c2_e_v7_vol3_ts2509",
+  "resume_from": [
+   "runs/camp_c2_e_v7_vol3_ts2509"
+  ],
+  "merge_mode": null
+ }
+]

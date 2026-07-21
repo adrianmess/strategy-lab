@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-21 00:42:43",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode lev --method vol3 --algo crossfit --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c3/spaces/levsafe6.json --name camp_c3_s_macdx_vol3_xfit_lev6 --holdout-days 21 --max-dd 0.4 --lockbox 2026-04-01..",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

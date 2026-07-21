@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-20 20:44:18",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode lev --method vol3 --algo genetic --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c2_e_macdx_vol3_alt21 --holdout-days 21",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

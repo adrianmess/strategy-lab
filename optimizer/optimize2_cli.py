@@ -370,7 +370,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
         while (time.time() < t_end and done < ev_target and not stopped()):
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
-                           n=args.batch, t0=None, t1=None,
+                           n=args.batch, t0=args.train_start, t1=None,
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
                            gap_mode=args.gap_mode, alt=alt, scoring=_scoring(args),
@@ -631,6 +631,16 @@ def main():
     ap.add_argument("--total", type=int, default=None)
     ap.add_argument("--batch", type=int, default=120)
     ap.add_argument("--train-end", default=None, help="hold out data after this date")
+    ap.add_argument("--lev-stops", action="store_true",
+                    help="OPT-IN: keep stop-losses ACTIVE in lev mode (classic lev "
+                         "deliberately has none). Stops fire long before liquidation, "
+                         "so liq becomes structurally near-impossible. The flag is "
+                         "stamped into every evaluated candidate, so saved configs "
+                         "backtest exactly as scored.")
+    ap.add_argument("--train-start", default=None,
+                    help="train only on data from this date on (era specialist: "
+                         "e.g. 2025-09-01 trains on the bear market only). "
+                         "Holdout/finalize behavior is unchanged.")
     ap.add_argument("--lockbox", default=None,
                     help="cross-fit lockboxes: comma-separated date ranges 'a..b' with "
                          "open sides allowed, e.g. '2025-09-01..' or "
@@ -647,9 +657,11 @@ def main():
                     help="0 = seeding only; >0 additionally penalizes a candidate's "
                          "score by strength x normalized parameter distance from the anchor")
     ap.add_argument("--scoring", default="classic",
-                    choices=["classic", "worst_window", "underwater"],
+                    choices=["classic", "worst_window", "underwater", "recent"],
                     help="classic (default, unchanged): mean monthly growth minus "
-                         "volatility penalty. worst_window: rank by the WORST rolling "
+                         "volatility penalty. recent: recency-weighted monthly growth "
+                         "(half-life 3 months) so the newest market era dominates. "
+                         "worst_window: rank by the WORST rolling "
                          "3-month stretch. underwater: classic minus a penalty for the "
                          "fraction of time capital sits locked in open positions.")
     ap.add_argument("--gap-mode", default="skip_contaminated",
@@ -679,6 +691,12 @@ def main():
     args = ap.parse_args()
     if args.hours is None and args.total is None:
         args.hours = 1.0
+    if args.lev_stops:
+        # env var: inherited by the mp.Pool workers AND honored by the in-process
+        # finalize/holdout evaluations (see optimizer2.eval3 / wf2.eval_config)
+        os.environ["LEV_STOPS"] = "1"
+        print("LEV STOPS ON: stop-losses stay active despite leverage "
+              "(candidates are stamped with lev_stops=true)", flush=True)
 
     if args.holdout_days or args.algo == "crossfit":
         if args.train_end:
@@ -930,7 +948,7 @@ def main():
                and not STOP["flag"] and not os.path.exists("stop.flag")):
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
-                           n=args.batch, t0=None, t1=args.train_end,
+                           n=args.batch, t0=args.train_start, t1=args.train_end,
                            per_regime=per_regime, strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
                            gap_mode=args.gap_mode, scoring=_scoring(args),

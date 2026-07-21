@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-21 00:32:57",
+  "cmd": "python3 optimize2_cli.py --strategy rocx --mode lev --method trend3 --algo genetic --procs 14 --batch 100 --total 150000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c3/spaces/levsafe_ratchet.json --name camp_c3_s_rocx_trend3_alt21_r --holdout-days 21 --max-dd 0.4",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

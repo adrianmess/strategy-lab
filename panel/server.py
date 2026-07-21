@@ -563,6 +563,63 @@ def webhook_screenshot():
         return jsonify(error=f"could not get screenshot: {e}"), 502
 
 
+# ---------------- autonomous campaign ----------------
+@app.route("/api/campaign/status")
+def campaign_status():
+    name = request.args.get("name", "c1")
+    d = os.path.join(OPT, "campaigns", name)
+    plan_p = os.path.join(d, "plan.json")
+    if not os.path.exists(plan_p):
+        return jsonify(exists=False, name=name)
+    try:
+        plan = json.load(open(plan_p))
+    except Exception:
+        return jsonify(exists=False, name=name)
+    specs = plan.get("specs", [])
+    running_job = any(j["kind"] == "campaign" and j["proc"].poll() is None
+                      for j in jobs.values())
+    cur = next((s for s in specs if s["status"] == "running"), None)
+    report_p = os.path.join(d, "report.md")
+    return jsonify(exists=True, name=name, wave=plan.get("wave"),
+                   total=len(specs),
+                   done=sum(1 for s in specs if s["status"] == "done"),
+                   failed=sum(1 for s in specs if s["status"] == "failed"),
+                   pending=sum(1 for s in specs
+                               if s["status"] in ("pending", "interrupted")),
+                   current=(cur or {}).get("id"),
+                   runner_running=running_job,
+                   stop_requested=os.path.exists(os.path.join(d, "STOP")),
+                   report=(open(report_p).read()
+                           if os.path.exists(report_p) else None))
+
+@app.route("/api/campaign/start", methods=["POST"])
+def campaign_start():
+    dd = request.get_json(force=True) or {}
+    name = dd.get("name", "c1")
+    if any(j["kind"] == "campaign" and j["proc"].poll() is None
+           for j in jobs.values()):
+        return jsonify(error="a campaign runner is already running"), 400
+    stopf = os.path.join(OPT, "campaigns", name, "STOP")
+    if os.path.exists(stopf):
+        os.remove(stopf)
+    jid = spawn("campaign", name,
+                [sys.executable, "campaign.py", "--name", name,
+                 "--procs", str(dd.get("procs", 14)),
+                 "--matrix", dd.get("matrix", "c1")], OPT)
+    return jsonify(ok=True, id=jid)
+
+@app.route("/api/campaign/stop", methods=["POST"])
+def campaign_stop():
+    dd = request.get_json(force=True) or {}
+    name = dd.get("name", "c1")
+    d = os.path.join(OPT, "campaigns", name)
+    os.makedirs(d, exist_ok=True)
+    open(os.path.join(d, "STOP"), "w").write(time.strftime("%H:%M:%S"))
+    return jsonify(ok=True, note="the current experiment finalizes (holdout "
+                                 "evaluation), then the campaign pauses; "
+                                 "Start/Resume continues it")
+
+
 # ---------------- instances ----------------
 @app.route("/api/instances")
 def instances_list():

@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-20 16:24:04",
+  "cmd": "python3 optimize2_cli.py --strategy prime --mode spot --method trend3 --algo genetic --procs 14 --batch 100 --total 100000 --train-end 2025-09-01 --gap-mode skip_contaminated --max-hold-days 5 --scoring underwater --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c1_w1_35_prime_sp_tr3_uw",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

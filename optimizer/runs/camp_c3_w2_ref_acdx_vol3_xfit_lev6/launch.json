@@ -1,0 +1,10 @@
+[
+ {
+  "at": "2026-07-21 00:50:04",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode lev --method vol3 --algo refine --procs 14 --batch 100 --total 50000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c3/spaces/levsafe6.json --name camp_c3_w2_ref_acdx_vol3_xfit_lev6 --holdout-days 21 --max-dd 0.4 --resume-from runs/camp_c3_s_macdx_vol3_xfit_lev6",
+  "resume_from": [
+   "runs/camp_c3_s_macdx_vol3_xfit_lev6"
+  ],
+  "merge_mode": null
+ }
+]

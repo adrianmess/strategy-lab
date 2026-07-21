@@ -1,0 +1,2420 @@
+{
+ "macdx": {
+  "continuous": {
+   "a1L": {
+    "doc": "PT after Position Duration 1.",
+    "label": "Adjusted Profit Target 1 (%) (Long)",
+    "order": 9,
+    "range": [
+     0,
+     0.02
+    ]
+   },
+   "a1S": {
+    "doc": "",
+    "label": "Adjusted Profit Target 1 (%) (Short)",
+    "order": 15,
+    "range": [
+     0,
+     0.09
+    ]
+   },
+   "a2L": {
+    "doc": "PT after Position Duration 2.",
+    "label": "Adjusted Profit Target 2 (%) (Long)",
+    "order": 10,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "a2S": {
+    "doc": "",
+    "label": "Adjusted Profit Target 2 (%) (Short)",
+    "order": 16,
+    "range": [
+     0,
+     0.09
+    ]
+   },
+   "cdPL": {
+    "doc": "1-minute close-to-close drop that arms the long cooldown.",
+    "label": "Cooldown Price Drop Percentage (%) (Long)",
+    "order": 13,
+    "range": [
+     0,
+     0.1
+    ]
+   },
+   "cdPS": {
+    "doc": "3-minute close-to-close rise that arms the short cooldown.",
+    "label": "Cooldown Price Increase Percentage (%) (Short)",
+    "order": 19,
+    "range": [
+     0,
+     0.09
+    ]
+   },
+   "cdTL": {
+    "doc": "",
+    "label": "Cooldown Period (Minutes) (Long)",
+    "order": 14,
+    "range": [
+     1,
+     24
+    ]
+   },
+   "cdTS": {
+    "doc": "",
+    "label": "Cooldown Period (Minutes) (Short)",
+    "order": 20,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "d1L": {
+    "doc": "",
+    "label": "Position Duration 1 (Hours) (Long)",
+    "order": 11,
+    "range": [
+     0,
+     100
+    ]
+   },
+   "d1S": {
+    "doc": "",
+    "label": "Position Duration 1 (Hours) (Short)",
+    "order": 17,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "d2L": {
+    "doc": "",
+    "label": "Position Duration 2 (Hours) (Long)",
+    "order": 12,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "d2S": {
+    "doc": "",
+    "label": "Position Duration 2 (Hours) (Short)",
+    "order": 18,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "hrb": {
+    "doc": "Consecutive rising histogram bars required (integer).",
+    "label": "MACD Histogram Rising Bars (Long)",
+    "order": 8,
+    "range": [
+     1,
+     20
+    ]
+   },
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "mMaxL": {
+    "doc": "Raw MACD units.",
+    "label": "MACD Max for Long Entry",
+    "order": 7,
+    "range": [
+     -0.5,
+     0
+    ]
+   },
+   "mMinS": {
+    "doc": "Raw MACD units, like the pine.",
+    "label": "MACD Min for Short Entry",
+    "order": 6,
+    "range": [
+     0,
+     0.6
+    ]
+   },
+   "minT": {
+    "doc": "Shared gate across both directions (x20 bars).",
+    "label": "Min Time Between Orders (minutes)",
+    "order": 5,
+    "range": [
+     1,
+     100
+    ]
+   },
+   "slL": {
+    "doc": "Stop distance from the signal-bar close, longs.",
+    "label": "Stop Loss Long (%)",
+    "order": 3,
+    "range": [
+     0,
+     0.1
+    ]
+   },
+   "slS": {
+    "doc": "Stop distance, shorts.",
+    "label": "Stop Loss Short (%)",
+    "order": 4,
+    "range": [
+     0,
+     0.1
+    ]
+   },
+   "tpL": {
+    "doc": "Base profit target, longs (fraction).",
+    "label": "Take Profit Long (%)",
+    "order": 1,
+    "range": [
+     0.01,
+     0.02
+    ]
+   },
+   "tpS": {
+    "doc": "Base profit target, shorts.",
+    "label": "Take Profit Short (%)",
+    "order": 2,
+    "range": [
+     0.003,
+     0.02
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   },
+   "eS": {
+    "doc": "Sampled on/off in lev mode; forced off in spot.",
+    "label": "Shorts on/off"
+   },
+   "reqH": {
+    "doc": "Require Histogram > 0 for Long Entry (sampled on/off).",
+    "label": "Require Histogram > 0 (Long)"
+   }
+  }
+ },
+ "macdx@spot": {
+  "continuous": {
+   "a1L": {
+    "doc": "PT after Position Duration 1.",
+    "label": "Adjusted Profit Target 1 (%) (Long)",
+    "order": 9,
+    "range": [
+     0,
+     0.1
+    ]
+   },
+   "a1S": {
+    "doc": "",
+    "label": "Adjusted Profit Target 1 (%) (Short)",
+    "order": 15,
+    "range": [
+     0,
+     0.09
+    ]
+   },
+   "a2L": {
+    "doc": "PT after Position Duration 2.",
+    "label": "Adjusted Profit Target 2 (%) (Long)",
+    "order": 10,
+    "range": [
+     0,
+     0.1
+    ]
+   },
+   "a2S": {
+    "doc": "",
+    "label": "Adjusted Profit Target 2 (%) (Short)",
+    "order": 16,
+    "range": [
+     0,
+     0.09
+    ]
+   },
+   "cdPL": {
+    "doc": "1-minute close-to-close drop that arms the long cooldown.",
+    "label": "Cooldown Price Drop Percentage (%) (Long)",
+    "order": 13,
+    "range": [
+     50,
+     50
+    ]
+   },
+   "cdPS": {
+    "doc": "3-minute close-to-close rise that arms the short cooldown.",
+    "label": "Cooldown Price Increase Percentage (%) (Short)",
+    "order": 19,
+    "range": [
+     50,
+     50
+    ]
+   },
+   "cdTL": {
+    "doc": "",
+    "label": "Cooldown Period (Minutes) (Long)",
+    "order": 14,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "cdTS": {
+    "doc": "",
+    "label": "Cooldown Period (Minutes) (Short)",
+    "order": 20,
+    "range": [
+     50,
+     50
+    ]
+   },
+   "d1L": {
+    "doc": "",
+    "label": "Position Duration 1 (Hours) (Long)",
+    "order": 11,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "d1S": {
+    "doc": "",
+    "label": "Position Duration 1 (Hours) (Short)",
+    "order": 17,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "d2L": {
+    "doc": "",
+    "label": "Position Duration 2 (Hours) (Long)",
+    "order": 12,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "d2S": {
+    "doc": "",
+    "label": "Position Duration 2 (Hours) (Short)",
+    "order": 18,
+    "range": [
+     0,
+     24
+    ]
+   },
+   "hrb": {
+    "doc": "Consecutive rising histogram bars required (integer).",
+    "label": "MACD Histogram Rising Bars (Long)",
+    "order": 8,
+    "range": [
+     1,
+     100
+    ]
+   },
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "mMaxL": {
+    "doc": "Raw MACD units.",
+    "label": "MACD Max for Long Entry",
+    "order": 7,
+    "range": [
+     -0.7,
+     2
+    ]
+   },
+   "mMinS": {
+    "doc": "Raw MACD units, like the pine.",
+    "label": "MACD Min for Short Entry",
+    "order": 6,
+    "range": [
+     -2,
+     0.6
+    ]
+   },
+   "minT": {
+    "doc": "Shared gate across both directions (x20 bars).",
+    "label": "Min Time Between Orders (minutes)",
+    "order": 5,
+    "range": [
+     1,
+     1
+    ]
+   },
+   "slL": {
+    "doc": "Stop distance from the signal-bar close, longs.",
+    "label": "Stop Loss Long (%)",
+    "order": 3,
+    "range": [
+     0,
+     0.05
+    ]
+   },
+   "slS": {
+    "doc": "Stop distance, shorts.",
+    "label": "Stop Loss Short (%)",
+    "order": 4,
+    "range": [
+     0,
+     0.05
+    ]
+   },
+   "tpL": {
+    "doc": "Base profit target, longs (fraction).",
+    "label": "Take Profit Long (%)",
+    "order": 1,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "tpS": {
+    "doc": "Base profit target, shorts.",
+    "label": "Take Profit Short (%)",
+    "order": 2,
+    "range": [
+     0.003,
+     0.02
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   },
+   "eS": {
+    "doc": "Sampled on/off in lev mode; forced off in spot.",
+    "label": "Shorts on/off"
+   },
+   "reqH": {
+    "doc": "Require Histogram > 0 for Long Entry (sampled on/off).",
+    "label": "Require Histogram > 0 (Long)"
+   }
+  }
+ },
+ "prime": {
+  "continuous": {
+   "apt1Long": {
+    "default": 0.006999999999999999,
+    "doc": "Live: 0.007 (0.7%).",
+    "label": "Adjusted Profit Target 1 (%) (Long)",
+    "order": 6,
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt1Short": {
+    "default": 0.009000000000000001,
+    "doc": "Live: 0.009.",
+    "label": "Adjusted Profit Target 1 (%) (Short)",
+    "order": 16,
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt2Long": {
+    "default": 0.0034999999999999996,
+    "doc": "Live: 0.0035 (0.35%).",
+    "label": "Adjusted Profit Target 2 (%) (Long)",
+    "order": 7,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "apt2Short": {
+    "default": 0.003,
+    "doc": "Live: 0.003.",
+    "label": "Adjusted Profit Target 2 (%) (Short)",
+    "order": 17,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "bbL": {
+    "doc": "Long entry needs %B below this. Live: -0.1.",
+    "label": "BB %B Value (Long)",
+    "order": 3,
+    "range": [
+     -0.35,
+     0.25
+    ]
+   },
+   "bbS": {
+    "doc": "Short entry needs %B above this. Live: 1.65 (makes shorts extremely rare).",
+    "label": "BB %B Value (Short)",
+    "order": 14,
+    "range": [
+     0.6,
+     1.7
+    ]
+   },
+   "cdPctLong": {
+    "default": 0.00402,
+    "doc": "Live: 0.00402.",
+    "label": "Cooldown Price Drop Percentage (%) (Long)",
+    "order": 10,
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPctShort": {
+    "default": 0.0031,
+    "doc": "Live: 0.0031.",
+    "label": "Cooldown Price Increase Percentage (%) (Short)",
+    "order": 20,
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPeriodLong": {
+    "default": 90,
+    "doc": "Live: 90.",
+    "label": "Cooldown Period (Minutes) (Long)",
+    "order": 11,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "cdPeriodShort": {
+    "default": 55,
+    "doc": "Live: 55.",
+    "label": "Cooldown Period (Minutes) (Short)",
+    "order": 21,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "dur1Long": {
+    "default": 0.6,
+    "doc": "Live: 0.6 min.",
+    "label": "Position Duration 1 (Minutes) (Long)",
+    "order": 8,
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur1Short": {
+    "default": 14.4,
+    "doc": "Live: 14.4 min.",
+    "label": "Position Duration 1 (Minutes) (Short)",
+    "order": 18,
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur2Long": {
+    "default": 43.2,
+    "doc": "Live: 43.2 min.",
+    "label": "Position Duration 2 (Minutes) (Long)",
+    "order": 9,
+    "range": [
+     10,
+     360
+    ]
+   },
+   "dur2Short": {
+    "default": 38.4,
+    "doc": "Live: 38.4 min.",
+    "label": "Position Duration 2 (Minutes) (Short)",
+    "order": 19,
+    "range": [
+     10,
+     360
+    ]
+   },
+   "leverage": {
+    "default": 8,
+    "doc": "Position leverage (lev mode). Live: 8.",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "ptLong": {
+    "default": 0.0121,
+    "doc": "Live: 0.0121 (1.21%).",
+    "label": "Profit Target (%) (Long)",
+    "order": 4,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "ptShort": {
+    "default": 0.01,
+    "doc": "Live: 0.01 (1.0%).",
+    "label": "Profit Target (%) (Short)",
+    "order": 15,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "rsiValLong": {
+    "default": 68,
+    "doc": "Long entry requires RSI(3) below this. Live: 68.",
+    "label": "RSI OverSold Level (Long)",
+    "order": 1,
+    "range": [
+     30,
+     85
+    ]
+   },
+   "rsiValShort": {
+    "default": 68,
+    "doc": "Short entry requires RSI(3) above this. Live: 68.",
+    "label": "RSI OverBought Level (Short)",
+    "order": 12,
+    "range": [
+     50,
+     90
+    ]
+   },
+   "slLong": {
+    "default": 0.1,
+    "doc": "Live: 0.10. In lev mode there is no stop (your live style).",
+    "label": "Stop Loss (%)",
+    "order": 5,
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "slShort": {
+    "default": 0.1,
+    "doc": "Live: 0.10.",
+    "label": "Stop-loss % \u2014 shorts (spot only)",
+    "order": 500,
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "zL": {
+    "doc": "Long entry: z-scored entry-MACD must be BELOW this. Your live value \u2248 -1.7 in z-units.",
+    "label": "MACD Value (%) (Long) \u2014 z-scored",
+    "order": 2,
+    "range": [
+     -2.8,
+     -0.8
+    ]
+   },
+   "zS": {
+    "doc": "Short entry: z-scored entry-MACD must be ABOVE this.",
+    "label": "MACD Value (%) (Short) \u2014 z-scored",
+    "order": 13,
+    "range": [
+     0.8,
+     2.8
+    ]
+   }
+  },
+  "flags": {
+   "eL3": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Long system on/off"
+   },
+   "eS3": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Short system on/off"
+   }
+  },
+  "menus": {},
+  "note": "Solana Prime = the RSI/MACD/BB dip system standalone (no crossover), ATR-switched EMA trend filter. Every parameter searchable, per regime. Base = your live xlsx values (validated 105/111 trades). Genetic, random, and refine algorithms all supported."
+ },
+ "prime7": {
+  "continuous": {
+   "apt1Long": {
+    "default": 0.006999999999999999,
+    "doc": "Profit target after dur1Long minutes in the trade.",
+    "label": "Adjusted Profit Target 1 (%) (Long)",
+    "order": 11,
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt1Short": {
+    "default": 0.009000000000000001,
+    "doc": "PT after dur1Short minutes.",
+    "label": "Adjusted Profit Target 1 (%) (Short)",
+    "order": 22,
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt2Long": {
+    "default": 0.0034999999999999996,
+    "doc": "Profit target after dur2Long minutes (give-up level).",
+    "label": "Adjusted Profit Target 2 (%) (Long)",
+    "order": 12,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "apt2Short": {
+    "default": 0.003,
+    "doc": "PT after dur2Short minutes.",
+    "label": "Adjusted Profit Target 2 (%) (Short)",
+    "order": 23,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "bbValLong": {
+    "default": -0.1,
+    "doc": "Long entry requires Bollinger %B below this.",
+    "label": "BB %B Value (Long)",
+    "order": 8,
+    "range": [
+     -0.35,
+     0.35
+    ]
+   },
+   "bbValShort": {
+    "default": 1.65,
+    "doc": "Short entry requires Bollinger %B above this.",
+    "label": "BB %B Value (Short)",
+    "order": 19,
+    "range": [
+     0.6,
+     1.25
+    ]
+   },
+   "cdPctLong": {
+    "default": 0.00402,
+    "doc": "1-min move that triggers the long-side cooldown.",
+    "label": "Cooldown Price Drop Percentage (%) (Long)",
+    "order": 15,
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPctShort": {
+    "default": 0.0031,
+    "doc": "3-min rise that triggers the short-side cooldown.",
+    "label": "Cooldown Price Increase Percentage (%) (Short)",
+    "order": 26,
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPeriodLong": {
+    "default": 90,
+    "doc": "Long cooldown length, minutes.",
+    "label": "Cooldown Period (Minutes) (Long)",
+    "order": 16,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "cdPeriodShort": {
+    "default": 55,
+    "doc": "Short cooldown length, minutes.",
+    "label": "Cooldown Period (Minutes) (Short)",
+    "order": 27,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "dur1Long": {
+    "default": 0.6,
+    "doc": "Minutes until PT drops to apt1Long.",
+    "label": "Position Duration 1 (Minutes) (Long)",
+    "order": 13,
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur1Short": {
+    "default": 14.4,
+    "doc": "Minutes until PT drops to apt1Short.",
+    "label": "Position Duration 1 (Minutes) (Short)",
+    "order": 24,
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur2Long": {
+    "default": 43.2,
+    "doc": "Minutes until PT drops to apt2Long.",
+    "label": "Position Duration 2 (Minutes) (Long)",
+    "order": 14,
+    "range": [
+     10,
+     360
+    ]
+   },
+   "dur2Short": {
+    "default": 38.4,
+    "doc": "Minutes until PT drops to apt2Short.",
+    "label": "Position Duration 2 (Minutes) (Short)",
+    "order": 25,
+    "range": [
+     10,
+     360
+    ]
+   },
+   "leverage": {
+    "default": 8,
+    "doc": "Position leverage (capped at 10; lev mode only).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1,
+     10
+    ]
+   },
+   "ptLong": {
+    "default": 0.0121,
+    "doc": "Base profit target, longs (fraction: 0.012 = 1.2%).",
+    "label": "Profit Target (%) (Long)",
+    "order": 9,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "ptShort": {
+    "default": 0.01,
+    "doc": "Base profit target, shorts.",
+    "label": "Profit Target (%) (Short)",
+    "order": 20,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "rsiValLong": {
+    "default": 68,
+    "doc": "Long entry requires RSI below this.",
+    "label": "RSI OverSold Level (Long)",
+    "order": 4,
+    "range": [
+     30,
+     85
+    ]
+   },
+   "rsiValShort": {
+    "default": 68,
+    "doc": "Short entry requires RSI above this.",
+    "label": "RSI OverBought Level (Short)",
+    "order": 17,
+    "range": [
+     50,
+     90
+    ]
+   },
+   "slLong": {
+    "default": 0.1,
+    "doc": "Stop-loss %, longs (spot mode only; lev mode has no stop).",
+    "label": "Stop Loss (%) (Long)",
+    "order": 10,
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "slShort": {
+    "default": 0.1,
+    "doc": "Stop-loss %, shorts (spot mode only).",
+    "label": "Stop Loss (%) (Short)",
+    "order": 21,
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "xApt1Long": {
+    "default": 0.003,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system PT after xDur1Long min.",
+    "label": "Adjusted Profit Target 1 (%) (Long, crossover)",
+    "order": 35,
+    "range": [
+     0.0005,
+     0.015
+    ]
+   },
+   "xApt1Short": {
+    "default": 0.001,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system PT after xDur1Short min.",
+    "label": "Adjusted Profit Target 1 (%) (Short, crossover)",
+    "order": 39,
+    "range": [
+     0.0005,
+     0.015
+    ]
+   },
+   "xApt2Long": {
+    "default": 0.00207,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system PT after xDur2Long min.",
+    "label": "Adjusted Profit Target 2 (%) (Long, crossover)",
+    "order": 36,
+    "range": [
+     0,
+     0.01
+    ]
+   },
+   "xApt2Short": {
+    "default": 0,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system PT after xDur2Short min.",
+    "label": "Adjusted Profit Target 2 (%) (Short, crossover)",
+    "order": 40,
+    "range": [
+     0,
+     0.01
+    ]
+   },
+   "xCdPctShort": {
+    "default": 0.0003,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-short cooldown trigger.",
+    "label": "Cooldown Price Increase Percentage (%) (Short, crossover)",
+    "order": 43,
+    "range": [
+     0.0002,
+     0.01
+    ]
+   },
+   "xCdPeriodShort": {
+    "default": 7,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-short cooldown length, minutes.",
+    "label": "Cooldown Period (Minutes) (Short, crossover)",
+    "order": 44,
+    "range": [
+     3,
+     120
+    ]
+   },
+   "xDur1Long": {
+    "default": 60,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system minutes to PT step 1.",
+    "label": "Position Duration 1 (Minutes) (Long, crossover)",
+    "order": 37,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "xDur1Short": {
+    "default": 60,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system minutes to PT step 1.",
+    "label": "Position Duration 1 (Minutes) (Short, crossover)",
+    "order": 41,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "xDur2Long": {
+    "default": 120,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system minutes to PT step 2.",
+    "label": "Position Duration 2 (Minutes) (Long, crossover)",
+    "order": 38,
+    "range": [
+     30,
+     720
+    ]
+   },
+   "xDur2Short": {
+    "default": 120,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system minutes to PT step 2.",
+    "label": "Position Duration 2 (Minutes) (Short, crossover)",
+    "order": 42,
+    "range": [
+     30,
+     720
+    ]
+   },
+   "xMinBetween": {
+    "default": 13,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Min spacing between cross-system entries (x20 bars).",
+    "label": "Min Time Between Orders (minutes) (crossover)",
+    "order": 31,
+    "range": [
+     1,
+     30
+    ]
+   },
+   "xTpLong": {
+    "default": 0.004,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system base PT, longs.",
+    "label": "Take Profit Long (%) (crossover)",
+    "order": 29,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "xTpShort": {
+    "default": 0.0015,
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system base PT, shorts.",
+    "label": "Take Profit Short (%) (crossover)",
+    "order": 30,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "zL": {
+    "doc": "Long entry: z-scored entry-MACD must be BELOW this (how deep a dip to buy).",
+    "label": "MACD Value (%) (Long) \u2014 z-scored",
+    "order": 6,
+    "range": [
+     -3,
+     -0.8
+    ]
+   },
+   "zS": {
+    "doc": "Short entry: z-scored entry-MACD must be ABOVE this.",
+    "label": "MACD Value (%) (Short) \u2014 z-scored",
+    "order": 18,
+    "range": [
+     0.8,
+     3
+    ]
+   },
+   "zXLmax": {
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system long: crossover only counts if z-MACD is below this.",
+    "label": "MACD Max for Long Entry (crossover) \u2014 z",
+    "order": 33,
+    "range": [
+     -2.5,
+     0.5
+    ]
+   },
+   "zXS": {
+    "doc": "(inactive in Prime7 \u2014 crossover system is locked off) Cross-system short: z-scored crossover-MACD must exceed this at crossunder.",
+    "label": "MACD Min for Short Entry (crossover) \u2014 z",
+    "order": 32,
+    "range": [
+     1,
+     3
+    ]
+   }
+  },
+  "flags": {
+   "eL3": {
+    "doc": "Enable the RSI/MACD/BB dip-buy long system.",
+    "label": "Dip-buy long system on/off"
+   },
+   "eS3": {
+    "doc": "Enable the RSI/MACD/BB short system.",
+    "label": "Dip-sell short system on/off"
+   },
+   "eXL": {
+    "doc": "LOCKED OFF in Prime7 (Prime is the dip system standalone). Enable the MACD-crossover long system.",
+    "fixed": 0,
+    "label": "Crossover long system on/off"
+   },
+   "eXS": {
+    "doc": "LOCKED OFF in Prime7 (Prime is the dip system standalone). Enable the MACD-crossover short system.",
+    "fixed": 0,
+    "label": "Crossover short system on/off"
+   },
+   "requireHistPos": {
+    "doc": "LOCKED OFF in Prime7 (Prime is the dip system standalone). Cross-longs need histogram > 0 at the crossover.",
+    "fixed": 0,
+    "label": "Require histogram > 0 for crossover longs"
+   }
+  },
+  "menus": {
+   "trendBlockZ": {
+    "doc": "Block ALL shorts when price is this many daily-vol z-scores above its 1-day EMA (melt-up protection).",
+    "label": "Melt-up Short Blocker (z)",
+    "labels": [
+     "block z>1",
+     "block z>1.5",
+     "block z>2",
+     "block z>3",
+     "off"
+    ],
+    "options": [
+     1,
+     1.5,
+     2,
+     3,
+     99
+    ],
+    "order": 45
+   },
+   "vBB": {
+    "doc": "Bollinger length/stddev.",
+    "label": "BB Length / StdDev",
+    "labels": [
+     "BB 14/2.0",
+     "BB 21/2.0",
+     "BB 30/2.0",
+     "BB 21/2.5",
+     "BB 50/2.0"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 7
+   },
+   "vEmaDn": {
+    "doc": "Trend EMA for short entries (must be falling).",
+    "label": "Short EMA Length",
+    "labels": [
+     "EMA 20",
+     "EMA 50",
+     "EMA 95",
+     "EMA 150",
+     "EMA 270"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 2
+   },
+   "vEmaUp": {
+    "doc": "Trend EMA for long entries (must be rising).",
+    "label": "Long EMA Length",
+    "labels": [
+     "EMA 20",
+     "EMA 50",
+     "EMA 95",
+     "EMA 150",
+     "EMA 270"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 1
+   },
+   "vHistN": {
+    "doc": "Histogram must rise for N bars before a cross-long.",
+    "label": "MACD Histogram Rising Bars (Long)",
+    "labels": [
+     "2 bars",
+     "4 bars",
+     "8 bars",
+     "12 bars"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "order": 34
+   },
+   "vMacd": {
+    "doc": "Entry-MACD fast/slow lengths.",
+    "label": "MACD Fast/Slow Length",
+    "labels": [
+     "MACD 3/7",
+     "MACD 3/10",
+     "MACD 5/13",
+     "MACD 8/17",
+     "MACD 12/26"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 5
+   },
+   "vRsi": {
+    "doc": "RSI length variant.",
+    "label": "RSI Length",
+    "labels": [
+     "RSI 2",
+     "RSI 3",
+     "RSI 4",
+     "RSI 6",
+     "RSI 9",
+     "RSI 14"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "order": 3
+   },
+   "vX": {
+    "doc": "Crossover-MACD lengths.",
+    "label": "MACD Fast/Slow/Signal Length (crossover)",
+    "labels": [
+     "X-MACD 12/26/9",
+     "X-MACD 12/26/8",
+     "X-MACD 8/17/9",
+     "X-MACD 5/35/5",
+     "X-MACD 20/50/9"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 28
+   }
+  },
+  "note": "Prime7 = Solana Prime upgraded to the full-parameter V7 engine: every indicator length (RSI / MACD / Bollinger / trend-EMA) is searchable via the variant menus, entry triggers are z-scored (volatility-adjusted) instead of raw %, and the MACD-crossover subsystem is locked OFF to preserve Prime's dip-system character. Defaults marked on parameters are your live xlsx values. Indicator length LIBRARIES are shared with V7 (same engine) \u2014 edit them under the V7 strategy."
+ },
+ "scalpx": {
+  "continuous": {
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "rsiOB": {
+    "doc": "Shorts need RSI above this.",
+    "label": "RSI OverBought Level (Short)",
+    "order": 4,
+    "range": [
+     50,
+     85
+    ]
+   },
+   "rsiOS": {
+    "doc": "Longs need RSI below this.",
+    "label": "RSI OverSold Level (Long)",
+    "order": 3,
+    "range": [
+     15,
+     50
+    ]
+   },
+   "tpL": {
+    "doc": "Bracket take-profit for longs (fraction: 0.006 = 0.6%).",
+    "label": "Take Profit (%) (Long)",
+    "order": 1,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "tpS": {
+    "doc": "Bracket take-profit for shorts.",
+    "label": "Take Profit (%) (Short)",
+    "order": 2,
+    "range": [
+     0.002,
+     0.02
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   },
+   "eS": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Shorts on/off"
+   },
+   "useEma": {
+    "doc": "The second entry path (EMA crossover).",
+    "label": "EMA-cross entry branch on/off"
+   }
+  },
+  "menus": {
+   "sl": {
+    "doc": "Bracket stop distance, spot mode.",
+    "label": "Stop Loss (%)",
+    "labels": [
+     "1%",
+     "2%",
+     "3%",
+     "5%",
+     "8%"
+    ],
+    "options": [
+     0.01,
+     0.02,
+     0.03,
+     0.05,
+     0.08
+    ],
+    "order": 5
+   }
+  },
+  "note": "ScalpX = VRVP+CVD+EMA scalp strategy. CVD/POC/EMA lengths are fixed; thresholds and brackets are searchable. Reminder: tested edge-less in every configuration so far."
+ },
+ "scalpx2": {
+  "continuous": {
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "rsiOB": {
+    "doc": "Shorts need RSI above this.",
+    "label": "RSI OverBought Level (Short)",
+    "order": 4,
+    "range": [
+     50,
+     85
+    ]
+   },
+   "rsiOS": {
+    "doc": "Longs need RSI below this.",
+    "label": "RSI OverSold Level (Long)",
+    "order": 3,
+    "range": [
+     15,
+     50
+    ]
+   },
+   "tpL": {
+    "doc": "Bracket take-profit for longs (fraction: 0.006 = 0.6%).",
+    "label": "Take Profit (%) (Long)",
+    "order": 1,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "tpS": {
+    "doc": "Bracket take-profit for shorts.",
+    "label": "Take Profit (%) (Short)",
+    "order": 2,
+    "range": [
+     0.002,
+     0.02
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   },
+   "eS": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Shorts on/off"
+   },
+   "useEma": {
+    "doc": "The second entry path (EMA crossover).",
+    "label": "EMA-cross entry branch on/off"
+   }
+  },
+  "menus": {
+   "sl": {
+    "doc": "Bracket stop distance, spot mode.",
+    "label": "Stop Loss (%)",
+    "labels": [
+     "1%",
+     "2%",
+     "3%",
+     "5%",
+     "8%"
+    ],
+    "options": [
+     0.01,
+     0.02,
+     0.03,
+     0.05,
+     0.08
+    ],
+    "order": 5
+   },
+   "vC": {
+    "doc": "SMA length applied to cumulative volume delta (default 50).",
+    "label": "CVD Smoothing Length",
+    "labels": [
+     "SMA 25",
+     "SMA 50",
+     "SMA 100"
+    ],
+    "options": [
+     0,
+     1,
+     2
+    ],
+    "order": 7
+   },
+   "vE": {
+    "doc": "Slow EMA for the EMA-cross branch (default 1200; fast stays 1 = close).",
+    "label": "Slow EMA Length",
+    "labels": [
+     "EMA 400",
+     "EMA 800",
+     "EMA 1200",
+     "EMA 2000"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "order": 9
+   },
+   "vP": {
+    "doc": "Bars used to find the highest-volume close (default 300).",
+    "label": "VRVP / POC Lookback",
+    "labels": [
+     "150 bars",
+     "300 bars",
+     "600 bars"
+    ],
+    "options": [
+     0,
+     1,
+     2
+    ],
+    "order": 8
+   },
+   "vR": {
+    "doc": "RSI period variant (script default 14). Uncheck options to narrow the search.",
+    "label": "RSI Length",
+    "labels": [
+     "RSI 7",
+     "RSI 10",
+     "RSI 14",
+     "RSI 21"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "order": 6
+   }
+  },
+  "note": "ScalpX2 = ScalpX upgraded with searchable indicator lengths: RSI, CVD smoothing, VRVP lookback and slow-EMA are now variant menus the optimizer explores per regime. Thresholds/brackets as before. Reminder: the scalp family has tested edge-less so far \u2014 holdout is the number to trust.",
+  "variants": {
+   "cvd": [
+    25,
+    50,
+    100
+   ],
+   "emaS": [
+    400,
+    800,
+    1200,
+    2000
+   ],
+   "poc": [
+    150,
+    300,
+    600
+   ],
+   "rsi": [
+    7,
+    10,
+    14,
+    21
+   ]
+  }
+ },
+ "v6": {
+  "continuous": {
+   "leverage": {
+    "default": 8,
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "ptScale": {
+    "doc": "One multiplier applied to ALL profit targets (V6 keeps the original PT structure and scales it).",
+    "label": "Profit Target Scale (\u00d7 your live targets)",
+    "order": 5,
+    "range": [
+     0.5,
+     100
+    ]
+   },
+   "zL": {
+    "doc": "Long entry: z-scored entry-MACD must be BELOW this.",
+    "label": "MACD Value (%) (Long) \u2014 z-scored",
+    "order": 1,
+    "range": [
+     -4,
+     -2
+    ]
+   },
+   "zS": {
+    "doc": "Short entry: z-scored entry-MACD must be ABOVE this.",
+    "label": "MACD Value (%) (Short) \u2014 z-scored",
+    "order": 2,
+    "range": [
+     0,
+     5
+    ]
+   },
+   "zXLmax": {
+    "doc": "Crossover-long only counts below this (sampled ~50% of the time; else the subsystem is disabled).",
+    "label": "MACD Max for Long Entry (crossover) \u2014 z",
+    "order": 4,
+    "range": [
+     -2,
+     0.3
+    ]
+   },
+   "zXS": {
+    "doc": "Crossover-short gate on z-scored crossover MACD.",
+    "label": "MACD Min for Short Entry (crossover) \u2014 z",
+    "order": 3,
+    "range": [
+     0,
+     5
+    ]
+   }
+  },
+  "flags": {
+   "eS3": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Dip-sell short system on/off"
+   },
+   "eXS": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Crossover short system on/off"
+   }
+  },
+  "menus": {},
+  "note": "V6 = thresholds only; indicator lengths are fixed (that's what V7 unlocked)."
+ },
+ "v7": {
+  "continuous": {
+   "apt1Long": {
+    "default": 0.006999999999999999,
+    "doc": "Profit target after dur1Long minutes in the trade.",
+    "label": "Adjusted Profit Target 1 (%) (Long)",
+    "order": 11,
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt1Short": {
+    "default": 0.009000000000000001,
+    "doc": "PT after dur1Short minutes.",
+    "label": "Adjusted Profit Target 1 (%) (Short)",
+    "order": 22,
+    "range": [
+     0.001,
+     0.02
+    ]
+   },
+   "apt2Long": {
+    "default": 0.00407,
+    "doc": "Profit target after dur2Long minutes (give-up level).",
+    "label": "Adjusted Profit Target 2 (%) (Long)",
+    "order": 12,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "apt2Short": {
+    "default": 0.004,
+    "doc": "PT after dur2Short minutes.",
+    "label": "Adjusted Profit Target 2 (%) (Short)",
+    "order": 23,
+    "range": [
+     0,
+     0.015
+    ]
+   },
+   "bbValLong": {
+    "default": -0.05,
+    "doc": "Long entry requires Bollinger %B below this.",
+    "label": "BB %B Value (Long)",
+    "order": 8,
+    "range": [
+     -0.35,
+     0.35
+    ]
+   },
+   "bbValShort": {
+    "default": 0.825,
+    "doc": "Short entry requires Bollinger %B above this.",
+    "label": "BB %B Value (Short)",
+    "order": 19,
+    "range": [
+     0.6,
+     1.25
+    ]
+   },
+   "cdPctLong": {
+    "default": 0.00402,
+    "doc": "1-min move that triggers the long-side cooldown.",
+    "label": "Cooldown Price Drop Percentage (%) (Long)",
+    "order": 15,
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPctShort": {
+    "default": 0.003,
+    "doc": "3-min rise that triggers the short-side cooldown.",
+    "label": "Cooldown Price Increase Percentage (%) (Short)",
+    "order": 26,
+    "range": [
+     0.0005,
+     0.012
+    ]
+   },
+   "cdPeriodLong": {
+    "default": 90,
+    "doc": "Long cooldown length, minutes.",
+    "label": "Cooldown Period (Minutes) (Long)",
+    "order": 16,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "cdPeriodShort": {
+    "default": 70,
+    "doc": "Short cooldown length, minutes.",
+    "label": "Cooldown Period (Minutes) (Short)",
+    "order": 27,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "dur1Long": {
+    "default": 0.6,
+    "doc": "Minutes until PT drops to apt1Long.",
+    "label": "Position Duration 1 (Minutes) (Long)",
+    "order": 13,
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur1Short": {
+    "default": 0.6,
+    "doc": "Minutes until PT drops to apt1Short.",
+    "label": "Position Duration 1 (Minutes) (Short)",
+    "order": 24,
+    "range": [
+     0.6,
+     90
+    ]
+   },
+   "dur2Long": {
+    "default": 14.4,
+    "doc": "Minutes until PT drops to apt2Long.",
+    "label": "Position Duration 2 (Minutes) (Long)",
+    "order": 14,
+    "range": [
+     10,
+     360
+    ]
+   },
+   "dur2Short": {
+    "default": 14.4,
+    "doc": "Minutes until PT drops to apt2Short.",
+    "label": "Position Duration 2 (Minutes) (Short)",
+    "order": 25,
+    "range": [
+     10,
+     360
+    ]
+   },
+   "leverage": {
+    "default": 8,
+    "doc": "Position leverage (capped at 10; lev mode only).",
+    "label": "Leverage",
+    "order": 0,
+    "range": [
+     1,
+     10
+    ]
+   },
+   "ptLong": {
+    "default": 0.012,
+    "doc": "Base profit target, longs (fraction: 0.012 = 1.2%).",
+    "label": "Profit Target (%) (Long)",
+    "order": 9,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "ptShort": {
+    "default": 0.01,
+    "doc": "Base profit target, shorts.",
+    "label": "Profit Target (%) (Short)",
+    "order": 20,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "rsiValLong": {
+    "default": 68,
+    "doc": "Long entry requires RSI below this.",
+    "label": "RSI OverSold Level (Long)",
+    "order": 4,
+    "range": [
+     30,
+     85
+    ]
+   },
+   "rsiValShort": {
+    "default": 68,
+    "doc": "Short entry requires RSI above this.",
+    "label": "RSI OverBought Level (Short)",
+    "order": 17,
+    "range": [
+     50,
+     90
+    ]
+   },
+   "slLong": {
+    "default": 0.1,
+    "doc": "Stop-loss %, longs (spot mode only; lev mode has no stop).",
+    "label": "Stop Loss (%) (Long)",
+    "order": 10,
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "slShort": {
+    "default": 0.1,
+    "doc": "Stop-loss %, shorts (spot mode only).",
+    "label": "Stop Loss (%) (Short)",
+    "order": 21,
+    "range": [
+     0.02,
+     0.12
+    ]
+   },
+   "xApt1Long": {
+    "default": 0.003,
+    "doc": "Cross-system PT after xDur1Long min.",
+    "label": "Adjusted Profit Target 1 (%) (Long, crossover)",
+    "order": 35,
+    "range": [
+     0.0005,
+     0.015
+    ]
+   },
+   "xApt1Short": {
+    "default": 0.001,
+    "doc": "Cross-system PT after xDur1Short min.",
+    "label": "Adjusted Profit Target 1 (%) (Short, crossover)",
+    "order": 39,
+    "range": [
+     0.0005,
+     0.015
+    ]
+   },
+   "xApt2Long": {
+    "default": 0.00207,
+    "doc": "Cross-system PT after xDur2Long min.",
+    "label": "Adjusted Profit Target 2 (%) (Long, crossover)",
+    "order": 36,
+    "range": [
+     0,
+     0.01
+    ]
+   },
+   "xApt2Short": {
+    "default": 0,
+    "doc": "Cross-system PT after xDur2Short min.",
+    "label": "Adjusted Profit Target 2 (%) (Short, crossover)",
+    "order": 40,
+    "range": [
+     0,
+     0.01
+    ]
+   },
+   "xCdPctShort": {
+    "default": 0.0003,
+    "doc": "Cross-short cooldown trigger.",
+    "label": "Cooldown Price Increase Percentage (%) (Short, crossover)",
+    "order": 43,
+    "range": [
+     0.0002,
+     0.01
+    ]
+   },
+   "xCdPeriodShort": {
+    "default": 7,
+    "doc": "Cross-short cooldown length, minutes.",
+    "label": "Cooldown Period (Minutes) (Short, crossover)",
+    "order": 44,
+    "range": [
+     3,
+     120
+    ]
+   },
+   "xDur1Long": {
+    "default": 60,
+    "doc": "Cross-system minutes to PT step 1.",
+    "label": "Position Duration 1 (Minutes) (Long, crossover)",
+    "order": 37,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "xDur1Short": {
+    "default": 60,
+    "doc": "Cross-system minutes to PT step 1.",
+    "label": "Position Duration 1 (Minutes) (Short, crossover)",
+    "order": 41,
+    "range": [
+     10,
+     240
+    ]
+   },
+   "xDur2Long": {
+    "default": 120,
+    "doc": "Cross-system minutes to PT step 2.",
+    "label": "Position Duration 2 (Minutes) (Long, crossover)",
+    "order": 38,
+    "range": [
+     30,
+     720
+    ]
+   },
+   "xDur2Short": {
+    "default": 120,
+    "doc": "Cross-system minutes to PT step 2.",
+    "label": "Position Duration 2 (Minutes) (Short, crossover)",
+    "order": 42,
+    "range": [
+     30,
+     720
+    ]
+   },
+   "xMinBetween": {
+    "default": 13,
+    "doc": "Min spacing between cross-system entries (x20 bars).",
+    "label": "Min Time Between Orders (minutes) (crossover)",
+    "order": 31,
+    "range": [
+     1,
+     30
+    ]
+   },
+   "xTpLong": {
+    "default": 0.004,
+    "doc": "Cross-system base PT, longs.",
+    "label": "Take Profit Long (%) (crossover)",
+    "order": 29,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "xTpShort": {
+    "default": 0.0015,
+    "doc": "Cross-system base PT, shorts.",
+    "label": "Take Profit Short (%) (crossover)",
+    "order": 30,
+    "range": [
+     0.002,
+     0.02
+    ]
+   },
+   "zL": {
+    "doc": "Long entry: z-scored entry-MACD must be BELOW this (how deep a dip to buy).",
+    "label": "MACD Value (%) (Long) \u2014 z-scored",
+    "order": 6,
+    "range": [
+     -3,
+     -0.8
+    ]
+   },
+   "zS": {
+    "doc": "Short entry: z-scored entry-MACD must be ABOVE this.",
+    "label": "MACD Value (%) (Short) \u2014 z-scored",
+    "order": 18,
+    "range": [
+     0.8,
+     3
+    ]
+   },
+   "zXLmax": {
+    "doc": "Cross-system long: crossover only counts if z-MACD is below this.",
+    "label": "MACD Max for Long Entry (crossover) \u2014 z",
+    "order": 33,
+    "range": [
+     -2.5,
+     0.5
+    ]
+   },
+   "zXS": {
+    "doc": "Cross-system short: z-scored crossover-MACD must exceed this at crossunder.",
+    "label": "MACD Min for Short Entry (crossover) \u2014 z",
+    "order": 32,
+    "range": [
+     1,
+     3
+    ]
+   }
+  },
+  "flags": {
+   "eL3": {
+    "doc": "Enable the RSI/MACD/BB dip-buy long system.",
+    "label": "Dip-buy long system on/off"
+   },
+   "eS3": {
+    "doc": "Enable the RSI/MACD/BB short system.",
+    "label": "Dip-sell short system on/off"
+   },
+   "eXL": {
+    "doc": "Enable the MACD-crossover long system.",
+    "label": "Crossover long system on/off"
+   },
+   "eXS": {
+    "doc": "Enable the MACD-crossover short system.",
+    "label": "Crossover short system on/off"
+   },
+   "requireHistPos": {
+    "doc": "Cross-longs need histogram > 0 at the crossover.",
+    "label": "Require histogram > 0 for crossover longs"
+   }
+  },
+  "menus": {
+   "trendBlockZ": {
+    "doc": "Block ALL shorts when price is this many daily-vol z-scores above its 1-day EMA (melt-up protection).",
+    "label": "Melt-up Short Blocker (z)",
+    "labels": [
+     "block z>1",
+     "block z>1.5",
+     "block z>2",
+     "block z>3",
+     "off"
+    ],
+    "options": [
+     1,
+     1.5,
+     2,
+     3,
+     99
+    ],
+    "order": 45
+   },
+   "vBB": {
+    "doc": "Bollinger length/stddev.",
+    "label": "BB Length / StdDev",
+    "labels": [
+     "BB 14/2.0",
+     "BB 21/2.0",
+     "BB 30/2.0",
+     "BB 21/2.5",
+     "BB 50/2.0"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 7
+   },
+   "vEmaDn": {
+    "doc": "Trend EMA for short entries (must be falling).",
+    "label": "Short EMA Length",
+    "labels": [
+     "EMA 20",
+     "EMA 50",
+     "EMA 95",
+     "EMA 150",
+     "EMA 270"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 2
+   },
+   "vEmaUp": {
+    "doc": "Trend EMA for long entries (must be rising).",
+    "label": "Long EMA Length",
+    "labels": [
+     "EMA 20",
+     "EMA 50",
+     "EMA 95",
+     "EMA 150",
+     "EMA 270"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 1
+   },
+   "vHistN": {
+    "doc": "Histogram must rise for N bars before a cross-long.",
+    "label": "MACD Histogram Rising Bars (Long)",
+    "labels": [
+     "2 bars",
+     "4 bars",
+     "8 bars",
+     "12 bars"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "order": 34
+   },
+   "vMacd": {
+    "doc": "Entry-MACD fast/slow lengths.",
+    "label": "MACD Fast/Slow Length",
+    "labels": [
+     "MACD 3/7",
+     "MACD 3/10",
+     "MACD 5/13",
+     "MACD 8/17",
+     "MACD 12/26"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 5
+   },
+   "vRsi": {
+    "doc": "RSI length variant.",
+    "label": "RSI Length",
+    "labels": [
+     "RSI 2",
+     "RSI 3",
+     "RSI 4",
+     "RSI 6",
+     "RSI 9",
+     "RSI 14"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "order": 3
+   },
+   "vX": {
+    "doc": "Crossover-MACD lengths.",
+    "label": "MACD Fast/Slow/Signal Length (crossover)",
+    "labels": [
+     "X-MACD 12/26/9",
+     "X-MACD 12/26/8",
+     "X-MACD 8/17/9",
+     "X-MACD 5/35/5",
+     "X-MACD 20/50/9"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 28
+   }
+  },
+  "note": "",
+  "variants": {
+   "bb": [
+    [
+     14,
+     2
+    ],
+    [
+     21,
+     2
+    ],
+    [
+     30,
+     2
+    ],
+    [
+     21,
+     2.5
+    ],
+    [
+     50,
+     2
+    ]
+   ],
+   "ema": [
+    20,
+    50,
+    95,
+    150,
+    270
+   ],
+   "histn": [
+    2,
+    4,
+    8,
+    12
+   ],
+   "macd": [
+    [
+     3,
+     7
+    ],
+    [
+     3,
+     10
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     8,
+     17
+    ],
+    [
+     12,
+     26
+    ]
+   ],
+   "rsi": [
+    2,
+    3,
+    4,
+    6,
+    9,
+    14
+   ],
+   "xmacd": [
+    [
+     12,
+     26,
+     9
+    ],
+    [
+     12,
+     26,
+     8
+    ],
+    [
+     8,
+     17,
+     9
+    ],
+    [
+     5,
+     35,
+     5
+    ],
+    [
+     20,
+     50,
+     9
+    ]
+   ]
+  }
+ },
+ "rocx": {
+  "continuous": {
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage Factor",
+    "order": 0,
+    "range": [
+     1.2,
+     10.0
+    ]
+   },
+   "pt": {
+    "doc": "vs the SIGNAL close (pine longEntryPrice, reset by re-signals).",
+    "label": "Profit Target (%)",
+    "order": 1,
+    "range": [
+     0.005,
+     0.02
+    ]
+   },
+   "tsl": {
+    "doc": "Close-follow trail (pine-exact: follows the close in both directions).",
+    "label": "Trailing Stop Loss (%)",
+    "order": 2,
+    "range": [
+     0.005,
+     0.03
+    ]
+   },
+   "rocN": {
+    "doc": "Integer; sampled 1-min ROC(low) strictly falling toward the present.",
+    "label": "Number of ROC Bars for Trend Detection",
+    "order": 3,
+    "range": [
+     2,
+     8
+    ]
+   },
+   "smaN": {
+    "doc": "Integer; 45-min SMA slope lookback in chart bars.",
+    "label": "Number of SMA Bars for Trend Detection",
+    "order": 4,
+    "range": [
+     1,
+     8
+    ]
+   }
+  },
+  "menus": {
+   "vRoc": {
+    "doc": "ROC Length (1-min lows). Each choice is a precomputed variant.",
+    "label": "ROC Length",
+    "order": 5,
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "labels": [
+     "ROC 7",
+     "ROC 10",
+     "ROC 14",
+     "ROC 21",
+     "ROC 28"
+    ]
+   },
+   "vSma": {
+    "doc": "SMA Length (45-min closes).",
+    "label": "SMA Length",
+    "order": 6,
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "labels": [
+     "SMA 9",
+     "SMA 13",
+     "SMA 21",
+     "SMA 34"
+    ]
+   },
+   "tslm": {
+    "doc": "Which trailing-stop algorithm the engine simulates (applies to every rocx search/backtest, per regime). Pine (0) = exactly what your Pine script does: the trail follows the close DOWN too, so loss from entry is NOT capped \u2014 validated vs TradingView. Ratchet (1) = trail only moves up: high-water trail + ~tsl% max loss from the signal close (NOT pine-faithful). Tick 'search' on Ratchet to let the optimizer use/choose it; tick only Ratchet to force it.",
+    "label": "Trailing Stop Mode",
+    "order": 7,
+    "options": [
+     0,
+     1
+    ],
+    "labels": [
+     "Pine (close-follow)",
+     "Ratchet (capped loss)"
+    ],
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   }
+  },
+  "note": "V4 ROC/SMA pine. ROC/SMA Time Frames fixed at 1min/45min (engine); lengths are menu variants."
+ },
+ "rocx@spot": {
+  "continuous": {
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage Factor",
+    "order": 0,
+    "range": [
+     1.2,
+     10.0
+    ]
+   },
+   "pt": {
+    "doc": "vs the SIGNAL close (pine longEntryPrice, reset by re-signals).",
+    "label": "Profit Target (%)",
+    "order": 1,
+    "range": [
+     0.005,
+     0.02
+    ]
+   },
+   "tsl": {
+    "doc": "Close-follow trail (pine-exact: follows the close in both directions).",
+    "label": "Trailing Stop Loss (%)",
+    "order": 2,
+    "range": [
+     0.005,
+     0.03
+    ]
+   },
+   "rocN": {
+    "doc": "Integer; sampled 1-min ROC(low) strictly falling toward the present.",
+    "label": "Number of ROC Bars for Trend Detection",
+    "order": 3,
+    "range": [
+     2,
+     8
+    ]
+   },
+   "smaN": {
+    "doc": "Integer; 45-min SMA slope lookback in chart bars.",
+    "label": "Number of SMA Bars for Trend Detection",
+    "order": 4,
+    "range": [
+     1,
+     8
+    ]
+   }
+  },
+  "menus": {
+   "vRoc": {
+    "doc": "ROC Length (1-min lows). Each choice is a precomputed variant.",
+    "label": "ROC Length",
+    "order": 5,
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "labels": [
+     "ROC 7",
+     "ROC 10",
+     "ROC 14",
+     "ROC 21",
+     "ROC 28"
+    ]
+   },
+   "vSma": {
+    "doc": "SMA Length (45-min closes).",
+    "label": "SMA Length",
+    "order": 6,
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "labels": [
+     "SMA 9",
+     "SMA 13",
+     "SMA 21",
+     "SMA 34"
+    ]
+   },
+   "tslm": {
+    "doc": "Which trailing-stop algorithm the engine simulates (applies to every rocx search/backtest, per regime). Pine (0) = exactly what your Pine script does: the trail follows the close DOWN too, so loss from entry is NOT capped \u2014 validated vs TradingView. Ratchet (1) = trail only moves up: high-water trail + ~tsl% max loss from the signal close (NOT pine-faithful). Tick 'search' on Ratchet to let the optimizer use/choose it; tick only Ratchet to force it.",
+    "label": "Trailing Stop Mode",
+    "order": 7,
+    "options": [
+     0,
+     1
+    ],
+    "labels": [
+     "Pine (close-follow)",
+     "Ratchet (capped loss)"
+    ],
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   }
+  },
+  "note": "SPOT parameter space (independent of the lev one), wide exits."
+ }
+}

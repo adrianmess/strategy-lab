@@ -1,0 +1,13 @@
+[
+ {
+  "at": "2026-07-20 22:07:44",
+  "cmd": "python3 optimize2_cli.py --strategy scalpx2 --mode lev --method vol3 --algo genetic --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c2_w2_merge_scalpx2_lev_vol3 --holdout-days 21 --max-dd 0.55 --resume-from runs/camp_c2_e_scalp_vol3_ts2509,runs/camp_c2_e_scalp_vol3_alt21rec,runs/camp_c2_e_scalp_vol3_alt21,runs/camp_c2_e_scalp_vol3_ts2501 --merge-mode breed",
+  "resume_from": [
+   "runs/camp_c2_e_scalp_vol3_ts2509",
+   "runs/camp_c2_e_scalp_vol3_alt21rec",
+   "runs/camp_c2_e_scalp_vol3_alt21",
+   "runs/camp_c2_e_scalp_vol3_ts2501"
+  ],
+  "merge_mode": "breed"
+ }
+]

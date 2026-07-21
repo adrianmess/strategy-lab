@@ -1,0 +1,12 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 2.9637881365796703,
+  "total_mult": 2.0437554349037206,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c2_e_rocx_trend3_ts2501_full",
+  "at": "2026-07-20 21:30"
+ }
+}

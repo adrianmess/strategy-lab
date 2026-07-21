@@ -1,0 +1,12 @@
+[
+ {
+  "at": "2026-07-21 00:56:39",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode lev --method vol3 --algo genetic --procs 14 --batch 100 --total 100000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c3_w2_merge_macdx_lev_vol3 --holdout-days 21 --max-dd 0.55 --resume-from runs/camp_c3_s_macdx_vol3_xfit_lev6,runs/camp_c3_s_macdx_vol3_ts2501,runs/camp_c3_s_macdx_vol3_xfit --merge-mode breed",
+  "resume_from": [
+   "runs/camp_c3_s_macdx_vol3_xfit_lev6",
+   "runs/camp_c3_s_macdx_vol3_ts2501",
+   "runs/camp_c3_s_macdx_vol3_xfit"
+  ],
+  "merge_mode": "breed"
+ }
+]

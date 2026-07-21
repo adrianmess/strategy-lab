@@ -523,7 +523,8 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
             tr, eq, liq, op = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
                                    initial_capital=eq,
                                    commission=0.0004 if mode == "lev" else 0.0005,
-                                   use_sl=(mode == "spot"), dyn_liq=(mode == "lev"),
+                                   use_sl=(mode == "spot" or bool(cand.get("lev_stops"))),
+                                   dyn_liq=(mode == "lev"),
                                    return_open=True,
                                    no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
             if op:
@@ -637,7 +638,8 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
                                              no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
             elif v6like:
                 tr, eq, liq, op = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
-                                           initial_capital=eq, use_sl=(mode == "spot"),
+                                           initial_capital=eq,
+                                           use_sl=(mode == "spot" or bool(cand.get("lev_stops"))),
                                            commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
                                            return_open=True,

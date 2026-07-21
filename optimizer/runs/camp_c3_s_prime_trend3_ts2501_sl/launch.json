@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-21 00:31:07",
+  "cmd": "python3 optimize2_cli.py --strategy prime --mode lev --method trend3 --algo genetic --procs 14 --batch 100 --total 150000 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c3/spaces/levsafe.json --name camp_c3_s_prime_trend3_ts2501_sl --train-end 2026-03-01 --train-start 2025-01-01 --max-dd 0.4 --lev-stops",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

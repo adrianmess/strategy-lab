@@ -175,6 +175,24 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     </div>
   </div>
 
+  <h2>Autonomous campaign <span class="mini">— curated experiment matrix (mh≤5d, small-gains bias), runs sequentially at 14 procs; stop any time, resume later</span></h2>
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:14px">
+    <div class="row" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span id="campStatus" class="kv">checking…</span>
+      <span style="display:flex;gap:6px;align-items:center">
+        <input id="campName" value="c2" style="width:56px" title="campaign name — c1 = broad matrix (done), c2 = era-robustness matrix">
+        <select id="campMatrix" style="width:140px" title="matrix used if this campaign doesn't exist yet">
+          <option value="meta">meta-router matrix</option>
+          <option value="survival">survival matrix</option>
+          <option value="era">era matrix</option><option value="c1">broad matrix</option></select>
+        <button class="small" onclick="campStart()">▶ Start / Resume</button>
+        <button class="small" onclick="campStop()" title="The experiment in flight finishes its generation and finalizes honestly (holdout eval); nothing is lost">■ Stop (graceful)</button>
+        <button class="small" onclick="toggleCampReport()">Report</button>
+      </span>
+    </div>
+    <pre id="campReport" style="display:none;max-height:320px;margin-top:8px"></pre>
+  </div>
+
   <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
     <span class="mini" style="float:right">
     <label style="margin-right:4px">Show</label>
@@ -182,6 +200,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <option value="all">all runs</option>
       <option value="clean">✓ no-liq only</option>
       <option value="liq">liquidated only</option>
+      <option value="camp">campaign runs only</option>
+      <option value="nocamp">manual runs only</option>
     </select>
     <label data-x="gapmode" style="cursor:pointer;margin-left:14px">Backtest gap handling</label>
     <select id="gapMode" style="font-size:12px;padding:3px 6px"><option value="skip_contaminated">skip_contaminated (default)</option><option value="skip_open">skip_open</option></select></span></h2>
@@ -436,6 +456,8 @@ function renderRuns(){
   const lf = $('liqFilter').value;
   const base = lf==='clean' ? RUNS.filter(r=>r._clean>=2)
              : lf==='liq'   ? RUNS.filter(r=>r._clean===0)
+             : lf==='camp'  ? RUNS.filter(r=>r.name.startsWith('camp_'))
+             : lf==='nocamp'? RUNS.filter(r=>!r.name.startsWith('camp_'))
              : RUNS;
   const rs = [...base].sort((a,b)=>{
     const va=a[sortKey], vb=b[sortKey];
@@ -747,6 +769,39 @@ async function stopJob(id){
   const r = await api('jobs/'+id+'/stop', {});
   if(r.note && r.graceful) $('launchMsg').textContent = r.note;
   refreshJobs();
+}
+// ---------- autonomous campaign ----------
+async function refreshCampaign(){
+  try{
+    const nm = ($('campName').value||'c1').trim();
+    const c = await api('campaign/status?name='+encodeURIComponent(nm));
+    const el = $('campStatus');
+    if(!c.exists){ el.textContent = `no campaign '${nm}' yet — Start creates its plan and begins`; return; }
+    el.innerHTML = `<b>${nm}</b> · wave ${c.wave} · <span class="pos">${c.done} done</span> · ${c.pending} pending`
+      + (c.failed?` · <span class="neg">${c.failed} failed</span>`:'')
+      + (c.current?` · running: <b>${c.current}</b>`:'')
+      + (c.runner_running?' <span class="badge b-green">RUNNER ACTIVE</span>':' <span class="badge b-amber">paused</span>')
+      + (c.stop_requested?' <span class="kv">(stop requested — finishing current experiment)</span>':'');
+    if($('campReport').style.display!=='none' && c.report) $('campReport').textContent = c.report;
+  }catch(e){}
+}
+async function campStart(){
+  const r = await api('campaign/start',{name:($('campName').value||'c1').trim(),
+    matrix:$('campMatrix').value, procs:14});
+  if(r.ok) setTimeout(refreshCampaign, 1000);
+}
+async function campStop(){
+  const r = await api('campaign/stop',{name:($('campName').value||'c1').trim()});
+  if(r.ok) alert(r.note);
+  refreshCampaign();
+}
+async function toggleCampReport(){
+  const p = $('campReport');
+  p.style.display = p.style.display==='none' ? 'block' : 'none';
+  if(p.style.display!=='none'){
+    const c = await api('campaign/status?name='+encodeURIComponent(($('campName').value||'c1').trim()));
+    p.textContent = c.report || 'no report yet — appears after the first experiment finishes';
+  }
 }
 // ---------- nested job rows (running optimize job shown under its run) ----------
 const JOBHIDE = new Set();          // run names whose nested job row is collapsed
@@ -1063,8 +1118,8 @@ $('strat').onchange = ()=>{
   explain('strategy');
 };
 $('perreg').disabled = !['v7','prime7'].includes($('strat').value);  // sync after restore
-refreshRuns().then(applyCombineFromBacktests); refreshJobs(); loadSpace(); aiKey();
-setInterval(refreshJobs, 4000); setInterval(refreshRuns, 15000);
+refreshRuns().then(applyCombineFromBacktests); refreshJobs(); loadSpace(); aiKey(); refreshCampaign();
+setInterval(refreshJobs, 4000); setInterval(refreshRuns, 15000); setInterval(refreshCampaign, 10000);
 </script>
 </body>
 </html>

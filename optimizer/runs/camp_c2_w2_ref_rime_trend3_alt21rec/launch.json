@@ -1,0 +1,10 @@
+[
+ {
+  "at": "2026-07-20 21:59:03",
+  "cmd": "python3 optimize2_cli.py --strategy prime --mode lev --method trend3 --algo refine --procs 14 --batch 100 --total 50000 --gap-mode skip_contaminated --max-hold-days 5 --scoring recent --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c2_w2_ref_rime_trend3_alt21rec --holdout-days 21 --resume-from runs/camp_c2_e_prime_trend3_alt21rec",
+  "resume_from": [
+   "runs/camp_c2_e_prime_trend3_alt21rec"
+  ],
+  "merge_mode": null
+ }
+]

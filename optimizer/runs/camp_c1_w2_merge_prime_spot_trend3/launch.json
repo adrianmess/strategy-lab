@@ -1,0 +1,11 @@
+[
+ {
+  "at": "2026-07-20 16:47:31",
+  "cmd": "python3 optimize2_cli.py --strategy prime --mode spot --method trend3 --algo genetic --procs 14 --batch 100 --total 100000 --train-end 2025-09-01 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c1_w2_merge_prime_spot_trend3 --max-dd 0.55 --resume-from runs/camp_c1_w1_34_prime_sp_tr3_t,runs/camp_c1_w1_35_prime_sp_tr3_uw --merge-mode breed",
+  "resume_from": [
+   "runs/camp_c1_w1_34_prime_sp_tr3_t",
+   "runs/camp_c1_w1_35_prime_sp_tr3_uw"
+  ],
+  "merge_mode": "breed"
+ }
+]

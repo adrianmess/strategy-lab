@@ -723,6 +723,9 @@ def _clip_indices(t_arr, t0, t1):
 
 def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 gap_mode=None, scoring=None):
+    # OPT-IN lev stops (see optimizer2.eval3): stamped onto evaluated candidates
+    if os.environ.get("LEV_STOPS") == "1" and mode == "lev":
+        cand["lev_stops"] = True
     need = {"prime": ("v6",), "macdx": ("v6", "macdx"),
             "rocx": ("v6", "rocx")}.get(cand["strategy"], (cand["strategy"],))
     G = load_globals(need)
@@ -741,7 +744,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
         segs = G["v6"][cand["tv"]]
         regs = G["regimes_v6"][method]
         comm = FUT_COMM
-        use_sl = (mode == "spot")
+        use_sl = (mode == "spot") or bool(cand.get("lev_stops"))
         for (pre, f), reg in zip(segs, regs):
             i0, i1 = _clip_indices(pre["t"], t0, t1)
             i0 = max(i0, warmup)   # never trade unconverged indicators
@@ -920,6 +923,11 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
         out["score"] = float(rw.min()) if len(rw) else out["score"]
     elif scoring == "underwater":
         out["score"] = out["score"] - 0.5 * out["in_market"]
+    elif scoring == "recent":
+        # recency-weighted monthly growth (half-life 3 months) — see optimizer2
+        if len(gm) >= 2:
+            w = 0.5 ** (np.arange(len(gm))[::-1] / 3.0)
+            out["score"] = float(np.average(gm.to_numpy(), weights=w)) - 0.25 * g_std
     for k, v in out.items():   # NaN/inf breaks JSON in browsers
         if isinstance(v, float) and not np.isfinite(v):
             out[k] = 0.0
