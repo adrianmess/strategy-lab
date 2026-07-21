@@ -60,6 +60,12 @@ def resolve_candidate(best_config, runs_dir):
                 source_run=best_config.get("generated"))
 
 
+def _ts16(x):
+    """Minute-resolution timestamp label, separator-normalized: numpy datetime64
+    stringifies as '…T…', pandas as '… …' — they must compare equal."""
+    return str(x)[:16].replace("T", " ")
+
+
 def _extend(df3, df1):
     """Append the synthetic zero-range bar to both frames."""
     last3 = df3.iloc[-1]
@@ -140,7 +146,7 @@ class StrategyMetax:
         breg, _ = make_regimes(feats, BUCKET_METHOD[self.buckets])
         bucket_now = int(breg[len(x3) - 2])     # last REAL bar = the signal bar
         syn_i = len(x3) - 1
-        syn_t = str(x3["t"].iloc[-1])[:16]
+        syn_t = _ts16(x3["t"].iloc[-1])
         s = self.state
         mirror = s.get("mirror")
 
@@ -155,13 +161,12 @@ class StrategyMetax:
             k = mirror["comp"]
             tr, op = get_run(k)
             still_open = (op is not None
-                          and str(op.get("entry_t", ""))[:16] == mirror["entry_t"])
+                          and _ts16(op.get("entry_t", "")) == mirror["entry_t"])
             if not still_open:
                 s["mirror"] = None
                 reason = "virtual_exit"
                 if len(tr):
-                    m = tr[tr["entry_t"].astype(str).str.slice(0, 16)
-                           == mirror["entry_t"]]
+                    m = tr[tr["entry_t"].map(_ts16) == mirror["entry_t"]]
                     if len(m):
                         rmap = {0.0: "profit_target", 1.0: "stop_loss",
                                 2.0: "liquidation"}

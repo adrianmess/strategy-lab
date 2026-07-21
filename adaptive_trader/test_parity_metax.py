@@ -103,8 +103,9 @@ def replay_adapter(candidate, mode, d3, d1, i_start, i_end):
     live = []
     open_pos = None
     t1v = d1["t"].values
+    anchor = max(0, i_start - win)   # ANCHORED window, like the live feed
     for i in range(i_start, i_end):
-        lo = max(0, i - win)
+        lo = anchor
         w3 = d3.iloc[lo:i + 1]
         lo_t = w3["t"].iloc[0].to_datetime64()
         hi_t = (w3["t"].iloc[-1] + BAR3).to_datetime64()
@@ -141,12 +142,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="camp_c4_m_spot_vol3")
     ap.add_argument("--days", type=int, default=10)
+    ap.add_argument("--end-days-ago", type=int, default=0,
+                    help="shift the test window into the past — pick an ACTIVE "
+                         "stretch; a quiet week gives a vacuous 0-trade result")
     args = ap.parse_args()
     best = json.load(open(os.path.join(RUNS, args.run, "best_config.json")))
     candidate = resolve_candidate(best, RUNS)
     mode = best["mode"]
     d3, d1 = load_data()
-    i_end = len(d3)
+    i_end = len(d3) - args.end_days_ago * 480
     i_start = i_end - args.days * 480
     print(f"router {args.run} ({mode}, {candidate['buckets']}), replaying "
           f"{args.days}d = {i_end - i_start} bars…", flush=True)
@@ -173,6 +177,10 @@ def main():
             print(f"  UNMATCHED ref entry {r['entry_t']} dir {r['dir']} "
                   f"comp {r['comp']}", flush=True)
     extra = len(live) - len(used)
+    if not ref and not live:
+        print("PARITY: INCONCLUSIVE — no routed trades in this stretch; "
+              "re-run with --end-days-ago on an active window", flush=True)
+        return
     pct = 100.0 * matched / max(len(ref), 1)
     verdict = "PASS" if (pct >= 90 and extra == 0) else "FAIL"
     print(f"PARITY: {verdict} — {matched}/{len(ref)} reference entries matched "

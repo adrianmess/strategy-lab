@@ -168,10 +168,12 @@ def resample_3m(df1: pd.DataFrame) -> pd.DataFrame:
 
 
 class Feed:
-    def __init__(self, symbol: str, live: bool = True):
+    def __init__(self, symbol: str, live: bool = True, anchored: bool = False):
         self.symbol = symbol
         self.df3 = None
         self.df1 = None
+        self.anchored = anchored
+        self.trim_ok = False    # trader sets True when flat (anchored mode)
         self.live = LivePrice(symbol) if live else None
 
     def backfill(self):
@@ -193,9 +195,22 @@ class Feed:
         prev_last = self.df3["t"].iloc[-1] if len(self.df3) else None
         self.df1 = (pd.concat([self.df1, new1], ignore_index=True)
                     .drop_duplicates("t", keep="last").sort_values("t").reset_index(drop=True))
-        # trim
-        cutoff = pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=HISTORY_DAYS)
-        self.df1 = self.df1[self.df1["t"] >= cutoff].reset_index(drop=True)
+        # trim: rolling window by default. ANCHORED mode (router strategies):
+        # the window's left edge stays FIXED while it grows, because rolling it
+        # re-writes the virtual engines' history and can flip long-held virtual
+        # trades (observed in the metax parity test). Re-anchor only when the
+        # window has grown 14 extra days AND the trader says it's flat
+        # (trim_ok) — so a re-anchor can never happen mid-trade.
+        now = pd.Timestamp.utcnow().tz_localize(None)
+        if not self.anchored:
+            cutoff = now - pd.Timedelta(days=HISTORY_DAYS)
+            self.df1 = self.df1[self.df1["t"] >= cutoff].reset_index(drop=True)
+        elif (len(self.df1) and self.df1["t"].iloc[0]
+                < now - pd.Timedelta(days=HISTORY_DAYS + 14)
+                and getattr(self, "trim_ok", False)):
+            cutoff = now - pd.Timedelta(days=HISTORY_DAYS)
+            logger.info("anchored feed: re-anchoring window to %s (flat)", cutoff)
+            self.df1 = self.df1[self.df1["t"] >= cutoff].reset_index(drop=True)
         self.df3 = resample_3m(self.df1)
         return prev_last is None or self.df3["t"].iloc[-1] > prev_last
 

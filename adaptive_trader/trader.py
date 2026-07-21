@@ -122,7 +122,8 @@ def main():
     strat = make_strategy(cfg, state)
     ex = Executor(cfg)
 
-    feed = Feed(cfg["symbol"])
+    is_router = (cfg.get("candidate") or {}).get("strategy") == "metax"
+    feed = Feed(cfg["symbol"], anchored=is_router)
     feed.backfill()
     last_closed = None
 
@@ -153,6 +154,9 @@ def main():
 
     while True:
         try:
+            # anchored feed may only re-anchor its window while we're flat
+            feed.trim_ok = (not state.get("position")
+                            and not state.get("mirror"))
             feed.update()
             price = feed.last_price()
 
