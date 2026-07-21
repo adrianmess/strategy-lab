@@ -817,7 +817,7 @@ def _config_entries():
                 except Exception:
                     rating = 0
                 out.append(dict(path=p, label=f"optimizer run: {d}", kind="run",
-                                best=best, rating=rating))
+                                run=d, best=best, rating=rating))
     # starred/rated first, like on the Optimize page
     out.sort(key=lambda e: (-(e.get("best") and 1 or 0), -(e.get("rating") or 0)))
     return out

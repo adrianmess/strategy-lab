@@ -442,11 +442,18 @@ async function refreshConfigs(){
 }
 function btFromRow(i){ $('btPick').value=i; $('btCfg').value=''; runBacktest(); }
 async function adopt(i){
-  const t = $('adoptTarget').value;
-  if(!confirm(`Copy parameters from "${CONFIGS[i].label}" into ${t}? (backup is kept)`)) return;
-  const r = await api('adopt',{source:CONFIGS[i].path, target:t});
-  if(r.ok) alert('Adopted into '+r.target+'. Restart the trader to apply.');
-  loadSettings();
+  const c = CONFIGS[i];
+  let t = $('adoptTarget').value;
+  if(c.strategy === 'metax'){
+    // routers always get their OWN config file named after the run
+    t = `config_${c.run}.json`;
+    if(!confirm(`Adopt ROUTER "${c.run}" into its own trader config?\n\n  ${t}\n  (created if missing — own state/log files, starts as dry-run)\n\nRun a dry-run soak before LIVE.`)) return;
+  } else {
+    if(!confirm(`Copy parameters from "${c.label}" into ${t}? (backup is kept)`)) return;
+  }
+  const r = await api('adopt',{source:c.path, target:t});
+  if(r.ok) alert((r.note || ('Adopted into '+r.target+'.')) + '\nPick "'+r.target+'" on an instance to start it.');
+  loadSettings(); refresh();
 }
 async function loadSettings(){
   const c = await fetch('/api/trader_config?file='+$('sFile').value).then(r=>r.json());
