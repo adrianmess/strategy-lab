@@ -521,7 +521,7 @@ function renderRuns(){
       <td>${hcell}</td>
       <td>${r.strategy==='metax'?`
         <span class="kv" title="Router runs are built/validated by metax_cli (campaign card); their backtests are linked in the holdout column.">router</span>
-        <button class="small" title="Adopt this ROUTER into a trader config: embeds the component configs into a self-contained candidate. Adopt spot routers into config_spot.json. Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adopt('runs/${r.name}/best_config.json','${r.mode}')">Adopt router</button>
+        <button class="small" title="Adopt this ROUTER into its own trader config (config_${r.name}.json — created if missing, own state/log, dry-run). Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adoptRouter('${r.name}','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
         <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
@@ -748,6 +748,14 @@ async function bt(cfg,name){ runAndPreview(cfg, name+'_full', null); }
 async function btH(cfg,name,hd){
   if(hd) runAndPreview(cfg, name+'_HOLDOUT', null, hd);
   else runAndPreview(cfg, name+'_HOLDOUT', $('trainEnd').value||'2025-09-01');
+}
+async function adoptRouter(name, mode){
+  // routers get their OWN config file named after the run, so several routers
+  // (and the classic configs) can coexist as separate panel instances
+  const target = `config_${name}.json`;
+  if(!confirm(`Adopt router "${name}" into its own trader config?\n\n  ${target}\n  (created if missing — own state/log files, starts as dry-run)\n\nRun a dry-run soak before LIVE.`)) return;
+  const r = await api('adopt',{source:`runs/${name}/best_config.json`, target});
+  if(r.ok) alert((r.note||'Adopted.')+`\n\nOn the Control panel, pick "${target}" on an instance and Start dry-run.`);
 }
 async function adopt(cfg, mode){
   const target = (mode==='spot') ? 'config_spot.json' : 'config.json';

@@ -8,5 +8,10 @@
   "cfg": "config_spot.json",
   "port": 5002,
   "headless": false
+ },
+ "3": {
+  "cfg": "config_router_lev.json",
+  "port": 5003,
+  "headless": false
  }
 }

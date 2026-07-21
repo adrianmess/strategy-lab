@@ -861,26 +861,44 @@ def adopt():
             return jsonify(error=(
                 f"router assigns component families with no live runner yet: "
                 f"{sorted(bad)}")), 400
-        target = os.path.join(AT, d.get("target", "config.json"))
-        cfg = json.load(open(target))
-        if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:
-            if not d.get("force"):
-                right = ("config_spot.json" if best["mode"] == "spot"
-                         else "config.json")
+        tname = os.path.basename(d.get("target", "config.json"))
+        import re as _re
+        if not _re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", tname):
+            return jsonify(error=f"bad target name '{tname}'"), 400
+        target = os.path.join(AT, tname)
+        created = False
+        if not os.path.exists(target):
+            # per-router config named after the run: skeleton from config.json
+            # with its OWN state/log files, starting as a dry-run
+            suffix = tname[len("config_"):-len(".json")] if \
+                tname.startswith("config_") else "router"
+            cfg = json.load(open(os.path.join(AT, "config.json")))
+            cfg.pop("candidate", None)
+            cfg.pop("adopted_from", None)
+            cfg.update(dry_run=True,
+                       state_file=f"trader_state_{suffix}.json",
+                       log_file=f"trader_{suffix}.log")
+            created = True
+        else:
+            cfg = json.load(open(target))
+            if best.get("mode") and cfg.get("mode") \
+                    and best["mode"] != cfg["mode"] and not d.get("force"):
                 return jsonify(error=(
-                    f"This is a {best['mode']}-mode router but "
-                    f"{os.path.basename(target)} is the {cfg['mode']}-mode "
-                    f"config. Choose '{right}' instead.")), 400
-        import shutil
-        shutil.copy(target, target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+                    f"This is a {best['mode']}-mode router but {tname} is the "
+                    f"{cfg['mode']}-mode config.")), 400
+            import shutil
+            shutil.copy(target, target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
         cfg["candidate"] = rc
         cfg["mode"] = best["mode"]
         cfg["method"] = best.get("method", "vol3")
         cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
         json.dump(cfg, open(target, "w"), indent=1)
-        return jsonify(ok=True, target=os.path.basename(target),
-                       note=("ROUTER adopted. Run the parity test "
-                             "(test_parity_metax.py), then dry-run before LIVE."))
+        return jsonify(ok=True, target=tname, created=created,
+                       note=(f"ROUTER adopted into {tname}"
+                             + (" (new file — own state/log, dry-run)."
+                                if created else " (backup kept).")
+                             + " Run test_parity_metax.py, then a dry-run "
+                               "soak before LIVE."))
     cfg = json.load(open(target))
     if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:
         if not d.get("force"):
