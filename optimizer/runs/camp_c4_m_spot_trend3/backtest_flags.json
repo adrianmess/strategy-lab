@@ -1,0 +1,22 @@
+{
+ "best_config.json|router merge": {
+  "source": "best_config.json",
+  "kind": "router merge",
+  "liq": false,
+  "growth_pct": 8.943533712765529,
+  "total_mult": 11.006286780468033,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_spot_trend3_router_full",
+  "at": "2026-07-21 01:46"
+ },
+ "best_config.json|router merge, refined": {
+  "source": "best_config.json",
+  "kind": "router merge, refined",
+  "liq": false,
+  "growth_pct": 9.22633719601038,
+  "total_mult": 10.835251500975478,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_spot_trend3_refined_router_full",
+  "at": "2026-07-21 01:46"
+ }
+}

@@ -1,0 +1,94 @@
+{
+ "strategy": "metax",
+ "mode": "spot",
+ "method": "month12",
+ "algo": "router",
+ "per_regime": true,
+ "cand": {
+  "strategy": "metax",
+  "mode": "spot",
+  "buckets": "month12",
+  "assign": [
+   -1,
+   -1,
+   -1,
+   -1,
+   -1,
+   2,
+   2,
+   2,
+   2,
+   -1,
+   -1,
+   -1
+  ],
+  "components": [
+   {
+    "run": "camp_c1_w2_merge_prime_spot_trend3",
+    "file": "holdout_best_config.json",
+    "strategy": "prime"
+   },
+   {
+    "run": "camp_c1_w1_34_prime_sp_tr3_t",
+    "file": "holdout_best_config.json",
+    "strategy": "prime"
+   },
+   {
+    "run": "ScalpX_spot_trend3_unified",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx"
+   },
+   {
+    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
+    "file": "holdout_best_config.json",
+    "strategy": "v7"
+   },
+   {
+    "run": "camp_c1_w1_40_sx1_sp_vol3_cl",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx"
+   },
+   {
+    "run": "camp_c1_w1_37_sx2_sp_tr3_uw_t",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx2"
+   },
+   {
+    "run": "spotcamp_A2_macdx_vol3_100k",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx"
+   },
+   {
+    "run": "spotcamp_A3_macdx_vol3_500k",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx"
+   }
+  ],
+  "live_replication": "run every component's signal state machine virtually; mirror real orders only when the entry bar's bucket is assigned to that component and the single slot is free"
+ },
+ "metrics": {
+  "growth": 0.2902233185077631,
+  "score": 0.2619975023894526,
+  "eq": 4267.8773355985995,
+  "maxdd": 0.3412802197728917,
+  "n": 20,
+  "months": 6.7523885786246165,
+  "tpm": 2.961914849407818,
+  "max_hold_days": 6.783333333333333,
+  "liq": false
+ },
+ "holdout": {
+  "growth": -0.031062584366917688,
+  "score": -0.09448178057131412,
+  "eq": 779.9693344060859,
+  "maxdd": 0.557987923456617,
+  "n": 16,
+  "months": 6.7523885786246165,
+  "tpm": 2.3695318795262543,
+  "max_hold_days": 6.783333333333333,
+  "liq": false
+ },
+ "seasonal_flag": true,
+ "evaluated": 30000,
+ "generated": "2026-07-21 01:35"
+}

@@ -1,0 +1,55 @@
+{
+ "strategy": "metax",
+ "mode": "lev",
+ "method": "vol3",
+ "algo": "router",
+ "per_regime": true,
+ "cand": {
+  "strategy": "metax",
+  "mode": "lev",
+  "buckets": "vol3",
+  "assign": [
+   -1,
+   -1,
+   0
+  ],
+  "components": [
+   {
+    "run": "camp_c2_e_macdx_vol3_xfit",
+    "file": "best_config.json",
+    "strategy": "macdx"
+   },
+   {
+    "run": "camp_c3_s_macdx_vol3_xfit_lev6",
+    "file": "best_config.json",
+    "strategy": "macdx"
+   }
+  ],
+  "live_replication": "run every component's signal state machine virtually; mirror real orders only when the entry bar's bucket is assigned to that component and the single slot is free"
+ },
+ "metrics": {
+  "growth": 0.13701024773028783,
+  "score": 0.08701642406443746,
+  "eq": 13506.819511174353,
+  "maxdd": 0.47894548068049936,
+  "n": 47,
+  "months": 15.37194070302234,
+  "tpm": 3.0575189501452567,
+  "max_hold_days": 3.8833333333333333,
+  "liq": false
+ },
+ "holdout": {
+  "growth": 0.12445516974513342,
+  "score": 0.0938777694598733,
+  "eq": 8295.70478993598,
+  "maxdd": 0.4800000000000004,
+  "n": 30,
+  "months": 15.37194070302234,
+  "tpm": 1.9516078405182489,
+  "max_hold_days": 3.8833333333333333,
+  "liq": false
+ },
+ "seasonal_flag": false,
+ "evaluated": 30000,
+ "generated": "2026-07-21 02:07"
+}

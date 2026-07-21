@@ -434,20 +434,25 @@ class Campaign:
         spec["rc"] = rc
         self.save()
         r = spec.get("result") or {}
-        ob = r.get("oos_best")
+        ob = r.get("oos_best") or r.get("train_best")
+        tag = "OOS-best" if r.get("oos_best") else "holdout"
         print(f"    -> {spec['status']}"
-              + (f" | OOS-best {ob['pct_mo']:+.1f}%/mo dd {100*ob['maxdd']:.0f}% "
-                 f"tpm {ob['tpm']:.1f}" if ob and not ob["liq"] else
-                 " | no surviving OOS-best"), flush=True)
+              + (f" | {tag} {ob['pct_mo']:+.1f}%/mo dd {100*ob['maxdd']:.0f}% "
+                 f"tpm {ob['tpm']:.1f}" if ob and not ob["liq"]
+                 and ob.get("pct_mo") is not None else
+                 " | no surviving candidate"), flush=True)
 
     # ---------------- iteration (wave 2/3 generation) ----------------
     def gen_wave2(self):
         if self.plan.get("matrix") == "meta":
             # phase 2 = joint refine of component params, frozen assignment
+            # (idempotent: re-runs of fixed wave-1 specs get their refine later)
+            have = {s["id"] for s in self.plan["specs"]}
             new = []
             for s in self.plan["specs"]:
                 if s["wave"] == 1 and s["status"] == "done" \
-                        and (s.get("result") or {}).get("ok"):
+                        and (s.get("result") or {}).get("ok") \
+                        and f"w2_refine_{s['id']}" not in have:
                     tb = (s["result"].get("train_best")
                           or s["result"].get("oos_best"))
                     if tb and not tb.get("liq") and (tb.get("growth") or 0) > 0:
@@ -563,6 +568,10 @@ class Campaign:
             pending = [s for s in self.plan["specs"]
                        if s["status"] in ("pending", "interrupted", "failed_retry")]
             if not pending:
+                if self.plan.get("matrix") == "meta":
+                    if self.gen_wave2():
+                        continue
+                    break
                 cur = self.plan.get("wave", 1)
                 if cur == 1 and not any(s["wave"] == 2 for s in self.plan["specs"]):
                     if self.gen_wave2():

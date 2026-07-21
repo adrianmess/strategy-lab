@@ -134,8 +134,24 @@
    "space": "default",
    "total": 30000,
    "mh": 7,
-   "status": "running",
-   "started": "2026-07-21 01:13:23"
+   "status": "done",
+   "started": "2026-07-21 01:13:23",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.0739824763175052,
+     "pct_mo": 7.68,
+     "maxdd": 0.31048457052559364,
+     "n": 26,
+     "tpm": 1.8502486374860583,
+     "max_hold_days": 4.114583333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
   },
   {
    "id": "m_spot_vol3",
@@ -148,7 +164,24 @@
    "space": "default",
    "total": 30000,
    "mh": 7,
-   "status": "pending"
+   "status": "done",
+   "started": "2026-07-21 01:34:18",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.09809564334239482,
+     "pct_mo": 10.31,
+     "maxdd": 0.31048457052559375,
+     "n": 20,
+     "tpm": 1.4522359465966945,
+     "max_hold_days": 4.114583333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
   },
   {
    "id": "m_spot_trend3",
@@ -161,7 +194,24 @@
    "space": "default",
    "total": 30000,
    "mh": 7,
-   "status": "pending"
+   "status": "done",
+   "started": "2026-07-21 01:34:38",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.027352078809579978,
+     "pct_mo": 2.77,
+     "maxdd": 0.32307025665579636,
+     "n": 101,
+     "tpm": 6.530275286194094,
+     "max_hold_days": 6.466666666666667
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
   },
   {
    "id": "m_spot_month12",
@@ -174,11 +224,168 @@
    "space": "default",
    "total": 30000,
    "mh": 7,
-   "status": "pending"
+   "status": "done",
+   "started": "2026-07-21 01:35:03",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": -0.031062584366917688,
+     "pct_mo": -3.06,
+     "maxdd": 0.557987923456617,
+     "n": 16,
+     "tpm": 2.3695318795262543,
+     "max_hold_days": 6.783333333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_refine_m_lev_vol3",
+   "wave": 2,
+   "kind": "metax_refine",
+   "status": "done",
+   "strategy": "metax",
+   "mode": "lev",
+   "method": "vol3",
+   "iters": 400,
+   "run_override": "camp_c4_m_lev_vol3",
+   "started": "2026-07-21 01:13:58",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.11868665257127335,
+     "pct_mo": 12.6,
+     "maxdd": 0.5356665947209392,
+     "n": 40,
+     "tpm": 2.5921147462096097,
+     "max_hold_days": 3.654166666666667
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_refine_m_lev_trend3",
+   "wave": 2,
+   "kind": "metax_refine",
+   "status": "done",
+   "strategy": "metax",
+   "mode": "lev",
+   "method": "trend3",
+   "iters": 400,
+   "run_override": "camp_c4_m_lev_trend3",
+   "started": "2026-07-21 01:14:08",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": -0.1585033970902715,
+     "pct_mo": -14.66,
+     "maxdd": 0.9558888080184202,
+     "n": 36,
+     "tpm": 2.442022966947002,
+     "max_hold_days": 2.525
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_refine_m_spot_vt9",
+   "wave": 2,
+   "kind": "metax_refine",
+   "status": "done",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "vt9",
+   "iters": 400,
+   "run_override": "camp_c4_m_spot_vt9",
+   "started": "2026-07-21 01:14:18",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.0739824763175052,
+     "pct_mo": 7.68,
+     "maxdd": 0.31048457052559364,
+     "n": 26,
+     "tpm": 1.8502486374860583,
+     "max_hold_days": 4.114583333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_refine_m_spot_vol3",
+   "wave": 2,
+   "kind": "metax_refine",
+   "status": "done",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "vol3",
+   "iters": 400,
+   "run_override": "camp_c4_m_spot_vol3",
+   "started": "2026-07-21 01:35:18",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.09809564334239482,
+     "pct_mo": 10.31,
+     "maxdd": 0.31048457052559375,
+     "n": 20,
+     "tpm": 1.4522359465966945,
+     "max_hold_days": 4.114583333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_refine_m_spot_trend3",
+   "wave": 2,
+   "kind": "metax_refine",
+   "status": "done",
+   "strategy": "metax",
+   "mode": "spot",
+   "method": "trend3",
+   "iters": 400,
+   "run_override": "camp_c4_m_spot_trend3",
+   "started": "2026-07-21 01:35:28",
+   "result": {
+    "ok": true,
+    "evaluated": 30000,
+    "train_best": {
+     "liq": false,
+     "growth": 0.015206500674768546,
+     "pct_mo": 1.53,
+     "maxdd": 0.32307025665579636,
+     "n": 126,
+     "tpm": 8.146680060004513,
+     "max_hold_days": 6.466666666666667
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
   }
  ],
- "wave": 1,
+ "wave": 2,
  "matrix": "meta",
  "note": "wave-2/3 specs are appended automatically",
- "updated": "2026-07-21 01:13:23"
+ "updated": "2026-07-21 01:35:44"
 }

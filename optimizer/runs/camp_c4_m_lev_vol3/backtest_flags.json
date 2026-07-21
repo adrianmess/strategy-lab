@@ -1,0 +1,22 @@
+{
+ "best_config.json|router merge": {
+  "source": "best_config.json",
+  "kind": "router merge",
+  "liq": false,
+  "growth_pct": 25.022215718186725,
+  "total_mult": 332.4045638819735,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_lev_vol3_router_full",
+  "at": "2026-07-21 01:46"
+ },
+ "best_config.json|router merge, refined": {
+  "source": "best_config.json",
+  "kind": "router merge, refined",
+  "liq": false,
+  "growth_pct": 35.729567862935774,
+  "total_mult": 1528.2246244014514,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_lev_vol3_refined_router_full",
+  "at": "2026-07-21 01:46"
+ }
+}

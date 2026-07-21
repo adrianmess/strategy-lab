@@ -1,0 +1,12 @@
+{
+ "best_config.json|router merge": {
+  "source": "best_config.json",
+  "kind": "router merge",
+  "liq": false,
+  "growth_pct": 5.277906732076865,
+  "total_mult": 3.808625495484417,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_lev_trend3_router_full",
+  "at": "2026-07-21 01:46"
+ }
+}

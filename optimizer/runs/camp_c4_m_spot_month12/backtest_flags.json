@@ -1,0 +1,12 @@
+{
+ "best_config.json|router merge": {
+  "source": "best_config.json",
+  "kind": "router merge",
+  "liq": false,
+  "growth_pct": 22.19353890909521,
+  "total_mult": 3.328813444773659,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_spot_month12_router_full",
+  "at": "2026-07-21 01:46"
+ }
+}

@@ -57,6 +57,9 @@ def mine_components(mode, max_per_family=2, cap=8):
                 continue
             if b.get("mode") != mode or not b.get("cand"):
                 continue
+            if b.get("strategy") == "metax" \
+                    or (b.get("cand") or {}).get("strategy") == "metax":
+                continue   # never route a router (self-reference)
             h = b.get("holdout") or {}
             if fn == "best_config.json" and b.get("holdout_best"):
                 h2 = (b["holdout_best"] or {}).get("holdout") or {}
@@ -97,16 +100,24 @@ def bucket_arrays(buckets):
         dt = times.astype("datetime64[ns]")
         b = (dt.astype("datetime64[M]").astype(int) % 12)   # 0 = January
         return times, b.astype(np.int32), 12
+    global N_SEGS
+    N_SEGS = len(segs)
     method = {"vol3": "vol3", "trend3": "trend3", "vt9": "volXtrend9"}[buckets]
     regs = G["regimes_v6"][method]
     b = np.concatenate([np.asarray(r, dtype=np.int32) for r in regs])
     return times, b, int(b.max()) + 1
 
+N_SEGS = 4
+
 
 # ---------------- component trade tables ----------------
 def component_trades(comp, times, bucket, mode):
-    """Full-history backtest of one component -> vectorized trade table."""
+    """Full-history backtest of one component -> vectorized trade table.
+    Sets comp['liq_full'] — a component that LIQUIDATES in full history is
+    ineligible for routing: its simulation (and trade table) simply ends at
+    the liq, so the router would route to a ghost."""
     e = BT.run_single(comp["path"])
+    comp["liq_full"] = bool(e["stats"]["liq"])
     rows = []
     comm = FUT_COMM if mode == "lev" else SPOT_COMM
     for t in e["trades"]:
@@ -131,13 +142,20 @@ def component_trades(comp, times, bucket, mode):
 
 
 def build_tables(comps, times, bucket, mode):
-    tabs = []
-    for k, c in enumerate(comps):
+    """Backtest every component; EXCLUDE any that liquidates in full history.
+    Returns (kept_comps, tabs) — callers must use the filtered comp list."""
+    kept, tabs = [], []
+    for c in comps:
         a = component_trades(c, times, bucket, mode)
-        print(f"  component {k}: {c['run'][:48]} ({c['strategy']}) "
+        if c.get("liq_full"):
+            print(f"  EXCLUDED {c['run'][:48]} ({c['strategy']}): liquidates "
+                  f"in full history — table truncates at the liq", flush=True)
+            continue
+        print(f"  component {len(kept)}: {c['run'][:48]} ({c['strategy']}) "
               f"{len(a)} trades, holdout {c['holdout_pct']:+.1f}%/mo", flush=True)
+        kept.append(c)
         tabs.append(a)
-    return tabs
+    return kept, tabs
 
 
 # ---------------- router evaluation ----------------
@@ -283,7 +301,11 @@ def publish_backtest(name, mode, buckets, comps, assign, taken, tr_s, ho_s):
                    sl_hits=0, win=(wins / max(len(trades), 1))),
         curve=curve, trades=trades[-400:],
         monthly=[dict(month=m, ret_pct=100 * (v - 1)) for m, v in sorted(mo_map.items())],
-        open_positions=[], gap_mode="inherited from components",
+        open_positions=[], gap_mode="skip_contaminated",
+        gap_handling=dict(threshold_min=1000, n_segments=N_SEGS, skipped_gaps=[],
+                          note="router merge: every component was simulated on "
+                               "gap-segmented data (skip_contaminated); no "
+                               "positions cross a gap"),
         strategy="metax", mode=mode, method=buckets,
         kind="full-history (router merge)",
         config=dict(assign=assign, components=[c["run"] for c in comps]),
@@ -297,6 +319,167 @@ def publish_backtest(name, mode, buckets, comps, assign, taken, tr_s, ho_s):
         json.dump(entries, f, default=float)
         f.write(";")
     print(f"published '{entry['name']}' ({len(entries)} entries)", flush=True)
+    # link the backtest from the run's row on the Optimize page
+    base = name[:-8] if name.endswith("_refined") else name
+    fdir = os.path.join(RUNS, base)
+    if os.path.isdir(fdir):
+        fp = os.path.join(fdir, "backtest_flags.json")
+        try:
+            flags = json.load(open(fp)) if os.path.exists(fp) else {}
+        except Exception:
+            flags = {}
+        kind = ("router merge, refined" if name.endswith("_refined")
+                else "router merge")
+        flags[f"best_config.json|{kind}"] = dict(
+            source="best_config.json", kind=kind,
+            liq=entry["stats"]["liq"],
+            growth_pct=entry["stats"]["monthly_growth_pct"],
+            total_mult=entry["stats"]["total_mult"],
+            gap_mode="skip_contaminated", backtest=entry["name"],
+            at=time.strftime("%Y-%m-%d %H:%M"))
+        json.dump(flags, open(fp, "w"), indent=1, default=float)
+
+
+# ---------------- chronological walk-forward validation ----------------
+_DAY_NS = 86_400_000_000_000
+
+def merge_taken(assign, tabs, t_lo=-np.inf, t_hi=np.inf):
+    """Single-slot merge of assigned trades whose ENTRY falls in [t_lo, t_hi)."""
+    take = []
+    for k, tab in enumerate(tabs):
+        if len(tab) == 0:
+            continue
+        m = np.isin(tab[:, 5].astype(int), np.where(np.asarray(assign) == k)[0])
+        m &= (tab[:, 0] >= t_lo) & (tab[:, 0] < t_hi)
+        if m.any():
+            t = tab[m]
+            take.append(np.column_stack([t, np.full(len(t), k)]))
+    if not take:
+        return np.zeros((0, 8))
+    T = np.vstack(take)
+    T = T[np.argsort(T[:, 0])]
+    out, last_exit = [], -np.inf
+    for row in T:
+        if row[0] < last_exit:
+            continue
+        last_exit = row[1]
+        out.append(row)
+    return np.array(out) if out else np.zeros((0, 8))
+
+def rows_stats(rows):
+    if len(rows) == 0:
+        return None
+    eq = peak = 1000.0
+    dd, max_hold, liq = 0.0, 0.0, False
+    mo = {}
+    for et, xt, r, mae, liqf, bkt, hold, k in rows:
+        r = max(r, -0.999)
+        trough = eq * (1.0 + min(mae, 0.0))
+        eq *= (1.0 + r)
+        peak = max(peak, eq)
+        dd = max(dd, 1 - min(trough, eq) / peak)
+        mo_k = int(et // (30.44 * _DAY_NS))
+        mo[mo_k] = mo.get(mo_k, 0.0) + math.log(max(1e-9, 1.0 + r))
+        liq = liq or bool(liqf)
+        max_hold = max(max_hold, hold)
+    g = np.array(list(mo.values()))
+    months = max(len(mo), 1)
+    return dict(eq=eq, maxdd=dd, n=len(rows), months=months,
+                growth=float(g.mean()), score=float(g.mean() - 0.25 * g.std()),
+                tpm=len(rows) / months, max_hold_days=max_hold, liq=liq)
+
+def search_window(tabs, n_b, n_comps, t_max, total, rng, dd_gate=0.35):
+    """Best feasible assignment judged ONLY on trades entered before t_max.
+    Risk-averse on purpose: tight past-DD gate + DD-penalized score, so the
+    forward window inherits calm assignments (greedy selection walk-forward
+    FAILED the DD gate — this is the fix)."""
+    best, pool, evals = None, [], 0
+    def consider(a):
+        nonlocal best, evals
+        evals += 1
+        s = rows_stats(merge_taken(a, tabs, t_hi=t_max))
+        if not s or s["liq"] or s["n"] < 10 or s["maxdd"] > dd_gate \
+                or s["max_hold_days"] > MAX_HOLD_D:
+            return
+        sc = s["score"] - 0.3 * s["maxdd"]
+        pool.append((sc, tuple(a)))
+        if best is None or sc > best[0]:
+            best = (sc, list(a))
+    for k in range(n_comps):
+        consider([k] * n_b)
+    while evals < total:
+        if pool and rng.random() < 0.7:
+            pool.sort(key=lambda x: -x[0])
+            par = pool[:24]
+            a = list(par[rng.integers(0, len(par))][1])
+            b = list(par[rng.integers(0, len(par))][1])
+            child = [a[i] if rng.random() < 0.5 else b[i] for i in range(n_b)]
+            for i in range(n_b):
+                if rng.random() < 0.15:
+                    child[i] = int(rng.integers(-1, n_comps))
+            consider(child)
+        else:
+            consider([int(rng.integers(-1, n_comps)) for _ in range(n_b)])
+    return best[1] if best else None
+
+def walkforward(run_dir, step_days=42, total=8000, seed=5):
+    """The honest chronological test: at each cutoff, pick the assignment from
+    the PAST only, trade it on the NEXT unseen window, chain the windows."""
+    meta = json.load(open(os.path.join(run_dir, "best_config.json")))
+    cand, mode, buckets = meta["cand"], meta["mode"], meta["method"]
+    comps = [dict(run=c["run"], file=c["file"], strategy=c["strategy"],
+                  path=os.path.join(RUNS, c["run"], c["file"]),
+                  holdout_pct=0.0)
+             for c in cand["components"]]
+    times, bucket, n_b = bucket_arrays(buckets)
+    comps, tabs = build_tables(comps, times, bucket, mode)
+    if len(comps) < 1:
+        print('walk-forward: no surviving components', flush=True)
+        return
+    dd_gate = 0.35 if mode == "spot" else 0.50
+    step = step_days * _DAY_NS
+    t_first = min(t[0, 0] for t in tabs if len(t))
+    t_last = max(t[:, 1].max() for t in tabs if len(t))
+    t0 = np.datetime64("2025-01-01").astype("datetime64[ns]").astype("int64")
+    rng = np.random.default_rng(seed)
+    chained, folds = [], 0
+    T = max(t0, int(t_first + 200 * _DAY_NS))
+    print(f"walk-forward: {step_days}d steps from "
+          f"{np.datetime64(int(T), 'ns')}", flush=True)
+    while T < t_last - _DAY_NS:
+        a = search_window(tabs, n_b, len(comps), T, total, rng, dd_gate=dd_gate)
+        if a is not None:
+            oos = merge_taken(a, tabs, T, T + step)
+            named = [comps[x]["run"][:24] if x >= 0 else "—" for x in a]
+            s = rows_stats(oos)
+            print(f"  fold @{str(np.datetime64(int(T),'ns'))[:10]}: "
+                  f"assign {named} -> "
+                  + (f"{s['n']} trades, eq x{s['eq']/1000:.3f}" if s else "no trades"),
+                  flush=True)
+            chained += list(oos)
+        else:
+            print(f"  fold @{str(np.datetime64(int(T),'ns'))[:10]}: "
+                  f"no feasible assignment — flat", flush=True)
+        folds += 1
+        T += step
+    S = rows_stats(np.array(chained) if chained else np.zeros((0, 8)))
+    name = os.path.basename(run_dir.rstrip("/"))
+    if not S:
+        print("WALK-FORWARD VERDICT: no OOS trades at all — FAIL", flush=True)
+        return
+    pct = 100 * (math.exp(S["growth"]) - 1)
+    verdict = "PASS" if (pct > 0 and not S["liq"] and S["maxdd"] <= MAX_DD) \
+        else "FAIL"
+    print(f"WALK-FORWARD VERDICT ({name}): {verdict} — chained OOS "
+          f"{pct:+.1f}%/mo, dd {100*S['maxdd']:.0f}%, {S['n']} trades over "
+          f"{folds} folds, tpm {S['tpm']:.1f}", flush=True)
+    tr_dummy = S
+    publish_backtest(name + "_walkforward", mode, buckets, comps,
+                     cand["assign"], np.array(chained), tr_dummy, None)
+    json.dump(dict(verdict=verdict, oos_pct_mo=pct, maxdd=S["maxdd"],
+                   n=S["n"], folds=folds, step_days=step_days,
+                   at=time.strftime("%Y-%m-%d %H:%M")),
+              open(os.path.join(run_dir, "walkforward.json"), "w"), indent=1)
 
 
 # ---------------- phase 2: joint refine of component params ----------------
@@ -322,7 +505,7 @@ def refine(run_dir, iters, seed=11):
     times, bucket, n_b = bucket_arrays(buckets)
     space_all = json.load(open(os.path.join(HERE, "param_space.json")))
     tmp = os.path.join(run_dir, "_refine_tmp.json")
-    tabs = build_tables(comps, times, bucket, mode)
+    comps, tabs = build_tables(comps, times, bucket, mode)
     cur = eval_assign(assign, tabs)
     if cur is None or cur[0] is None:
         print("refine: assignment no longer evaluates — aborting", flush=True)
@@ -376,6 +559,12 @@ def refine(run_dir, iters, seed=11):
             print(f"  …{it+1}/{iters}, {accepted} accepted, "
                   f"score {best_score:.3f}", flush=True)
     tr_s, ho_s, taken = eval_assign(assign, tabs, collect=True)
+    # keep the pre-refine config recoverable (refine can overfit; the report
+    # may recommend the ORIGINAL — see c4 lev_trend3)
+    pre = os.path.join(run_dir, "best_config.pre_refine.json")
+    if not os.path.exists(pre):
+        import shutil
+        shutil.copy(cfgp, pre)
     cand["components"] = [dict(run=c["run"], file=c["file"],
                                strategy=c["strategy"],
                                cand=c["cfg"]["cand"]) for c in comps]
@@ -399,6 +588,11 @@ def main():
     ap.add_argument("--refine", default=None,
                     help="run dir of an existing metax run: joint-refine its "
                          "component parameters under the frozen assignment")
+    ap.add_argument("--walkforward", default=None,
+                    help="run dir of an existing metax run: chronological "
+                         "walk-forward validation (assignment re-picked from "
+                         "past-only data at each step, applied forward)")
+    ap.add_argument("--step-days", type=int, default=42)
     ap.add_argument("--iters", type=int, default=400)
     ap.add_argument("--mode", default=None, choices=["lev", "spot"])
     ap.add_argument("--buckets", default="vt9",
@@ -408,6 +602,11 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     args = ap.parse_args()
 
+    if args.walkforward:
+        rd = args.walkforward if os.path.isabs(args.walkforward) \
+            else os.path.join(HERE, args.walkforward)
+        walkforward(rd, args.step_days, seed=args.seed)
+        return
     if args.refine:
         rd = args.refine if os.path.isabs(args.refine) \
             else os.path.join(HERE, args.refine)
@@ -428,7 +627,10 @@ def main():
         sys.exit(1)
     times, bucket, n_b = bucket_arrays(args.buckets)
     print(f"{len(comps)} components, {n_b} buckets ({args.buckets})", flush=True)
-    tabs = build_tables(comps, times, bucket, args.mode)
+    comps, tabs = build_tables(comps, times, bucket, args.mode)
+    if len(comps) < 2:
+        print('fewer than 2 surviving components after the liq filter', flush=True)
+        sys.exit(1)
     rng = np.random.default_rng(args.seed)
     t0 = time.time()
     best, evals = search(tabs, n_b, len(comps), args.total, rng)
