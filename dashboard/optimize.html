@@ -520,7 +520,8 @@ function renderRuns(){
         :'<span class="kv" title="Run both the holdout evaluation and a full backtest to fill this in">—</span>'}</td>
       <td>${hcell}</td>
       <td>${r.strategy==='metax'?`
-        <span class="kv" title="Router runs are built/validated by metax_cli (campaign card). Backtest/Adopt/Load-setup don't apply: the launch card can't search routers and the live trader has no router adapter yet (in progress). The router's backtests are linked in the holdout column.">router — see bt links · live adapter in progress</span>
+        <span class="kv" title="Router runs are built/validated by metax_cli (campaign card); their backtests are linked in the holdout column.">router</span>
+        <button class="small" title="Adopt this ROUTER into a trader config: embeds the component configs into a self-contained candidate. Adopt spot routers into config_spot.json. Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adopt('runs/${r.name}/best_config.json','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
         <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`

@@ -3,5 +3,10 @@
   "cfg": "config.json",
   "port": 5002,
   "headless": true
+ },
+ "2": {
+  "cfg": "config_spot.json",
+  "port": 5002,
+  "headless": false
  }
 }
