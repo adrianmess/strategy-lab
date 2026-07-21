@@ -21,8 +21,8 @@ Buckets are computed live exactly as in research: causal rolling features
 0.33/0.67) — no frozen thresholds needed. Requires >= 31 days of history; the
 feed backfills 35.
 
-Supported component families: macdx, scalpx. (Both validated routers use only
-these; other families can be added as needed.)
+Supported component families: macdx, scalpx, scalpx2, v7/prime7, prime/v6 —
+every family the router campaigns can produce.
 """
 import sys, os, logging
 import numpy as np
@@ -91,9 +91,10 @@ class StrategyMetax:
         self.comps = self.cand["components"]   # [{strategy, method, cand}, ...]
         for k in {a for a in self.assign if a is not None and a >= 0}:
             fam = self.comps[k]["strategy"]
-            if fam not in ("macdx", "scalpx"):
+            if fam not in ("macdx", "scalpx", "scalpx2", "v7", "prime7",
+                           "prime", "v6"):
                 raise SystemExit(f"metax live: assigned component family "
-                                 f"'{fam}' has no live runner yet")
+                                 f"'{fam}' has no live runner")
         self.state = state
         state.setdefault("position", None)
         # mirror = the component virtual trade the real position is tracking:
@@ -133,6 +134,46 @@ class StrategyMetax:
                                         liq_threshold=(-1.0 if self.mode == "lev"
                                                        else 1e9),
                                         return_open=True)
+            return tr, op
+        if strat == "scalpx2":
+            from scalp_engine import scalp_precompute2, run_scalp2
+            from wf2 import build_P_scalpx2
+            pre = scalp_precompute2(df3)
+            P, vidx = build_P_scalpx2(cand, R)
+            tr, eq, liq, op = run_scalp2(pre, P, vidx, regime=reg, warmup=warmup,
+                                         initial_capital=1000.0, commission=comm,
+                                         liq_threshold=(-1.0 if self.mode == "lev"
+                                                        else 1e9),
+                                         return_open=True)
+            return tr, op
+        if strat in ("v7", "prime7"):
+            from engine3 import precompute3, run3
+            from optimizer2 import build_P3
+            pre = precompute3(df3, df1)
+            P = build_P3(cand)
+            if P.shape[0] != R:
+                P = np.vstack([P[min(i, P.shape[0] - 1)] for i in range(R)])
+            use_sl = (self.mode == "spot") or bool(cand.get("lev_stops"))
+            tr, eq, liq, op = run3(pre, P, regime=reg, warmup=warmup,
+                                   initial_capital=1000.0, commission=comm,
+                                   use_sl=use_sl, dyn_liq=(self.mode == "lev"),
+                                   return_open=True)
+            return tr, op
+        if strat in ("prime", "v6"):
+            from fast_engine import precompute, run_fast
+            from adaptive import make_adaptive_pre
+            from wf2 import build_P_prime, build_P_v6, TREND_VARIANTS
+            pre0 = precompute(df3, df1)
+            tv = int(cand.get("tv", 0) or 0)
+            q, _f = make_adaptive_pre(pre0, trend_block_z=TREND_VARIANTS[tv])
+            P = (build_P_prime if strat == "prime" else build_P_v6)(cand, R)
+            use_sl = (self.mode == "spot") or bool(cand.get("lev_stops"))
+            tr, eq, liq, op = run_fast(q, P, regime=reg, warmup=warmup,
+                                       initial_capital=1000.0, commission=comm,
+                                       use_sl=use_sl,
+                                       liq_threshold=(-1.0 if self.mode == "lev"
+                                                      else 1e9),
+                                       return_open=True)
             return tr, op
         raise SystemExit(f"unsupported component family {strat}")
 

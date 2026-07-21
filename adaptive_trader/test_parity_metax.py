@@ -44,36 +44,20 @@ def load_data():
 
 
 def reference_trades(candidate, mode, d3, d1, i_start, i_end):
-    """Component engines run ONCE over [0, i_end); router rules applied:
-    bucket gate at the SIGNAL bar (fill-1), single slot, entries in stretch."""
+    """Component engines run ONCE over the full frame; router rules applied:
+    bucket gate at the SIGNAL bar (fill-1), single slot, entries in stretch.
+    Uses the ADAPTER's own family runners, so the test isolates exactly the
+    live-specific mechanics: windowing, bucketing, mirroring, slot logic."""
     feats = regime_features(dict(c=d3["close"].to_numpy(), h=d3["high"].to_numpy(),
                                  l=d3["low"].to_numpy(), vol=d3["volume"].to_numpy()))
     breg, _ = make_regimes(feats, BUCKET_METHOD[candidate["buckets"]])
     assign = candidate["assign"]
-    comm = FUT_COMM if mode == "lev" else SPOT_COMM
+    ref_strat = StrategyMetax(dict(candidate=candidate, mode=mode,
+                                   emergency_exit_adverse=None), {})
     rows = []
     for k in sorted({a for a in assign if a is not None and a >= 0}):
         comp = candidate["components"][k]
-        reg, R = make_regimes(feats, comp.get("method", "vol3"))
-        if comp["strategy"] == "macdx":
-            from macdx_engine import precompute_macdx, run_macdx_P, MACDX_DEFAULTS
-            from wf2 import build_P_macdx
-            pre = precompute_macdx(d3, d1, MACDX_DEFAULTS)
-            P = build_P_macdx(comp["cand"], R)
-            tr, eq, liq, op = run_macdx_P(pre, P, regime=reg, warmup=WARMUP,
-                                          initial_capital=1000.0, commission=comm,
-                                          return_open=True)
-        elif comp["strategy"] == "scalpx":
-            from scalp_engine import scalp_precompute, run_scalp
-            from wf2 import build_P_scalpx
-            pre = scalp_precompute(d3)
-            P = build_P_scalpx(comp["cand"], R)
-            tr, eq, liq, op = run_scalp(pre, P, regime=reg, warmup=WARMUP,
-                                        initial_capital=1000.0, commission=comm,
-                                        liq_threshold=(-1.0 if mode == "lev" else 1e9),
-                                        return_open=True)
-        else:
-            raise SystemExit(f"no reference runner for {comp['strategy']}")
+        tr, op = ref_strat._run_component(comp, d3, d1, feats)
         for _, t in tr.iterrows():
             ei = int(t["entry_idx"])
             sig = max(ei - 1, 0)                     # signal bar = fill - 1

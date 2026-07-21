@@ -153,7 +153,7 @@ const $ = id => document.getElementById(id);
 async function api(path, body){
   const r = await fetch('/api/'+path, body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
   const j = await r.json();
-  if(!r.ok) alert(j.error||'error');
+  if(!r.ok) alert('⚠ Request failed\n\n' + (j.error||'unknown error'));
   return j;
 }
 // ---------------- instances ----------------

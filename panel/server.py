@@ -856,10 +856,11 @@ def adopt():
         except Exception as e:
             return jsonify(error=f"router adopt failed: {e}"), 400
         bad = {rc["components"][a]["strategy"] for a in rc["assign"]
-               if a is not None and a >= 0} - {"macdx", "scalpx"}
+               if a is not None and a >= 0} \
+            - {"macdx", "scalpx", "scalpx2", "v7", "prime7", "prime", "v6"}
         if bad:
             return jsonify(error=(
-                f"router assigns component families with no live runner yet: "
+                f"router assigns component families with no live runner: "
                 f"{sorted(bad)}")), 400
         tname = os.path.basename(d.get("target", "config.json"))
         import re as _re
