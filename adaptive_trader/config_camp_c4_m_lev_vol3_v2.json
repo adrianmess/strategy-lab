@@ -297,5 +297,6 @@
  "adopted_from": {
   "source": "/Users/adrian/Code/strategy-lab/optimizer/runs/camp_c4_m_lev_vol3_v2/best_config.json",
   "at": "2026-07-21 15:10"
- }
+ },
+ "execution": "api"
 }

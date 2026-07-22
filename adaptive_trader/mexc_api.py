@@ -176,6 +176,71 @@ class MexcFuturesAPI:
         return out or [{"note": "no open position"}]
 
 
+class MexcSpotAPI:
+    """SPOT v3 client (Binance-style): the signature is HMAC-SHA256 of the
+    query/body string itself, sent as a 'signature' parameter, with the key in
+    the X-MEXC-APIKEY header. Symbols have NO underscore (SOLUSDT)."""
+    def __init__(self, access_key=None, secret_key=None, via_proxy=None,
+                 timeout=20, account=None):
+        self.account = account or "(explicit keys)"
+        if access_key is None:
+            self.account, acct = load_account(account)
+            access_key = acct["access_key"]
+            secret_key = acct["secret_key"]
+            if via_proxy is None:
+                via_proxy = bool(acct.get("via_proxy", True))
+        self.ak, self.sk = access_key, secret_key
+        self.timeout = timeout
+        self.proxies = _load_proxies() if via_proxy else None
+        if via_proxy and not self.proxies:
+            raise RuntimeError("via_proxy=true but proxy_config.json unusable")
+
+    def _signed(self, method, path, params):
+        params = {k: v for k, v in params.items() if v is not None}
+        params["timestamp"] = int(time.time() * 1000)
+        qs = "&".join(f"{k}={params[k]}" for k in params)
+        sig = hmac.new(self.sk.encode(), qs.encode(), hashlib.sha256).hexdigest()
+        url = f"{BASE}{path}?{qs}&signature={sig}"
+        r = requests.request(method, url,
+                             headers={"X-MEXC-APIKEY": self.ak},
+                             proxies=self.proxies, timeout=self.timeout)
+        try:
+            j = r.json()
+        except Exception:
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
+        if r.status_code != 200 or (isinstance(j, dict) and j.get("code")
+                                    not in (None, 200, 0)):
+            raise RuntimeError(f"spot API error: {str(j)[:300]}")
+        return j
+
+    @staticmethod
+    def spot_symbol(symbol):
+        return symbol.replace("_", "")          # SOL_USDT -> SOLUSDT
+
+    # ---------------- read-only ----------------
+    def account_info(self):
+        return self._signed("GET", "/api/v3/account", {})
+
+    def balance(self, asset):
+        for b in self.account_info().get("balances", []):
+            if b.get("asset") == asset:
+                return float(b.get("free", 0))
+        return 0.0
+
+    # ---------------- trading ----------------
+    def market_buy_quote(self, symbol, quote_usdt):
+        """Market BUY spending quote_usdt of USDT. Returns the order (with
+        executedQty = base filled) — spot has no leverage, ever."""
+        return self._signed("POST", "/api/v3/order", dict(
+            symbol=self.spot_symbol(symbol), side="BUY", type="MARKET",
+            quoteOrderQty=f"{quote_usdt:.2f}"))
+
+    def market_sell(self, symbol, qty_base):
+        return self._signed("POST", "/api/v3/order", dict(
+            symbol=self.spot_symbol(symbol), side="SELL", type="MARKET",
+            quantity=f"{qty_base:.4f}"))
+
+
 def _test(account=None):
     api = MexcFuturesAPI(account=account)
     print(f"account: {api.account} | egress via proxy: {bool(api.proxies)}")
@@ -192,6 +257,14 @@ def _test(account=None):
               f"{'YES — spot API trading available!' if sol else 'NO — spot stays on the browser executor'}")
     except Exception as e:
         print(f"spot symbol probe failed (futures unaffected): {e}")
+    try:
+        spot = MexcSpotAPI(account=account)
+        usdt_free = spot.balance("USDT")
+        sol_free = spot.balance("SOL")
+        print(f"SPOT wallet: {usdt_free:.2f} USDT free, {sol_free:.4f} SOL free")
+        print("SPOT SELF-TEST OK")
+    except Exception as e:
+        print(f"spot account probe failed: {e}")
 
 
 if __name__ == "__main__":

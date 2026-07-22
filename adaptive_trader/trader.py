@@ -154,6 +154,72 @@ class APIExecutor:
             return {"status": "error", "message": str(e)}
 
 
+class APISpotExecutor:
+    """Native MEXC SPOT API execution (config: "execution": "api" + mode spot).
+    Market BUY spends equity_usdt of USDT; market SELL closes the tracked
+    quantity (read from the state file, falling back to the free SOL balance,
+    capped so personal holdings on the account are never touched beyond it)."""
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.log = logging.getLogger("api-spot-executor")
+        from mexc_api import MexcSpotAPI
+        self.api = MexcSpotAPI(account=cfg.get("api_account"))
+        base = cfg["symbol"].split("_")[0]
+        self.base_asset = base
+        self.log.info("MEXC SPOT API executor ready (account=%s, proxy=%s)",
+                      self.api.account, bool(self.api.proxies))
+
+    def open_position(self, direction, lev, price):
+        cfg = self.cfg
+        if direction < 0:
+            self.log.error("spot cannot short — signal ignored")
+            return {"status": "error", "message": "spot cannot short"}, 0
+        quote = float(cfg["equity_usdt"])       # spot is always 1x
+        qty_est = quote / price
+        if cfg["dry_run"]:
+            self.log.info("[DRY RUN] would SPOT-BUY %.2f USDT (~%.4f %s) at ~%.3f",
+                          quote, qty_est, self.base_asset, price)
+            return {"status": "dry_run"}, qty_est
+        try:
+            res = self.api.market_buy_quote(cfg["symbol"], quote)
+            qty = float(res.get("executedQty") or 0) or qty_est
+            self.log.info("SPOT BUY filled: qty=%.4f order=%s", qty,
+                          res.get("orderId"))
+            return {"status": "success", "order": res}, qty
+        except Exception as e:
+            self.log.error("SPOT BUY FAILED: %s", e)
+            return {"status": "error", "message": str(e)}, 0
+
+    def _tracked_qty(self):
+        try:
+            st = json.load(open(os.path.join(HERE, self.cfg["state_file"])))
+            pos = st.get("position") or {}
+            return float(pos.get("qty") or 0)
+        except Exception:
+            return 0.0
+
+    def close_position(self):
+        if self.cfg["dry_run"]:
+            self.log.info("[DRY RUN] would SPOT-SELL tracked %s position",
+                          self.base_asset)
+            return {"status": "dry_run"}
+        try:
+            qty = self._tracked_qty()
+            free = self.api.balance(self.base_asset)
+            sell = min(qty, free) if qty > 0 else free
+            if sell <= 0:
+                self.log.warning("nothing to sell (tracked=%.4f free=%.4f)",
+                                 qty, free)
+                return {"status": "success", "note": "nothing to sell"}
+            res = self.api.market_sell(self.cfg["symbol"], sell)
+            self.log.info("SPOT SELL filled: qty=%.4f order=%s", sell,
+                          res.get("orderId"))
+            return {"status": "success", "order": res}
+        except Exception as e:
+            self.log.error("SPOT SELL FAILED: %s", e)
+            return {"status": "error", "message": str(e)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="disable dry_run")
@@ -173,9 +239,13 @@ def main():
 
     state = load_state(cfg)
     strat = make_strategy(cfg, state)
-    ex = APIExecutor(cfg) if cfg.get("execution") == "api" else Executor(cfg)
-    log.info("execution path: %s", "MEXC futures API"
-             if cfg.get("execution") == "api" else "browser webhook")
+    if cfg.get("execution") == "api":
+        ex = APISpotExecutor(cfg) if cfg.get("mode") == "spot" else APIExecutor(cfg)
+        log.info("execution path: MEXC %s API",
+                 "SPOT" if cfg.get("mode") == "spot" else "futures")
+    else:
+        ex = Executor(cfg)
+        log.info("execution path: browser webhook")
 
     is_router = (cfg.get("candidate") or {}).get("strategy") == "metax"
     feed = Feed(cfg["symbol"], anchored=is_router)

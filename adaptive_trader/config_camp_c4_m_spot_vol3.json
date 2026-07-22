@@ -904,5 +904,6 @@
  "adopted_from": {
   "source": "/Users/adrian/Code/strategy-lab/optimizer/runs/camp_c4_m_spot_vol3/best_config.json",
   "at": "2026-07-21 13:05"
- }
+ },
+ "execution": "api"
 }

@@ -5,7 +5,7 @@
   "headless": true
  },
  "2": {
-  "cfg": "config_camp_c4_m_lev_vol3_v2.json",
+  "cfg": "config_camp_c4_m_spot_vol3.json",
   "port": 5002,
   "headless": false
  },
