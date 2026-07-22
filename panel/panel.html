@@ -296,10 +296,14 @@ function updateCfgSummary(i){
 async function refreshInst(i){
   try{
     const s = await api('status?instance='+i);
-    const dot = s.running ? (s.live?'warn-dot':'on') : 'off';
+    // dot = process health (green running / red stopped); LIVE vs dry shows in the label
+    const dot = s.running ? 'on' : 'off';
     $('tdot_'+i).className = 'dot ' + dot;
     const td = $('tabdot_'+i); if(td) td.className = 'dot ' + dot;
-    $('tstate_'+i).textContent = s.running ? (s.live?'RUNNING — LIVE':'running (dry-run)') : 'stopped';
+    $('tstate_'+i).innerHTML = s.running
+      ? (s.live ? '<span style="color:var(--red);font-weight:700">RUNNING — LIVE</span>'
+                : 'running (dry-run)')
+      : 'stopped';
     $('tinfo_'+i).textContent = ` · ${s.config} · mode ${s.mode||'?'} · method ${s.method||'?'} · equity $${s.equity_usdt}` + (s.started?` · since ${s.started}`:'');
     $('levwarn_'+i).style.display = (s.mode==='lev')?'block':'none';
     const p = s.position;
