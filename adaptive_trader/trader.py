@@ -22,6 +22,13 @@ import requests
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from data_feed import Feed              # noqa: E402
+from notify import notify               # noqa: E402
+
+
+def _acct_label(cfg):
+    exe = cfg.get("execution") == "api" and "api" or "browser"
+    acct = cfg.get("api_account") or "mexc1"
+    return f"{acct}/{exe}"
 
 CFG_PATH = os.path.join(HERE, "config.json")
 
@@ -265,7 +272,12 @@ def main():
         if act:
             log.warning("INTRABAR STOP at %.3f (%s price): %s",
                         price, feed.price_source(), act)
-            ex.close_position()
+            res = ex.close_position()
+            notify("position_closed", account=_acct_label(cfg),
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   symbol=cfg["symbol"], reason=act.get("reason"),
+                   price=price, live=(not cfg["dry_run"]),
+                   result=(res or {}).get("status"))
             state["position"] = None
             save_state(cfg, state)
             return True
@@ -299,11 +311,31 @@ def main():
                 for a in actions:
                     if a["do"] == "close" and state.get("position"):
                         log.info("CLOSE (%s) pos=%s", a["reason"], state["position"])
-                        ex.close_position()
+                        res = ex.close_position()
+                        notify("position_closed", account=_acct_label(cfg),
+                               config=os.path.basename(cfg.get("_path", "?")),
+                               symbol=cfg["symbol"], reason=a["reason"],
+                               price=price, live=(not cfg["dry_run"]),
+                               position=state.get("position"),
+                               result=(res or {}).get("status"))
+                        if (res or {}).get("status") == "error":
+                            notify("order_failed", account=_acct_label(cfg),
+                                   config=os.path.basename(cfg.get("_path", "?")),
+                                   action="close", detail=res.get("message"))
                         state["position"] = None
                     elif a["do"] == "open" and not state.get("position"):
                         res, qty = ex.open_position(a["dir"], a["lev"], price)
+                        if (res or {}).get("status") == "error":
+                            notify("order_failed", account=_acct_label(cfg),
+                                   config=os.path.basename(cfg.get("_path", "?")),
+                                   action="open", detail=res.get("message"))
                         if qty > 0:
+                            notify("position_opened", account=_acct_label(cfg),
+                                   config=os.path.basename(cfg.get("_path", "?")),
+                                   symbol=cfg["symbol"],
+                                   side=("LONG" if a["dir"] > 0 else "SHORT"),
+                                   qty=qty, lev=a["lev"], price=price,
+                                   live=(not cfg["dry_run"]))
                             state["position"] = dict(
                                 dir=a["dir"], system=a["system"], regime=a["regime"],
                                 entry_price=price, qty=qty, lev=a["lev"],
@@ -330,6 +362,9 @@ def main():
             break
         except Exception as e:
             log.exception("loop error: %s", e)
+            notify("trader_error", account=_acct_label(cfg),
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   detail=str(e)[:300])
             time.sleep(30)
 
 

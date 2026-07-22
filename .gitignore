@@ -24,3 +24,4 @@ cache/
 .DS_Store
 proxy_config.json
 adaptive_trader/mexc_api_keys.json
+adaptive_trader/notify_config.json

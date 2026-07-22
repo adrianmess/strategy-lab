@@ -33,6 +33,20 @@ current_symbol = "SOL_USDT"  # Track the current symbol
 # chart bundle never load — meaningfully less data through a metered proxy.
 FUTURES_PAGE_HASH = "#info"
 
+
+def _notify_proxy(detail):
+    """Proxy health alert -> OpenClaw/WhatsApp (best-effort, rate-limited)."""
+    try:
+        import sys as _s
+        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "adaptive_trader")
+        if _p not in _s.path:
+            _s.path.insert(0, _p)
+        from notify import notify
+        notify("proxy_alert", component="browser-executor", detail=detail)
+    except Exception:
+        pass
+
 def futures_url(symbol):
     return f"https://www.mexc.com/futures/{symbol}?type=linear_swap{FUTURES_PAGE_HASH}"
 
@@ -509,6 +523,8 @@ async def initialize_browser():
                     logger.error(f"PROXY LEAK: browser egress IP {egress} == your REAL IP. "
                                  "Proxy is NOT being used. DO NOT trade live.")
                     logger.error("=" * 68)
+                    _notify_proxy(f"PROXY LEAK: browser egress {egress} == real "
+                                  f"IP — do NOT trade live via the browser")
                 else:
                     logger.info("=" * 68)
                     logger.info(f"PROXY OK — browser egress IP: {egress}"
@@ -516,6 +532,8 @@ async def initialize_browser():
                     logger.info("=" * 68)
             except Exception as e:
                 logger.warning(f"PROXY CHECK failed (could not fetch egress IP): {e}")
+                _notify_proxy(f"proxy check FAILED — browser can't reach the "
+                              f"internet through the proxy: {str(e)[:200]}")
 
         # Bandwidth saver (mainly for metered residential proxies): abort images,
         # media and fonts. NEVER blocks captcha/verification/login resources —
