@@ -112,6 +112,7 @@ def main():
     cfg_path = args.config if os.path.isabs(args.config) else os.path.join(HERE, args.config)
     with open(cfg_path) as f:
         cfg = json.load(f)
+    cfg["_path"] = cfg_path   # router strategies hot-reload re-assignments
     if args.live:
         cfg["dry_run"] = False
     setup_logging(cfg)

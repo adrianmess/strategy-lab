@@ -30,9 +30,9 @@
   "mode": "spot",
   "buckets": "vol3",
   "assign": [
-   2,
+   1,
    -1,
-   -1
+   3
   ],
   "components": [
    {
@@ -898,7 +898,8 @@
     }
    }
   ],
-  "source_run": "2026-07-21 01:35"
+  "source_run": "2026-07-21 01:35",
+  "reassigned_at": "2026-07-21 17:19"
  },
  "adopted_from": {
   "source": "/Users/adrian/Code/strategy-lab/optimizer/runs/camp_c4_m_spot_vol3/best_config.json",

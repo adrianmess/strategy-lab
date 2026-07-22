@@ -1,0 +1,22 @@
+[
+ {
+  "at": "2026-07-21 17:19",
+  "config": "config_camp_c4_m_spot_vol3.json",
+  "changed": true,
+  "old": [
+   2,
+   -1,
+   -1
+  ],
+  "new": [
+   1,
+   -1,
+   3
+  ],
+  "named": {
+   "0": "camp_c1_w1_34_prime_sp_tr3_t",
+   "1": "\u2014",
+   "2": "camp_c1_w1_39_v7_sp_vol3_cl_t"
+  }
+ }
+]

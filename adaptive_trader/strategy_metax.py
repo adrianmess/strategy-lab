@@ -52,7 +52,7 @@ def resolve_candidate(best_config, runs_dir):
         src = json.load(open(os.path.join(runs_dir, c["run"], c["file"])))
         comps.append(dict(strategy=c["strategy"],
                           method=src.get("method", "vol3"),
-                          run=c["run"],
+                          run=c["run"], file=c["file"],
                           cand=(c.get("cand") or src["cand"])))
     return dict(strategy="metax", mode=best_config["mode"],
                 buckets=cand["buckets"], assign=list(cand["assign"]),
@@ -100,6 +100,39 @@ class StrategyMetax:
         # mirror = the component virtual trade the real position is tracking:
         # dict(comp=k, entry_t="YYYY-mm-dd HH:MM", dir=±1, lev=x)
         state.setdefault("mirror", None)
+        # hot-reload support: metax_reassign.py rewrites the config on its
+        # 42-day cadence; pick the new assignment up at the next FLAT bar close
+        self.cfg_path = cfg.get("_path")
+        self._cfg_mtime = (os.path.getmtime(self.cfg_path)
+                           if self.cfg_path and os.path.exists(self.cfg_path)
+                           else None)
+
+    def _maybe_reload(self):
+        if not self.cfg_path or self._cfg_mtime is None:
+            return
+        if self.state.get("position") or self.state.get("mirror"):
+            return                          # never swap assignments mid-trade
+        try:
+            m = os.path.getmtime(self.cfg_path)
+            if m == self._cfg_mtime:
+                return
+            import json
+            fresh = json.load(open(self.cfg_path))
+            cand = fresh.get("candidate") or {}
+            if cand.get("strategy") != "metax":
+                return
+            old = self.assign
+            self.cand = cand
+            self.assign = list(cand["assign"])
+            self.comps = cand["components"]
+            self.buckets = cand["buckets"]
+            self._cfg_mtime = m
+            if old != self.assign:
+                logger.info("metax: HOT-RELOADED assignment %s -> %s "
+                            "(reassigned_at=%s)", old, self.assign,
+                            cand.get("reassigned_at"))
+        except Exception as e:
+            logger.warning("metax: config reload failed: %s", e)
 
     # ---------------- component virtual runs (engine-exact) ----------------
     def _features(self, df3):
@@ -179,6 +212,7 @@ class StrategyMetax:
 
     # ---------------- router ----------------
     def on_bar_close(self, df3, df1):
+        self._maybe_reload()
         if len(df3) < WARMUP + 300:
             logger.warning("metax: window too short (%d bars)", len(df3))
             return []

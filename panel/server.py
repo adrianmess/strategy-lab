@@ -313,6 +313,16 @@ def job_refit():
     if d.get("dry"): cmd += ["--dry"]
     return jsonify(id=spawn("refit", "refit", cmd, AT))
 
+@app.route("/api/jobs/reassign", methods=["POST"])
+def job_reassign():
+    """Run the router re-assignment selector now (all router configs)."""
+    d = request.get_json(silent=True) or {}
+    cmd = [sys.executable, "metax_reassign.py", "--all"]
+    if d.get("force"):
+        cmd.append("--force")
+    return jsonify(id=spawn("reassign", "routers", cmd, OPT))
+
+
 @app.route("/api/jobs/update_data", methods=["POST"])
 def job_data():
     cmd = [sys.executable, os.path.join(AT, "research", "update_data.py")]

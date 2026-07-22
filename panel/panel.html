@@ -133,6 +133,7 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
     <button onclick="runWF()">Walk-forward (v6)</button>
     <button onclick="runRefit()">Refit trader params now</button>
     <button onclick="updateData()">Refresh CoinAPI data</button>
+    <button onclick="api('jobs/reassign',{force:true}).then(refresh)" title="Re-pick every live router's bucket assignment from trailing data NOW (walk-forward selector semantics: risk-averse, past-only). Automatic cadence: run 'python3 optimizer/metax_reassign.py --all --loop'. Skips any router that's in a trade; running traders hot-reload when flat.">Re-assign routers now</button>
   </div>
 </div>
 
