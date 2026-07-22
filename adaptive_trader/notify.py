@@ -4,9 +4,14 @@
 The trading system EMITS structured events; your agent owns formatting and
 delivery. Configure adaptive_trader/notify_config.json (gitignored):
 
+Three delivery modes — use whichever your agent (Hermes) can ingest;
+any combination may be enabled at once:
   { "enabled": true,
-    "webhook_url": "http://127.0.0.1:18789/hooks/strategy-lab",
-    "token": "optional-bearer-token" }
+    "webhook_url": "http://host:port/hooks/strategy-lab",   # HTTP POST (JSON)
+    "token": "optional-bearer-token",
+    "command": "hermes notify --stdin" }                    # shell cmd, JSON on stdin
+Third option needs no config at all: notifications.log is ALWAYS written
+(newline-delimited JSON) — an agent with file access can simply tail it.
 
 Design rules:
   - fire-and-forget, 5s timeout, NEVER raises into the trading loop;
@@ -52,7 +57,8 @@ def notify(event, **fields):
     except Exception:
         pass
     cfg = _config()
-    if not cfg.get("enabled") or not cfg.get("webhook_url"):
+    if not cfg.get("enabled") or not (cfg.get("webhook_url")
+                                      or cfg.get("command")):
         return False
     if event in _RATE_LIMITED_EVENTS:
         key = (event, fields.get("config") or fields.get("account") or "")
@@ -61,15 +67,24 @@ def notify(event, **fields):
                 return False
             _last_sent[key] = time.time()
     def _send():
-        try:
-            import requests
-            headers = {"Content-Type": "application/json"}
-            if cfg.get("token"):
-                headers["Authorization"] = f"Bearer {cfg['token']}"
-            requests.post(cfg["webhook_url"], json=payload, headers=headers,
-                          timeout=5)
-        except Exception as e:
-            logger.warning("notify delivery failed (%s): %s", event, e)
+        if cfg.get("webhook_url"):
+            try:
+                import requests
+                headers = {"Content-Type": "application/json"}
+                if cfg.get("token"):
+                    headers["Authorization"] = f"Bearer {cfg['token']}"
+                requests.post(cfg["webhook_url"], json=payload,
+                              headers=headers, timeout=5)
+            except Exception as e:
+                logger.warning("notify webhook failed (%s): %s", event, e)
+        if cfg.get("command"):
+            try:
+                import subprocess
+                subprocess.run(cfg["command"], shell=True,
+                               input=json.dumps(payload).encode(),
+                               timeout=15, capture_output=True)
+            except Exception as e:
+                logger.warning("notify command failed (%s): %s", event, e)
     threading.Thread(target=_send, daemon=True).start()
     return True
 
