@@ -86,6 +86,9 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
 <div id="instTabs" class="tabs"></div>
 <div id="instWrap"></div>
 
+<h2>MEXC accounts <span class="note">— live balances &amp; open positions via API (read-only, refreshes every 20s)</span></h2>
+<div class="card" id="mexcCard"><span class="kv">loading account info…</span></div>
+
 <h2>Trader settings <span class="note">(applies on next trader start)</span></h2>
 <div class="card row" id="settings">
   <label>file</label><select id="sFile" onchange="loadSettings()"></select>
@@ -403,6 +406,47 @@ async function manual(i, action){
   box.textContent = JSON.stringify(r, null, 1);
 }
 
+// ---------------- MEXC account info ----------------
+const fnum = (x, d=2) => (x==null || isNaN(+x)) ? '—' : (+x).toLocaleString(undefined,{maximumFractionDigits:d});
+async function refreshMexc(){
+  try{
+    const accs = await api('mexc/account');
+    const el = $('mexcCard');
+    if(!accs.length){ el.innerHTML = '<span class="kv">no API keys configured (adaptive_trader/mexc_api_keys.json)</span>'; return; }
+    el.innerHTML = accs.map(a=>{
+      const head = `<div class="row" style="justify-content:space-between">
+        <span><b>${a.account}</b> <span class="kv">${a.email||''}</span></span>
+        ${a.configured?'':'<span class="badge b-amber">keys not set</span>'}
+        ${a.error?`<span class="neg" title="${String(a.error).replace(/"/g,'&quot;')}">⚠ ${String(a.error).slice(0,80)}</span>`:''}</div>`;
+      if(!a.configured || a.error) return `<div style="padding:6px 0">${head}</div>`;
+      const fut = (a.futures||[]).map(f=>
+        `<span class="kv">futures <b>${fnum(f.equity)} ${f.currency}</b></span>
+         <span class="kv">available <b>${fnum(f.available)}</b></span>
+         <span class="kv">in margin <b>${fnum(f.position_margin)}</b></span>
+         <span class="kv">unrealized <b class="${(+f.unrealized||0)>=0?'pos':'neg'}">${fnum(f.unrealized)}</b></span>`).join(' · ')
+        || '<span class="kv">futures wallet empty</span>';
+      const spot = (a.spot||[]).map(b=>
+        `<b>${fnum(b.free,4)}</b> ${b.asset}${(+b.locked)?` <span class="kv">(+${fnum(b.locked,4)} locked)</span>`:''}`).join(' · ');
+      const pos = (a.positions||[]).length
+        ? `<table style="margin-top:6px"><thead><tr><th>symbol</th><th>side</th><th>vol</th><th>entry</th><th>lev</th><th>liq price</th><th>margin</th><th>realised</th></tr></thead><tbody>
+           ${a.positions.map(p=>`<tr>
+             <td>${p.symbol}</td>
+             <td class="${p.side==='LONG'?'pos':'neg'}"><b>${p.side}</b></td>
+             <td>${fnum(p.vol,4)}</td><td>${fnum(p.entry,3)}</td>
+             <td>${fnum(p.lev,0)}×</td><td class="warn">${fnum(p.liq,3)}</td>
+             <td>${fnum(p.margin)}</td>
+             <td class="${(+p.realised||0)>=0?'pos':'neg'}">${fnum(p.realised)}</td></tr>`).join('')}
+           </tbody></table>`
+        : '<div class="kv" style="margin-top:4px">no open futures positions</div>';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+        ${head}
+        <div class="row" style="margin-top:4px">${fut}</div>
+        <div class="row" style="margin-top:2px"><span class="kv">spot:</span> ${spot||'<span class="kv">empty</span>'}</div>
+        ${pos}</div>`;
+    }).join('');
+  }catch(e){}
+}
+
 // ---------------- processes ----------------
 async function refreshProcs(){
   try{
@@ -500,10 +544,11 @@ async function fixCaches(){
   alert('Removed:\n'+(r.removed.length?r.removed.join('\n'):'nothing needed removing'));
   runDoctor();
 }
-loadInstances(); refreshConfigs(); loadSettings(); runDoctor(); refreshProcs();
+loadInstances(); refreshConfigs(); loadSettings(); runDoctor(); refreshProcs(); refreshMexc();
 setInterval(refresh, 4000);
 setInterval(refreshConfigs, 20000);
 setInterval(refreshProcs, 10000);
+setInterval(refreshMexc, 20000);
 </script>
 </body>
 </html>

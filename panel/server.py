@@ -770,6 +770,65 @@ def processes_kill():
     return jsonify(ok=True, killed=dict(pid=pid, kind=target["kind"]))
 
 
+# ---------------- MEXC account info (read-only) ----------------
+_MEXC_CACHE = {"t": 0.0, "data": None}
+
+@app.route("/api/mexc/account")
+def mexc_account():
+    """Balances + open positions for every configured API account.
+    Read-only endpoints only; cached 10s to respect rate limits."""
+    if _MEXC_CACHE["data"] is not None and time.time() - _MEXC_CACHE["t"] < 10:
+        return jsonify(_MEXC_CACHE["data"])
+    keys_p = os.path.join(AT, "mexc_api_keys.json")
+    if not os.path.exists(keys_p):
+        return jsonify([])
+    try:
+        keys = json.load(open(keys_p))
+    except Exception as e:
+        return jsonify([dict(account="?", configured=False, error=str(e))])
+    accounts = keys.get("accounts") or {"mexc1": keys}
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    out = []
+    for name, acct in sorted(accounts.items()):
+        e = dict(account=name, email=acct.get("email"), configured=True)
+        if "PASTE" in str(acct.get("access_key", "")):
+            e["configured"] = False
+            out.append(e)
+            continue
+        try:
+            from mexc_api import MexcFuturesAPI, MexcSpotAPI
+            fapi = MexcFuturesAPI(account=name)
+            e["futures"] = [
+                dict(currency=a.get("currency"), equity=a.get("equity"),
+                     available=a.get("availableBalance"),
+                     unrealized=a.get("unrealized"),
+                     position_margin=a.get("positionMargin"),
+                     frozen=a.get("frozenBalance"))
+                for a in (fapi.assets() or [])
+                if float(a.get("equity") or 0) > 0]
+            e["positions"] = [
+                dict(symbol=p.get("symbol"),
+                     side=("LONG" if int(p.get("positionType") or 1) == 1
+                           else "SHORT"),
+                     vol=p.get("holdVol"), entry=p.get("openAvgPrice"),
+                     lev=p.get("leverage"), liq=p.get("liquidatePrice"),
+                     margin=(p.get("im") or p.get("oim")),
+                     realised=p.get("realised"))
+                for p in (fapi.open_positions() or [])]
+            sapi = MexcSpotAPI(account=name)
+            e["spot"] = [
+                dict(asset=b.get("asset"), free=b.get("free"),
+                     locked=b.get("locked"))
+                for b in sapi.account_info().get("balances", [])
+                if float(b.get("free") or 0) + float(b.get("locked") or 0) > 0]
+        except Exception as ex:
+            e["error"] = str(ex)
+        out.append(e)
+    _MEXC_CACHE.update(t=time.time(), data=out)
+    return jsonify(out)
+
+
 # ---------------- manual test orders ----------------
 @app.route("/api/manual", methods=["POST"])
 def manual_order():
