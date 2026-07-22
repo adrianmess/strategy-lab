@@ -49,15 +49,35 @@ def _load_proxies():
         return None
 
 
+def load_account(account=None):
+    """Multi-account keys file:
+      { "default": "mexc1",
+        "accounts": { "mexc1": {access_key, secret_key, via_proxy},
+                      "mexc2": {...} } }
+    (a legacy flat {access_key, secret_key} file is treated as 'mexc1')."""
+    k = json.load(open(KEYS_FILE))
+    if "accounts" in k:
+        name = account or k.get("default") or sorted(k["accounts"])[0]
+        if name not in k["accounts"]:
+            raise RuntimeError(f"API account '{name}' not in {KEYS_FILE}")
+        acct = k["accounts"][name]
+    else:
+        name, acct = "mexc1", k
+    if "PASTE" in str(acct.get("access_key", "")):
+        raise RuntimeError(f"API account '{name}' has placeholder keys")
+    return name, acct
+
+
 class MexcFuturesAPI:
     def __init__(self, access_key=None, secret_key=None, via_proxy=None,
-                 timeout=20):
+                 timeout=20, account=None):
+        self.account = account or "(explicit keys)"
         if access_key is None:
-            k = json.load(open(KEYS_FILE))
-            access_key = k["access_key"]
-            secret_key = k["secret_key"]
+            self.account, acct = load_account(account)
+            access_key = acct["access_key"]
+            secret_key = acct["secret_key"]
             if via_proxy is None:
-                via_proxy = bool(k.get("via_proxy", True))
+                via_proxy = bool(acct.get("via_proxy", True))
         self.ak, self.sk = access_key, secret_key
         self.timeout = timeout
         self.proxies = _load_proxies() if via_proxy else None
@@ -106,6 +126,21 @@ class MexcFuturesAPI:
     def assets(self):
         return self._get("/api/v1/private/account/assets")
 
+    def spot_api_symbols(self):
+        """SPOT v3 (Binance-style signing): the symbols THIS key may API-trade.
+        The key-creation UI lets you whitelist any pair, but MEXC gates spot
+        API order placement per symbol server-side — this is the ground truth."""
+        ts = int(time.time() * 1000)
+        qs = f"timestamp={ts}"
+        sig = hmac.new(self.sk.encode(), qs.encode(), hashlib.sha256).hexdigest()
+        r = requests.get(f"{BASE}/api/v3/defaultSymbols?{qs}&signature={sig}",
+                         headers={"X-MEXC-APIKEY": self.ak},
+                         proxies=self.proxies, timeout=self.timeout)
+        j = r.json()
+        if isinstance(j, dict) and j.get("data") is not None:
+            return j["data"]
+        raise RuntimeError(f"spot symbols query failed: {str(j)[:300]}")
+
     def open_positions(self, symbol=None):
         return self._get("/api/v1/private/position/open_positions",
                          {"symbol": symbol})
@@ -141,23 +176,31 @@ class MexcFuturesAPI:
         return out or [{"note": "no open position"}]
 
 
-def _test():
-    api = MexcFuturesAPI()
-    print("egress via proxy:", bool(api.proxies))
+def _test(account=None):
+    api = MexcFuturesAPI(account=account)
+    print(f"account: {api.account} | egress via proxy: {bool(api.proxies)}")
     a = api.assets()
     usdt = next((x for x in a if x.get("currency") == "USDT"), None)
     print("USDT asset:", json.dumps(usdt, indent=1) if usdt else a)
     p = api.open_positions("SOL_USDT")
     print("SOL_USDT open positions:", json.dumps(p, indent=1))
-    print("SELF-TEST OK — key, signature, IP link and region all working")
+    print("FUTURES SELF-TEST OK — key, signature, IP link and region working")
+    try:
+        syms = api.spot_api_symbols()
+        sol = "SOLUSDT" in syms
+        print(f"spot API-tradable symbols: {len(syms)} | SOLUSDT: "
+              f"{'YES — spot API trading available!' if sol else 'NO — spot stays on the browser executor'}")
+    except Exception as e:
+        print(f"spot symbol probe failed (futures unaffected): {e}")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", action="store_true",
-                    help="read-only self-test (assets + positions)")
+                    help="read-only self-test (assets + positions + spot probe)")
+    ap.add_argument("--account", default=None, help="key account name (mexc1…)")
     args = ap.parse_args()
     if args.test:
-        _test()
+        _test(args.account)
     else:
         print(__doc__)

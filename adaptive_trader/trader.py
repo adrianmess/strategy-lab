@@ -115,9 +115,9 @@ class APIExecutor:
                              "trading is restricted (BTC/ETH pairs only). "
                              "Use the browser executor for spot.")
         from mexc_api import MexcFuturesAPI
-        self.api = MexcFuturesAPI()
-        self.log.info("MEXC futures API executor ready (proxy=%s)",
-                      bool(self.api.proxies))
+        self.api = MexcFuturesAPI(account=cfg.get("api_account"))
+        self.log.info("MEXC futures API executor ready (account=%s, proxy=%s)",
+                      self.api.account, bool(self.api.proxies))
 
     def open_position(self, direction, lev, price):
         cfg = self.cfg
