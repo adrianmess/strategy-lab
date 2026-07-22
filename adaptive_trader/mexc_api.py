@@ -197,6 +197,8 @@ class MexcSpotAPI:
 
     def _signed(self, method, path, params):
         params = {k: v for k, v in params.items() if v is not None}
+        # 30s recvWindow: proxy round-trips (Tokyo egress) exceed the 5s default
+        params["recvWindow"] = 30000
         params["timestamp"] = int(time.time() * 1000)
         qs = "&".join(f"{k}={params[k]}" for k in params)
         sig = hmac.new(self.sk.encode(), qs.encode(), hashlib.sha256).hexdigest()
