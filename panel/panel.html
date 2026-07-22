@@ -97,6 +97,14 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
   <span class="note" id="sMsg"></span>
 </div>
 
+<h2>All running processes <span class="note">— everything on this machine, including processes this panel didn't start</span></h2>
+<div class="card">
+  <div id="procWarn"></div>
+  <table id="procT"><thead><tr><th>kind</th><th>pid</th><th>started</th><th>flags</th><th>command</th><th></th></tr></thead><tbody><tr><td colspan="6" class="kv">scanning…</td></tr></tbody></table>
+  <div class="row" style="margin-top:6px"><button class="small" onclick="refreshProcs()">↻ rescan</button>
+    <span class="note">“hidden” = not started by this panel (terminal-started or orphaned). More than one trader, or an executor you don't recognize, is exactly what this table is for.</span></div>
+</div>
+
 <h2>Configs & optimizer runs <span class="note">— ★ / stars come from your marks on the Optimize page</span></h2>
 <div class="card">
   <table id="cfgT"><thead><tr><th></th><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
@@ -135,14 +143,6 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
     <button onclick="updateData()">Refresh CoinAPI data</button>
     <button onclick="api('jobs/reassign',{force:true}).then(refresh)" title="Re-pick every live router's bucket assignment from trailing data NOW (walk-forward selector semantics: risk-averse, past-only). Automatic cadence: run 'python3 optimizer/metax_reassign.py --all --loop'. Skips any router that's in a trade; running traders hot-reload when flat.">Re-assign routers now</button>
   </div>
-</div>
-
-<h2>All running processes <span class="note">— everything on this machine, including processes this panel didn't start</span></h2>
-<div class="card">
-  <div id="procWarn"></div>
-  <table id="procT"><thead><tr><th>kind</th><th>pid</th><th>started</th><th>flags</th><th>command</th><th></th></tr></thead><tbody><tr><td colspan="6" class="kv">scanning…</td></tr></tbody></table>
-  <div class="row" style="margin-top:6px"><button class="small" onclick="refreshProcs()">↻ rescan</button>
-    <span class="note">“hidden” = not started by this panel (terminal-started or orphaned). More than one trader, or an executor you don't recognize, is exactly what this table is for.</span></div>
 </div>
 
 <h2>Jobs</h2>
