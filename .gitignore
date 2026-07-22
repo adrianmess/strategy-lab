@@ -23,3 +23,4 @@ cache/
 # OS
 .DS_Store
 proxy_config.json
+adaptive_trader/mexc_api_keys.json

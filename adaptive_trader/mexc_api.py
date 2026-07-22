@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""MEXC FUTURES API client — native order execution (retail futures API,
+launched by MEXC on 2026-03-31).
+
+Replaces the Playwright browser for lev instances: no captcha, no browser,
+~instant orders, real leverage parameter on the order itself.
+
+Signing (per the integration guide): HMAC-SHA256 over
+  accessKey + timestamp + parameterString
+with headers ApiKey / Request-Time / Signature. GET params sorted + joined
+with '&'; POST signs the raw JSON body.
+
+Keys: adaptive_trader/mexc_api_keys.json (gitignored):
+  { "access_key": "...", "secret_key": "...", "via_proxy": true }
+via_proxy routes all API calls through proxy_config.json — required when the
+key is IP-linked to the Decodo egress IP (recommended: static, no 90-day
+expiry, region-stable).
+
+Fee note: API futures trades are maker 0.01% / taker 0.05% (overrides web
+promo rates). The engines model 0.04% taker, so backtests are within 0.01%/side
+of API reality.
+
+Self-test (read-only, safe):  python3 mexc_api.py --test
+"""
+import argparse, hashlib, hmac, json, os, time
+
+import requests
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+BASE = "https://api.mexc.com"
+KEYS_FILE = os.path.join(HERE, "mexc_api_keys.json")
+PROXY_FILE = os.path.join(os.path.dirname(HERE), "proxy_config.json")
+
+# order sides (API constants)
+OPEN_LONG, CLOSE_SHORT, OPEN_SHORT, CLOSE_LONG = 1, 2, 3, 4
+TYPE_MARKET = 5
+ISOLATED, CROSS = 1, 2
+
+
+def _load_proxies():
+    try:
+        pc = json.load(open(PROXY_FILE))
+        server = (pc.get("server") or "").replace("http://", "")
+        if not server or "FILL" in str(pc.get("username", "")):
+            return None
+        url = f"http://{pc['username']}:{pc['password']}@{server}"
+        return {"http": url, "https": url}
+    except Exception:
+        return None
+
+
+class MexcFuturesAPI:
+    def __init__(self, access_key=None, secret_key=None, via_proxy=None,
+                 timeout=20):
+        if access_key is None:
+            k = json.load(open(KEYS_FILE))
+            access_key = k["access_key"]
+            secret_key = k["secret_key"]
+            if via_proxy is None:
+                via_proxy = bool(k.get("via_proxy", True))
+        self.ak, self.sk = access_key, secret_key
+        self.timeout = timeout
+        self.proxies = _load_proxies() if via_proxy else None
+        if via_proxy and not self.proxies:
+            raise RuntimeError("via_proxy=true but proxy_config.json is not "
+                               "usable — the IP-linked API key would be "
+                               "rejected from the wrong egress IP")
+
+    # ---------------- signing ----------------
+    def _headers(self, param_str):
+        ts = str(int(time.time() * 1000))
+        sig = hmac.new(self.sk.encode(),
+                       (self.ak + ts + param_str).encode(),
+                       hashlib.sha256).hexdigest()
+        return {"ApiKey": self.ak, "Request-Time": ts, "Signature": sig,
+                "Content-Type": "application/json"}
+
+    def _get(self, path, params=None):
+        params = {k: v for k, v in (params or {}).items() if v is not None}
+        pstr = "&".join(f"{k}={params[k]}" for k in sorted(params))
+        r = requests.get(BASE + path, params=params,
+                         headers=self._headers(pstr),
+                         proxies=self.proxies, timeout=self.timeout)
+        return self._out(r)
+
+    def _post(self, path, body):
+        body = {k: v for k, v in body.items() if v is not None}
+        raw = json.dumps(body)
+        r = requests.post(BASE + path, data=raw,
+                          headers=self._headers(raw),
+                          proxies=self.proxies, timeout=self.timeout)
+        return self._out(r)
+
+    @staticmethod
+    def _out(r):
+        try:
+            j = r.json()
+        except Exception:
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
+        if not j.get("success", False):
+            raise RuntimeError(f"API error code={j.get('code')}: "
+                               f"{j.get('message')}")
+        return j.get("data")
+
+    # ---------------- read-only ----------------
+    def assets(self):
+        return self._get("/api/v1/private/account/assets")
+
+    def open_positions(self, symbol=None):
+        return self._get("/api/v1/private/position/open_positions",
+                         {"symbol": symbol})
+
+    # ---------------- trading ----------------
+    def place_market(self, symbol, side, vol, leverage=None, price=None,
+                     open_type=ISOLATED, external_oid=None):
+        """Market order. price is still required by the endpoint — pass the
+        current mark/last price as a reference value."""
+        return self._post("/api/v1/private/order/create", dict(
+            symbol=symbol, price=float(price or 0) or None, vol=float(vol),
+            leverage=(int(leverage) if leverage else None), side=int(side),
+            type=TYPE_MARKET, openType=open_type, externalOid=external_oid))
+
+    def open_long(self, symbol, vol, leverage, price):
+        return self.place_market(symbol, OPEN_LONG, vol, leverage, price)
+
+    def open_short(self, symbol, vol, leverage, price):
+        return self.place_market(symbol, OPEN_SHORT, vol, leverage, price)
+
+    def close_position(self, symbol, price=None):
+        """Close every open position on the symbol with market orders."""
+        out = []
+        for p in (self.open_positions(symbol) or []):
+            hold = float(p.get("holdVol") or 0)
+            if hold <= 0:
+                continue
+            ptype = int(p.get("positionType") or 1)   # 1 long, 2 short
+            side = CLOSE_LONG if ptype == 1 else CLOSE_SHORT
+            out.append(self.place_market(symbol, side, hold,
+                                         price=price,
+                                         open_type=int(p.get("openType") or 1)))
+        return out or [{"note": "no open position"}]
+
+
+def _test():
+    api = MexcFuturesAPI()
+    print("egress via proxy:", bool(api.proxies))
+    a = api.assets()
+    usdt = next((x for x in a if x.get("currency") == "USDT"), None)
+    print("USDT asset:", json.dumps(usdt, indent=1) if usdt else a)
+    p = api.open_positions("SOL_USDT")
+    print("SOL_USDT open positions:", json.dumps(p, indent=1))
+    print("SELF-TEST OK — key, signature, IP link and region all working")
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--test", action="store_true",
+                    help="read-only self-test (assets + positions)")
+    args = ap.parse_args()
+    if args.test:
+        _test()
+    else:
+        print(__doc__)

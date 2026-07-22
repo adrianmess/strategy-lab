@@ -102,6 +102,58 @@ class Executor:
         return self._post({"action": "close_position", "symbol": self.cfg["symbol"]})
 
 
+class APIExecutor:
+    """Native MEXC futures API execution (config: "execution": "api").
+    Same interface as Executor; dry_run only logs, exactly like the webhook
+    path. NOTE: futures only — MEXC spot API trading is still restricted to
+    selected BTC/ETH pairs, so spot instances keep the browser executor."""
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.log = logging.getLogger("api-executor")
+        if cfg.get("mode") == "spot":
+            raise SystemExit('execution:"api" is futures-only — MEXC spot API '
+                             "trading is restricted (BTC/ETH pairs only). "
+                             "Use the browser executor for spot.")
+        from mexc_api import MexcFuturesAPI
+        self.api = MexcFuturesAPI()
+        self.log.info("MEXC futures API executor ready (proxy=%s)",
+                      bool(self.api.proxies))
+
+    def open_position(self, direction, lev, price):
+        cfg = self.cfg
+        notional = cfg["equity_usdt"] * lev
+        qty = int(notional / price / cfg["contract_size"])
+        if qty < 1:
+            self.log.warning("qty < 1 contract, skipping (equity too small)")
+            return None, 0
+        lev_i = max(1, int(lev))   # FLOOR — never more leverage than backtested
+        if cfg["dry_run"]:
+            self.log.info("[DRY RUN] would API-%s %d contracts at ~%.3f lev %d",
+                          "LONG" if direction > 0 else "SHORT", qty, price, lev_i)
+            return {"status": "dry_run"}, qty
+        try:
+            fn = self.api.open_long if direction > 0 else self.api.open_short
+            res = fn(cfg["symbol"], qty, lev_i, price)
+            self.log.info("API order placed: %s", res)
+            return {"status": "success", "order": res}, qty
+        except Exception as e:
+            self.log.error("API order FAILED: %s", e)
+            return {"status": "error", "message": str(e)}, 0
+
+    def close_position(self):
+        if self.cfg["dry_run"]:
+            self.log.info("[DRY RUN] would API-close all %s positions",
+                          self.cfg["symbol"])
+            return {"status": "dry_run"}
+        try:
+            res = self.api.close_position(self.cfg["symbol"])
+            self.log.info("API close: %s", res)
+            return {"status": "success", "result": res}
+        except Exception as e:
+            self.log.error("API close FAILED: %s", e)
+            return {"status": "error", "message": str(e)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="disable dry_run")
@@ -121,7 +173,9 @@ def main():
 
     state = load_state(cfg)
     strat = make_strategy(cfg, state)
-    ex = Executor(cfg)
+    ex = APIExecutor(cfg) if cfg.get("execution") == "api" else Executor(cfg)
+    log.info("execution path: %s", "MEXC futures API"
+             if cfg.get("execution") == "api" else "browser webhook")
 
     is_router = (cfg.get("candidate") or {}).get("strategy") == "metax"
     feed = Feed(cfg["symbol"], anchored=is_router)
