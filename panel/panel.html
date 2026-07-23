@@ -189,6 +189,8 @@ function instCard(i){
     <div class="row">
       <label>config</label>
       <select id="tcfg_${i}" onchange="cfgChanged('${i}')"></select>
+      <label>account</label>
+      <select id="acct_${i}" onchange="acctChanged('${i}')" title="Which MEXC API account this instance's config trades. Written into the config file; applies on the next trader start." style="width:80px"></select>
       <button class="primary" onclick="startTrader('${i}',false)">Start dry-run</button>
       <button class="danger" onclick="startTrader('${i}',true)">Start LIVE</button>
       <button onclick="stopTrader('${i}')">Stop</button>
@@ -307,8 +309,30 @@ function venueBadge(acct, execution, mode){
     ? 'orders go straight to the MEXC '+(mode==='spot'?'SPOT':'futures')+' API on account '+(acct||'mexc1')+' (proxy-routed, IP-linked key) — no browser involved'
     : 'orders are placed by the Playwright browser executor for this instance'}">${label}</span>`;
 }
+let MEXCACCTS = ['mexc1'];
+function fillAcctSelect(i){
+  const sel = $('acct_'+i); if(!sel) return;
+  const cfgSel = $('tcfg_'+i);
+  const c = TCONFIGS.find(x=>x.file===cfgSel.value);
+  sel.innerHTML = MEXCACCTS.map(a=>`<option value="${a}">${a}</option>`).join('');
+  if(c && MEXCACCTS.includes(c.api_account)) sel.value = c.api_account;
+}
+async function acctChanged(i){
+  const file = $('tcfg_'+i).value;
+  const acct = $('acct_'+i).value;
+  if(!confirm(`Point ${file} at account "${acct}"?\n\nWritten into the config (backup kept). A RUNNING trader keeps its current account until restarted.`)){
+    fillAcctSelect(i); return;
+  }
+  const r = await fetch('/api/trader_config?file='+encodeURIComponent(file), {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({api_account:acct})}).then(x=>x.json());
+  if(r.ok){
+    const c = TCONFIGS.find(x=>x.file===file); if(c) c.api_account = acct;
+    updateCfgSummary(i); refresh();
+  }
+}
 function updateCfgSummary(i){
   const sel = $('tcfg_'+i); if(!sel) return;
+  fillAcctSelect(i);
   const c = TCONFIGS.find(x=>x.file===sel.value);
   if(c) $('cfgSummary_'+i).innerHTML = `Selected config: <b>${c.file}</b> runs <b>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</b> in <b>${c.mode}</b> mode`+
     `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}, executes via `+
@@ -446,6 +470,8 @@ async function refreshMexc(force){
     if(force){ btn.disabled = true; btn.textContent = '…fetching'; }
     const accs = await api('mexc/account' + (force ? '?force=1' : ''));
     $('mexcStamp').textContent = 'updated ' + new Date().toLocaleTimeString();
+    MEXCACCTS = accs.map(a=>a.account);
+    INSTS.forEach(x=>fillAcctSelect(x.id));
     const el = $('mexcCard');
     if(!accs.length){ el.innerHTML = '<span class="kv">no API keys configured (adaptive_trader/mexc_api_keys.json)</span>'; return; }
     el.innerHTML = accs.map(a=>{

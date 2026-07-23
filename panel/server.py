@@ -1023,7 +1023,8 @@ def trader_config():
     d = request.get_json(force=True)
     cfg = json.load(open(path))
     allowed = {"equity_usdt", "webhook_url", "poll_seconds",
-               "emergency_exit_adverse", "dry_run", "symbol"}
+               "emergency_exit_adverse", "dry_run", "symbol",
+               "api_account", "execution"}
     changed = {k: v for k, v in d.items() if k in allowed}
     import shutil
     shutil.copy(path, path + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
