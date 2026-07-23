@@ -232,7 +232,12 @@ def doctor_fix():
 
 @app.route("/dashboard/<path:p>")
 def dash(p):
-    return send_from_directory(DASH, p)
+    resp = send_from_directory(DASH, p)
+    # pages and their inline JS change often — force revalidation so stale
+    # cached pages can't hide new features ("I don't see the badges")
+    if p.endswith((".html", ".js", ".css")):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 # ---------------- trader ----------------

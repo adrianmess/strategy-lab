@@ -269,7 +269,15 @@ fetch('/api/runs2').then(r=>r.json()).then(runs=>{
   if(TRADED.length) render();
 }).catch(()=>{});
 function tradedOf(name){
-  return TRADED.find(t=>name===t.run || name.startsWith(t.run+'_'));
+  // ONE badge per traded run: the entry matching the config actually adopted
+  // (refined publish wins if it exists — that's what Adopt copied), never the
+  // walk-forward or other sibling entries
+  for(const t of TRADED){
+    const pri = [t.run+'_refined_router_full', t.run+'_router_full', t.run];
+    const hit = pri.find(n=>BT.some(e=>e.name===n)) || null;
+    if(hit === name) return t;
+  }
+  return null;
 }
 
 const BT = window.BACKTESTS||[];
