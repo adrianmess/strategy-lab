@@ -101,6 +101,17 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 <section>
   <h2>All published backtests</h2>
   <p class="hint">Click a row to inspect · click column headers to sort · tick checkboxes to combine their source runs · run new backtests from the <a href="optimize.html">Optimize page</a>.</p>
+  <div class="row" style="display:flex;gap:12px;align-items:center;margin:4px 0 8px;flex-wrap:wrap">
+    <label class="hint">mode
+      <select id="fMode" onchange="saveBtFilters()" style="margin-left:4px">
+        <option value="all">all</option>
+        <option value="spot">spot only</option>
+        <option value="lev">lev only</option>
+      </select></label>
+    <label class="hint" title="hide every backtest whose simulation hit a liquidation">
+      <input type="checkbox" id="fNoLiq" onchange="saveBtFilters()"> no liquidations only</label>
+    <span class="hint" id="fCount"></span>
+  </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
   <div id="cmbBar" style="display:none;margin:4px 0 8px">
     <span id="cmbCount" style="font-weight:600"></span>
@@ -318,10 +329,25 @@ function gapBadge(e){
               (g.retroactive?'\n(metadata added retroactively — this run did use segmented data)':'');
   return `<span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="${tip}">skipped ✓</span>`;
 }
+function saveBtFilters(){
+  localStorage.setItem('btFilterMode', document.getElementById('fMode').value);
+  localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
+  sel = null; render();
+}
+(function initBtFilters(){
+  document.getElementById('fMode').value = localStorage.getItem('btFilterMode') || 'all';
+  document.getElementById('fNoLiq').checked = localStorage.getItem('btFilterNoLiq') === '1';
+})();
 function render(){
   const holder = document.getElementById('detailHolder');
   holder.style.display='none'; document.querySelector('main').appendChild(holder);
   let order = BT.map((e,i)=>i);
+  const fm = document.getElementById('fMode').value;
+  const fnl = document.getElementById('fNoLiq').checked;
+  if(fm !== 'all') order = order.filter(i=>BT[i].mode === fm);
+  if(fnl) order = order.filter(i=>!(BT[i].stats||{}).liq);
+  document.getElementById('fCount').textContent =
+    (fm!=='all'||fnl) ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
