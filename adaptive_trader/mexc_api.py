@@ -234,6 +234,35 @@ class MexcSpotAPI:
         p = {"symbol": self.spot_symbol(symbol)} if symbol else {}
         return self._signed("GET", "/api/v3/openOrders", p)
 
+    _scale_cache = {}
+
+    def quantity_scale(self, symbol):
+        """Allowed decimal places for BASE quantity on this symbol (from
+        exchangeInfo baseSizePrecision, e.g. '0.01' -> 2). Orders with more
+        decimals are rejected with 'quantity scale is invalid'."""
+        s = self.spot_symbol(symbol)
+        if s in MexcSpotAPI._scale_cache:
+            return MexcSpotAPI._scale_cache[s]
+        r = requests.get(f"{BASE}/api/v3/exchangeInfo", params={"symbol": s},
+                         proxies=self.proxies, timeout=self.timeout)
+        info = (r.json().get("symbols") or [{}])[0]
+        scale = 2
+        bsp = str(info.get("baseSizePrecision") or "")
+        if bsp:
+            scale = len(bsp.split(".")[1].rstrip("0")) if "." in bsp else 0
+        elif info.get("baseAssetPrecision") is not None:
+            scale = int(info["baseAssetPrecision"])
+        MexcSpotAPI._scale_cache[s] = scale
+        return scale
+
+    def floor_qty(self, symbol, qty):
+        """FLOOR a base quantity to the symbol's allowed scale (never round up:
+        you can't sell more than you hold)."""
+        import math
+        sc = self.quantity_scale(symbol)
+        q = math.floor(float(qty) * 10 ** sc) / 10 ** sc
+        return q, sc
+
     def my_trades(self, symbol, limit=20):
         """Recent fills on a spot symbol (newest last per API ordering)."""
         return self._signed("GET", "/api/v3/myTrades",
@@ -256,9 +285,15 @@ class MexcSpotAPI:
             quoteOrderQty=f"{quote_usdt:.2f}"))
 
     def market_sell(self, symbol, qty_base):
+        q, sc = self.floor_qty(symbol, qty_base)
+        if q <= 0:
+            raise RuntimeError(
+                f"sellable quantity is 0 after flooring {qty_base} to the "
+                f"symbol's {sc}-decimal scale — the remainder is dust below "
+                f"the exchange's minimum step")
         return self._signed("POST", "/api/v3/order", dict(
             symbol=self.spot_symbol(symbol), side="SELL", type="MARKET",
-            quantity=f"{qty_base:.4f}"))
+            quantity=f"{q:.{sc}f}"))
 
 
 def _test(account=None):
