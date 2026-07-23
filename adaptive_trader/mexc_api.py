@@ -229,6 +229,18 @@ class MexcSpotAPI:
                 return float(b.get("free", 0))
         return 0.0
 
+    def open_orders(self, symbol=None):
+        """Pending (unfilled) spot orders."""
+        p = {"symbol": self.spot_symbol(symbol)} if symbol else {}
+        return self._signed("GET", "/api/v3/openOrders", p)
+
+    def ticker_price(self, symbol):
+        """Public last price (no auth)."""
+        r = requests.get(f"{BASE}/api/v3/ticker/price",
+                         params={"symbol": self.spot_symbol(symbol)},
+                         proxies=self.proxies, timeout=self.timeout)
+        return float(r.json().get("price"))
+
     # ---------------- trading ----------------
     def market_buy_quote(self, symbol, quote_usdt):
         """Market BUY spending quote_usdt of USDT. Returns the order (with

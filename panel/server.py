@@ -837,11 +837,57 @@ def mexc_account():
                      realised=p.get("realised"))
                 for p in (fapi.open_positions() or [])]
             sapi = MexcSpotAPI(account=name)
-            e["spot"] = [
-                dict(asset=b.get("asset"), free=b.get("free"),
-                     locked=b.get("locked"))
-                for b in sapi.account_info().get("balances", [])
-                if float(b.get("free") or 0) + float(b.get("locked") or 0) > 0]
+            stables = ("USDT", "USDC", "USD", "DAI")
+            spot = []
+            for b in sapi.account_info().get("balances", []):
+                tot = float(b.get("free") or 0) + float(b.get("locked") or 0)
+                if tot <= 0:
+                    continue
+                row = dict(asset=b.get("asset"), free=b.get("free"),
+                           locked=b.get("locked"))
+                if b.get("asset") not in stables and tot > 1e-4:
+                    try:
+                        px = sapi.ticker_price(f"{b['asset']}_USDT")
+                        row["price"] = px
+                        row["usdt_value"] = tot * px
+                    except Exception:
+                        pass
+                spot.append(row)
+            e["spot"] = spot
+            try:
+                e["spot_orders"] = [
+                    dict(symbol=o.get("symbol"), side=o.get("side"),
+                         type=o.get("type"), qty=o.get("origQty"),
+                         price=o.get("price"))
+                    for o in (sapi.open_orders() or [])]
+            except Exception:
+                e["spot_orders"] = []
+            # bot-tracked open spot positions: any spot config on this account
+            # whose trader state holds a position (entry price, qty, when)
+            bot = []
+            for f in sorted(os.listdir(AT)):
+                if not (f.startswith("config") and f.endswith(".json")):
+                    continue
+                try:
+                    c = json.load(open(os.path.join(AT, f)))
+                except Exception:
+                    continue
+                if c.get("mode") != "spot" \
+                        or c.get("api_account", "mexc1") != name:
+                    continue
+                try:
+                    st = json.load(open(os.path.join(
+                        AT, c.get("state_file", "trader_state.json"))))
+                except Exception:
+                    continue
+                pos = st.get("position")
+                if pos:
+                    bot.append(dict(config=f, symbol=c.get("symbol"),
+                                    qty=pos.get("qty"),
+                                    entry=pos.get("entry_price"),
+                                    opened=pos.get("opened_at"),
+                                    dry_run=bool(c.get("dry_run", True))))
+            e["bot_spot_positions"] = bot
         except Exception as ex:
             e["error"] = str(ex)
         out.append(e)

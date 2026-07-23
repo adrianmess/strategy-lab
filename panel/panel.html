@@ -524,7 +524,19 @@ async function refreshMexc(force){
          <span class="kv">unrealized <b class="${(+f.unrealized||0)>=0?'pos':'neg'}">${fnum(f.unrealized)}</b></span>`).join(' · ')
         || '<span class="kv">futures wallet empty</span>';
       const spot = (a.spot||[]).map(b=>
-        `<b>${fnum(b.free,4)}</b> ${b.asset}${(+b.locked)?` <span class="kv">(+${fnum(b.locked,4)} locked)</span>`:''}`).join(' · ');
+        `<b>${fnum(b.free,4)}</b> ${b.asset}${(+b.locked)?` <span class="kv">(+${fnum(b.locked,4)} locked)</span>`:''}`+
+        `${b.usdt_value!=null?` <span class="kv">(≈${fnum(b.usdt_value)} USDT @ ${fnum(b.price,3)})</span>`:''}`).join(' · ');
+      const sords = (a.spot_orders||[]).length
+        ? `<div class="row" style="margin-top:2px"><span class="kv">spot open orders:</span> ${a.spot_orders.map(o=>
+            `<span>${o.symbol} <b class="${o.side==='BUY'?'pos':'neg'}">${o.side}</b> ${fnum(o.qty,4)} @ ${fnum(o.price,3)} <span class="kv">${o.type}</span></span>`).join(' · ')}</div>` : '';
+      const bots = (a.bot_spot_positions||[]).length
+        ? `<table style="margin-top:6px"><thead><tr><th>spot position (bot-tracked)</th><th>symbol</th><th>qty</th><th>entry</th><th>opened</th><th></th></tr></thead><tbody>
+           ${a.bot_spot_positions.map(p=>`<tr>
+             <td class="kv">${p.config}</td><td>${p.symbol}</td>
+             <td>${fnum(p.qty,4)}</td><td>${fnum(p.entry,3)}</td>
+             <td class="kv">${p.opened||''}</td>
+             <td>${p.dry_run?'<span class="badge b-amber" title="dry-run position — tracked by the trader, no real coins behind it">dry-run</span>':'<span class="badge b-green">LIVE</span>'}</td></tr>`).join('')}
+           </tbody></table>` : '';
       const pos = (a.positions||[]).length
         ? `<table style="margin-top:6px"><thead><tr><th>symbol</th><th>side</th><th>vol</th><th>entry</th><th>lev</th><th>liq price</th><th>margin</th><th>realised</th></tr></thead><tbody>
            ${a.positions.map(p=>`<tr>
@@ -540,7 +552,7 @@ async function refreshMexc(force){
         ${head}
         <div class="row" style="margin-top:4px">${fut}</div>
         <div class="row" style="margin-top:2px"><span class="kv">spot:</span> ${spot||'<span class="kv">empty</span>'}</div>
-        ${pos}</div>`;
+        ${sords}${bots}${pos}</div>`;
     }).join('');
   }catch(e){}
   finally{ btn.disabled = false; btn.textContent = '↻ refresh now'; }
