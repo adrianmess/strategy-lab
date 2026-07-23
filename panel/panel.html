@@ -112,7 +112,7 @@ details.term > pre{margin-top:4px}
 <h2>All running processes <span class="note">— everything on this machine, including processes this panel didn't start</span></h2>
 <div class="card">
   <div id="procWarn"></div>
-  <table id="procT"><thead><tr><th>kind</th><th>pid</th><th>started</th><th>flags</th><th>command</th><th></th></tr></thead><tbody><tr><td colspan="6" class="kv">scanning…</td></tr></tbody></table>
+  <table id="procT"><thead><tr><th>kind</th><th>instance</th><th>pid</th><th>started</th><th>flags</th><th>command</th><th></th></tr></thead><tbody><tr><td colspan="7" class="kv">scanning…</td></tr></tbody></table>
   <div class="row" style="margin-top:6px"><button class="small" onclick="refreshProcs()">↻ rescan</button>
     <span class="note">“hidden” = not started by this panel (terminal-started or orphaned). More than one trader, or an executor you don't recognize, is exactly what this table is for.</span></div>
 </div>
@@ -568,11 +568,13 @@ async function refreshProcs(){
     ['trader','executor'].forEach(k=>{ if(ps.filter(p=>p.kind===k).length>1) dupKinds.add(k); });
     document.querySelector('#procT tbody').innerHTML = ps.length ? ps.map(p=>`
       <tr class="${dupKinds.has(p.kind)?'procdup':''}">
-        <td><b>${p.kind}</b></td><td>${p.pid}</td><td class="kv">${p.started}</td>
+        <td><b>${p.kind}</b></td>
+        <td>${p.instance?`${p.instance_name||('Instance '+p.instance)} <span class="kv">#${p.instance}</span>`:'<span class="kv">—</span>'}</td>
+        <td>${p.pid}</td><td class="kv">${p.started}</td>
         <td>${p.live?'<span class="neg" style="font-weight:700">LIVE</span> ':''}${p.me?'<span class="kv">(this panel)</span>':(p.panel_child?'<span class="kv">panel-started</span>':'<span style="color:var(--amber)">hidden</span>')}</td>
         <td class="kv" style="font-size:11.5px;max-width:480px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.cmd.replace(/"/g,'&quot;')}">${p.cmd}</td>
         <td>${p.me?'':`<button class="small" style="color:var(--red)" onclick="killProc(${p.pid},'${p.kind}',${p.live})">kill</button>`}</td>
-      </tr>`).join('') : '<tr><td colspan="6" class="kv">no strategy-lab processes running</td></tr>';
+      </tr>`).join('') : '<tr><td colspan="7" class="kv">no strategy-lab processes running</td></tr>';
   }catch(e){}
 }
 async function killProc(pid, kind, live){

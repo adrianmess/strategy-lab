@@ -795,19 +795,36 @@ _PROC_KINDS = {"trader.py": "trader", "webhook_server.py": "executor",
 def _scan_processes():
     out = []
     try:
-        ps = subprocess.run(["ps", "-axo", "pid=,lstart=,command="],
+        ps = subprocess.run(["ps", "eww", "-axo", "pid=,lstart=,command="],
                             capture_output=True, text=True, timeout=10).stdout
     except Exception:
         return out
     known = set()   # pids the panel started itself
-    for I in instances.values():
+    pid2inst = {}   # pid -> instance id (from live handles)
+    for i, I in instances.items():
         for kind in ("trader", "webhook"):
             p = I[kind]["proc"]
             if p is not None and p.poll() is None:
                 known.add(p.pid)
+                pid2inst[p.pid] = i
     for j in jobs.values():
         if j["proc"].poll() is None:
             known.add(j["proc"].pid)
+
+    def _instance_of(pid, cmd):
+        if pid in pid2inst:
+            return pid2inst[pid]
+        # fallbacks for processes the panel doesn't hold (hidden/orphaned)
+        if "TRADER_CONFIG=" in cmd:
+            cfg = cmd.split("TRADER_CONFIG=")[1].split()[0]
+            for i, I in instances.items():
+                if I.get("cfg") == cfg:
+                    return i
+        if "webhook_server.py" in cmd and "--instance" in cmd:
+            i = cmd.split("--instance")[1].split()[0].strip()
+            if i in instances:
+                return i
+        return None
     me = os.getpid()
     for line in ps.splitlines():
         parts = line.strip().split(None, 6)
@@ -827,9 +844,14 @@ def _scan_processes():
         hit = next((k for k in _PROC_KINDS if k in cmd), None)
         if not hit:
             continue
+        inst = _instance_of(pid, cmd)
         out.append(dict(pid=pid, kind=_PROC_KINDS[hit], started=started,
                         live=("--live" in cmd), me=(pid == me),
-                        panel_child=(pid in known), cmd=cmd[:220]))
+                        panel_child=(pid in known),
+                        instance=inst,
+                        instance_name=(instances[inst].get("name")
+                                       if inst in instances else None),
+                        cmd=cmd[:220]))
     return out
 
 @app.route("/api/processes")
