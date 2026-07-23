@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-23 16:08:51",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method vol3 --procs 6 --batch 100 --name indicator_demo --total 40000 --train-end 2025-09-01",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

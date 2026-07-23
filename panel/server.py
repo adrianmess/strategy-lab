@@ -1436,6 +1436,24 @@ def runs2():
     runs_dir = os.path.join(OPT, "runs")
     running_names = {j.get("name") for j in jobs.values()
                      if j["proc"].poll() is None and "optimize" in j.get("kind", "")}
+    # which runs are being TRADED right now: a running instance whose config
+    # was adopted from that run
+    import re as _re
+    trading_map = {}
+    for _i, _I in instances.items():
+        _t = _I["trader"]
+        if _t["proc"] is None or _t["proc"].poll() is not None:
+            continue
+        try:
+            _c = json.load(open(os.path.join(AT, _t["config"] or _I["cfg"])))
+        except Exception:
+            continue
+        _m = _re.search(r"/runs/([^/]+)/", (_c.get("adopted_from") or {})
+                        .get("source", ""))
+        if _m:
+            trading_map[_m.group(1)] = dict(
+                instance=_i, name=_I.get("name") or f"Instance {_i}",
+                live=bool(_t["live"]))
     for d in sorted(os.listdir(runs_dir)):
         pool_p = os.path.join(runs_dir, d, "pool2.json")
         if not os.path.exists(pool_p):
@@ -1465,6 +1483,7 @@ def runs2():
         e = dict(name=d, run=f"runs/{d}",
                  best=os.path.exists(os.path.join(runs_dir, d, "marked_best")),
                  rating=rating, launches=launches, walkforward=wf,
+                 trading=trading_map.get(d),
                  running=(d in running_names),
                  last_run=time.strftime("%Y-%m-%d %H:%M",
                                         time.localtime(os.path.getmtime(pool_p))))
