@@ -278,13 +278,9 @@ function instCard(i){
     </div>
     <div class="row" style="margin-top:8px">
       <label>symbol</label><input id="mSym_${i}" value="SOL_USDT" style="width:110px">
-      <label>leverage</label><input id="mLev_${i}" value="1" style="width:55px">
+      <span id="mLevWrap_${i}"><label>leverage</label><input id="mLev_${i}" value="1" style="width:55px"></span>
       <label>quantity (contracts)</label><input id="mQty_${i}" value="1" style="width:70px">
-      <button class="small" onclick="manual('${i}','open_long')" style="color:var(--green)">Open LONG</button>
-      <button class="small" onclick="manual('${i}','open_short')" style="color:var(--red)">Open SHORT</button>
-      <button class="small" onclick="manual('${i}','close_long')">Close LONG</button>
-      <button class="small" onclick="manual('${i}','close_short')">Close SHORT</button>
-      <button class="small danger" onclick="manual('${i}','close_position')">Close ALL</button>
+      <span id="mBtns_${i}" style="display:contents"></span>
     </div>
     <details class="term" id="mResultd_${i}" style="display:none;margin-top:8px"><summary>order result ▸</summary><pre id="mResult_${i}"></pre></details>
   </div>
@@ -418,10 +414,26 @@ async function acctChanged(i){
     updateCfgSummary(i); refresh();
   }
 }
+function renderManualButtons(i, mode){
+  const box = $('mBtns_'+i); if(!box) return;
+  const spot = mode === 'spot';
+  $('mLevWrap_'+i).style.display = spot ? 'none' : '';
+  box.innerHTML = spot ? `
+      <button class="small" onclick="manual('${i}','open_long')" style="color:var(--green)">Buy</button>
+      <button class="small" onclick="manual('${i}','close_long')" style="color:var(--red)">Sell</button>
+      <button class="small danger" onclick="manual('${i}','close_position')" title="sell the ENTIRE free balance of the base asset">Sell ALL</button>`
+    : `
+      <button class="small" onclick="manual('${i}','open_long')" style="color:var(--green)">Open LONG</button>
+      <button class="small" onclick="manual('${i}','open_short')" style="color:var(--red)">Open SHORT</button>
+      <button class="small" onclick="manual('${i}','close_long')">Close LONG</button>
+      <button class="small" onclick="manual('${i}','close_short')">Close SHORT</button>
+      <button class="small danger" onclick="manual('${i}','close_position')">Close ALL</button>`;
+}
 function updateCfgSummary(i){
   const sel = $('tcfg_'+i); if(!sel) return;
   fillAcctSelect(i);
   const c = TCONFIGS.find(x=>x.file===sel.value);
+  renderManualButtons(i, c && c.mode);
   if(c) $('cfgSummary_'+i).innerHTML = `Selected config: <b>${c.file}</b> runs <b>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</b> in <b>${c.mode}</b> mode`+
     `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}, executes via `+
     venueBadge(c.api_account, c.execution, c.mode)+
@@ -549,7 +561,12 @@ async function refreshShot(i){
 function stopShotAuto(i){ if(_shotAuto[i]){ clearInterval(_shotAuto[i]); _shotAuto[i]=null; } }
 async function manual(i, action){
   const qty = +$('mQty_'+i).value, lev = +$('mLev_'+i).value, sym = $('mSym_'+i).value;
-  const desc = action.replace('_',' ').toUpperCase() + (action.startsWith('open') ? ` ${qty} contract(s) of ${sym} at ${lev}x` : ` on ${sym}`);
+  const cfgm = TCONFIGS.find(x=>x.file===$('tcfg_'+i).value);
+  const spot = cfgm && cfgm.mode === 'spot';
+  const spotNames = {open_long:'BUY', close_long:'SELL', close_position:'SELL ALL'};
+  const desc = spot
+    ? `${spotNames[action]||action} ${action==='close_position'?'entire balance':qty+' contract(s) (='+(qty*0.1).toFixed(1)+' SOL)'} of ${sym} — spot, no leverage`
+    : action.replace('_',' ').toUpperCase() + (action.startsWith('open') ? ` ${qty} contract(s) of ${sym} at ${lev}x` : ` on ${sym}`);
   const c = await modalWord(`${instName(i)} (#${i}) — REAL order via this instance's venue:\n\n  ${desc}`, 'SEND', 'Send order');
   if(c===null) return;
   const box = $('mResult_'+i);
