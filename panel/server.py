@@ -1029,6 +1029,61 @@ def manual_order():
                       "close_position"):
         return jsonify(error=f"unknown action {action}"), 400
     i, I = _inst()
+    # route by the instance's execution path (same venue as its badge)
+    try:
+        icfg = json.load(open(os.path.join(AT, I["cfg"])))
+    except Exception:
+        icfg = {}
+    if icfg.get("execution") == "api":
+        if AT not in sys.path:
+            sys.path.insert(0, AT)
+        from mexc_api import MexcFuturesAPI, MexcSpotAPI
+        acct = icfg.get("api_account", "mexc1")
+        symbol = d.get("symbol", "SOL_USDT")
+        qty = float(d.get("quantity", 1))
+        lev = max(1, int(d.get("leverage", 1)))
+        log = os.path.join(JOBS_DIR, "manual_orders.log")
+        try:
+            if icfg.get("mode") == "spot":
+                sapi = MexcSpotAPI(account=acct)
+                px = sapi.ticker_price(symbol)
+                base_qty = qty * float(icfg.get("contract_size", 0.1))
+                if action == "open_long":
+                    r = sapi.market_buy_quote(symbol, base_qty * px)
+                elif action in ("close_long", "close_position"):
+                    free = sapi.balance(symbol.split("_")[0])
+                    sell = free if action == "close_position" \
+                        else min(base_qty, free)
+                    if sell <= 0:
+                        raise RuntimeError("nothing to sell")
+                    r = sapi.market_sell(symbol, sell)
+                else:
+                    raise RuntimeError("spot cannot short")
+            else:
+                fapi = MexcFuturesAPI(account=acct)
+                px = MexcSpotAPI(account=acct).ticker_price(symbol)
+                if action == "open_long":
+                    r = fapi.open_long(symbol, qty, lev, px)
+                elif action == "open_short":
+                    r = fapi.open_short(symbol, qty, lev, px)
+                elif action == "close_long":
+                    r = fapi.place_market(symbol, 4, qty, price=px)
+                elif action == "close_short":
+                    r = fapi.place_market(symbol, 2, qty, price=px)
+                else:
+                    r = fapi.close_position(symbol, price=px)
+            out = dict(ok=True, via=f"MEXC {icfg.get('mode','lev')} API",
+                       account=acct, sent=dict(action=action, symbol=symbol,
+                                               quantity=qty, leverage=lev),
+                       response=r)
+        except Exception as e:
+            out = dict(ok=False, via="MEXC API", account=acct,
+                       sent=dict(action=action, symbol=symbol, quantity=qty),
+                       error=f"{type(e).__name__}: {e}")
+        with open(log, "a") as lf:
+            lf.write(json.dumps(dict(t=time.strftime("%Y-%m-%d %H:%M:%S"),
+                                     **out), default=str) + "\n")
+        return jsonify(out), (200 if out.get("ok") else 502)
     port = I["webhook"].get("port") or I["port"] or 5001
     url = d.get("url") or f"http://127.0.0.1:{port}/webhook"
     payload = dict(action=action, symbol=d.get("symbol", "SOL_USDT"))
