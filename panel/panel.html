@@ -179,6 +179,7 @@ function instCard(i){
   <div class="row" style="justify-content:space-between">
     <div>
       <span id="tdot_${i}" class="dot off"></span><b id="tstate_${i}">stopped</b>
+      <span id="tacct_${i}"></span>
       <span class="kv" id="tinfo_${i}"></span>
     </div>
     <div class="row">
@@ -294,12 +295,21 @@ function fillCfgSelects(){
     updateCfgSummary(x.id);
   });
 }
+function venueBadge(acct, execution, mode){
+  const api = execution === 'api';
+  const label = api ? `${acct||'mexc1'} · MEXC ${mode==='spot'?'spot':'futures'} API`
+                    : `${acct||'mexc1'} · browser executor`;
+  return `<span class="badge ${api?'b-green':'b-amber'}" style="margin:0 6px" title="${api
+    ? 'orders go straight to the MEXC '+(mode==='spot'?'SPOT':'futures')+' API on account '+(acct||'mexc1')+' (proxy-routed, IP-linked key) — no browser involved'
+    : 'orders are placed by the Playwright browser executor for this instance'}">${label}</span>`;
+}
 function updateCfgSummary(i){
   const sel = $('tcfg_'+i); if(!sel) return;
   const c = TCONFIGS.find(x=>x.file===sel.value);
   if(c) $('cfgSummary_'+i).innerHTML = `Selected config: <b>${c.file}</b> runs <b>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</b> in <b>${c.mode}</b> mode`+
-    `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}`+
-    `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}.`;
+    `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}, executes via `+
+    venueBadge(c.api_account, c.execution, c.mode)+
+    `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}`;
 }
 
 async function refreshInst(i){
@@ -313,6 +323,7 @@ async function refreshInst(i){
       ? (s.live ? '<span style="color:var(--red);font-weight:700">RUNNING — LIVE</span>'
                 : 'running (dry-run)')
       : 'stopped';
+    $('tacct_'+i).innerHTML = venueBadge(s.api_account, s.execution, s.mode);
     $('tinfo_'+i).textContent = ` · ${s.config} · mode ${s.mode||'?'} · method ${s.method||'?'} · equity $${s.equity_usdt}` + (s.started?` · since ${s.started}`:'');
     $('levwarn_'+i).style.display = (s.mode==='lev')?'block':'none';
     const p = s.position;

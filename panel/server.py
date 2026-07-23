@@ -148,6 +148,8 @@ def status():
         running=running, live=t["live"] if running else False,
         config=cfg_name, started=t["started"] if running else None,
         exit_code=(None if running or p is None else p.poll()),
+        execution=cfg.get("execution", "browser"),
+        api_account=cfg.get("api_account", "mexc1"),
         mode=cfg.get("mode"), method=cfg.get("method"),
         equity_usdt=cfg.get("equity_usdt"),
         candidate=cfg.get("candidate"),
@@ -1006,6 +1008,8 @@ def trader_configs():
                                          ("v6" if cand else "legacy"))
         out.append(dict(file=f, strategy=strat, mode=c.get("mode"),
                         method=c.get("method"), equity=c.get("equity_usdt"),
+                        execution=c.get("execution", "browser"),
+                        api_account=c.get("api_account", "mexc1"),
                         adopted_from=(c.get("adopted_from") or {}).get("source"),
                         adopted_at=(c.get("adopted_from") or {}).get("at")))
     return jsonify(out)
