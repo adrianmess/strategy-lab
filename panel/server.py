@@ -776,8 +776,11 @@ _MEXC_CACHE = {"t": 0.0, "data": None}
 @app.route("/api/mexc/account")
 def mexc_account():
     """Balances + open positions for every configured API account.
-    Read-only endpoints only; cached 10s to respect rate limits."""
-    if _MEXC_CACHE["data"] is not None and time.time() - _MEXC_CACHE["t"] < 10:
+    Read-only endpoints only; cached 10s to respect rate limits.
+    ?force=1 bypasses the cache (the panel's refresh-now button)."""
+    force = request.args.get("force") == "1"
+    if not force and _MEXC_CACHE["data"] is not None \
+            and time.time() - _MEXC_CACHE["t"] < 10:
         return jsonify(_MEXC_CACHE["data"])
     keys_p = os.path.join(AT, "mexc_api_keys.json")
     if not os.path.exists(keys_p):
