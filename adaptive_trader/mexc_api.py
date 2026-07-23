@@ -234,6 +234,12 @@ class MexcSpotAPI:
         p = {"symbol": self.spot_symbol(symbol)} if symbol else {}
         return self._signed("GET", "/api/v3/openOrders", p)
 
+    def my_trades(self, symbol, limit=20):
+        """Recent fills on a spot symbol (newest last per API ordering)."""
+        return self._signed("GET", "/api/v3/myTrades",
+                            {"symbol": self.spot_symbol(symbol),
+                             "limit": int(limit)})
+
     def ticker_price(self, symbol):
         """Public last price (no auth)."""
         r = requests.get(f"{BASE}/api/v3/ticker/price",

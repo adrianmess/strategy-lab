@@ -913,6 +913,58 @@ def processes_kill():
 # ---------------- MEXC account info (read-only) ----------------
 _MEXC_CACHE = {"t": 0.0, "data": None}
 
+def _order_sources():
+    """Timestamps of bot- and panel-placed orders (from the event logs), used
+    to tag exchange trades by origin. Anything unmatched = manual (web/app)."""
+    out = []
+    try:
+        with open(os.path.join(AT, "notifications.log")) as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if e.get("event", "").startswith("position_") and e.get("live"):
+                    out.append(("bot", time.mktime(
+                        time.strptime(e["at"], "%Y-%m-%d %H:%M:%S"))))
+    except Exception:
+        pass
+    try:
+        with open(os.path.join(JOBS_DIR, "manual_orders.log")) as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if e.get("ok"):
+                    out.append(("panel", time.mktime(
+                        time.strptime(e["t"], "%Y-%m-%d %H:%M:%S"))))
+    except Exception:
+        pass
+    return out
+
+def _trade_source(ts_s, sources, tol=120):
+    for kind, t0 in sources:
+        if abs(ts_s - t0) <= tol:
+            return kind
+    return "manual"
+
+def _avg_cost(trades, holding):
+    """Volume-weighted avg BUY price of the most recent buys covering the
+    current holding (recent-first walk) — an estimate, labeled as such."""
+    need = holding
+    cost = qty = 0.0
+    for t in sorted(trades, key=lambda x: -float(x.get("time") or 0)):
+        if not t.get("isBuyer"):
+            continue
+        q = min(float(t.get("qty") or 0), need)
+        cost += q * float(t.get("price") or 0)
+        qty += q
+        need -= q
+        if need <= 1e-12:
+            break
+    return (cost / qty) if qty > 0 else None
+
 @app.route("/api/mexc/account")
 def mexc_account():
     """Balances + open positions for every configured API account.
@@ -962,6 +1014,9 @@ def mexc_account():
             sapi = MexcSpotAPI(account=name)
             stables = ("USDT", "USDC", "USD", "DAI")
             spot = []
+            spot_positions = []
+            spot_trades = []
+            sources = _order_sources()
             for b in sapi.account_info().get("balances", []):
                 tot = float(b.get("free") or 0) + float(b.get("locked") or 0)
                 if tot <= 0:
@@ -970,13 +1025,34 @@ def mexc_account():
                            locked=b.get("locked"))
                 if b.get("asset") not in stables and tot > 1e-4:
                     try:
-                        px = sapi.ticker_price(f"{b['asset']}_USDT")
+                        sym = f"{b['asset']}_USDT"
+                        px = sapi.ticker_price(sym)
                         row["price"] = px
                         row["usdt_value"] = tot * px
+                        trades = sapi.my_trades(sym, 20) or []
+                        avg = _avg_cost(trades, tot)
+                        spot_positions.append(dict(
+                            asset=b["asset"], qty=tot, price=px,
+                            usdt_value=tot * px, avg_cost=avg,
+                            pnl_pct=(100 * (px / avg - 1)) if avg else None))
+                        for t in trades:
+                            ts = float(t.get("time") or 0) / 1000.0
+                            spot_trades.append(dict(
+                                symbol=sym,
+                                t=time.strftime("%m-%d %H:%M",
+                                                time.localtime(ts)),
+                                ts=ts,
+                                side=("BUY" if t.get("isBuyer") else "SELL"),
+                                qty=t.get("qty"), price=t.get("price"),
+                                quote=t.get("quoteQty"),
+                                source=_trade_source(ts, sources)))
                     except Exception:
                         pass
                 spot.append(row)
+            spot_trades.sort(key=lambda x: -x["ts"])
             e["spot"] = spot
+            e["spot_positions"] = spot_positions
+            e["spot_trades"] = spot_trades[:25]
             try:
                 e["spot_orders"] = [
                     dict(symbol=o.get("symbol"), side=o.get("side"),

@@ -9,12 +9,12 @@
   "cfg": "config_camp_c4_m_spot_vol3.json",
   "port": 5002,
   "headless": false,
-  "name": "Spot router"
+  "name": "MEX2 Spot"
  },
  "3": {
   "cfg": "config_camp_c4_m_lev_vol3_v2.json",
   "port": 5003,
   "headless": false,
-  "name": "Lev router (mexc2)"
+  "name": "MEX 1 - Lev"
  }
 }
