@@ -145,6 +145,12 @@ class MexcFuturesAPI:
         return self._get("/api/v1/private/position/open_positions",
                          {"symbol": symbol})
 
+    def order_deals(self, symbol, page_size=20):
+        """Recent futures fills (deal history) on a symbol."""
+        return self._get("/api/v1/private/order/list/order_deals",
+                         {"symbol": symbol, "page_num": 1,
+                          "page_size": int(page_size)}) or []
+
     # ---------------- trading ----------------
     def place_market(self, symbol, side, vol, leverage=None, price=None,
                      open_type=ISOLATED, external_oid=None):

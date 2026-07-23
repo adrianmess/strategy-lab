@@ -1011,6 +1011,22 @@ def mexc_account():
                      margin=(p.get("im") or p.get("oim")),
                      realised=p.get("realised"))
                 for p in (fapi.open_positions() or [])]
+            _SIDE = {1: "OPEN LONG", 2: "CLOSE SHORT",
+                     3: "OPEN SHORT", 4: "CLOSE LONG"}
+            try:
+                fsources = _order_sources()
+                e["futures_trades"] = [
+                    dict(symbol=t.get("symbol"),
+                         t=time.strftime("%m-%d %H:%M", time.localtime(
+                             float(t.get("timestamp") or 0) / 1000)),
+                         side=_SIDE.get(int(t.get("side") or 0), "?"),
+                         vol=t.get("vol"), price=t.get("price"),
+                         fee=t.get("fee"), profit=t.get("profit"),
+                         source=_trade_source(
+                             float(t.get("timestamp") or 0) / 1000, fsources))
+                    for t in (fapi.order_deals("SOL_USDT", 20) or [])]
+            except Exception:
+                e["futures_trades"] = []
             sapi = MexcSpotAPI(account=name)
             stables = ("USDT", "USDC", "USD", "DAI")
             spot = []

@@ -617,8 +617,24 @@ async function refreshMexc(force){
                :'<span class="kv">avg cost n/a</span>'}
             </div>`).join('')}
         </div>` : '';
-      const tradesBox = (a.spot_trades||[]).length ? `
-        <div style="flex:1;min-width:280px;position:relative;min-height:110px">
+      const futBox = (a.futures_trades||[]).length ? `
+        <div style="flex:1;position:relative;min-height:100px">
+          <div style="position:absolute;inset:0;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+            <span class="kv">recent futures trades</span>
+            ${a.futures_trades.map(t=>`
+              <div style="font-size:12px;margin-top:2px">
+                <span class="kv">${t.t}</span>
+                <b class="${t.side.includes('LONG')===(t.side.startsWith('OPEN'))?'pos':'neg'}">${t.side}</b>
+                ${fnum(t.vol,0)} @ ${fnum(t.price,3)}
+                ${(+t.profit)?`<b class="${(+t.profit)>=0?'pos':'neg'}">${(+t.profit)>=0?'+':''}${fnum(t.profit,3)}</b>`:''}
+                <span class="kv" title="fee">−${fnum(t.fee,4)}</span>
+                <span class="badge ${t.source==='bot'?'b-green':t.source==='panel'?'b-amber':''}" style="${t.source==='manual'?'background:rgba(139,148,158,.15);color:var(--dim);':''}"
+                  title="${t.source==='bot'?'matched a bot position event (±2 min)':t.source==='panel'?'matched a panel manual-order (±2 min)':'no matching bot/panel event — placed manually (web/app)'}">${t.source}</span>
+              </div>`).join('')}
+          </div>
+        </div>` : '';
+      const spotTradesInner = (a.spot_trades||[]).length ? `
+        <div style="flex:1;position:relative;min-height:100px">
           <div style="position:absolute;inset:0;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px 10px">
             <span class="kv">recent spot trades</span>
             ${a.spot_trades.map(t=>`
@@ -631,6 +647,10 @@ async function refreshMexc(force){
                   title="${t.source==='bot'?'matched a bot position event (±2 min)':t.source==='panel'?'matched a panel manual-order (±2 min)':'no matching bot/panel event — placed manually (web/app)'}">${t.source}</span>
               </div>`).join('')}
           </div>
+        </div>` : '';
+      const tradesBox = (futBox || spotTradesInner) ? `
+        <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:8px">
+          ${spotTradesInner}${futBox}
         </div>` : '';
       const sords = (a.spot_orders||[]).length
         ? `<div class="row" style="margin-top:2px"><span class="kv">spot open orders:</span> ${a.spot_orders.map(o=>
