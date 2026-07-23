@@ -196,8 +196,10 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
     <span class="mini" style="float:right">
     <label style="margin-right:4px">Show</label>
+    <input id="runFind" placeholder="find run…" style="font-size:12px;padding:3px 8px;width:150px;margin-right:6px" oninput="renderRuns()">
     <select id="liqFilter" style="font-size:12px;padding:3px 6px" onchange="localStorage.setItem('liqFilter',this.value);renderRuns()">
       <option value="all">all runs</option>
+      <option value="trading">● trading / active now</option>
       <option value="clean">✓ no-liq only</option>
       <option value="liq">liquidated only</option>
       <option value="camp">campaign runs only</option>
@@ -454,11 +456,15 @@ async function refreshRuns(){
 }
 function renderRuns(){
   const lf = $('liqFilter').value;
-  const base = lf==='clean' ? RUNS.filter(r=>r._clean>=2)
+  const q = ($('runFind').value||'').trim().toLowerCase();
+  let base = lf==='clean' ? RUNS.filter(r=>r._clean>=2)
              : lf==='liq'   ? RUNS.filter(r=>r._clean===0)
              : lf==='camp'  ? RUNS.filter(r=>r.name.startsWith('camp_'))
              : lf==='nocamp'? RUNS.filter(r=>!r.name.startsWith('camp_'))
+             : lf==='trading'? RUNS.filter(r=>r.trading||r.running)
              : RUNS;
+  if(q) base = base.filter(r=>r.name.toLowerCase().includes(q)
+                             || (r.strategy||'').toLowerCase().includes(q));
   const rs = [...base].sort((a,b)=>{
     const va=a[sortKey], vb=b[sortKey];
     if(typeof va==='string'||typeof vb==='string') return sortDir*String(va??'').localeCompare(String(vb??''));
