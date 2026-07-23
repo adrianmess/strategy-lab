@@ -34,7 +34,8 @@ def _new_instance(i):
     return dict(
         trader=dict(proc=None, config=None, live=False, started=None),
         webhook=dict(proc=None, started=None, port=None, headless=False),
-        cfg="config.json", port=5000 + int(i), headless=False)
+        cfg="config.json", port=5000 + int(i), headless=False,
+        name=f"Instance {i}")
 
 def _load_instances():
     out = {}
@@ -47,6 +48,7 @@ def _load_instances():
         d["cfg"] = m.get("cfg") or d["cfg"]
         d["port"] = m.get("port") or d["port"]
         d["headless"] = bool(m.get("headless"))
+        d["name"] = m.get("name") or d["name"]
         out[str(i)] = d
     if "1" not in out:
         out["1"] = _new_instance(1)
@@ -56,7 +58,8 @@ instances = _load_instances()
 
 def _save_instances():
     json.dump({i: dict(cfg=d.get("cfg"), port=d.get("port"),
-                       headless=d.get("headless", False))
+                       headless=d.get("headless", False),
+                       name=d.get("name"))
                for i, d in instances.items()},
               open(INSTANCES_FILE, "w"), indent=1)
 
@@ -640,10 +643,22 @@ def instances_list():
         t, w = I["trader"], I["webhook"]
         out.append(dict(
             id=i, cfg=I["cfg"], port=I["port"], headless=I["headless"],
+            name=I.get("name") or f"Instance {i}",
             trader_running=(t["proc"] is not None and t["proc"].poll() is None),
             trader_live=t["live"],
             webhook_running=(w["proc"] is not None and w["proc"].poll() is None)))
     return jsonify(out)
+
+@app.route("/api/instances/rename", methods=["POST"])
+def instances_rename():
+    d = request.get_json(force=True)
+    i = str(d.get("id", ""))
+    name = (d.get("name") or "").strip()[:40]
+    if i not in instances or not name:
+        return jsonify(error="unknown instance or empty name"), 400
+    instances[i]["name"] = name
+    _save_instances()
+    return jsonify(ok=True, id=i, name=name)
 
 @app.route("/api/instances/add", methods=["POST"])
 def instances_add():

@@ -43,8 +43,7 @@ label{color:var(--dim);font-size:12px;margin-right:4px}
 .tab .dot{width:8px;height:8px;margin-right:5px}
 #instWrap.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px;align-items:start}
 #instWrap.cols .icard{margin-bottom:0}
-.icard .iname{font-weight:700;color:var(--dim);margin-bottom:8px;display:none}
-#instWrap.cols .icard .iname{display:block}
+.icard .iname{font-weight:700;color:var(--dim);margin-bottom:8px}
 .star-on{color:var(--green)} .rate-star{letter-spacing:1px;font-size:13px}
 .rate1{color:var(--amber)} .rate2{color:rgb(45,186,150)} .rate3{color:var(--green)}
 .procdup td{background:rgba(248,81,73,.08)}
@@ -179,7 +178,7 @@ const _shotAuto = {};                 // instance -> interval id
 
 function instCard(i){
   return `<div class="card icard" id="icard_${i}">
-  <div class="iname">Instance ${i}</div>
+  <div class="iname" id="iname_${i}">Instance ${i}</div>
   <div class="row" style="justify-content:space-between">
     <div>
       <span id="tdot_${i}" class="dot off"></span><b id="tstate_${i}">stopped</b>
@@ -241,19 +240,57 @@ function instCard(i){
 </div>`;
 }
 
+function instName(i){
+  const x = INSTS.find(v=>v.id===i);
+  return (x && x.name) || ('Instance '+i);
+}
+function orderedInsts(){
+  // DISPLAY order only — dragging never changes an instance's identity
+  // (its number, browser profile, port and logs all stay put)
+  let ord = [];
+  try{ ord = JSON.parse(localStorage.getItem('instOrder')||'[]'); }catch(e){}
+  return [...INSTS].sort((a,b)=>{
+    const ia = ord.indexOf(a.id), ib = ord.indexOf(b.id);
+    return (ia<0?999:ia) - (ib<0?999:ib) || (+a.id - +b.id);
+  });
+}
+let _dragId = null;
+function tabDrop(targetId){
+  if(_dragId===null || _dragId===targetId) return;
+  const ids = orderedInsts().map(x=>x.id);
+  ids.splice(ids.indexOf(_dragId), 1);
+  ids.splice(ids.indexOf(targetId), 0, _dragId);
+  localStorage.setItem('instOrder', JSON.stringify(ids));
+  _dragId = null;
+  renderInstances();
+}
+async function renameInstance(i){
+  const nn = prompt(`Name for instance #${i} (shown on the tab and card — the number, browser profile and port never change):`, instName(i));
+  if(!nn || nn===instName(i)) return;
+  const r = await api('instances/rename',{id:i, name:nn});
+  if(r.ok){ const x = INSTS.find(v=>v.id===i); if(x) x.name = r.name; renderInstances(); }
+}
 function renderInstances(){
   const wrap = $('instWrap'), tabs = $('instTabs');
   if(!INSTS.some(x=>x.id===CUR)) CUR = INSTS[0] ? INSTS[0].id : '1';
-  tabs.innerHTML = LAYOUT==='tabs' ? INSTS.map(x=>
-    `<span class="tab ${x.id===CUR?'here':''}" id="tab_${x.id}" onclick="switchTab('${x.id}')">
-       <span class="dot off" id="tabdot_${x.id}"></span>Instance ${x.id}</span>`).join('') : '';
+  const ord = orderedInsts();
+  tabs.innerHTML = LAYOUT==='tabs' ? ord.map(x=>
+    `<span class="tab ${x.id===CUR?'here':''}" id="tab_${x.id}" draggable="true"
+       onclick="switchTab('${x.id}')" ondblclick="renameInstance('${x.id}')"
+       ondragstart="_dragId='${x.id}'" ondragover="event.preventDefault()"
+       ondrop="tabDrop('${x.id}')"
+       title="click to switch · double-click to rename · drag to reorder (display only)">
+       <span class="dot off" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)} <span class="kv" style="font-weight:400">#${x.id}</span></span>`).join('') : '';
   tabs.style.display = LAYOUT==='tabs' ? 'flex' : 'none';
   wrap.className = LAYOUT==='cols' ? 'cols' : '';
   $('main').className = LAYOUT==='cols' ? 'cols' : '';
-  wrap.innerHTML = INSTS.map(x=>instCard(x.id)).join('');
+  wrap.innerHTML = ord.map(x=>instCard(x.id)).join('');
   INSTS.forEach(x=>{
     $('icard_'+x.id).style.display = (LAYOUT==='cols' || x.id===CUR) ? '' : 'none';
     $('wHeadless_'+x.id).checked = !!x.headless;
+    const nm = $('iname_'+x.id);
+    if(nm) nm.innerHTML = `${x.name||('Instance '+x.id)} <span class="kv">#${x.id}</span>
+      <button class="small" style="padding:0 6px" title="rename this instance" onclick="renameInstance('${x.id}')">✎</button>`;
   });
   fillCfgSelects();
   refresh();
