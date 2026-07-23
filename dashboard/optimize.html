@@ -503,7 +503,7 @@ function renderRuns(){
     const rowToggle = (r.running && runJob(r.name))
       ? ` style="cursor:pointer" title="click to show/hide this run's live job"
           onclick="if(['TD','B','TR'].includes(event.target.tagName)) toggleJobRow('${r.name.replace(/'/g,"\\'")}')"` : '';
-    return `<tr class="${r.best?'best':''} rate${r.rating||0}"${rowToggle}><td><b>${r.name}</b>${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
+    return `<tr class="${r.best?'best':''} rate${r.rating||0}"${rowToggle}><td>${r.running?'<span class="livedot" title="this run\'s search is executing right now"></span>':''}<b>${r.name}</b>${r.running?' <span class="badge b-green" title="search in progress — live job nested below, progress in the settings column">ACTIVE</span>':''}${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span></td>
       <td>${r.method||''}</td>

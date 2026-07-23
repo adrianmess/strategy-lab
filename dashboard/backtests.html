@@ -101,6 +101,7 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
 <section>
   <h2>All published backtests</h2>
   <p class="hint">Click a row to inspect · click column headers to sort · tick checkboxes to combine their source runs · run new backtests from the <a href="optimize.html">Optimize page</a>.</p>
+  <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
   <div id="cmbBar" style="display:none;margin:4px 0 8px">
     <span id="cmbCount" style="font-weight:600"></span>
     <button onclick="sendToCombine()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are prefilled in the Combine row on the Optimize page">→ combine these runs on the Optimize page</button>
@@ -238,6 +239,29 @@ async function reloadBacktests(selectName){
   sel = null; render();
   if(idx >= 0) select(idx);
 }
+// active-jobs banner: shows optimize/backtest/campaign work currently running;
+// auto-reloads the list when a backtest job completes (new entries publish then)
+let _prevRunningJobs = new Set();
+async function pollActiveJobs(){
+  try{
+    const jobs = await fetch('/api/jobs').then(r=>r.json());
+    const act = jobs.filter(j=>j.status==='running');
+    const el = document.getElementById('activeJobs');
+    el.style.display = act.length ? '' : 'none';
+    el.innerHTML = act.length ? '<span class="livedot"></span><b>active now:</b> ' +
+      act.map(j=>`${j.name} <span class="hint">(${j.kind}${j.progress?`, ${Math.round(100*j.progress.pct)}% · ETA ${Math.round((j.progress.eta_s||0)/60)}m`:''})</span>`).join(' · ') : '';
+    const now = new Set(act.map(j=>j.id));
+    for(const id of _prevRunningJobs){
+      if(!now.has(id)){
+        const j = jobs.find(x=>x.id===id);
+        if(j && (j.kind==='backtest' || j.kind.startsWith('optimize'))){ reloadBacktests(); break; }
+      }
+    }
+    _prevRunningJobs = now;
+  }catch(e){}
+}
+setInterval(pollActiveJobs, 4000); pollActiveJobs();
+
 const BT = window.BACKTESTS||[];
 const tb = document.querySelector('#bt tbody');
 let sel = null, chart=null,

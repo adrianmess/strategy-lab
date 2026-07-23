@@ -47,3 +47,9 @@ select{cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:26px
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%238b949e' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>")!important;
   background-repeat:no-repeat!important;background-position:right 9px center!important}
 input[type=checkbox]{accent-color:var(--blue);cursor:pointer;box-shadow:none}
+
+/* --- live-activity indicator --- */
+@keyframes lab-pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+.livedot{display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--green);animation:lab-pulse 1.2s ease-in-out infinite;
+  margin-right:5px;vertical-align:1px}
