@@ -342,12 +342,12 @@ function render(){
   const holder = document.getElementById('detailHolder');
   holder.style.display='none'; document.querySelector('main').appendChild(holder);
   let order = BT.map((e,i)=>i);
-  const fm = document.getElementById('fMode').value;
-  const fnl = document.getElementById('fNoLiq').checked;
-  if(fm !== 'all') order = order.filter(i=>BT[i].mode === fm);
-  if(fnl) order = order.filter(i=>!(BT[i].stats||{}).liq);
+  const fModeV = document.getElementById('fMode').value;
+  const fNoLiqV = document.getElementById('fNoLiq').checked;
+  if(fModeV !== 'all') order = order.filter(i=>BT[i].mode === fModeV);
+  if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   document.getElementById('fCount').textContent =
-    (fm!=='all'||fnl) ? `showing ${order.length} of ${BT.length}` : '';
+    (fModeV!=='all'||fNoLiqV) ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
