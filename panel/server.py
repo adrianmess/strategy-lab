@@ -81,6 +81,107 @@ trader = instances["1"]["trader"]
 webhook = instances["1"]["webhook"]
 
 
+class _PidProc:
+    """Popen-compatible handle for a RE-ADOPTED orphan (a process this panel
+    started before a restart). Signals by pid; every poll re-verifies the
+    command line still matches, so a recycled pid can never be mistaken for
+    our process."""
+    def __init__(self, pid, sig):
+        self.pid = int(pid)
+        self._sig = sig            # substring that must appear in the cmdline
+        self._rc = None
+
+    def _alive(self):
+        try:
+            out = subprocess.run(["ps", "-p", str(self.pid), "-o", "command="],
+                                 capture_output=True, text=True,
+                                 timeout=5).stdout
+            return self._sig in out
+        except Exception:
+            return False
+
+    def poll(self):
+        if self._rc is not None:
+            return self._rc
+        if self._alive():
+            return None
+        self._rc = 0
+        return self._rc
+
+    def send_signal(self, s):
+        os.kill(self.pid, s)
+
+    def terminate(self):
+        os.kill(self.pid, signal.SIGTERM)
+
+    def kill(self):
+        os.kill(self.pid, signal.SIGKILL)
+
+    def wait(self, timeout=None):
+        deadline = time.time() + (timeout or 3600)
+        while time.time() < deadline:
+            if self.poll() is not None:
+                return self._rc
+            time.sleep(0.2)
+        raise subprocess.TimeoutExpired("readopted", timeout)
+
+
+def _readopt_orphans():
+    """On panel startup: re-attach traders/executors that a previous panel
+    started (matched by TRADER_CONFIG env / --instance flag). Without this,
+    a panel restart leaves them running but invisible to the instance cards."""
+    try:
+        ps = subprocess.run(["ps", "eww", "-axo", "pid=,lstart=,command="],
+                            capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return
+    for line in ps.splitlines():
+        parts = line.strip().split(None, 6)
+        if len(parts) < 7:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        started = " ".join(parts[3:6])
+        cmd = parts[6]
+        if "Python" not in cmd and "python" not in cmd:
+            continue
+        if "trader.py" in cmd and "TRADER_CONFIG=" in cmd:
+            cfg = cmd.split("TRADER_CONFIG=")[1].split()[0]
+            for i, I in instances.items():
+                t = I["trader"]
+                busy = t["proc"] is not None and t["proc"].poll() is None
+                if not busy and I.get("cfg") == cfg:
+                    t.update(proc=_PidProc(pid, "trader.py"), config=cfg,
+                             live=("--live" in cmd), started=started)
+                    print(f"re-adopted trader pid {pid} ({cfg}) -> "
+                          f"instance {i}", flush=True)
+                    break
+        elif "webhook_server.py" in cmd and "--instance" in cmd:
+            inst = cmd.split("--instance")[1].split()[0].strip()
+            I = instances.get(inst)
+            if I is None:
+                continue
+            wh = I["webhook"]
+            busy = wh["proc"] is not None and wh["proc"].poll() is None
+            if not busy:
+                port = None
+                if "--port" in cmd:
+                    try:
+                        port = int(cmd.split("--port")[1].split()[0])
+                    except ValueError:
+                        pass
+                wh.update(proc=_PidProc(pid, "webhook_server.py"),
+                          started=started, port=(port or I.get("port")),
+                          headless=("--headless" in cmd))
+                print(f"re-adopted executor pid {pid} -> instance {inst}",
+                      flush=True)
+
+
+_readopt_orphans()
+
+
 def tail(path, lines=80):
     try:
         with open(path, "rb") as f:
