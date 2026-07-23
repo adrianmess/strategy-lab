@@ -606,7 +606,7 @@ async function refreshMexc(force){
         `<b>${fnum(b.free,4)}</b> ${b.asset}${(+b.locked)?` <span class="kv">(+${fnum(b.locked,4)} locked)</span>`:''}`+
         `${b.usdt_value!=null?` <span class="kv">(≈${fnum(b.usdt_value)} USDT @ ${fnum(b.price,3)})</span>`:''}`).join(' · ');
       const spotPos = (a.spot_positions||[]).length ? `
-        <div style="display:flex;gap:14px;margin-top:6px;align-items:flex-start;flex-wrap:wrap">
+        <div style="display:flex;gap:14px;margin-top:6px;align-items:stretch;flex-wrap:wrap;min-height:96px">
           <div style="flex:1;min-width:260px">
             <span class="kv">open spot positions:</span>
             ${a.spot_positions.map(p=>`
@@ -618,7 +618,8 @@ async function refreshMexc(force){
                  :'<span class="kv">avg cost n/a</span>'}
               </div>`).join('')}
           </div>
-          <div style="flex:1;min-width:280px;max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+          <div style="flex:1;min-width:280px;position:relative">
+          <div style="position:absolute;inset:0;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px 10px">
             <span class="kv">recent spot trades</span>
             ${(a.spot_trades||[]).map(t=>`
               <div style="font-size:12px;margin-top:2px">
@@ -629,6 +630,7 @@ async function refreshMexc(force){
                 <span class="badge ${t.source==='bot'?'b-green':t.source==='panel'?'b-amber':''}" style="${t.source==='manual'?'background:rgba(139,148,158,.15);color:var(--dim);':''}"
                   title="${t.source==='bot'?'matched a bot position event (±2 min)':t.source==='panel'?'matched a panel manual-order (±2 min)':'no matching bot/panel event — placed manually (web/app)'}">${t.source}</span>
               </div>`).join('') || '<div class="kv" style="margin-top:2px">none</div>'}
+          </div>
           </div>
         </div>` : '';
       const sords = (a.spot_orders||[]).length
