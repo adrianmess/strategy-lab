@@ -611,6 +611,7 @@ async function refreshMexc(force){
             <span class="kv">open spot positions:</span>
             ${a.spot_positions.map(p=>`
               <div style="margin-top:3px"><b>${p.asset}</b> ${fnum(p.qty,4)}
+                <span class="kv" title="1 contract = 0.1 ${p.asset} — the unit the manual-order quantity field uses">(≈${fnum(p.qty/0.1,2)} contracts)</span>
                 <span class="kv">(≈${fnum(p.usdt_value)} USDT @ ${fnum(p.price,3)})</span>
                 ${p.avg_cost!=null?`<span class="kv" title="volume-weighted average of the most recent BUY fills covering this holding — an estimate">avg cost ${fnum(p.avg_cost,3)}</span>
                   <b class="${(p.pnl_pct||0)>=0?'pos':'neg'}">${(p.pnl_pct||0)>=0?'+':''}${fnum(p.pnl_pct,2)}%</b>`
