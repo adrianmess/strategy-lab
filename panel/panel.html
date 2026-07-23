@@ -51,6 +51,11 @@ details.term > summary{cursor:pointer;color:var(--dim);font-size:12px;user-selec
 details.term > summary:hover{color:var(--fg)}
 details.term[open] > summary{color:var(--fg)}
 details.term > pre{margin-top:4px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 22px;max-width:460px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.modal p{margin:0 0 12px;white-space:pre-wrap;font-size:13px;line-height:1.5}
+.modal input{width:100%;margin-bottom:12px;font-size:14px;padding:8px 10px}
+.modal .mrow{display:flex;gap:8px;justify-content:flex-end}
 </style>
 <link rel="stylesheet" href="/dashboard/assets/theme.css">
 <script src="/dashboard/assets/ui.js"></script>
@@ -169,6 +174,52 @@ async function api(path, body){
   if(!r.ok) alert('⚠ Request failed\n\n' + (j.error||'unknown error'));
   return j;
 }
+// ---------------- modal dialogs (replace native confirm/prompt) ----------------
+function modal({message, input=false, placeholder='', mustEqual=null, value='',
+                okLabel='OK', danger=false}){
+  return new Promise(res=>{
+    const bg = document.createElement('div'); bg.className='modal-bg';
+    const box = document.createElement('div'); box.className='modal';
+    const p = document.createElement('p'); p.textContent = message; box.appendChild(p);
+    let inp = null;
+    if(input){
+      inp = document.createElement('input');
+      inp.placeholder = placeholder; inp.value = value; inp.autocomplete='off';
+      box.appendChild(inp);
+    }
+    const row = document.createElement('div'); row.className='mrow';
+    const bC = document.createElement('button'); bC.textContent='Cancel';
+    const bO = document.createElement('button'); bO.textContent=okLabel;
+    bO.className = danger ? 'danger' : 'primary';
+    row.appendChild(bC); row.appendChild(bO); box.appendChild(row);
+    bg.appendChild(box); document.body.appendChild(bg);
+    const done = v=>{ document.removeEventListener('keydown', onKey); bg.remove(); res(v); };
+    const submit = ()=>{
+      if(input){
+        const v = inp.value.trim();
+        if(mustEqual && v.toUpperCase() !== mustEqual.toUpperCase()){
+          inp.style.borderColor='var(--red)'; inp.select(); return;
+        }
+        done(v || null);
+      } else done(true);
+    };
+    const onKey = e=>{
+      if(e.key==='Escape') done(input?null:false);
+      else if(e.key==='Enter') submit();
+    };
+    document.addEventListener('keydown', onKey);
+    bO.onclick = submit;
+    bC.onclick = ()=>done(input?null:false);
+    bg.onclick = e=>{ if(e.target===bg) done(input?null:false); };
+    if(inp){ inp.focus(); } else bO.focus();
+  });
+}
+const modalConfirm = (message, opts={}) => modal({message, ...opts});
+const modalWord = (message, word, okLabel) =>
+  modal({message, input:true, mustEqual:word, placeholder:`type ${word} and press Enter`,
+         okLabel: okLabel||word, danger:true});
+const modalPrompt = (message, value='') => modal({message, input:true, value});
+
 // ---------------- instances ----------------
 let INSTS = [];                       // [{id, cfg, port, ...}] from /api/instances
 let CUR = localStorage.getItem('curInst') || '1';
@@ -192,7 +243,7 @@ function instCard(i){
       <select id="acct_${i}" onchange="acctChanged('${i}')" title="Which MEXC API account this instance's config trades. Written into the config file; applies on the next trader start." style="width:80px"></select>
       <button class="primary" onclick="startTrader('${i}',false)">Start dry-run</button>
       <button class="danger" onclick="startTrader('${i}',true)">Start LIVE</button>
-      <button onclick="stopTrader('${i}')">Stop</button>
+      <button id="stopbtn_${i}" onclick="stopTrader('${i}')">Stop</button>
       ${i!=='1'?`<button class="small" title="Remove this instance (must be fully stopped)" onclick="removeInstance('${i}')">✕ remove</button>`:''}
     </div>
   </div>
@@ -265,7 +316,7 @@ function tabDrop(targetId){
   renderInstances();
 }
 async function renameInstance(i){
-  const nn = prompt(`Name for instance #${i} (shown on the tab and card — the number, browser profile and port never change):`, instName(i));
+  const nn = await modalPrompt(`Name for instance #${i} (shown on the tab and card — the number, browser profile and port never change):`, instName(i));
   if(!nn || nn===instName(i)) return;
   const r = await api('instances/rename',{id:i, name:nn});
   if(r.ok){ const x = INSTS.find(v=>v.id===i); if(x) x.name = r.name; renderInstances(); }
@@ -312,7 +363,7 @@ async function addInstance(){
   if(r.ok){ await api('instances'); CUR = r.id; localStorage.setItem('curInst', CUR); loadInstances(); }
 }
 async function removeInstance(i){
-  if(!confirm(`Remove instance ${i}? (Its trader and executor must be stopped.)`)) return;
+  if(!(await modalConfirm(`Remove ${instName(i)} (#${i})? Its trader and executor must be stopped.`, {okLabel:'Remove', danger:true}))) return;
   const r = await api('instances/remove',{id:i});
   if(r.ok){ CUR='1'; loadInstances(); }
 }
@@ -357,7 +408,7 @@ function fillAcctSelect(i){
 async function acctChanged(i){
   const file = $('tcfg_'+i).value;
   const acct = $('acct_'+i).value;
-  if(!confirm(`Point ${file} at account "${acct}"?\n\nWritten into the config (backup kept). A RUNNING trader keeps its current account until restarted.`)){
+  if(!(await modalConfirm(`Point ${file} at account "${acct}"?\n\nWritten into the config (backup kept). A RUNNING trader keeps its current account until restarted.`, {okLabel:'Change account'}))){
     fillAcctSelect(i); return;
   }
   const r = await fetch('/api/trader_config?file='+encodeURIComponent(file), {method:'POST',
@@ -446,18 +497,29 @@ const JOBSOPEN = new Set();
 async function startTrader(i, live){
   const cfg = $('tcfg_'+i).value;
   if(live){
-    const c = prompt(`Instance ${i}: this will place REAL orders via its executor.\nType LIVE to confirm:`);
-    if(c!=='LIVE') return;
+    const c = await modalWord(`${instName(i)} (#${i}): this will place REAL orders via its venue (${$('acct_'+i).value} — see badge).`, 'LIVE', 'Start LIVE');
+    if(c===null) return;
     await api('trader/start',{instance:i, config:cfg, live:true, confirm:'LIVE'});
   } else {
     await api('trader/start',{instance:i, config:cfg, live:false});
   }
   setTimeout(refresh,500);
 }
-async function stopTrader(i){ await api('trader/stop',{instance:i}); setTimeout(refresh,500); }
+async function stopTrader(i){
+  const b = $('stopbtn_'+i);
+  b.disabled = true; b.textContent = '⏳ stopping…';
+  try{
+    await api('trader/stop',{instance:i});
+    for(let k=0;k<20;k++){                      // wait until it's really gone
+      await new Promise(r=>setTimeout(r,700));
+      const s = await api('status?instance='+i);
+      if(!s.running) break;
+    }
+  } finally { b.disabled = false; b.textContent = 'Stop'; refresh(); }
+}
 async function startExecutor(i){
   const headless = $('wHeadless_'+i).checked;
-  if(headless && !confirm("Start headless (no visible window)?\n\nUse headed (unchecked) for the FIRST login — the MEXC captcha slider needs a real window. Once logged in, headless reuses the saved session.\n\nStart headless anyway?")) return;
+  if(headless && !(await modalConfirm("Start headless (no visible window)?\n\nUse headed (unchecked) for the FIRST login — the MEXC captcha slider needs a real window. Once logged in, headless reuses the saved session.", {okLabel:'Start headless'}))) return;
   const r = await api('webhook/start',{instance:i, headless});
   if(r.ok){
     if(r.note) alert(r.note);
@@ -467,7 +529,7 @@ async function startExecutor(i){
 }
 async function stopExecutor(i){ await api('webhook/stop',{instance:i}); setTimeout(refresh,500); }
 async function forceStopExecutors(){
-  if(!confirm("Force-stop ALL executor processes (every instance)?\n\nThis also kills executors started from a terminal and any orphaned executor browser windows. Non-executor programs on ports 5001-5011 are left alone.\n\nYour MEXC logins are safe — they live in the browser profiles on disk.\n\nRunning traders can't place orders until executors are restarted.")) return;
+  if(!(await modalConfirm("Force-stop ALL executor processes (every instance)?\n\nThis also kills executors started from a terminal and any orphaned executor browser windows. Non-executor programs on ports 5001-5011 are left alone.\n\nYour MEXC logins are safe — they live in the browser profiles on disk.", {okLabel:'Force stop all', danger:true}))) return;
   const r = await api('webhook/force_stop',{});
   alert((r.killed && r.killed.length ? 'force-stopped:\n  '+r.killed.join('\n  ') : 'nothing to stop')
     + (r.skipped && r.skipped.length ? '\nleft alone:\n  '+r.skipped.join('\n  ') : ''));
@@ -488,8 +550,8 @@ function stopShotAuto(i){ if(_shotAuto[i]){ clearInterval(_shotAuto[i]); _shotAu
 async function manual(i, action){
   const qty = +$('mQty_'+i).value, lev = +$('mLev_'+i).value, sym = $('mSym_'+i).value;
   const desc = action.replace('_',' ').toUpperCase() + (action.startsWith('open') ? ` ${qty} contract(s) of ${sym} at ${lev}x` : ` on ${sym}`);
-  const c = prompt(`Instance ${i} — this sends a REAL order to MEXC through its executor:\n\n  ${desc}\n\nType SEND to confirm:`);
-  if(c !== 'SEND') return;
+  const c = await modalWord(`${instName(i)} (#${i}) — REAL order via this instance's venue:\n\n  ${desc}`, 'SEND', 'Send order');
+  if(c===null) return;
   const box = $('mResult_'+i);
   const wrap = $('mResultd_'+i);
   wrap.style.display='block'; wrap.open = true;   // auto-expand: you asked for this output
@@ -578,7 +640,7 @@ async function refreshProcs(){
   }catch(e){}
 }
 async function killProc(pid, kind, live){
-  if(!confirm(`Kill ${kind} pid ${pid}${live?' — it is running LIVE':''}?`)) return;
+  if(!(await modalConfirm(`Kill ${kind} pid ${pid}${live?' — it is running LIVE':''}?`, {okLabel:'Kill', danger:true}))) return;
   const r = await api('processes/kill',{pid});
   if(r.ok){ refreshProcs(); setTimeout(refresh, 500); }
 }
@@ -609,9 +671,9 @@ async function adopt(i){
   if(c.strategy === 'metax'){
     // routers always get their OWN config file named after the run
     t = `config_${c.run}.json`;
-    if(!confirm(`Adopt ROUTER "${c.run}" into its own trader config?\n\n  ${t}\n  (created if missing — own state/log files, starts as dry-run)\n\nRun a dry-run soak before LIVE.`)) return;
+    if(!(await modalConfirm(`Adopt ROUTER "${c.run}" into its own trader config?\n\n  ${t}\n  (created if missing — own state/log files, starts as dry-run)\n\nRun a dry-run soak before LIVE.`, {okLabel:'Adopt router'}))) return;
   } else {
-    if(!confirm(`Copy parameters from "${c.label}" into ${t}? (backup is kept)`)) return;
+    if(!(await modalConfirm(`Copy parameters from "${c.label}" into ${t}? (backup is kept)`, {okLabel:'Adopt'}))) return;
   }
   const r = await api('adopt',{source:c.path, target:t});
   if(r.ok) alert((r.note || ('Adopted into '+r.target+'.')) + '\nPick "'+r.target+'" on an instance to start it.');
