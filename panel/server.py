@@ -1255,6 +1255,11 @@ def adopt():
         src = os.path.join(OPT, src)
     target = os.path.join(AT, d.get("target", "config.json"))
     best = json.load(open(src))
+    if (best.get("cand") or {}).get("stack"):
+        return jsonify(error="this is a method-STACKED router (research "
+                             "artifact) — no live adapter yet. Adopt the "
+                             "single-method router it currently picks "
+                             "instead (see cand.current in its config)."), 400
     if best.get("strategy") == "metax" \
             or (best.get("cand") or {}).get("strategy") == "metax":
         # ROUTER adopt: embed the resolved component configs so the trader

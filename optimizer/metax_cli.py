@@ -486,6 +486,183 @@ def walkforward(run_dir, step_days=42, total=8000, seed=5):
               open(os.path.join(run_dir, "walkforward.json"), "w"), indent=1)
 
 
+# ---------------- method-stacked router (router of routers) ----------------
+def stack(run_dirs, name, step_days=42, lookback_days=84, total=8000, seed=5):
+    """Combine 2+ same-mode metax runs with DIFFERENT bucketing methods into
+    one router-of-routers. Fully causal, so the chained curve IS the
+    walk-forward: at each fold start every source's assignment is re-picked
+    from past-only data (search_window), the sources are compared on their
+    trailing dd-penalized realized performance over the lookback window, and
+    the winner's trades are taken forward on the next unseen fold.
+
+    NOTE: no live adapter yet — this is a research artifact. If it beats the
+    single-method routers, adopt the underlying router it picks most, or ask
+    for strategy_metax stack support."""
+    srcs, mode = [], None
+    for rd in run_dirs:
+        rd = rd if os.path.isabs(rd) else os.path.join(HERE, rd)
+        meta = json.load(open(os.path.join(rd, "best_config.json")))
+        if meta.get("strategy") != "metax" or (meta.get("cand") or {}).get("stack"):
+            sys.exit(f"{rd}: not a plain metax run (need a single-method router)")
+        if mode is None:
+            mode = meta["mode"]
+        elif meta["mode"] != mode:
+            sys.exit("all stacked runs must share the same mode")
+        srcs.append(dict(run=os.path.basename(rd.rstrip("/")), meta=meta,
+                         method=meta["method"]))
+    if len(srcs) < 2:
+        sys.exit("need at least 2 source runs to stack")
+    if len({s["method"] for s in srcs}) < 2:
+        print("WARNING: all sources use the same method — stacking adds "
+              "little beyond re-assignment", flush=True)
+    glob_comps = []
+    for s in srcs:
+        cand = s["meta"]["cand"]
+        comps = [dict(run=c["run"], file=c["file"], strategy=c["strategy"],
+                      path=os.path.join(RUNS, c["run"], c["file"]),
+                      holdout_pct=0.0)
+                 for c in cand["components"]]
+        times, bucket, n_b = bucket_arrays(s["method"])
+        print(f"source {s['run']} ({s['method']}, {n_b} buckets):", flush=True)
+        comps, tabs = build_tables(comps, times, bucket, mode)
+        if len(comps) < 1:
+            sys.exit(f"{s['run']}: no surviving components")
+        s.update(comps=comps, tabs=tabs, n_b=n_b, offset=len(glob_comps))
+        glob_comps += comps
+    dd_gate = 0.35 if mode == "spot" else 0.50
+    step, look = step_days * _DAY_NS, lookback_days * _DAY_NS
+    t_first = min(t[0, 0] for s in srcs for t in s["tabs"] if len(t))
+    t_last = max(t[:, 1].max() for s in srcs for t in s["tabs"] if len(t))
+    t0 = np.datetime64("2025-01-01").astype("datetime64[ns]").astype("int64")
+    T = max(t0, int(t_first + 200 * _DAY_NS))
+    rng = np.random.default_rng(seed)
+    chained, picks, folds = [], [], 0
+    last_exit = -np.inf
+
+    def pick_source(T_cut):
+        """(sel_score, src_idx, assign) chosen from PAST-only data at T_cut."""
+        best = None
+        for j, s in enumerate(srcs):
+            a = search_window(s["tabs"], s["n_b"], len(s["comps"]), T_cut,
+                              total, rng, dd_gate=dd_gate)
+            if a is None:
+                continue
+            st = rows_stats(merge_taken(a, s["tabs"], T_cut - look, T_cut))
+            sel = (st["score"] - 0.3 * st["maxdd"]) \
+                if (st and not st["liq"]) else -9.0
+            if best is None or sel > best[0]:
+                best = (sel, j, a)
+        return best
+
+    print(f"stack walk-forward: {step_days}d folds, {lookback_days}d trailing "
+          f"selection, from {str(np.datetime64(int(T),'ns'))[:10]}", flush=True)
+    while T < t_last - _DAY_NS:
+        best = pick_source(T)
+        d = str(np.datetime64(int(T), "ns"))[:10]
+        if best is None:
+            print(f"  fold @{d}: no feasible source — flat", flush=True)
+            picks.append(dict(fold=d, source=None))
+        else:
+            _, j, a = best
+            s = srcs[j]
+            took = []
+            for row in merge_taken(a, s["tabs"], T, T + step):
+                if row[0] < last_exit:          # slot still busy across folds
+                    continue
+                last_exit = row[1]
+                r = row.copy()
+                r[7] = s["offset"] + int(row[7])
+                took.append(r)
+            st = rows_stats(np.array(took) if took else np.zeros((0, 8)))
+            print(f"  fold @{d}: -> {s['run']} ({s['method']}) "
+                  + (f"{st['n']} trades, eq x{st['eq']/1000:.3f}"
+                     if st else "no trades"), flush=True)
+            chained += took
+            picks.append(dict(fold=d, source=s["run"], method=s["method"],
+                              assign=[int(x) for x in a]))
+        folds += 1
+        T += step
+    run_dir = os.path.join(RUNS, name)
+    os.makedirs(run_dir, exist_ok=True)
+    S = rows_stats(np.array(chained) if chained else np.zeros((0, 8)))
+    methods = "+".join(dict.fromkeys(s["method"] for s in srcs))
+    if not S:
+        print("STACK VERDICT: no OOS trades at all — NO-TRADES", flush=True)
+        json.dump(dict(verdict="NO-TRADES", oos_pct_mo=0.0, maxdd=0.0, n=0,
+                       folds=folds, step_days=step_days,
+                       at=time.strftime("%Y-%m-%d %H:%M")),
+                  open(os.path.join(run_dir, "walkforward.json"), "w"), indent=1)
+        return
+    pct = 100 * (math.exp(S["growth"]) - 1)
+    verdict = "PASS" if (pct > 0 and not S["liq"] and S["maxdd"] <= MAX_DD) \
+        else "FAIL"
+    print(f"STACK VERDICT ({name}): {verdict} — chained OOS {pct:+.1f}%/mo, "
+          f"dd {100*S['maxdd']:.0f}%, {S['n']} trades over {folds} folds, "
+          f"tpm {S['tpm']:.1f}", flush=True)
+    # the assignment to trade NEXT: same causal pick with past = everything
+    cur = pick_source(int(t_last) + 1)
+    current = None
+    if cur is not None:
+        _, j, a = cur
+        current = dict(source=srcs[j]["run"], method=srcs[j]["method"],
+                       assign=[int(x) for x in a])
+        print(f"current pick (all data): {current['source']} "
+              f"({current['method']})", flush=True)
+    cand = dict(strategy="metax", stack=True, mode=mode,
+                step_days=step_days, lookback_days=lookback_days,
+                sources=[dict(run=s["run"], method=s["method"],
+                              components=[dict(run=c["run"], file=c["file"],
+                                               strategy=c["strategy"])
+                                          for c in s["comps"]])
+                         for s in srcs],
+                current=current, fold_picks=picks,
+                live_replication="NOT YET SUPPORTED by strategy_metax — "
+                                 "research artifact; adopt the underlying "
+                                 "single-method router instead")
+    out = dict(strategy="metax", mode=mode, method=f"stack:{methods}",
+               algo="stacked-router", per_regime=True, cand=cand,
+               metrics=S, holdout=S, stack=True,
+               evaluated=folds * total * len(srcs),
+               generated=time.strftime("%Y-%m-%d %H:%M"))
+    json.dump(out, open(os.path.join(run_dir, "best_config.json"), "w"),
+              indent=1, default=float)
+    json.dump(dict(pool=[], evaluated=out["evaluated"], seed_base=seed,
+                   reservoir=[], res_seen=0, runtime_s=0),
+              open(os.path.join(run_dir, "pool2.json"), "w"))
+    json.dump(dict(verdict=verdict, oos_pct_mo=pct, maxdd=S["maxdd"], n=S["n"],
+                   folds=folds, step_days=step_days,
+                   note="stack is causal by construction: this verdict IS the "
+                        "full-history chained OOS",
+                   at=time.strftime("%Y-%m-%d %H:%M")),
+              open(os.path.join(run_dir, "walkforward.json"), "w"), indent=1)
+    publish_backtest(name, mode, f"stack:{methods}", glob_comps,
+                     dict(stack_fold_picks=picks),
+                     np.array(chained), S, None)
+
+
+def stack_auto_sources(mode):
+    """All WF-PASS single-method metax runs for this mode (no month12 —
+    seasonal research; no stacks)."""
+    out = []
+    for d in sorted(os.listdir(RUNS)):
+        p = os.path.join(RUNS, d, "best_config.json")
+        w = os.path.join(RUNS, d, "walkforward.json")
+        if not (os.path.exists(p) and os.path.exists(w)):
+            continue
+        try:
+            b, wf = json.load(open(p)), json.load(open(w))
+        except Exception:
+            continue
+        if b.get("strategy") != "metax" or b.get("mode") != mode:
+            continue
+        if (b.get("cand") or {}).get("stack") or b.get("method") == "month12":
+            continue
+        if wf.get("verdict") != "PASS":
+            continue
+        out.append(os.path.join(RUNS, d))
+    return out
+
+
 # ---------------- phase 2: joint refine of component params ----------------
 def refine(run_dir, iters, seed=11):
     """Hill-climb component parameters UNDER the frozen winning assignment.
@@ -596,6 +773,14 @@ def main():
                     help="run dir of an existing metax run: chronological "
                          "walk-forward validation (assignment re-picked from "
                          "past-only data at each step, applied forward)")
+    ap.add_argument("--stack", nargs="+", default=None,
+                    help="2+ metax run dirs: method-stacked router (router of "
+                         "routers), causal fold-by-fold source selection")
+    ap.add_argument("--stack-auto", default=None, choices=["lev", "spot"],
+                    help="stack ALL WF-PASS single-method metax runs of this "
+                         "mode (excludes month12 and existing stacks)")
+    ap.add_argument("--lookback-days", type=int, default=84,
+                    help="trailing window for stack source selection")
     ap.add_argument("--step-days", type=int, default=42)
     ap.add_argument("--iters", type=int, default=400)
     ap.add_argument("--mode", default=None, choices=["lev", "spot"])
@@ -606,6 +791,19 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     args = ap.parse_args()
 
+    if args.stack or args.stack_auto:
+        dirs = args.stack or stack_auto_sources(args.stack_auto)
+        if args.stack_auto and len(dirs) < 2:
+            sys.exit(f"stack-auto: fewer than 2 WF-PASS {args.stack_auto} "
+                     f"routers on disk ({len(dirs)})")
+        nm = args.name or f"stack_{args.stack_auto or 'custom'}"
+        if args.stack_auto:
+            print(f"stack-auto sources: {[os.path.basename(d) for d in dirs]}",
+                  flush=True)
+        stack(dirs, nm, step_days=args.step_days,
+              lookback_days=args.lookback_days,
+              total=min(args.total, 8000), seed=args.seed)
+        return
     if args.walkforward:
         rd = args.walkforward if os.path.isabs(args.walkforward) \
             else os.path.join(HERE, args.walkforward)

@@ -268,8 +268,17 @@ def meta_specs():
                           mh=7, status="pending"))
     return S
 
+def stack_specs():
+    """Method-stacked router: causal router-of-routers over the WF-PASS
+    single-method metax runs of each mode. Sources resolved at runtime
+    (--stack-auto), so this stays honest as new routers appear."""
+    return [dict(id=f"stk_{mode}", wave=1, kind="metax_stack",
+                 strategy="metax", mode=mode, method="stack",
+                 status="pending")
+            for mode in ("spot", "lev")]
+
 MATRICES = {"c1": wave1_specs, "era": era_specs, "survival": survival_specs,
-            "meta": meta_specs}
+            "meta": meta_specs, "stack": stack_specs}
 
 
 # ---------------- helpers ----------------
@@ -371,6 +380,9 @@ class Campaign:
             return [sys.executable, "metax_cli.py", "--mode", spec["mode"],
                     "--buckets", spec["method"], "--name", name,
                     "--total", str(spec.get("total", 30000))]
+        if spec.get("kind") == "metax_stack":
+            return [sys.executable, "metax_cli.py",
+                    "--stack-auto", spec["mode"], "--name", name]
         if spec.get("kind") == "metax_refine":
             return [sys.executable, "metax_cli.py",
                     "--refine", f"runs/{spec['run_override']}",

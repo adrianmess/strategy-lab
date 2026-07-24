@@ -374,7 +374,9 @@ function render(){
     <td class="hint">${e.created||''}</td>
     <td><span class="rstars r${e.rating||0}" title="quality rating — independent of the ★ best mark">${[1,2,3].map(k=>
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
-    <td style="white-space:nowrap"><input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page"><button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+    <td style="white-space:nowrap">${e.strategy==='metax'
+      ? `<input type="checkbox" disabled title="MetaX router runs can't be combined here — combine merges opt2 candidate pools (flat params for one strategy family), but a router's params are routing tables built by metax_cli. To combine routers with different methods, use the stacked router (metax_cli stack).">`
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
