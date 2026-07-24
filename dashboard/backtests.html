@@ -139,9 +139,14 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
       <div id="mgrid" class="mgrid"></div>
     </div>
   </div>
-  <h2 style="margin-top:14px">Trades <span class="hint" id="tcount"></span></h2>
+  <h2 style="margin-top:14px">Trades <span class="hint" id="tcount"></span>
+    <span class="hint" style="font-weight:400;font-size:12.5px;margin-left:14px">
+      excursion worse than <input id="maeTh" type="number" step="0.5" min="0" placeholder="—" style="width:58px"> %
+      <select id="maeBasis" title="price move, or multiplied by each trade's leverage (what your equity felt)"><option value="price">price move</option><option value="equity">× lev (equity)</option></select>
+      <span id="maeSum" style="margin-left:8px"></span>
+    </span></h2>
   <div style="max-height:340px;overflow-y:auto">
-  <table id="tt"><thead><tr><th>entry</th><th>exit</th><th>dir</th><th>entry px</th><th>exit px</th><th title="price move in the trade's direction; hover a value for the leveraged equity impact">% gain</th><th>net</th><th>worst excursion</th><th>reason</th><th>lev</th></tr></thead><tbody></tbody></table>
+  <table id="tt"><thead><tr><th>entry</th><th>exit</th><th>dir</th><th>entry px</th><th>exit px</th><th title="price move in the trade's direction; hover a value for the leveraged equity impact">% gain</th><th>net</th><th title="worst adverse move during the trade (MAE); average is across all trades of this run">worst excursion<br><span id="maeHdr" class="hint" style="font-weight:400"></span></th><th>reason</th><th>lev</th></tr></thead><tbody></tbody></table>
   </div>
   <div id="openinfo" style="margin:6px 0"></div>
   <div id="gapinfo" class="hint" style="margin-top:10px"></div>
@@ -457,10 +462,42 @@ function select(i){
   window.onThemeChange = ()=>{ if(sel!==null) select(sel); };
   document.getElementById('mgrid').innerHTML=(e.monthly||[]).map(m=>
     `<div class="mcell"><div class="hint">${m.month}</div><div class="${m.ret_pct>=0?'pos':'neg'}">${fp(m.ret_pct)}</div></div>`).join('')||'<span class="hint">n/a</span>';
+  renderTrades(e);
+  const g = e.gap_handling;
+  const gm = e.gap_mode ? ` Gap mode: <b>${e.gap_mode}</b>${e.gap_mode==='skip_contaminated'?` — entries were additionally suppressed on ${(e.suppressed_bars||0).toLocaleString()} bars while indicators re-converged after small in-segment gaps`:''}.` : '';
+  document.getElementById('gapinfo').innerHTML = g ?
+    `<b style="color:var(--green)">Data gaps skipped.</b> Simulation split into ${g.n_segments} continuous segments (gap threshold ${g.threshold_min} min); no positions held across gaps, no P&L inside them.${gm}` +
+    (g.skipped_gaps&&g.skipped_gaps.length?`<br>Skipped ranges: ${g.skipped_gaps.join(' · ')}`:'') +
+    (g.retroactive?'<br><i>(metadata added retroactively — this run did use segmented data)</i>':'') :
+    '<b style="color:var(--amber)">Gap handling unknown</b> (entry predates gap tracking).';
+  document.getElementById('cfg').textContent = JSON.stringify(e.config,null,1)||'—';
+}
+function renderTrades(e){
   const tt=document.querySelector('#tt tbody');
   const tr=(e.trades||[]);
   const ops=(e.open_positions||[]).filter(o=>o.at==='end of data');
-  document.getElementById('tcount').textContent = (tr.length||ops.length)?`(showing ${tr.length}${ops.length?` + ${ops.length} open`:''})`:'(none stored)';
+  // excursion basis: raw price move, or × leverage = equity impact (identical for spot)
+  const basisSel = document.getElementById('maeBasis');
+  basisSel.style.display = (e.mode==='lev') ? '' : 'none';
+  const basis = (e.mode==='lev') ? basisSel.value : 'price';
+  const bm = t => 100*(t.mae||0)*(basis==='equity'?(t.lev||1):1);
+  const thRaw = parseFloat(document.getElementById('maeTh').value);
+  const th = (isFinite(thRaw) && thRaw>0) ? -Math.abs(thRaw) : null;
+  const shown = (th==null) ? tr : tr.filter(t=>bm(t)<=th);
+  // average worst excursion across ALL trades of this run (unfiltered)
+  const avg = tr.length ? tr.reduce((a,t)=>a+bm(t),0)/tr.length : null;
+  document.getElementById('maeHdr').textContent = avg==null ? '' :
+    `avg ${avg.toFixed(2)}%${basis==='equity'?' eq':''}`;
+  const sum = document.getElementById('maeSum');
+  if(th!=null && tr.length){
+    const netSum = shown.reduce((a,t)=>a+(t.net||0),0);
+    sum.innerHTML = `→ <b>${shown.length}</b> of ${tr.length} trades ` +
+      `(<b>${(100*shown.length/tr.length).toFixed(1)}%</b>) · combined net ` +
+      `<span class="${netSum>=0?'pos':'neg'}">${netSum>=0?'+':''}${netSum.toFixed(2)}</span>`;
+  } else sum.textContent='';
+  document.getElementById('tcount').textContent = (tr.length||ops.length)
+    ? `(showing ${shown.length}${th!=null?` of ${tr.length}`:''}${ops.length?` + ${ops.length} open`:''})`
+    : '(none stored)';
   document.getElementById('openinfo').innerHTML = ops.map(o=>
     `<span class="${o.at==='end of data'?'neg':'hint'}" style="font-weight:600">⚠ OPEN POSITION at ${o.at}: ${o.dir.toUpperCase()} entered ${o.entry_t} @ $${o.entry.toFixed(2)} · ` +
     `mark $${o.mark.toFixed(2)} (${(100*o.move_pct).toFixed(1)}% ${o.move_pct<0?'underwater':'in profit'} at ${o.lev.toFixed(1)}×, ` +
@@ -473,24 +510,19 @@ function select(i){
     <td class="${o.unreal>=0?'pos':'neg'}">${o.unreal.toFixed(2)} <span class="hint">unrealized</span></td>
     <td>—</td>
     <td class="neg">still open</td><td>${o.lev.toFixed(1)}×</td></tr>`).join('');
-  tt.innerHTML = openRows + tr.slice().reverse().map(t=>{
+  tt.innerHTML = openRows + shown.slice().reverse().map(t=>{
     const pct = 100*(t.exit/t.entry-1)*(t.dir==='long'?1:-1);
+    const other = 100*(t.mae||0)*(basis==='equity'?1:(t.lev||1));
     return `<tr>
     <td>${(t.entry_t||'').slice(0,16)}</td><td>${(t.exit_t||'').slice(0,16)}</td><td>${t.dir}</td>
     <td>${t.entry.toFixed(3)}</td><td>${t.exit.toFixed(3)}</td>
     <td>${fpc(pct, t.lev)}</td>
     <td class="${t.net>=0?'pos':'neg'}">${t.net.toFixed(2)}</td>
-    <td>${(100*t.mae).toFixed(2)}%</td>
-    <td class="${t.reason==='profit_target'?'':'neg'}">${t.reason}</td><td>${t.lev.toFixed(1)}×</td></tr>`}).join('');
-  const g = e.gap_handling;
-  const gm = e.gap_mode ? ` Gap mode: <b>${e.gap_mode}</b>${e.gap_mode==='skip_contaminated'?` — entries were additionally suppressed on ${(e.suppressed_bars||0).toLocaleString()} bars while indicators re-converged after small in-segment gaps`:''}.` : '';
-  document.getElementById('gapinfo').innerHTML = g ?
-    `<b style="color:var(--green)">Data gaps skipped.</b> Simulation split into ${g.n_segments} continuous segments (gap threshold ${g.threshold_min} min); no positions held across gaps, no P&L inside them.${gm}` +
-    (g.skipped_gaps&&g.skipped_gaps.length?`<br>Skipped ranges: ${g.skipped_gaps.join(' · ')}`:'') +
-    (g.retroactive?'<br><i>(metadata added retroactively — this run did use segmented data)</i>':'') :
-    '<b style="color:var(--amber)">Gap handling unknown</b> (entry predates gap tracking).';
-  document.getElementById('cfg').textContent = JSON.stringify(e.config,null,1)||'—';
+    <td title="${basis==='equity'?`price move ${(100*(t.mae||0)).toFixed(2)}%`:`equity impact ${other.toFixed(2)}% at ${(t.lev||1).toFixed(1)}×`}">${bm(t).toFixed(2)}%</td>
+    <td class="${t.reason==='profit_target'?'':'neg'}">${t.reason}</td><td>${(t.lev||1).toFixed(1)}×</td></tr>`}).join('');
 }
+document.getElementById('maeTh').oninput = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
+document.getElementById('maeBasis').onchange = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
 (function(){
   if(!BT.length){ render(); return; }
   // only auto-expand when a specific backtest was linked to (?sel=name)
