@@ -63,7 +63,17 @@ def slice_pre(pre, i0, i1):
     n = len(pre["c"])
     out = {}
     for k, v in pre.items():
-        out[k] = v[i0:i1] if isinstance(v, np.ndarray) and len(v) == n else v
+        if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == n:
+            out[k] = v[i0:i1]
+        elif isinstance(v, np.ndarray) and v.ndim == 2 and v.shape[1] == n:
+            # variant stacks (V, n): slice the BAR axis. Before 2026-07 these
+            # were passed through whole, silently misaligning every variant
+            # indicator by i0 bars whenever a window started mid-history
+            # (alt blocks, --train-start) — engine3's per-bar reads then came
+            # from months-earlier bars.
+            out[k] = v[:, i0:i1]
+        else:
+            out[k] = v
     return out
 
 def run_adaptive(pres_adaptive, P, regimes, t0=None, t1=None, warmup=3000,
