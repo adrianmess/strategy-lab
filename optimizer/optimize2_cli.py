@@ -560,7 +560,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                        max_dd=args.max_dd, max_hold_days=args.max_hold_days,
                        gap_mode=args.gap_mode, scoring=args.scoring,
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=total_eval,
-                       crossfit=report, cand=None, metrics=None, pair=_pair_tag(),
+                       crossfit=report, cand=None, metrics=None, pair=_pair_tag(), market_data=_market_tag(),
                        generated=time.strftime("%Y-%m-%d %H:%M")),
                   open("best_config.json", "w"), indent=1, default=float)
         return None
@@ -590,6 +590,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                crossfit=report, winner_origin=winner["origin"],
                generated=time.strftime("%Y-%m-%d %H:%M"))
     out["pair"] = _pair_tag()
+    out["market_data"] = _market_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print(f"\nCROSS-FIT WINNER ({winner['origin']}): "
           + (f"lockbox worst {(pow(2.718281828, table_holdout['growth'])-1)*100:+.1f}%/mo"
@@ -623,6 +624,10 @@ def auto_backtest(args, run_dir):
 def _pair_tag():
     return os.environ.get("LAB_COIN", "sol").upper() + "_USDT"
 
+
+def _market_tag():
+    return os.environ.get("LAB_MARKET", "perp").lower()
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -640,6 +645,12 @@ def main():
                              "pepe", "wif"],
                     help="trading pair (vs USDT): selects data files and "
                          "per-symbol precompute caches; stamped on the run")
+    ap.add_argument("--data-market", default="auto",
+                    choices=["auto", "spot", "perp"],
+                    help="which venue's historic candles to research on. "
+                         "auto (default): spot mode uses SPOT candles, lev "
+                         "uses perp — 'perp' reproduces legacy spot-on-perp "
+                         "runs")
     ap.add_argument("--cadapt", action="store_true",
                     help="continuous adaptation: candidates are TWO endpoint "
                          "param sets (calm / volatile) interpolated across the "
@@ -719,6 +730,14 @@ def main():
     if args.symbol.lower() != "sol":
         print(f"PAIR: {args.symbol.upper()}_USDT (per-symbol data + caches)",
               flush=True)
+    # chart data follows the traded venue: spot mode -> SPOT candles,
+    # lev mode -> perp candles (override with --data-market to reproduce
+    # legacy spot-on-perp runs)
+    mkt = args.data_market
+    if mkt == "auto":
+        mkt = "spot" if args.mode == "spot" else "perp"
+    os.environ["LAB_MARKET"] = mkt
+    print(f"CHART DATA: {mkt} candles", flush=True)
     if args.lev_stops:
         # env var: inherited by the mp.Pool workers AND honored by the in-process
         # finalize/holdout evaluations (see optimizer2.eval3 / wf2.eval_config)
@@ -1063,6 +1082,7 @@ def main():
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
     out["pair"] = _pair_tag()
+    out["market_data"] = _market_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
     print(json.dumps(best_m, indent=1, default=float))
@@ -1154,6 +1174,7 @@ def main():
                       note=f"OOS-best from pool rank #{best_h+1} (train-best was rank #1). "
                            "Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.")
             hb["pair"] = _pair_tag()
+            hb["market_data"] = _market_tag()
             json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
             out["holdout_best"] = dict(rank=best_h + 1, holdout=holdouts[best_h])
             print(f"\nOOS-BEST is pool rank #{best_h+1} -> saved to holdout_best_config.json")
@@ -1170,6 +1191,7 @@ def main():
             except Exception:
                 pass
         out["pair"] = _pair_tag()
+    out["market_data"] = _market_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
     auto_backtest(args, run_dir)

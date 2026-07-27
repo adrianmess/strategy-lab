@@ -28,10 +28,16 @@ def coin():
 def pair():
     return f"{coin().upper()}_USDT"
 
+def market():
+    """'perp' (default, all legacy research) or 'spot' (LAB_MARKET=spot):
+    which venue's historic candles the research runs on."""
+    return os.environ.get("LAB_MARKET", "perp").lower()
+
 def load_segments():
     c = coin()
-    df3 = pd.read_parquet(_data_path(f"{c}_3min.parquet"))
-    df1 = pd.read_parquet(_data_path(f"{c}_1min.parquet"))
+    sfx = "_spot" if market() == "spot" else ""
+    df3 = pd.read_parquet(_data_path(f"{c}{sfx}_3min.parquet"))
+    df1 = pd.read_parquet(_data_path(f"{c}{sfx}_1min.parquet"))
     df3["t"] = df3["t"].dt.tz_localize(None)
     df1["t"] = df1["t"].dt.tz_localize(None)
     d = df3["t"].diff().dt.total_seconds().div(60).fillna(3)

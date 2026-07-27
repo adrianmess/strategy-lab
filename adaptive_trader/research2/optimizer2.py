@@ -34,6 +34,8 @@ def load_g3():
     _coin = os.environ.get("LAB_COIN", "sol").lower()
     if _coin != "sol":
         cache_dir = os.path.join(cache_dir, _coin)
+    if os.environ.get("LAB_MARKET", "perp").lower() == "spot":
+        cache_dir = os.path.join(cache_dir, "spotdata")
     os.makedirs(cache_dir, exist_ok=True)
     from engine3 import variants_hash, VARIANTS, _DEFAULT_VARIANTS
     h = variants_hash()

@@ -7,8 +7,8 @@ close, volume, trades_count), so load_segments() and every engine work
 unchanged on the new pair.
 
 Usage:
-  python3 fetch_pair.py btc            # full backfill (resumable) + update
-  python3 fetch_pair.py btc eth doge   # several pairs sequentially
+  python3 fetch_pair.py btc                    # perp data (default)
+  python3 fetch_pair.py --market spot btc eth  # SPOT candles -> <coin>_spot_*.parquet
 Env: COINAPI_KEY overrides the default key.
 """
 import gzip, json, os, sys, time, urllib.request
@@ -69,9 +69,10 @@ def to_df(rows):
     return df[COLS]
 
 
-def backfill(coin, period, fname):
+def backfill(coin, period, fname, market="perp"):
     os.makedirs(DATA, exist_ok=True)
-    symbol_id = f"MEXCFTS_PERP_{coin.upper()}_USDT"
+    symbol_id = (f"MEXC_SPOT_{coin.upper()}_USDT" if market == "spot"
+                 else f"MEXCFTS_PERP_{coin.upper()}_USDT")
     path = os.path.join(DATA, fname)
     if os.path.exists(path):
         df = pd.read_parquet(path)
@@ -101,11 +102,18 @@ def backfill(coin, period, fname):
 
 
 if __name__ == "__main__":
-    coins = [c.lower() for c in sys.argv[1:]]
+    argv = sys.argv[1:]
+    market = "perp"
+    if "--market" in argv:
+        i = argv.index("--market")
+        market = argv[i + 1].lower()
+        argv = argv[:i] + argv[i + 2:]
+    coins = [c.lower() for c in argv]
     if not coins:
-        sys.exit("usage: fetch_pair.py <coin> [<coin> ...]   e.g. btc eth doge")
+        sys.exit("usage: fetch_pair.py [--market spot|perp] <coin> [...]")
+    sfx = "_spot" if market == "spot" else ""
     for c in coins:
-        print(f"=== {c.upper()}_USDT ===", flush=True)
-        backfill(c, "3MIN", f"{c}_3min.parquet")
-        backfill(c, "1MIN", f"{c}_1min.parquet")
+        print(f"=== {c.upper()}_USDT ({market}) ===", flush=True)
+        backfill(c, "3MIN", f"{c}{sfx}_3min.parquet", market)
+        backfill(c, "1MIN", f"{c}{sfx}_1min.parquet", market)
     print("all done", flush=True)

@@ -71,12 +71,16 @@ def _cache_path(fn):
     in one cache would be catastrophic (wrong price data per symbol)."""
     d = os.environ.get("WF2_CACHE_DIR", "")
     c = os.environ.get("LAB_COIN", "sol").lower()
+    mkt = os.environ.get("LAB_MARKET", "perp").lower()
     if d:
         if c != "sol":
             d = os.path.join(d, c)
+        if mkt == "spot":
+            d = os.path.join(d, "spotdata")
         os.makedirs(d, exist_ok=True)
         return os.path.join(d, fn)
-    return fn if c == "sol" else f"{c}_{fn}"
+    pre = ("" if c == "sol" else f"{c}_") + ("spotdata_" if mkt == "spot" else "")
+    return pre + fn
 
 _G = {}
 

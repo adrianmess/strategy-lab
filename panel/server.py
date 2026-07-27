@@ -1546,6 +1546,7 @@ def runs2():
                 bc = json.load(open(best_p))
                 e["method"] = bc.get("method")
                 e["pair"] = bc.get("pair", "SOL_USDT")
+                e["market_data"] = bc.get("market_data", "perp")
                 e["mode"] = bc.get("mode", e.get("mode"))
                 e["no_survivors"] = ("cand" in bc and bc.get("cand") is None)
                 e["holdout"] = bc.get("holdout")

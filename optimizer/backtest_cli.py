@@ -567,18 +567,26 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
 
 def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_contaminated"):
     cfg = json.load(open(cfg_path))
-    # trading pair: select the config's data/caches BEFORE any globals load.
-    # A process that already loaded one coin's data must not silently sim
-    # another coin's config against it.
-    _coin = (cfg.get("pair") or "SOL_USDT").split("_")[0].lower()
-    _prev = os.environ.get("LAB_COIN", "sol").lower()
-    if _coin != _prev:
-        import wf2 as _W
-        if _W._G:
-            raise SystemExit(f"config is {_coin.upper()}_USDT but this process "
-                             f"already loaded {_prev.upper()} data — run it in "
-                             f"a fresh process")
-    os.environ["LAB_COIN"] = _coin
+    # trading pair + chart-data venue: select the config's data/caches BEFORE
+    # any globals load. Configs without market_data are legacy (perp candles).
+    # A process that already loaded one dataset must not silently sim another
+    # config against it. LAB_DATA_PINNED=1 (set by metax_cli) means the caller
+    # already pinned the dataset — components are simulated on the ROUTER's
+    # dataset, whatever their own configs say.
+    if os.environ.get("LAB_DATA_PINNED") != "1":
+        _coin = (cfg.get("pair") or "SOL_USDT").split("_")[0].lower()
+        _mkt = (cfg.get("market_data") or "perp").lower()
+        _prev = os.environ.get("LAB_COIN", "sol").lower()
+        _prevm = os.environ.get("LAB_MARKET", "perp").lower()
+        if (_coin, _mkt) != (_prev, _prevm):
+            import wf2 as _W
+            if _W._G:
+                raise SystemExit(
+                    f"config is {_coin.upper()}_USDT/{_mkt} but this process "
+                    f"already loaded {_prev.upper()}/{_prevm} data — run it "
+                    f"in a fresh process")
+        os.environ["LAB_COIN"] = _coin
+        os.environ["LAB_MARKET"] = _mkt
     cand = cfg.get("cand")
     if not cand:
         raise SystemExit("This run produced NO surviving candidate (see its report) — "
@@ -801,6 +809,7 @@ def main():
     entry["gap_handling"] = gap_info()
     entry.setdefault("pair",
                      os.environ.get("LAB_COIN", "sol").upper() + "_USDT")
+    entry.setdefault("market_data", os.environ.get("LAB_MARKET", "perp"))
     entries = [e for e in load_backtests() if e["name"] != args.name]
     entries.append(entry)
     save_backtests(entries)

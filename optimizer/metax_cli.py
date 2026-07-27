@@ -308,6 +308,7 @@ def publish_backtest(name, mode, buckets, comps, assign, taken, tr_s, ho_s):
                                "positions cross a gap"),
         strategy="metax", mode=mode, method=buckets,
         pair=os.environ.get("LAB_COIN", "sol").upper() + "_USDT",
+        market_data=os.environ.get("LAB_MARKET", "perp"),
         kind="full-history (router merge)",
         config=dict(assign=assign, components=[c["run"] for c in comps]),
         created=time.strftime("%Y-%m-%d %H:%M"))
@@ -427,6 +428,8 @@ def walkforward(run_dir, step_days=42, total=8000, seed=5):
     """The honest chronological test: at each cutoff, pick the assignment from
     the PAST only, trade it on the NEXT unseen window, chain the windows."""
     meta = json.load(open(os.path.join(run_dir, "best_config.json")))
+    os.environ["LAB_MARKET"] = (meta.get("market_data") or "perp").lower()
+    os.environ["LAB_DATA_PINNED"] = "1"
     cand, mode, buckets = meta["cand"], meta["mode"], meta["method"]
     comps = [dict(run=c["run"], file=c["file"], strategy=c["strategy"],
                   path=os.path.join(RUNS, c["run"], c["file"]),
@@ -513,6 +516,11 @@ def stack(run_dirs, name, step_days=42, lookback_days=84, total=8000, seed=5):
                          method=meta["method"]))
     if len(srcs) < 2:
         sys.exit("need at least 2 source runs to stack")
+    _mkts = {(s_["meta"].get("market_data") or "perp").lower() for s_ in srcs}
+    if len(_mkts) > 1:
+        sys.exit(f"sources mix chart datasets {sorted(_mkts)} — stack same-data routers only")
+    os.environ["LAB_MARKET"] = _mkts.pop()
+    os.environ["LAB_DATA_PINNED"] = "1"
     if len({s["method"] for s in srcs}) < 2:
         print("WARNING: all sources use the same method — stacking adds "
               "little beyond re-assignment", flush=True)
@@ -823,7 +831,10 @@ def main():
               "flagged research, not an adoption candidate.", flush=True)
     run_dir = os.path.join(RUNS, args.name)
     os.makedirs(run_dir, exist_ok=True)
-    print(f"mining components ({args.mode})…", flush=True)
+    os.environ["LAB_MARKET"] = "spot" if args.mode == "spot" else "perp"
+    os.environ["LAB_DATA_PINNED"] = "1"
+    print(f"mining components ({args.mode}) on "
+          f"{os.environ['LAB_MARKET']} candles…", flush=True)
     comps = mine_components(args.mode)
     if len(comps) < 2:
         print("fewer than 2 qualifying components — nothing to route", flush=True)
@@ -865,6 +876,7 @@ def main():
                                   "entry bar's bucket is assigned to that "
                                   "component and the single slot is free"))
     out = dict(strategy="metax", mode=args.mode, method=args.buckets,
+               market_data=os.environ.get("LAB_MARKET", "perp"),
                algo="router", per_regime=True, cand=cand,
                metrics=tr_s, holdout=ho_s,
                seasonal_flag=(args.buckets == "month12"),
