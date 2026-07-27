@@ -535,6 +535,7 @@ function renderRuns(){
         ${r.walkforward
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="chronological walk-forward: chained out-of-sample ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
           : `<span class="badge b-amber" title="no chronological walk-forward yet — the honest gate before adopting. Runs automatically as campaign wave 3; or: python3 metax_cli.py --walkforward runs/${r.name}">no WF</span>`}
+        <button class="small" title="Router runs aren't made by the Launch card, so there's no setup to load — this shows the exact metax_cli command that reproduces this run (search → refine → walk-forward)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||30000})">Cmd</button>
         <button class="small" title="Adopt this ROUTER into its own trader config (config_${r.name}.json — created if missing, own state/log, dry-run). Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adoptRouter('${r.name}','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
@@ -763,6 +764,18 @@ async function bt(cfg,name){ runAndPreview(cfg, name+'_full', null); }
 async function btH(cfg,name,hd){
   if(hd) runAndPreview(cfg, name+'_HOLDOUT', null, hd);
   else runAndPreview(cfg, name+'_HOLDOUT', $('trainEnd').value||'2025-09-01');
+}
+function routerCmd(name, mode, method, total){
+  const isStack = (method||'').startsWith('stack');
+  const cmd = isStack
+    ? `python3 metax_cli.py --stack-auto ${mode} --name ${name}`
+    : [`python3 metax_cli.py --mode ${mode} --buckets ${method} --name ${name} --total ${total}`,
+       `python3 metax_cli.py --refine runs/${name} --iters 400   # optional wave 2`,
+       `python3 metax_cli.py --walkforward runs/${name}`].join('\n');
+  const el = document.createElement('div');
+  el.innerHTML = `<p class="kv" style="margin:0 0 6px">Router runs are built by <b>metax_cli</b> (not the Launch card) — components are re-mined from the best runs on disk at execution time, so a re-run may pick newer components. Reproduce with:</p><pre style="user-select:all;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">cd optimizer\n${cmd}</pre>`;
+  if(typeof modal === 'function') modal('Reproduce '+name, el);
+  else alert('cd optimizer\n'+cmd);
 }
 async function adoptRouter(name, mode){
   // routers get their OWN config file named after the run, so several routers
