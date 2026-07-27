@@ -97,6 +97,10 @@ def worker(args):
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime, "macdx": W.sample_macdx,
                "rocx": W.sample_rocx,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
+    if payload.get("cadapt"):
+        base_sampler = sampler
+        sampler = lambda rng, R, mode, space: \
+            W.sample_flat_ends(rng, R, mode, space, base_sampler)
     out = []
     for _ in range(payload["n"]):
         c = sampler(rng, R, payload["mode"], space)
@@ -371,7 +375,8 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
                            n=args.batch, t0=args.train_start, t1=None,
-                           per_regime=per_regime, strategy=args.strategy,
+                           per_regime=per_regime, cadapt=bool(args.cadapt),
+                           strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
                            gap_mode=args.gap_mode, alt=alt, scoring=_scoring(args),
                            anchor_cand=anchor_cand, anchor_strength=args.anchor_strength)
@@ -623,7 +628,14 @@ def main():
                     choices=["random", "genetic", "refine", "crossfit"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
     ap.add_argument("--method", default="vol3",
-                    choices=["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"])
+                    choices=["none", "vol3", "vol3_7d", "volume3", "trend3",
+                             "volXtrend9", "cvol7"])
+    ap.add_argument("--cadapt", action="store_true",
+                    help="continuous adaptation: candidates are TWO endpoint "
+                         "param sets (calm / volatile) interpolated across the "
+                         "method's grades — indicator lengths morph through "
+                         "the variant grids, thresholds lerp. Use with "
+                         "--method cvol7.")
     ap.add_argument("--single-set", action="store_true",
                     help="same parameters in every regime (default: per-regime specialists)")
     ap.add_argument("--procs", type=int, default=max(1, mp.cpu_count() - 1))
@@ -766,6 +778,14 @@ def main():
                                max_hold=args.max_hold_days)
 
     per_regime = not args.single_set
+    if args.cadapt:
+        per_regime = "ends"          # v7/prime7: endpoint-interpolated regs
+        if args.strategy == "macdx":
+            # unlock the MACD length grid (opt-in; classic searches stay 12/26/9)
+            space.setdefault("menus", {})["vMacd"] = dict(
+                options=[0, 1, 2, 3, 4],
+                labels=["5/13/5", "8/17/9", "12/26/9", "16/35/9", "20/50/9"],
+                label="MACD Lengths", doc="MACD fast/slow/signal variant")
     anchor_cand = None
     if args.anchor == "file":
         anchor_cand = json.load(open("anchor_cand.json"))
@@ -949,7 +969,8 @@ def main():
             gen += 1
             payload = dict(space=space, R=R, mode=args.mode, method=args.method,
                            n=args.batch, t0=args.train_start, t1=args.train_end,
-                           per_regime=per_regime, strategy=args.strategy,
+                           per_regime=per_regime, cadapt=bool(args.cadapt),
+                           strategy=args.strategy,
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
                            gap_mode=args.gap_mode, scoring=_scoring(args),
                            anchor_cand=anchor_cand, anchor_strength=args.anchor_strength,

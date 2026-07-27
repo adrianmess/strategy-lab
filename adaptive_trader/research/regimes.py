@@ -58,9 +58,19 @@ def make_regimes(f, method):
         v, _ = make_regimes(f, "vol3")
         t, _ = make_regimes(f, "trend3")
         return (v * 3 + t).astype(np.int32), 9
+    if method == "cvol7":
+        # continuous adaptation: 7 vol-percentile grades (0 = calmest,
+        # 6 = wildest). Same causal 30d rolling percentile as vol3, just
+        # unbucketed into a fine ladder; candidates are constrained to two
+        # ENDPOINT param sets interpolated across the grades, so knob count
+        # stays below vol3's despite the finer per-bar adaptation.
+        x = f["volPct"]
+        r = np.clip((np.nan_to_num(x, nan=0.5) * 7.0).astype(np.int32), 0, 6)
+        return r.astype(np.int32), 7
     raise ValueError(method)
 
-REGIME_METHODS = ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"]
+REGIME_METHODS = ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9",
+                  "cvol7"]
 
 def vol_terciles(volPct):
     """0=low,1=mid,2=high volatility regime, causal."""

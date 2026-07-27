@@ -46,7 +46,8 @@ def load_g3():
     pres = get_pres3(cache=cache)
     _G3["pres"] = pres
     _G3["regimes"] = {}
-    for m in ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9"]:
+    for m in ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9",
+              "cvol7"]:
         rs, R = [], 1
         for pre in pres:
             r, R = make_regimes(pre["feats"], m)
@@ -90,7 +91,43 @@ def sample_regime_params(rng, space, mode):
         d["leverage"] = max(1.0, float(int(d["leverage"])))   # floor
     return d
 
+def _interp_ends(lo_d, hi_d, R, space, mode):
+    """Continuous adaptation (cadapt): materialize R per-grade param dicts by
+    interpolating between the CALM endpoint (grade 0) and the VOLATILE
+    endpoint (grade R-1). Continuous params lerp; menu params lerp in
+    option-INDEX space (rounded), so indicator lengths morph through the
+    variant grid; flags step at the midpoint. The searcher only ever touches
+    the two endpoints — fewer knobs than vol3's three independent sets."""
+    regs = []
+    menu_opts = {k: [float(o) for o in spec["options"]]
+                 for k, spec in space["menus"].items()}
+    for g in range(R):
+        t = g / max(R - 1, 1)
+        d = {}
+        for k in set(lo_d) | set(hi_d):
+            a, b = lo_d.get(k, hi_d.get(k)), hi_d.get(k, lo_d.get(k))
+            if k in space["continuous"]:
+                d[k] = float(a + (b - a) * t)
+            elif k in menu_opts:
+                opts = menu_opts[k]
+                ia = min(range(len(opts)), key=lambda i: abs(opts[i] - a))
+                ib = min(range(len(opts)), key=lambda i: abs(opts[i] - b))
+                d[k] = opts[int(round(ia + (ib - ia) * t))]
+            else:                                   # flags
+                d[k] = float(a if t < 0.5 else b)
+        if mode == "spot":
+            d["leverage"] = 1.0; d["eS3"] = 0.0; d["eXS"] = 0.0
+        elif "leverage" in d:
+            d["leverage"] = max(1.0, float(int(d["leverage"])))
+        regs.append(d)
+    return regs
+
 def sample_candidate(rng, space, R, mode, per_regime=True):
+    if per_regime == "ends":
+        lo_d = sample_regime_params(rng, space, mode)
+        hi_d = sample_regime_params(rng, space, mode)
+        return dict(strategy="v7", mode=mode, cadapt=True, ends=[lo_d, hi_d],
+                    regs=_interp_ends(lo_d, hi_d, R, space, mode))
     if per_regime:
         regs = [sample_regime_params(rng, space, mode) for _ in range(R)]
     else:
@@ -99,6 +136,16 @@ def sample_candidate(rng, space, R, mode, per_regime=True):
     return dict(strategy="v7", mode=mode, regs=regs)
 
 def crossover(rng, a, b):
+    if a.get("cadapt") and b.get("cadapt"):
+        R = len(a["regs"])
+        space = load_space()
+        ends = []
+        for ea, eb in zip(a["ends"], b["ends"]):
+            keys = set(ea) | set(eb)
+            ends.append({k: (ea[k] if (k not in eb or (k in ea and rng.random() < 0.5))
+                             else eb[k]) for k in keys})
+        return dict(strategy="v7", mode=a["mode"], cadapt=True, ends=ends,
+                    regs=_interp_ends(ends[0], ends[1], R, space, a["mode"]))
     child = dict(strategy="v7", mode=a["mode"], regs=[])
     for ra, rb in zip(a["regs"], b["regs"]):
         keys = set(ra) | set(rb)
@@ -110,6 +157,16 @@ def crossover(rng, a, b):
     return child
 
 def mutate(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):
+    if cand.get("cadapt"):
+        R = len(cand["regs"])
+        shell = dict(strategy="v7", mode=cand["mode"], regs=cand["ends"])
+        mut = _mutate_regs(rng, shell, space, mode, p_cont, p_menu, sigma)
+        ends = mut["regs"]
+        return dict(strategy="v7", mode=cand["mode"], cadapt=True, ends=ends,
+                    regs=_interp_ends(ends[0], ends[1], R, space, mode))
+    return _mutate_regs(rng, cand, space, mode, p_cont, p_menu, sigma)
+
+def _mutate_regs(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):
     out = dict(strategy="v7", mode=cand["mode"], regs=[])
     for reg in cand["regs"]:
         d = dict(reg)

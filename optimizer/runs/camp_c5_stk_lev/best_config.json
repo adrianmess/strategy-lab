@@ -1,0 +1,279 @@
+{
+ "strategy": "metax",
+ "mode": "lev",
+ "method": "stack:vol3+vt9",
+ "algo": "stacked-router",
+ "per_regime": true,
+ "cand": {
+  "strategy": "metax",
+  "stack": true,
+  "mode": "lev",
+  "step_days": 42,
+  "lookback_days": 84,
+  "sources": [
+   {
+    "run": "camp_c4_m_lev_vol3",
+    "method": "vol3",
+    "components": [
+     {
+      "run": "camp_c2_e_macdx_vol3_xfit",
+      "file": "best_config.json",
+      "strategy": "macdx"
+     },
+     {
+      "run": "camp_c3_s_macdx_vol3_xfit_lev6",
+      "file": "best_config.json",
+      "strategy": "macdx"
+     }
+    ]
+   },
+   {
+    "run": "camp_c4_m_lev_vol3_v2",
+    "method": "vol3",
+    "components": [
+     {
+      "run": "camp_c2_e_macdx_vol3_xfit",
+      "file": "best_config.json",
+      "strategy": "macdx"
+     },
+     {
+      "run": "camp_c3_s_macdx_vol3_xfit_lev6",
+      "file": "best_config.json",
+      "strategy": "macdx"
+     }
+    ]
+   },
+   {
+    "run": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "components": [
+     {
+      "run": "camp_c2_e_macdx_vol3_xfit",
+      "file": "best_config.json",
+      "strategy": "macdx"
+     },
+     {
+      "run": "camp_c3_s_macdx_vol3_xfit_lev6",
+      "file": "best_config.json",
+      "strategy": "macdx"
+     }
+    ]
+   }
+  ],
+  "current": {
+   "source": "camp_c4_m_lev_vol3",
+   "method": "vol3",
+   "assign": [
+    -1,
+    -1,
+    0
+   ]
+  },
+  "fold_picks": [
+   {
+    "fold": "2025-01-01",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     -1,
+     -1,
+     0,
+     0,
+     -1,
+     -1,
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-02-12",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     1,
+     -1,
+     0,
+     0,
+     1,
+     -1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-03-26",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     1,
+     -1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-05-07",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     1,
+     -1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-06-18",
+    "source": "camp_c4_m_lev_vol3",
+    "method": "vol3",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-07-30",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     1,
+     -1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-09-10",
+    "source": "camp_c4_m_lev_vol3",
+    "method": "vol3",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-10-22",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     -1,
+     -1,
+     1,
+     0,
+     1,
+     -1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-12-03",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     -1,
+     -1,
+     1,
+     0,
+     1,
+     -1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2026-01-14",
+    "source": "camp_c4_m_lev_vt9",
+    "method": "vt9",
+    "assign": [
+     -1,
+     -1,
+     1,
+     0,
+     1,
+     -1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2026-02-25",
+    "source": "camp_c4_m_lev_vol3",
+    "method": "vol3",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2026-04-08",
+    "source": "camp_c4_m_lev_vol3",
+    "method": "vol3",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2026-05-20",
+    "source": "camp_c4_m_lev_vol3",
+    "method": "vol3",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   }
+  ],
+  "live_replication": "NOT YET SUPPORTED by strategy_metax \u2014 research artifact; adopt the underlying single-method router instead"
+ },
+ "metrics": {
+  "eq": 65321.84081442089,
+  "maxdd": 0.49063577066678055,
+  "n": 93,
+  "months": 17,
+  "growth": 0.2458427323051429,
+  "score": 0.1882347168110845,
+  "tpm": 5.470588235294118,
+  "max_hold_days": 3.8833333333333333,
+  "liq": false
+ },
+ "holdout": {
+  "eq": 65321.84081442089,
+  "maxdd": 0.49063577066678055,
+  "n": 93,
+  "months": 17,
+  "growth": 0.2458427323051429,
+  "score": 0.1882347168110845,
+  "tpm": 5.470588235294118,
+  "max_hold_days": 3.8833333333333333,
+  "liq": false
+ },
+ "stack": true,
+ "evaluated": 312000,
+ "generated": "2026-07-24 10:43"
+}

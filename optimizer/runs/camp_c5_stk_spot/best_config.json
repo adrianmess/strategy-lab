@@ -1,0 +1,391 @@
+{
+ "strategy": "metax",
+ "mode": "spot",
+ "method": "stack:trend3+vol3+vt9",
+ "algo": "stacked-router",
+ "per_regime": true,
+ "cand": {
+  "strategy": "metax",
+  "stack": true,
+  "mode": "spot",
+  "step_days": 42,
+  "lookback_days": 84,
+  "sources": [
+   {
+    "run": "camp_c4_m_spot_trend3",
+    "method": "trend3",
+    "components": [
+     {
+      "run": "camp_c1_w2_merge_prime_spot_trend3",
+      "file": "holdout_best_config.json",
+      "strategy": "prime"
+     },
+     {
+      "run": "camp_c1_w1_34_prime_sp_tr3_t",
+      "file": "holdout_best_config.json",
+      "strategy": "prime"
+     },
+     {
+      "run": "ScalpX_spot_trend3_unified",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx"
+     },
+     {
+      "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
+      "file": "holdout_best_config.json",
+      "strategy": "v7"
+     },
+     {
+      "run": "camp_c1_w1_40_sx1_sp_vol3_cl",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx"
+     },
+     {
+      "run": "camp_c1_w1_37_sx2_sp_tr3_uw_t",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx2"
+     },
+     {
+      "run": "spotcamp_A2_macdx_vol3_100k",
+      "file": "holdout_best_config.json",
+      "strategy": "macdx"
+     },
+     {
+      "run": "spotcamp_A3_macdx_vol3_500k",
+      "file": "holdout_best_config.json",
+      "strategy": "macdx"
+     }
+    ]
+   },
+   {
+    "run": "camp_c4_m_spot_vol3",
+    "method": "vol3",
+    "components": [
+     {
+      "run": "camp_c1_w2_merge_prime_spot_trend3",
+      "file": "holdout_best_config.json",
+      "strategy": "prime"
+     },
+     {
+      "run": "camp_c1_w1_34_prime_sp_tr3_t",
+      "file": "holdout_best_config.json",
+      "strategy": "prime"
+     },
+     {
+      "run": "ScalpX_spot_trend3_unified",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx"
+     },
+     {
+      "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
+      "file": "holdout_best_config.json",
+      "strategy": "v7"
+     },
+     {
+      "run": "camp_c1_w1_40_sx1_sp_vol3_cl",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx"
+     },
+     {
+      "run": "camp_c1_w1_37_sx2_sp_tr3_uw_t",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx2"
+     },
+     {
+      "run": "spotcamp_A2_macdx_vol3_100k",
+      "file": "holdout_best_config.json",
+      "strategy": "macdx"
+     },
+     {
+      "run": "spotcamp_A3_macdx_vol3_500k",
+      "file": "holdout_best_config.json",
+      "strategy": "macdx"
+     }
+    ]
+   },
+   {
+    "run": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "components": [
+     {
+      "run": "camp_c1_w2_merge_prime_spot_trend3",
+      "file": "holdout_best_config.json",
+      "strategy": "prime"
+     },
+     {
+      "run": "camp_c1_w1_34_prime_sp_tr3_t",
+      "file": "holdout_best_config.json",
+      "strategy": "prime"
+     },
+     {
+      "run": "ScalpX_spot_trend3_unified",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx"
+     },
+     {
+      "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
+      "file": "holdout_best_config.json",
+      "strategy": "v7"
+     },
+     {
+      "run": "camp_c1_w1_40_sx1_sp_vol3_cl",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx"
+     },
+     {
+      "run": "camp_c1_w1_37_sx2_sp_tr3_uw_t",
+      "file": "holdout_best_config.json",
+      "strategy": "scalpx2"
+     },
+     {
+      "run": "spotcamp_A2_macdx_vol3_100k",
+      "file": "holdout_best_config.json",
+      "strategy": "macdx"
+     },
+     {
+      "run": "spotcamp_A3_macdx_vol3_500k",
+      "file": "holdout_best_config.json",
+      "strategy": "macdx"
+     }
+    ]
+   }
+  ],
+  "current": {
+   "source": "camp_c4_m_spot_vol3",
+   "method": "vol3",
+   "assign": [
+    1,
+    -1,
+    3
+   ]
+  },
+  "fold_picks": [
+   {
+    "fold": "2025-01-01",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     2,
+     2,
+     7,
+     5,
+     5,
+     1,
+     7,
+     5
+    ]
+   },
+   {
+    "fold": "2025-02-12",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     2,
+     2,
+     6,
+     3,
+     5,
+     2,
+     7,
+     7
+    ]
+   },
+   {
+    "fold": "2025-03-26",
+    "source": "camp_c4_m_spot_vol3",
+    "method": "vol3",
+    "assign": [
+     2,
+     6,
+     7
+    ]
+   },
+   {
+    "fold": "2025-05-07",
+    "source": "camp_c4_m_spot_vol3",
+    "method": "vol3",
+    "assign": [
+     2,
+     7,
+     7
+    ]
+   },
+   {
+    "fold": "2025-06-18",
+    "source": "camp_c4_m_spot_vol3",
+    "method": "vol3",
+    "assign": [
+     2,
+     6,
+     6
+    ]
+   },
+   {
+    "fold": "2025-07-30",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     2,
+     2,
+     7,
+     -1,
+     5,
+     1,
+     7,
+     0
+    ]
+   },
+   {
+    "fold": "2025-09-10",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     2,
+     2,
+     6,
+     5,
+     5,
+     1,
+     7,
+     7
+    ]
+   },
+   {
+    "fold": "2025-10-22",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     2,
+     2,
+     7,
+     2,
+     5,
+     1,
+     6,
+     6
+    ]
+   },
+   {
+    "fold": "2025-12-03",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     4,
+     2,
+     6,
+     2,
+     5,
+     1,
+     6,
+     6
+    ]
+   },
+   {
+    "fold": "2026-01-14",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     0,
+     2,
+     7,
+     2,
+     5,
+     1,
+     7,
+     7
+    ]
+   },
+   {
+    "fold": "2026-02-25",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     0,
+     2,
+     7,
+     2,
+     5,
+     1,
+     7,
+     6
+    ]
+   },
+   {
+    "fold": "2026-04-08",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     0,
+     2,
+     7,
+     2,
+     5,
+     1,
+     6,
+     7
+    ]
+   },
+   {
+    "fold": "2026-05-20",
+    "source": "camp_c4_m_spot_vt9",
+    "method": "vt9",
+    "assign": [
+     2,
+     4,
+     2,
+     7,
+     2,
+     6,
+     1,
+     6,
+     7
+    ]
+   },
+   {
+    "fold": "2026-07-01",
+    "source": "camp_c4_m_spot_trend3",
+    "method": "trend3",
+    "assign": [
+     5,
+     5,
+     0
+    ]
+   }
+  ],
+  "live_replication": "NOT YET SUPPORTED by strategy_metax \u2014 research artifact; adopt the underlying single-method router instead"
+ },
+ "metrics": {
+  "eq": 9322.961286318034,
+  "maxdd": 0.4881862154883323,
+  "n": 119,
+  "months": 18,
+  "growth": 0.12402668404522428,
+  "score": 0.06645786717919355,
+  "tpm": 6.611111111111111,
+  "max_hold_days": 4.114583333333333,
+  "liq": false
+ },
+ "holdout": {
+  "eq": 9322.961286318034,
+  "maxdd": 0.4881862154883323,
+  "n": 119,
+  "months": 18,
+  "growth": 0.12402668404522428,
+  "score": 0.06645786717919355,
+  "tpm": 6.611111111111111,
+  "max_hold_days": 4.114583333333333,
+  "liq": false
+ },
+ "stack": true,
+ "evaluated": 336000,
+ "generated": "2026-07-24 10:44"
+}

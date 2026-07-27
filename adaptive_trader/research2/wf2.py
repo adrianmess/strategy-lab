@@ -161,18 +161,18 @@ def load_globals(need=("v6", "scalpx")):
         _G["rocx"] = rx
     if "macdx" in need and "macdx" not in _G:
         mx = None
-        if os.path.exists(_cache_path("macdx_pre.pkl")):
+        if os.path.exists(_cache_path("macdx_pre2.pkl")):
             try:
-                mx = pickle.load(open(_cache_path("macdx_pre.pkl"), "rb"))
+                mx = pickle.load(open(_cache_path("macdx_pre2.pkl"), "rb"))
             except Exception as e:
-                print(f"macdx_pre.pkl unreadable ({e}); rebuilding...")
-                try: os.remove(_cache_path("macdx_pre.pkl"))
+                print(f"macdx_pre2.pkl unreadable ({e}); rebuilding...")
+                try: os.remove(_cache_path("macdx_pre2.pkl"))
                 except OSError: pass
         if mx is None:
             segs = segs or load_segments()
             from macdx_engine import MACDX_DEFAULTS, precompute_macdx
             mx = [precompute_macdx(g, d1, MACDX_DEFAULTS) for g, d1 in segs]
-            pickle.dump(mx, open(_cache_path("macdx_pre.pkl"), "wb"))
+            pickle.dump(mx, open(_cache_path("macdx_pre2.pkl"), "wb"))
         _G["macdx"] = mx
     return _G
 
@@ -366,6 +366,10 @@ def sample_macdx(rng, R, mode, space=None):
         cdPS=g("cdPS", (0.0005, 0.012)), cdTS=g("cdTS", (10, 240)),
         eL=[1.0] * R, eS=[1.0] * R,
     )
+    # MACD length variants are OPT-IN (mirrors tslm): unless the space's menus
+    # offer options, stay pinned at the pine 12/26/9 — classic searches unchanged
+    oM = ((s.get("menus", {}) or {}).get("vMacd", {}) or {}).get("options") or [2.0]
+    c["vMacd"] = [float(rng.choice(oM)) for _ in range(R)]
     if rng.random() < 0.3:
         c["reqH"] = rng.choice([0.0, 1.0], R, p=[0.35, 0.65]).tolist()
     if mode == "lev":
@@ -378,12 +382,17 @@ def sample_macdx(rng, R, mode, space=None):
     return _normalize_flat(c)
 
 def build_P_macdx(c, R):
-    from macdx_engine import MACDX_PNAMES
+    from macdx_engine import MACDX_PNAMES, MACDX_DEFAULT_VMACD
     rows = []
     for r in range(R):
         row = []
         for pn in MACDX_PNAMES:
-            v = c["lev"] if pn == "lev" else c[pn]
+            if pn == "lev":
+                v = c["lev"]
+            elif pn == "vMacd":
+                v = c.get("vMacd", float(MACDX_DEFAULT_VMACD))
+            else:
+                v = c[pn]
             row.append(float(v[r] if isinstance(v, list) else v))
         rows.append(row)
     return np.array(rows)
@@ -437,7 +446,8 @@ def build_P_rocx(c, R):
 # ---------------- generic genome ops for flat candidates (v6/prime/scalpx) ----
 FLAT_FLAG_KEYS = {"eL3", "eS3", "eXL", "eXS", "eL", "eS", "useCvd", "useEma", "reqH"}
 FLAT_MENU_KEYS = {"vR": "rsi", "vC": "cvd", "vP": "poc", "vE": "emaS",   # scalpx2
-                  "vRoc": "rocx_roc", "vSma": "rocx_sma"}                # rocx
+                  "vRoc": "rocx_roc", "vSma": "rocx_sma",                # rocx
+                  "vMacd": "macdx_macd"}                                 # macdx
 FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
     "prime": dict(rsiL="rsiValLong", rsiS="rsiValShort", ptL="ptLong", a1L="apt1Long",
                   a2L="apt2Long", d1L="dur1Long", d2L="dur2Long", ptS="ptShort",
@@ -475,6 +485,10 @@ def _normalize_flat(c):
             c["tslm"][r] = 1.0 if round(c["tslm"][r]) >= 1 else 0.0
     if c.get("strategy") == "macdx":
         R = len(c["tpL"])
+        if isinstance(c.get("vMacd"), list):
+            from macdx_engine import MACDX_VARIANTS
+            c["vMacd"] = [float(max(0, min(len(MACDX_VARIANTS) - 1, round(x))))
+                          for x in c["vMacd"]]
         for r in range(R):
             if c["a1L"][r] > c["tpL"][r]: c["a1L"][r] = c["tpL"][r] * 0.7
             if c["a2L"][r] > c["a1L"][r]: c["a2L"][r] = c["a1L"][r] * 0.6
@@ -494,14 +508,69 @@ def _normalize_flat(c):
             if c["d2S"][r] < c["d1S"][r]: c["d1S"][r], c["d2S"][r] = c["d2S"][r], c["d1S"][r]
     return c
 
+# ---------------- continuous adaptation (cadapt) for flat families ----------
+FLAT_INT_KEYS = {"vR", "vC", "vP", "vE", "vRoc", "vSma", "vMacd",
+                 "rocN", "smaN", "hrb", "tslm"}
+
+def _flat_interp_ends(ends, R):
+    """Materialize R per-grade lists from 2-element endpoint lists: continuous
+    lerp, integer/menu keys rounded lerp (lengths morph through the grid),
+    flags step at the midpoint."""
+    c = {}
+    for k, v in ends.items():
+        if not isinstance(v, list) or k in ("ends",):
+            c[k] = v
+            continue
+        lo, hi = float(v[0]), float(v[-1])
+        vals = []
+        for g in range(R):
+            t = g / max(R - 1, 1)
+            if k in FLAT_FLAG_KEYS:
+                vals.append(float(lo if t < 0.5 else hi))
+            elif k in FLAT_INT_KEYS:
+                vals.append(float(round(lo + (hi - lo) * t)))
+            else:
+                vals.append(float(lo + (hi - lo) * t))
+        c[k] = vals
+    return c
+
+def make_flat_cadapt(ends, R):
+    ends = {k: (list(v) if isinstance(v, list) else v)
+            for k, v in ends.items() if k not in ("cadapt", "ends", "cadapt_R")}
+    c = _normalize_flat(_flat_interp_ends(ends, R))
+    c["cadapt"] = True
+    c["cadapt_R"] = R
+    c["ends"] = ends
+    return c
+
+def sample_flat_ends(rng, R, mode, space, sampler):
+    """cadapt sampler wrapper: sample TWO endpoint param sets with the
+    family's own sampler, interpolate across R vol grades."""
+    return make_flat_cadapt(sampler(rng, 2, mode, space), R)
+
 def crossover_flat(rng, a, b):
+    if a.get("cadapt") and b.get("cadapt"):
+        ends = {}
+        for k in a["ends"]:
+            v = a["ends"][k] if rng.random() < 0.5 else b["ends"].get(k, a["ends"][k])
+            ends[k] = list(v) if isinstance(v, list) else v
+        return make_flat_cadapt(ends, int(a.get("cadapt_R") or 7))
     child = {}
     for k in a:
+        if k in ("cadapt", "ends", "cadapt_R"):   # never mix cadapt into a
+            continue                              # plain child half-way
         v = a[k] if rng.random() < 0.5 else b.get(k, a[k])
         child[k] = list(v) if isinstance(v, list) else v
     return _normalize_flat(child)
 
 def mutate_flat(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10):
+    if cand.get("cadapt"):
+        mut = _mutate_flat_core(rng, cand["ends"], mode, space,
+                                p_cont, p_flag, sigma)
+        return make_flat_cadapt(mut, int(cand.get("cadapt_R") or 7))
+    return _mutate_flat_core(rng, cand, mode, space, p_cont, p_flag, sigma)
+
+def _mutate_flat_core(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigma=0.10):
     s = space or {}
     strat = cand.get("strategy", "")
     keymap = FLAT_KEYMAP.get(strat, {})
@@ -825,7 +894,8 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
             ivs = eval_intervals(pre["t"], i0, i1, alt)
             for a, b in ivs:
                 w0 = max(0, a - warmup)
-                sp = {k: v[w0:b] for k, v in pre.items()}
+                sp = {k: (v[:, w0:b] if isinstance(v, np.ndarray) and v.ndim == 2
+                          else v[w0:b]) for k, v in pre.items()}
                 eq_before = eq
                 tr, eq, liq, op = run_macdx_P(sp, P, regime=reg[w0:b], warmup=a - w0,
                                               initial_capital=eq,

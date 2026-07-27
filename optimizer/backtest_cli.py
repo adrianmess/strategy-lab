@@ -114,7 +114,8 @@ def run_single_macdx(cfg, oos_start=None, holdout_days=None,
                 dict(days=holdout_days, part="holdout"))
         for iv_i, (a, b) in enumerate(ivs):
             w0 = max(0, a - warmup)
-            sp = {k: v[w0:b] for k, v in pre.items()}
+            sp = {k: (v[:, w0:b] if getattr(v, "ndim", 1) == 2 else v[w0:b])
+                  for k, v in pre.items()}
             eq0 = eq
             tr, eq, liq, op = run_macdx(sp, p, warmup=a - w0, initial_capital=eq,
                                         commission=FUT_COMM if mode == "lev" else SPOT_COMM,
@@ -341,7 +342,8 @@ def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
                 dict(days=holdout_days, part="holdout"))
         for iv_i, (a, b) in enumerate(ivs):
             w0 = max(0, a - warmup)
-            sp = {k: v[w0:b] for k, v in pre.items()}
+            sp = {k: (v[:, w0:b] if getattr(v, "ndim", 1) == 2 else v[w0:b])
+                  for k, v in pre.items()}
             eq0 = eq
             tr, eq, liq, op = run_macdx_P(sp, P, regime=reg[w0:b], warmup=a - w0,
                                           initial_capital=eq,

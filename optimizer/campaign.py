@@ -268,6 +268,28 @@ def meta_specs():
                           mh=7, status="pending"))
     return S
 
+def cadapt_specs():
+    """Campaign c6 — CONTINUOUS adaptation: indicator lengths + thresholds
+    morph with the causal 30d vol percentile (7 grades, cvol7) instead of
+    switching at tercile boundaries. Candidates = two endpoint param sets
+    (calm / volatile) interpolated across the grades — FEWER knobs than
+    vol3's three independent sets. Families: the variant-grid engines
+    (substrate twins of the originals) + macdx's new MACD length grid.
+    lev runs use lev-stops (c3 doctrine)."""
+    S = []
+    fams = ("v7", "prime7", "scalpx2", "rocx", "macdx")
+    for mode in ("lev", "spot"):
+        for fam in fams:
+            extra = ["--cadapt"]
+            if mode == "lev":
+                extra.append("--lev-stops")
+            S.append(dict(id=f"ca_{fam}_{mode}", wave=1,
+                          strategy=fam, mode=mode, method="cvol7",
+                          space=("levsafe" if mode == "lev" else "default"),
+                          algo="genetic", scoring="classic", total=150000,
+                          mh=7, hold=21, extra=extra, status="pending"))
+    return S
+
 def stack_specs():
     """Method-stacked router: causal router-of-routers over the WF-PASS
     single-method metax runs of each mode. Sources resolved at runtime
@@ -278,7 +300,7 @@ def stack_specs():
             for mode in ("spot", "lev")]
 
 MATRICES = {"c1": wave1_specs, "era": era_specs, "survival": survival_specs,
-            "meta": meta_specs, "stack": stack_specs}
+            "meta": meta_specs, "stack": stack_specs, "cadapt": cadapt_specs}
 
 
 # ---------------- helpers ----------------

@@ -1,0 +1,10 @@
+{
+ "verdict": "PASS",
+ "oos_pct_mo": 27.869845976861797,
+ "maxdd": 0.49063577066678055,
+ "n": 93,
+ "folds": 13,
+ "step_days": 42,
+ "note": "stack is causal by construction: this verdict IS the full-history chained OOS",
+ "at": "2026-07-24 10:43"
+}

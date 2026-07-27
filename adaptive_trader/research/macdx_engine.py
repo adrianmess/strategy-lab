@@ -30,7 +30,14 @@ MACDX_PNAMES = [
     "tpL", "tpS", "slL", "slS", "minT", "mMinS", "mMaxL", "hrb", "reqH",
     "lev", "a1L", "a2L", "d1L", "d2L", "cdPL", "cdTL",
     "a1S", "a2S", "d1S", "d2S", "cdPS", "cdTS", "eL", "eS",
+    "vMacd",   # index 24: MACD length-variant (see MACDX_VARIANTS); 2 = pine 12/26/9
 ]
+
+# (fast, slow, signal) period variants, ordered fast->slow. Index 2 is the
+# original pine 12/26/9 — the default everywhere, so pre-variant configs and
+# classic searches behave EXACTLY as before.
+MACDX_VARIANTS = [(5, 13, 5), (8, 17, 9), (12, 26, 9), (16, 35, 9), (20, 50, 9)]
+MACDX_DEFAULT_VMACD = 2
 _KEY2P = {k: (dk) for k, dk in [
     ("tpL", "takeProfitLongPct"), ("tpS", "takeProfitShortPct"),
     ("slL", "stopLossLongPct"), ("slS", "stopLossShortPct"),
@@ -47,7 +54,9 @@ _KEY2P = {k: (dk) for k, dk in [
 
 def macdx_P_from_dict(p):
     """One P row from a pine-named parameter dict."""
-    return np.array([[float(p[_KEY2P[k]]) for k in MACDX_PNAMES]])
+    return np.array([[float(p[_KEY2P[k]]) if k in _KEY2P
+                      else float(MACDX_DEFAULT_VMACD)
+                      for k in MACDX_PNAMES]])
 
 
 def pine_ema(src: np.ndarray, n: int) -> np.ndarray:
@@ -93,6 +102,14 @@ MACDX_DEFAULTS = dict(
 
 def precompute_macdx(df3: pd.DataFrame, df1: pd.DataFrame, p: dict) -> dict:
     c = df3["close"].to_numpy()
+    # full variant grid (V, n); rows ordered as MACDX_VARIANTS
+    macd_stack = np.empty((len(MACDX_VARIANTS), len(c)))
+    sig_stack = np.empty_like(macd_stack)
+    for vi, (f_, s_, g_) in enumerate(MACDX_VARIANTS):
+        macd_stack[vi] = pine_ema(c, f_) - pine_ema(c, s_)
+        sig_stack[vi] = pine_ema(macd_stack[vi], g_)
+    hist_stack = macd_stack - sig_stack
+    # legacy 1-D series = the config's own lengths (pine default 12/26/9)
     macd = pine_ema(c, int(p["macdFastLength"])) - pine_ema(c, int(p["macdSlowLength"]))
     sig = pine_ema(macd, int(p["macdSignalSmoothing"]))
     hist = macd - sig
@@ -107,7 +124,9 @@ def precompute_macdx(df3: pd.DataFrame, df1: pd.DataFrame, p: dict) -> dict:
     return dict(t=df3["t"].to_numpy(), t_ms=t_ms,
                 o=df3["open"].to_numpy(), h=df3["high"].to_numpy(),
                 l=df3["low"].to_numpy(), c=c,
-                macd=macd, sig=sig, hist=hist, dropL=dropL, incS=incS)
+                macd=macd, sig=sig, hist=hist, dropL=dropL, incS=incS,
+                macd_stack=macd_stack, sig_stack=sig_stack,
+                hist_stack=hist_stack)
 
 
 MAX_TRADES = 60000
@@ -270,9 +289,26 @@ def run_macdx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
     ne = no_entry if no_entry is not None else np.zeros(n, dtype=np.int8)
+    P = np.asarray(P, dtype=np.float64)
+    if P.ndim == 1:
+        P = P.reshape(1, -1)
+    # MACD length variants: per-bar gather OUTSIDE the jit (scalpx2 pattern).
+    # Only takes effect when the P matrix carries a vMacd column AND any
+    # regime picks a non-default variant; otherwise the legacy 1-D series are
+    # used bit-for-bit.
+    macd, sig, hist = pre["macd"], pre["sig"], pre["hist"]
+    if "macd_stack" in pre and P.shape[1] > 24:
+        vmcol = np.clip(P[:, 24].astype(np.int64), 0,
+                        len(MACDX_VARIANTS) - 1)
+        if np.any(vmcol != MACDX_DEFAULT_VMACD):
+            vm = vmcol[np.asarray(regime, dtype=np.int64)]
+            ar = np.arange(n)
+            macd = pre["macd_stack"][vm, ar]
+            sig = pre["sig_stack"][vm, ar]
+            hist = pre["hist_stack"][vm, ar]
     arr, eq, liq, pos, epx, qty, ei, clev = _core_macdx(
         pre["t_ms"], pre["o"], pre["h"], pre["l"], pre["c"],
-        pre["macd"], pre["sig"], pre["hist"], pre["dropL"], pre["incS"],
+        macd, sig, hist, pre["dropL"], pre["incS"],
         np.asarray(regime, dtype=np.int32), np.asarray(P, dtype=np.float64),
         int(warmup), float(initial_capital), float(commission),
         np.asarray(ne, dtype=np.int8))
