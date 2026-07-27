@@ -20,9 +20,18 @@ def _data_path(fname):
             return os.path.join(base, fname)
     raise FileNotFoundError(fname)
 
+def coin():
+    """Active research coin (vs USDT). Set LAB_COIN=btc|eth|doge|xrp|sui|sol
+    before importing engines; every loader and cache is keyed off it."""
+    return os.environ.get("LAB_COIN", "sol").lower()
+
+def pair():
+    return f"{coin().upper()}_USDT"
+
 def load_segments():
-    df3 = pd.read_parquet(_data_path("sol_3min.parquet"))
-    df1 = pd.read_parquet(_data_path("sol_1min.parquet"))
+    c = coin()
+    df3 = pd.read_parquet(_data_path(f"{c}_3min.parquet"))
+    df1 = pd.read_parquet(_data_path(f"{c}_1min.parquet"))
     df3["t"] = df3["t"].dt.tz_localize(None)
     df1["t"] = df1["t"].dt.tz_localize(None)
     d = df3["t"].diff().dt.total_seconds().div(60).fillna(3)

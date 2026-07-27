@@ -75,5 +75,6 @@
  "strategy": "rocx",
  "mode": "spot",
  "method": "vol3",
- "note": "OOS-best from pool rank #316 (train-best was rank #1). Caveat: picked USING the holdout, so re-verify with walk-forward before trusting."
+ "note": "OOS-best from pool rank #316 (train-best was rank #1). Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.",
+ "pair": "SOL_USDT"
 }

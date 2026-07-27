@@ -31,6 +31,9 @@ def load_g3():
         return _G3
     cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "..", "..", "optimizer", "cache")
+    _coin = os.environ.get("LAB_COIN", "sol").lower()
+    if _coin != "sol":
+        cache_dir = os.path.join(cache_dir, _coin)
     os.makedirs(cache_dir, exist_ok=True)
     from engine3 import variants_hash, VARIANTS, _DEFAULT_VARIANTS
     h = variants_hash()

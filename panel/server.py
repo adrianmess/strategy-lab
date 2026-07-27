@@ -1398,6 +1398,8 @@ def job_optimize2():
            "--name", name]
     if d.get("single_set"): cmd += ["--single-set"]
     if d.get("cadapt"): cmd += ["--cadapt"]
+    if d.get("symbol") and d["symbol"] != "sol":
+        cmd += ["--symbol", d["symbol"]]
     if d.get("hours"): cmd += ["--hours", str(d["hours"])]
     if d.get("total"): cmd += ["--total", str(d["total"])]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
@@ -1543,6 +1545,7 @@ def runs2():
             try:
                 bc = json.load(open(best_p))
                 e["method"] = bc.get("method")
+                e["pair"] = bc.get("pair", "SOL_USDT")
                 e["mode"] = bc.get("mode", e.get("mode"))
                 e["no_survivors"] = ("cand" in bc and bc.get("cand") is None)
                 e["holdout"] = bc.get("holdout")

@@ -458,7 +458,7 @@
   {
    "id": "w2_ref_macdx_spot",
    "wave": 2,
-   "status": "pending",
+   "status": "done",
    "strategy": "macdx",
    "mode": "spot",
    "method": "cvol7",
@@ -472,12 +472,32 @@
    "train_end": "2025-09-01",
    "algo": "refine",
    "resume_from": "runs/camp_c6_ca_macdx_spot",
-   "started": "2026-07-26 21:58:00",
+   "started": "2026-07-27 00:21:00",
    "result": {
-    "ok": false,
-    "reason": "no best_config.json (0 survivors or crash)"
+    "ok": true,
+    "evaluated": 50400,
+    "train_best": {
+     "liq": false,
+     "growth": 0.05228937047287875,
+     "pct_mo": 5.37,
+     "maxdd": 0.2165497986806675,
+     "n": 123,
+     "tpm": 9.891136743140247,
+     "max_hold_days": 8.18125
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.05509080428078229,
+     "pct_mo": 5.66,
+     "maxdd": 0.1573969513281946,
+     "n": 93,
+     "tpm": 7.478664366764577,
+     "max_hold_days": 3.3625
+    },
+    "oos_rank": 458,
+    "survivors": 10
    },
-   "rc": 1
+   "rc": 0
   },
   {
    "id": "w2_ref_v7_spot",
@@ -680,26 +700,26 @@
   {
    "id": "w3_bt_ca_rocx_spot",
    "wave": 3,
-   "status": "pending",
+   "status": "done",
    "kind": "backtest",
    "config": "runs/camp_c6_ca_rocx_spot/holdout_best_config.json",
    "bt_name": "camp_c6_ca_rocx_spot_oosbest_full",
-   "started": "2026-07-26 22:04:51",
-   "rc": -11
+   "started": "2026-07-27 00:22:35",
+   "rc": 0
   },
   {
    "id": "w3_bt_ca_macdx_spot",
    "wave": 3,
-   "status": "pending",
+   "status": "done",
    "kind": "backtest",
    "config": "runs/camp_c6_ca_macdx_spot/holdout_best_config.json",
    "bt_name": "camp_c6_ca_macdx_spot_oosbest_full",
-   "started": "2026-07-26 22:04:56",
-   "rc": 1
+   "started": "2026-07-27 00:22:40",
+   "rc": 0
   }
  ],
  "wave": 3,
  "matrix": "cadapt",
  "note": "wave-2/3 specs are appended automatically",
- "updated": "2026-07-26 22:05:06"
+ "updated": "2026-07-27 00:22:45"
 }

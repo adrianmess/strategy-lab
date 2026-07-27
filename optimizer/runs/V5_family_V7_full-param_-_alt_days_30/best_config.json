@@ -186,5 +186,6 @@
  "holdout_days": null,
  "max_dd": null,
  "evaluated": 100800,
- "generated": "2026-07-07 16:59"
+ "generated": "2026-07-07 16:59",
+ "pair": "SOL_USDT"
 }

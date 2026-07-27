@@ -23,7 +23,8 @@ COLS = ["t", "open", "high", "low", "close", "volume", "trades_count"]
 
 def fetch(symbol_id, period, time_start, time_end):
     rows_all, cur = [], time_start
-    while True:
+    end_ts = pd.Timestamp(time_end)
+    while pd.Timestamp(cur) < end_ts:
         url = (f"https://rest.coinapi.io/v1/ohlcv/{symbol_id}/history"
                f"?period_id={period}&time_start={cur}&time_end={time_end}"
                f"&limit=100000&include_empty_items=false")
@@ -37,7 +38,13 @@ def fetch(symbol_id, period, time_start, time_end):
         if isinstance(rows, dict):                       # error payload
             raise RuntimeError(str(rows)[:300])
         if not rows:
-            break
+            # CoinAPI has HOLES in its MEXC minute data (e.g. 2024-06 ->
+            # 2024-11, present in the original SOL files too, and the engines
+            # tolerate them). An empty page therefore means "hole", not
+            # "done" — hop forward and keep probing until the end date.
+            nxt = pd.Timestamp(cur) + pd.Timedelta(days=7)
+            cur = nxt.strftime("%Y-%m-%dT%H:%M:%S")
+            continue
         rows_all.extend(rows)
         cur = rows[-1]["time_period_end"]
         print(f"    {period}: +{len(rows)} rows (through {cur[:16]})", flush=True)

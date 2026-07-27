@@ -78,5 +78,6 @@
  "per_regime": true,
  "train_end": null,
  "evaluated": 60,
- "generated": "2026-07-02 10:48"
+ "generated": "2026-07-02 10:48",
+ "pair": "SOL_USDT"
 }

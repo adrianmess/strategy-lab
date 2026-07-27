@@ -307,6 +307,7 @@ def publish_backtest(name, mode, buckets, comps, assign, taken, tr_s, ho_s):
                                "gap-segmented data (skip_contaminated); no "
                                "positions cross a gap"),
         strategy="metax", mode=mode, method=buckets,
+        pair=os.environ.get("LAB_COIN", "sol").upper() + "_USDT",
         kind="full-history (router merge)",
         config=dict(assign=assign, components=[c["run"] for c in comps]),
         created=time.strftime("%Y-%m-%d %H:%M"))

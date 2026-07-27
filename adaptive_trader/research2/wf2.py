@@ -66,12 +66,17 @@ TREND_VARIANTS = [None, 2.0]
 # ---------------- global data (loaded once; fork-inherited) ----------------
 def _cache_path(fn):
     """Pickle cache location. WF2_CACHE_DIR (set by the optimizer CLI) makes the
-    heavy precompute caches shared across runs instead of per-run-dir."""
+    heavy precompute caches shared across runs instead of per-run-dir.
+    Non-SOL coins (LAB_COIN) get their own subdirectory/prefix — mixing coins
+    in one cache would be catastrophic (wrong price data per symbol)."""
     d = os.environ.get("WF2_CACHE_DIR", "")
+    c = os.environ.get("LAB_COIN", "sol").lower()
     if d:
+        if c != "sol":
+            d = os.path.join(d, c)
         os.makedirs(d, exist_ok=True)
         return os.path.join(d, fn)
-    return fn
+    return fn if c == "sol" else f"{c}_{fn}"
 
 _G = {}
 

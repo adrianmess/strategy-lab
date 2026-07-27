@@ -560,7 +560,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                        max_dd=args.max_dd, max_hold_days=args.max_hold_days,
                        gap_mode=args.gap_mode, scoring=args.scoring,
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=total_eval,
-                       crossfit=report, cand=None, metrics=None,
+                       crossfit=report, cand=None, metrics=None, pair=_pair_tag(),
                        generated=time.strftime("%Y-%m-%d %H:%M")),
                   open("best_config.json", "w"), indent=1, default=float)
         return None
@@ -589,6 +589,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                                  survivors=len(survA) + len(survB)),
                crossfit=report, winner_origin=winner["origin"],
                generated=time.strftime("%Y-%m-%d %H:%M"))
+    out["pair"] = _pair_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print(f"\nCROSS-FIT WINNER ({winner['origin']}): "
           + (f"lockbox worst {(pow(2.718281828, table_holdout['growth'])-1)*100:+.1f}%/mo"
@@ -618,6 +619,10 @@ def auto_backtest(args, run_dir):
             print(f"auto-backtest failed: {e}", flush=True)
 
 
+
+def _pair_tag():
+    return os.environ.get("LAB_COIN", "sol").upper() + "_USDT"
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -630,6 +635,11 @@ def main():
     ap.add_argument("--method", default="vol3",
                     choices=["none", "vol3", "vol3_7d", "volume3", "trend3",
                              "volXtrend9", "cvol7"])
+    ap.add_argument("--symbol", default="sol",
+                    choices=["sol", "btc", "eth", "doge", "xrp", "sui",
+                             "pepe", "wif"],
+                    help="trading pair (vs USDT): selects data files and "
+                         "per-symbol precompute caches; stamped on the run")
     ap.add_argument("--cadapt", action="store_true",
                     help="continuous adaptation: candidates are TWO endpoint "
                          "param sets (calm / volatile) interpolated across the "
@@ -703,6 +713,12 @@ def main():
     args = ap.parse_args()
     if args.hours is None and args.total is None:
         args.hours = 1.0
+    # trading pair: LAB_COIN drives data loading + cache locations everywhere
+    # (must be set BEFORE any engine/data import touches load_segments)
+    os.environ["LAB_COIN"] = args.symbol.lower()
+    if args.symbol.lower() != "sol":
+        print(f"PAIR: {args.symbol.upper()}_USDT (per-symbol data + caches)",
+              flush=True)
     if args.lev_stops:
         # env var: inherited by the mp.Pool workers AND honored by the in-process
         # finalize/holdout evaluations (see optimizer2.eval3 / wf2.eval_config)
@@ -1046,6 +1062,7 @@ def main():
                gap_mode=args.gap_mode, scoring=args.scoring,
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=evaluated,
                generated=time.strftime("%Y-%m-%d %H:%M"))
+    out["pair"] = _pair_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
     print(json.dumps(best_m, indent=1, default=float))
@@ -1136,6 +1153,7 @@ def main():
                       strategy=args.strategy, mode=args.mode, method=args.method,
                       note=f"OOS-best from pool rank #{best_h+1} (train-best was rank #1). "
                            "Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.")
+            hb["pair"] = _pair_tag()
             json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
             out["holdout_best"] = dict(rank=best_h + 1, holdout=holdouts[best_h])
             print(f"\nOOS-BEST is pool rank #{best_h+1} -> saved to holdout_best_config.json")
@@ -1151,7 +1169,8 @@ def main():
                     out["seed_holdout"] = sh
             except Exception:
                 pass
-        json.dump(out, open("best_config.json", "w"), indent=1, default=float)
+        out["pair"] = _pair_tag()
+    json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
     auto_backtest(args, run_dir)
 

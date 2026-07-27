@@ -1,0 +1,20 @@
+[
+ {
+  "at": "2026-07-27 12:12:27",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method cvol7 --procs 14 --batch 100 --name opt2_0712_1952_full_5_dd_contin --cadapt --total 50000 --train-end 2025-09-01 --max-dd 0.05 --max-hold-days 1 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ },
+ {
+  "at": "2026-07-27 12:20:49",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method cvol7 --procs 14 --batch 100 --name opt2_0712_1952_full_5_dd_contin --cadapt --total 10000 --train-end 2025-09-01 --max-dd 0.05 --max-hold-days 1 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ },
+ {
+  "at": "2026-07-27 12:27:35",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method vol3 --procs 14 --batch 100 --name opt2_0712_1952_full_5_dd_contin --cadapt --total 1000000 --train-end 2025-09-01 --max-dd 0.05 --max-hold-days 1 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

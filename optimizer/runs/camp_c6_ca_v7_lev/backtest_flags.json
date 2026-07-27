@@ -7,7 +7,7 @@
   "total_mult": 86.36061716433602,
   "gap_mode": "skip_contaminated",
   "backtest": "camp_c6_ca_v7_lev_full",
-  "at": "2026-07-26 21:15"
+  "at": "2026-07-27 00:20"
  },
  "holdout_best_config.json|full-history (in-sample fit)": {
   "source": "holdout_best_config.json",

@@ -90,5 +90,6 @@
  },
  "seasonal_flag": true,
  "evaluated": 30000,
- "generated": "2026-07-21 01:35"
+ "generated": "2026-07-21 01:35",
+ "pair": "SOL_USDT"
 }
