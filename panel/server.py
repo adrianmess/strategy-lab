@@ -1397,6 +1397,7 @@ def job_optimize2():
            "--procs", str(d.get("procs", 4)), "--batch", str(d.get("batch", 100)),
            "--name", name]
     if d.get("single_set"): cmd += ["--single-set"]
+    if d.get("cadapt"): cmd += ["--cadapt"]
     if d.get("hours"): cmd += ["--hours", str(d["hours"])]
     if d.get("total"): cmd += ["--total", str(d["total"])]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]

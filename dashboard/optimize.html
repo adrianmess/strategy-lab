@@ -125,7 +125,10 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="mode">Mode</label>
         <select id="mode"><option>lev</option><option>spot</option></select></div>
       <div class="field"><label data-x="regime">Regime</label>
-        <select id="method"><option>vol3</option><option>none</option><option>vol3_7d</option><option>volume3</option><option>trend3</option><option>volXtrend9</option></select></div>
+        <select id="method"><option>vol3</option><option>none</option><option>vol3_7d</option><option>volume3</option><option>trend3</option><option>volXtrend9</option><option>cvol7</option></select></div>
+      <div class="field"><label data-x="cadapt">Continuous adapt</label>
+        <label style="display:flex;align-items:center;gap:6px;height:34px" title="candidates become TWO endpoint parameter sets (calm / volatile) interpolated across the regime grades — indicator lengths morph through the variant grids, thresholds scale smoothly. Pairs with the cvol7 regime (7 vol-percentile grades).">
+        <input type="checkbox" id="cadapt" onchange="if(this.checked)$('method').value='cvol7'"> <span class="kv">2 endpoint sets</span></label></div>
       <div class="field"><label data-x="perregime">Parameter sets</label>
         <select id="perreg"><option value="">per-regime specialists</option><option value="1">single set</option></select></div>
     </div>
@@ -288,7 +291,8 @@ const X = {
   <dt>vol3_7d</dt><dd>Volatility terciles with only 7-day memory — adapts faster, forgets faster.</dd>
   <dt>volume3</dt><dd>Dollar-volume terciles (low/mid/high volume days).</dd>
   <dt>trend3</dt><dd>Down / flat / up-trend, from price vs its 1-day EMA.</dd>
-  <dt>volXtrend9</dt><dd>3×3 volatility×trend grid = 9 buckets. Overfit badly in testing — huge train numbers, liquidated on holdout.</dd></dl>`],
+  <dt>volXtrend9</dt><dd>3×3 volatility×trend grid = 9 buckets. Overfit badly in testing — huge train numbers, liquidated on holdout.</dd>
+ <dt>cvol7</dt><dd>7 fine grades of the same causal 30-day vol percentile behind vol3. Made for <b>Continuous adapt</b>: parameters interpolate smoothly from a calm endpoint to a volatile endpoint instead of jumping at tercile boundaries.</dd></dl>`],
  perregime: ["Parameter sets", `<dl><dt>per-regime specialists</dt><dd>A full independent parameter set per regime bucket — different RSI/MACD/BB/EMA lengths, thresholds, targets and leverage in low vs mid vs high volatility. This is the approach that won (+25%/mo holdout).</dd>
   <dt>single set</dt><dd>Same parameters in every bucket. Use with regime=none, or to reduce overfitting risk.</dd></dl>`],
  processes: ["Processes", `Parallel worker processes evaluating candidates. Set to your CPU core count (or cores−1 to keep the machine responsive). More processes = proportionally faster search.`],
@@ -339,7 +343,8 @@ async function launch(){
       (BT_ANCHORS.find(e=>e.name===$('anchor').value.slice(3))||{}).config : undefined,
     anchor_strength:(+$('anchorStr').value>0 && $('anchor').value) ? +$('anchorStr').value : undefined,
     lockbox:($('algo').value==='crossfit' && $('lockbox').value.trim()) ? $('lockbox').value.trim() : undefined,
-    single_set: $('perreg').value==='1'};
+    single_set: $('perreg').value==='1',
+    cadapt: $('cadapt').checked};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
   if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
@@ -619,6 +624,7 @@ function loadRunSettings(name){
   setSel('mode', r.mode);
   setSel('method', r.method);
   $('perreg').value = (r.per_regime===false) ? '1' : '';
+  $('cadapt').checked = (r.per_regime==='ends') || !!(r.cand&&r.cand.cadapt);
   setSel('algo', r.algo);
   $('lockboxField').style.display = $('algo').value==='crossfit' ? '' : 'none';
   if(r.holdout_days){ $('hoMode').value='alt'; $('hoDays').value=r.holdout_days; }
