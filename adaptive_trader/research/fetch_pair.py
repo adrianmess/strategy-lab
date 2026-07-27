@@ -21,10 +21,15 @@ DATA_START = "2023-11-27T00:00:00"          # CoinAPI's MEXC coverage start
 COLS = ["t", "open", "high", "low", "close", "volume", "trades_count"]
 
 
+def _utc(x):
+    t = pd.Timestamp(x)
+    return t.tz_localize("UTC") if t.tz is None else t.tz_convert("UTC")
+
+
 def fetch(symbol_id, period, time_start, time_end):
     rows_all, cur = [], time_start
-    end_ts = pd.Timestamp(time_end)
-    while pd.Timestamp(cur) < end_ts:
+    end_ts = _utc(time_end)
+    while _utc(cur) < end_ts:
         url = (f"https://rest.coinapi.io/v1/ohlcv/{symbol_id}/history"
                f"?period_id={period}&time_start={cur}&time_end={time_end}"
                f"&limit=100000&include_empty_items=false")
@@ -42,7 +47,7 @@ def fetch(symbol_id, period, time_start, time_end):
             # 2024-11, present in the original SOL files too, and the engines
             # tolerate them). An empty page therefore means "hole", not
             # "done" — hop forward and keep probing until the end date.
-            nxt = pd.Timestamp(cur) + pd.Timedelta(days=7)
+            nxt = _utc(cur) + pd.Timedelta(days=7)
             cur = nxt.strftime("%Y-%m-%dT%H:%M:%S")
             continue
         rows_all.extend(rows)

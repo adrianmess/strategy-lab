@@ -110,6 +110,11 @@ DEFAULT_PARAMS = dict(
 def last_1m_metric(df3: pd.DataFrame, df1: pd.DataFrame) -> np.ndarray:
     """Replicates request.security(tid, "1", close[1]-close) sampled at 3m bar closes:
     value of (prev 1m close - last 1m close) for the last 1m bar ending <= chart bar end."""
+    if df1 is None or len(df1) == 0:
+        # segment entirely inside a 1-minute data hole (CoinAPI's MEXC minute
+        # coverage has gaps; the SOL originals do too) — per-bar NaN triggers
+        # the standard 3m fallback downstream
+        return np.full(len(df3), np.nan)
     c1 = df1["close"].to_numpy()
     d1 = np.roll(c1, 1) - c1
     d1[0] = np.nan
