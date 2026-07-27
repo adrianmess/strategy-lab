@@ -14,6 +14,12 @@ DASHBOARD = os.path.join(REPO, "dashboard")
 sys.path.insert(0, RESEARCH2)
 sys.path.insert(0, RESEARCH)
 
+# ONE shared precompute cache for every CLI (optimizer, backtests, metax).
+# Mixing cache locations mixes data snapshots: segment lengths then disagree
+# across families and per-bar regime/variant indexing breaks (shape-mismatch
+# crashes, or silently misaligned sims).
+os.environ.setdefault("WF2_CACHE_DIR", os.path.join(OPT_DIR, "cache"))
+
 
 def safe_name(name: str) -> str:
     """Run names become folder names: strip path separators & odd characters."""

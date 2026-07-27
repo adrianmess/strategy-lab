@@ -508,6 +508,23 @@ def _normalize_flat(c):
             if c["d2S"][r] < c["d1S"][r]: c["d1S"][r], c["d2S"][r] = c["d2S"][r], c["d1S"][r]
     return c
 
+def _menu_options_fallback(k):
+    """Valid option indices for a variant-menu key when the param space
+    doesn't list any (e.g. refine of a cadapt seed with a plain space)."""
+    if k in ("vR", "vC", "vP", "vE"):
+        return list(range(len(SCALP2_VARIANTS[FLAT_MENU_KEYS[k]])))
+    if k == "vMacd":
+        from macdx_engine import MACDX_VARIANTS
+        return list(range(len(MACDX_VARIANTS)))
+    if k == "vRoc":
+        from rocx_engine import ROCX_ROC_LENGTHS
+        return list(range(len(ROCX_ROC_LENGTHS)))
+    if k == "vSma":
+        from rocx_engine import ROCX_SMA_LENGTHS
+        return list(range(len(ROCX_SMA_LENGTHS)))
+    return [0]
+
+
 # ---------------- continuous adaptation (cadapt) for flat families ----------
 FLAT_INT_KEYS = {"vR", "vC", "vP", "vE", "vRoc", "vSma", "vMacd",
                  "rocN", "smaN", "hrb", "tslm"}
@@ -600,7 +617,7 @@ def _mutate_flat_core(rng, cand, mode, space=None, p_cont=0.3, p_flag=0.05, sigm
         if k in FLAT_MENU_KEYS:
             menus = (s or {}).get("menus", {})
             opts = (menus.get(k, {}) or {}).get("options") \
-                or list(range(len(SCALP2_VARIANTS[FLAT_MENU_KEYS[k]])))
+                or _menu_options_fallback(k)
             for r in range(len(v)):
                 if rng.random() < 0.10:
                     v[r] = float(rng.choice(opts))

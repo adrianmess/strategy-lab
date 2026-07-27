@@ -1,0 +1,705 @@
+{
+ "name": "c6",
+ "created": "2026-07-26 21:09",
+ "procs": 14,
+ "specs": [
+  {
+   "id": "ca_v7_lev",
+   "wave": 1,
+   "strategy": "v7",
+   "mode": "lev",
+   "method": "cvol7",
+   "space": "levsafe",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt",
+    "--lev-stops"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:09:37",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": -0.08173413846665675,
+     "pct_mo": -7.85,
+     "maxdd": 0.4839764663296397,
+     "n": 277,
+     "tpm": 22.275161608535353,
+     "max_hold_days": 1.5875
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.0047657722793958334,
+     "pct_mo": 0.48,
+     "maxdd": 0.476158361064157,
+     "n": 259,
+     "tpm": 20.827678182709953,
+     "max_hold_days": 2.18125
+    },
+    "oos_rank": 7,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_prime7_lev",
+   "wave": 1,
+   "strategy": "prime7",
+   "mode": "lev",
+   "method": "cvol7",
+   "space": "levsafe",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt",
+    "--lev-stops"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:15:18",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": -0.046695394118580646,
+     "pct_mo": -4.56,
+     "maxdd": 0.2978810501268814,
+     "n": 61,
+     "tpm": 4.90536049863053,
+     "max_hold_days": 2.439583333333333
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": -0.04246967020863242,
+     "pct_mo": -4.16,
+     "maxdd": 0.3202188620334301,
+     "n": 64,
+     "tpm": 5.146607736268097,
+     "max_hold_days": 2.439583333333333
+    },
+    "oos_rank": 4,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_scalpx2_lev",
+   "wave": 1,
+   "strategy": "scalpx2",
+   "mode": "lev",
+   "method": "cvol7",
+   "space": "levsafe",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt",
+    "--lev-stops"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:19:28",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": true,
+     "growth": -15.325827129528255,
+     "pct_mo": -100.0,
+     "maxdd": 0.0,
+     "n": 1,
+     "tpm": 0.5546601794131062,
+     "max_hold_days": 4.664583333333334
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_rocx_lev",
+   "wave": 1,
+   "strategy": "rocx",
+   "mode": "lev",
+   "method": "cvol7",
+   "space": "levsafe",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt",
+    "--lev-stops"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:24:49",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": 0.1669947676371416,
+     "pct_mo": 18.17,
+     "maxdd": 0.6936068223621875,
+     "n": 77,
+     "tpm": 6.192012432697553,
+     "max_hold_days": 20.070833333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_macdx_lev",
+   "wave": 1,
+   "strategy": "macdx",
+   "mode": "lev",
+   "method": "cvol7",
+   "space": "levsafe",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt",
+    "--lev-stops"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:28:14",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": -0.20451912653828533,
+     "pct_mo": -18.5,
+     "maxdd": 0.9250207789270196,
+     "n": 105,
+     "tpm": 8.443653317314846,
+     "max_hold_days": 2.29375
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": -0.17891647197812138,
+     "pct_mo": -16.38,
+     "maxdd": 0.9151503026721326,
+     "n": 105,
+     "tpm": 8.443653317314846,
+     "max_hold_days": 2.29375
+    },
+    "oos_rank": 2,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_v7_spot",
+   "wave": 1,
+   "strategy": "v7",
+   "mode": "spot",
+   "method": "cvol7",
+   "space": "default",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:32:49",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": -0.02090972976922168,
+     "pct_mo": -2.07,
+     "maxdd": 0.19825066406728795,
+     "n": 143,
+     "tpm": 11.499451660724027,
+     "max_hold_days": 11.466666666666667
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.03499127418995788,
+     "pct_mo": 3.56,
+     "maxdd": 0.1508173545325473,
+     "n": 114,
+     "tpm": 9.167395030227546,
+     "max_hold_days": 4.922916666666667
+    },
+    "oos_rank": 433,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_prime7_spot",
+   "wave": 1,
+   "strategy": "prime7",
+   "mode": "spot",
+   "method": "cvol7",
+   "space": "default",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:38:14",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": -0.0007290854656859861,
+     "pct_mo": -0.07,
+     "maxdd": 0.19470831312699186,
+     "n": 191,
+     "tpm": 15.3594074629251,
+     "max_hold_days": 11.60625
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.02580595072557885,
+     "pct_mo": 2.61,
+     "maxdd": 0.06139171358937715,
+     "n": 33,
+     "tpm": 2.6537196140132373,
+     "max_hold_days": 2.31875
+    },
+    "oos_rank": 444,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_scalpx2_spot",
+   "wave": 1,
+   "strategy": "scalpx2",
+   "mode": "spot",
+   "method": "cvol7",
+   "space": "default",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:43:50",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": -0.028416493553899292,
+     "pct_mo": -2.8,
+     "maxdd": 0.5053352812498555,
+     "n": 31,
+     "tpm": 2.4792252421118404,
+     "max_hold_days": 8.502083333333333
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.008473684019261948,
+     "pct_mo": 0.85,
+     "maxdd": 0.13690174078342732,
+     "n": 74,
+     "tpm": 5.9181505779443935,
+     "max_hold_days": 5.720833333333333
+    },
+    "oos_rank": 415,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_rocx_spot",
+   "wave": 1,
+   "strategy": "rocx",
+   "mode": "spot",
+   "method": "cvol7",
+   "space": "default",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:49:30",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": 0.01885592085892182,
+     "pct_mo": 1.9,
+     "maxdd": 0.42883227680672265,
+     "n": 143,
+     "tpm": 11.499451660724027,
+     "max_hold_days": 14.066666666666666
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.0068030571416989585,
+     "pct_mo": 0.68,
+     "maxdd": 0.31222167950899427,
+     "n": 178,
+     "tpm": 14.314002766495642,
+     "max_hold_days": 6.885416666666667
+    },
+    "oos_rank": 536,
+    "survivors": 2
+   },
+   "rc": 0
+  },
+  {
+   "id": "ca_macdx_spot",
+   "wave": 1,
+   "strategy": "macdx",
+   "mode": "spot",
+   "method": "cvol7",
+   "space": "default",
+   "algo": "genetic",
+   "scoring": "classic",
+   "total": 150000,
+   "mh": 7,
+   "hold": 21,
+   "extra": [
+    "--cadapt"
+   ],
+   "status": "done",
+   "started": "2026-07-26 21:52:35",
+   "result": {
+    "ok": true,
+    "evaluated": 151200,
+    "train_best": {
+     "liq": false,
+     "growth": 0.05039605690950743,
+     "pct_mo": 5.17,
+     "maxdd": 0.2165497986806676,
+     "n": 125,
+     "tpm": 10.051968234898625,
+     "max_hold_days": 8.18125
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": 0.05136486482605,
+     "pct_mo": 5.27,
+     "maxdd": 0.17013177865040777,
+     "n": 106,
+     "tpm": 8.524069063194034,
+     "max_hold_days": 4.247916666666667
+    },
+    "oos_rank": 443,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_ref_rocx_lev",
+   "wave": 2,
+   "status": "done",
+   "strategy": "rocx",
+   "mode": "lev",
+   "method": "cvol7",
+   "scoring": "classic",
+   "space": "levsafe",
+   "total": 50000,
+   "mh": 7,
+   "dd": null,
+   "hold": 21,
+   "train_start": null,
+   "train_end": "2025-09-01",
+   "algo": "refine",
+   "resume_from": "runs/camp_c6_ca_rocx_lev",
+   "started": "2026-07-26 21:56:50",
+   "result": {
+    "ok": true,
+    "evaluated": 50400,
+    "train_best": {
+     "liq": false,
+     "growth": 0.1669947676371416,
+     "pct_mo": 18.17,
+     "maxdd": 0.6936068223621875,
+     "n": 77,
+     "tpm": 6.192012432697553,
+     "max_hold_days": 20.070833333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_ref_macdx_spot",
+   "wave": 2,
+   "status": "pending",
+   "strategy": "macdx",
+   "mode": "spot",
+   "method": "cvol7",
+   "scoring": "classic",
+   "space": "default",
+   "total": 50000,
+   "mh": 7,
+   "dd": null,
+   "hold": 21,
+   "train_start": null,
+   "train_end": "2025-09-01",
+   "algo": "refine",
+   "resume_from": "runs/camp_c6_ca_macdx_spot",
+   "started": "2026-07-26 21:58:00",
+   "result": {
+    "ok": false,
+    "reason": "no best_config.json (0 survivors or crash)"
+   },
+   "rc": 1
+  },
+  {
+   "id": "w2_ref_v7_spot",
+   "wave": 2,
+   "status": "done",
+   "strategy": "v7",
+   "mode": "spot",
+   "method": "cvol7",
+   "scoring": "classic",
+   "space": "default",
+   "total": 50000,
+   "mh": 7,
+   "dd": null,
+   "hold": 21,
+   "train_start": null,
+   "train_end": "2025-09-01",
+   "algo": "refine",
+   "resume_from": "runs/camp_c6_ca_v7_spot",
+   "started": "2026-07-26 21:58:05",
+   "result": {
+    "ok": true,
+    "evaluated": 50400,
+    "train_best": {
+     "liq": false,
+     "growth": -0.01695105062771431,
+     "pct_mo": -1.68,
+     "maxdd": 0.2266702334386241,
+     "n": 143,
+     "tpm": 11.499451660724027,
+     "max_hold_days": 11.470833333333333
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_ref_prime7_spot",
+   "wave": 2,
+   "status": "done",
+   "strategy": "prime7",
+   "mode": "spot",
+   "method": "cvol7",
+   "scoring": "classic",
+   "space": "default",
+   "total": 50000,
+   "mh": 7,
+   "dd": null,
+   "hold": 21,
+   "train_start": null,
+   "train_end": "2025-09-01",
+   "algo": "refine",
+   "resume_from": "runs/camp_c6_ca_prime7_spot",
+   "started": "2026-07-26 21:59:51",
+   "result": {
+    "ok": true,
+    "evaluated": 50400,
+    "train_best": {
+     "liq": false,
+     "growth": -0.006957764815565355,
+     "pct_mo": -0.69,
+     "maxdd": 0.19470831312699188,
+     "n": 184,
+     "tpm": 14.796497241770776,
+     "max_hold_days": 11.60625
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": -0.023249078531307844,
+     "pct_mo": -2.3,
+     "maxdd": 0.14644633731869966,
+     "n": 115,
+     "tpm": 9.247810776106736,
+     "max_hold_days": 6.883333333333334
+    },
+    "oos_rank": 487,
+    "survivors": 10
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_ref_rocx_spot",
+   "wave": 2,
+   "status": "done",
+   "strategy": "rocx",
+   "mode": "spot",
+   "method": "cvol7",
+   "scoring": "classic",
+   "space": "default",
+   "total": 50000,
+   "mh": 7,
+   "dd": null,
+   "hold": 21,
+   "train_start": null,
+   "train_end": "2025-09-01",
+   "algo": "refine",
+   "resume_from": "runs/camp_c6_ca_rocx_spot",
+   "started": "2026-07-26 22:01:41",
+   "result": {
+    "ok": true,
+    "evaluated": 50400,
+    "train_best": {
+     "liq": false,
+     "growth": 0.01885592085892182,
+     "pct_mo": 1.9,
+     "maxdd": 0.42883227680672265,
+     "n": 143,
+     "tpm": 11.499451660724027,
+     "max_hold_days": 14.066666666666666
+    },
+    "oos_rank": null,
+    "survivors": 0
+   },
+   "rc": 0
+  },
+  {
+   "id": "w2_ref_scalpx2_spot",
+   "wave": 2,
+   "status": "done",
+   "strategy": "scalpx2",
+   "mode": "spot",
+   "method": "cvol7",
+   "scoring": "classic",
+   "space": "default",
+   "total": 50000,
+   "mh": 7,
+   "dd": null,
+   "hold": 21,
+   "train_start": null,
+   "train_end": "2025-09-01",
+   "algo": "refine",
+   "resume_from": "runs/camp_c6_ca_scalpx2_spot",
+   "started": "2026-07-26 22:02:41",
+   "result": {
+    "ok": true,
+    "evaluated": 50400,
+    "train_best": {
+     "liq": false,
+     "growth": -0.028416493553899292,
+     "pct_mo": -2.8,
+     "maxdd": 0.5053352812498555,
+     "n": 31,
+     "tpm": 2.4792252421118404,
+     "max_hold_days": 8.502083333333333
+    },
+    "oos_best": {
+     "liq": false,
+     "growth": -0.062054099723538106,
+     "pct_mo": -6.02,
+     "maxdd": 0.587697164479498,
+     "n": 30,
+     "tpm": 2.399250234301781,
+     "max_hold_days": 6.841666666666667
+    },
+    "oos_rank": 531,
+    "survivors": 2
+   },
+   "rc": 0
+  },
+  {
+   "id": "w3_bt_ca_v7_lev",
+   "wave": 3,
+   "status": "done",
+   "kind": "backtest",
+   "config": "runs/camp_c6_ca_v7_lev/holdout_best_config.json",
+   "bt_name": "camp_c6_ca_v7_lev_oosbest_full",
+   "started": "2026-07-26 22:04:31",
+   "rc": 0
+  },
+  {
+   "id": "w3_bt_ca_v7_spot",
+   "wave": 3,
+   "status": "done",
+   "kind": "backtest",
+   "config": "runs/camp_c6_ca_v7_spot/holdout_best_config.json",
+   "bt_name": "camp_c6_ca_v7_spot_oosbest_full",
+   "started": "2026-07-26 22:04:36",
+   "rc": 0
+  },
+  {
+   "id": "w3_bt_ca_prime7_spot",
+   "wave": 3,
+   "status": "done",
+   "kind": "backtest",
+   "config": "runs/camp_c6_ca_prime7_spot/holdout_best_config.json",
+   "bt_name": "camp_c6_ca_prime7_spot_oosbest_full",
+   "started": "2026-07-26 22:04:41",
+   "rc": 0
+  },
+  {
+   "id": "w3_bt_ca_scalpx2_spot",
+   "wave": 3,
+   "status": "done",
+   "kind": "backtest",
+   "config": "runs/camp_c6_ca_scalpx2_spot/holdout_best_config.json",
+   "bt_name": "camp_c6_ca_scalpx2_spot_oosbest_full",
+   "started": "2026-07-26 22:04:46",
+   "rc": 0
+  },
+  {
+   "id": "w3_bt_ca_rocx_spot",
+   "wave": 3,
+   "status": "pending",
+   "kind": "backtest",
+   "config": "runs/camp_c6_ca_rocx_spot/holdout_best_config.json",
+   "bt_name": "camp_c6_ca_rocx_spot_oosbest_full",
+   "started": "2026-07-26 22:04:51",
+   "rc": -11
+  },
+  {
+   "id": "w3_bt_ca_macdx_spot",
+   "wave": 3,
+   "status": "pending",
+   "kind": "backtest",
+   "config": "runs/camp_c6_ca_macdx_spot/holdout_best_config.json",
+   "bt_name": "camp_c6_ca_macdx_spot_oosbest_full",
+   "started": "2026-07-26 22:04:56",
+   "rc": 1
+  }
+ ],
+ "wave": 3,
+ "matrix": "cadapt",
+ "note": "wave-2/3 specs are appended automatically",
+ "updated": "2026-07-26 22:05:06"
+}
