@@ -326,6 +326,20 @@ document.querySelectorAll('#bt th').forEach((th,i)=>{
     localStorage.setItem('btSortKey', sortKey); localStorage.setItem('btSortDir', sortDir);
     render(); };
 });
+function kindBadge(e){
+  // honesty tier for router-merge entries: full merges are train-flavored
+  // (assignment picked with info spanning the whole period); walk-forward
+  // siblings and stacks are the causal numbers to believe
+  if((e.kind||'') !== 'full-history (router merge)') return '';
+  if(e.name.endsWith('_walkforward_router_full'))
+    return ' <span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="chronological walk-forward: the assignment was re-picked from PAST-ONLY data at each 42d step, then traded on the next unseen window — the honest number">causal WF</span>';
+  if((e.method||'').startsWith('stack'))
+    return ' <span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="stacked router: every fold chose its source router and assignment from past-only data — causal by construction, so this full curve IS its walk-forward">causal</span>';
+  const wf = e.name.replace(/_router_full$/,'').replace(/_refined$/,'') + '_walkforward_router_full';
+  const has = BT.some(x=>x.name===wf);
+  return ' <span class="pill" style="background:rgba(210,153,34,.15);color:var(--amber)" title="full-history router merge: the bucket assignment was selected using performance information spanning this ENTIRE period (alternating 21d train blocks) — a best-case, train-flavored number. Judge the router by its walk-forward instead.">train-flavored</span>'
+    + (has ? ` <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(wf)}" title="open this router's chronological walk-forward — the honest version of this number">WF ↗</a>` : '');
+}
 function gapBadge(e){
   const g = e.gap_handling;
   if(!g) return '<span class="pill" style="background:rgba(210,153,34,.15);color:var(--amber)" title="run before gap tracking; handling unknown">unknown</span>';
@@ -361,7 +375,7 @@ function render(){
     });
   }
   tb.innerHTML = order.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
-    <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const tr=tradedOf(e.name);return tr?` <span class="pill" style="background:${tr.live?'rgba(248,81,73,.15)':'rgba(210,153,34,.15)'};color:${tr.live?'var(--red)':'var(--amber)'}" title="the run behind this backtest is being traded by ${tr.name} (#${tr.instance}) — ${tr.live?'REAL MONEY':'dry-run'}">${tr.live?'TRADING LIVE':'DRY-RUN'}</span>`:''})()}</td><td>${e.kind||''}</td><td>${stratName(e.strategy)}</td>
+    <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const tr=tradedOf(e.name);return tr?` <span class="pill" style="background:${tr.live?'rgba(248,81,73,.15)':'rgba(210,153,34,.15)'};color:${tr.live?'var(--red)':'var(--amber)'}" title="the run behind this backtest is being traded by ${tr.name} (#${tr.instance}) — ${tr.live?'REAL MONEY':'dry-run'}">${tr.live?'TRADING LIVE':'DRY-RUN'}</span>`:''})()}</td><td>${e.kind||''}${kindBadge(e)}</td><td>${stratName(e.strategy)}</td>
     <td><span class="pill ${e.mode}">${e.mode||''}</span></td><td>${e.method||''}</td>
     <td class="hint" style="font-size:11.5px">${e.opt ? [e.opt.algo, e.opt.param_set, 'holdout: '+e.opt.holdout, e.opt.max_dd!=null?('DD≤'+Math.round(100*e.opt.max_dd)+'%'):(e.mode==='lev'?'DD≤80%':'DD≤50%'), e.opt.max_hold_days?('≤'+e.opt.max_hold_days+'d in trade'):null, e.opt.gap_mode?('gaps: '+e.opt.gap_mode.replace('skip_','')):null, e.opt.lockbox?('lockbox '+e.opt.lockbox):null, (e.opt.scoring&&e.opt.scoring!=='classic')?('scoring: '+e.opt.scoring.replace('_','-')):null, e.opt.anchor?('anchored ('+e.opt.anchor+(e.opt.anchor_strength?(', λ'+e.opt.anchor_strength):'')+')'):null, e.opt.evaluated?(e.opt.evaluated.toLocaleString()+' evals'):null].filter(Boolean).join(' · ') : '—'}</td>
     <td class="${s.monthly_growth_pct>=0?'pos':'neg'}">${fp(s.monthly_growth_pct)}</td>
