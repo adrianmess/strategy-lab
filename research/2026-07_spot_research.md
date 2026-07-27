@@ -1,4 +1,18 @@
 # Spot-focus research: continuous adaptation, proven methods, and the 1%/day question
+
+## Addendum (2026-07-27): perp-vs-spot basis measurement
+
+All research data (every pair, both modes) is MEXC **perp** candles; spot backtests are spot
+rules on perp prices, and the live spot trader signals off perp but fills on the spot book.
+Measured on 23,813 aligned 1-minute bars (2026-07-01 → 07-27, MEXC spot klines vs research perp
+data), SOL/USDT: spot trades ~+5.5 bps above perp, very stable (std 1.8 bps; |basis| p95 8.2,
+p99 9.5, max 34.8 bps during the 07-10 spike; no meaningful widening in high-vol terciles).
+Because the basis level cancels across a round trip, the per-trade PnL error is
+**p50 1.3 bps / p95 4.9 bps — versus 10 bps round-trip fees**, i.e. at worst about half a fee
+side, and %-based signals are unaffected by the constant offset. Verdict: perp candles are a
+sound research proxy for SOL spot; assumption documented rather than re-engineered. If deep
+true-spot history is ever wanted, CoinAPI carries MEXC_SPOT_* from 2023-11-23 (MEXC's own spot
+kline API only retains ~30 days).
 *2026-07-27 — for Strategy Lab (MEXC SOL/USDT spot, 3-min bars, ~0.05%/side fees)*
 
 ## 1. Verdict on the 1%/day goal
