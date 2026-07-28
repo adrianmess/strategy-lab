@@ -815,6 +815,40 @@ def main():
         else:
             print(f"NOTE: no pair overlay for {args.symbol} — using SOL "
                   f"ranges as-is", flush=True)
+    if args.tf == 1:
+        # 1m charts: the engines appended 3x-scaled variant lengths (same
+        # WALL-CLOCK spans as the 3m grids) — widen the search menus so the
+        # optimizer can actually pick them
+        _vmenus = {}
+        if args.strategy in ("v7", "prime7"):
+            from engine3 import VARIANTS as _V3
+            _vmenus = dict(vRsi=len(_V3["rsi"]), vMacd=len(_V3["macd"]),
+                           vBB=len(_V3["bb"]), vEmaUp=len(_V3["ema"]),
+                           vEmaDn=len(_V3["ema"]), vX=len(_V3["xmacd"]),
+                           vHistN=len(_V3["histn"]))
+        elif args.strategy == "scalpx2":
+            from scalp_engine import SCALP2_VARIANTS as _SV
+            _vmenus = dict(vR=len(_SV["rsi"]), vC=len(_SV["cvd"]),
+                           vP=len(_SV["poc"]), vE=len(_SV["emaS"]))
+        elif args.strategy == "rocx":
+            from rocx_engine import ROCX_ROC_LENGTHS, ROCX_SMA_LENGTHS
+            _vmenus = dict(vRoc=len(ROCX_ROC_LENGTHS),
+                           vSma=len(ROCX_SMA_LENGTHS))
+        elif args.strategy == "macdx":
+            from macdx_engine import MACDX_VARIANTS as _MV
+            if (space.get("menus") or {}).get("vMacd"):
+                _vmenus = dict(vMacd=len(_MV))
+        n_wide = 0
+        for _k, _n in _vmenus.items():
+            _m = (space.get("menus") or {}).get(_k)
+            if _m and len(_m.get("options") or []) < _n:
+                space.setdefault("menus", {})[_k] = dict(
+                    _m, options=list(range(_n)),
+                    labels=[str(i) for i in range(_n)])
+                n_wide += 1
+        if n_wide:
+            print(f"1m grids: {n_wide} variant menus widened to include "
+                  f"3x-scaled (time-equivalent) indicator lengths", flush=True)
     flat = args.strategy not in ("v7", "prime7")
 
     if flat:

@@ -56,7 +56,28 @@ def _load_variants():
         print(f"variants from param_space.json unusable ({e}); using defaults")
     return dict(_DEFAULT_VARIANTS)
 
-VARIANTS = _load_variants()
+def _tf1_extend(v):
+    """1-minute charts: ALSO offer each length x3, so the same WALL-CLOCK
+    indicator spans as the 3m grids are searchable (bar-count grids alone
+    would cap at 1/3 of the 3m time spans). Dedup preserves order."""
+    if os.environ.get("LAB_TF", "3") != "1":
+        return v
+    def dd(seq):
+        out = []
+        for x in seq:
+            if x not in out:
+                out.append(x)
+        return out
+    return dict(
+        rsi=dd(v["rsi"] + [x * 3 for x in v["rsi"]]),
+        macd=dd(v["macd"] + [tuple(y * 3 for y in x) for x in v["macd"]]),
+        bb=dd(v["bb"] + [(x[0] * 3, x[1]) for x in v["bb"]]),
+        ema=dd(v["ema"] + [x * 3 for x in v["ema"]]),
+        xmacd=dd(v["xmacd"] + [tuple(y * 3 for y in x) for x in v["xmacd"]]),
+        histn=dd(v["histn"] + [x * 3 for x in v["histn"]]),
+    )
+
+VARIANTS = _tf1_extend(_load_variants())
 
 def variants_hash():
     import hashlib

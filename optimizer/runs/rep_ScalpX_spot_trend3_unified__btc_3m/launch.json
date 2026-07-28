@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:43:04",
+  "cmd": "python3 optimize2_cli.py --strategy scalpx --mode spot --method trend3 --algo genetic --batch 100 --total 4320 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol btc --tf 3 --name rep_ScalpX_spot_trend3_unified__btc_3m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

@@ -32,8 +32,14 @@ import pandas as pd
 from numba import njit
 
 # variant libraries (indicator lengths -> one precompute each, menu-searchable)
-ROCX_ROC_LENGTHS = [7, 10, 14, 21, 28]     # ta.roc(low_1m, L)
-ROCX_SMA_LENGTHS = [9, 13, 21, 34]         # ta.sma(close_45m, L)
+def _tf1x(seq):
+    import os as _os
+    if _os.environ.get("LAB_TF", "3") != "1":
+        return seq
+    return list(dict.fromkeys(list(seq) + [x * 3 for x in seq]))
+
+ROCX_ROC_LENGTHS = _tf1x([7, 10, 14, 21, 28])     # ta.roc(low_1m, L)
+ROCX_SMA_LENGTHS = _tf1x([9, 13, 21, 34])         # ta.sma(close_45m, L)
 
 ROCX_DEFAULTS = dict(
     rocNumBars=3, smaNumBars=2,

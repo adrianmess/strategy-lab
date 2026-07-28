@@ -38,6 +38,10 @@ MACDX_PNAMES = [
 # original pine 12/26/9 — the default everywhere, so pre-variant configs and
 # classic searches behave EXACTLY as before.
 MACDX_VARIANTS = [(5, 13, 5), (8, 17, 9), (12, 26, 9), (16, 35, 9), (20, 50, 9)]
+if os.environ.get("LAB_TF", "3") == "1":
+    # 1m charts: time-equivalent spans of the 3m grid too
+    MACDX_VARIANTS = MACDX_VARIANTS + [tuple(x * 3 for x in v)
+                                       for v in MACDX_VARIANTS]
 MACDX_DEFAULT_VMACD = 2
 _KEY2P = {k: (dk) for k, dk in [
     ("tpL", "takeProfitLongPct"), ("tpS", "takeProfitShortPct"),

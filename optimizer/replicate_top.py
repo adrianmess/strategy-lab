@@ -130,29 +130,33 @@ def make_plan():
     run_dirs = [d for d in os.listdir(RUNS)
                 if os.path.isdir(os.path.join(RUNS, d))]
     bests = {d: load_best(d) for d in run_dirs}
-    # top 10 optimize runs
-    scored = [(honest_growth(b), d) for d, b in bests.items()
-              if eligible(d, b) and honest_growth(b) is not None]
-    scored.sort(reverse=True)
-    top_opt = [d for _, d in scored[:10]]
-    # top 10 backtest source runs
     raw = open(os.path.join(HERE, "..", "dashboard", "backtests.js")).read()
-    ents = json.loads(raw[raw.index("["):raw.rindex("]") + 1])
-    ents = [e for e in ents
-            if not e["stats"].get("liq")
-            and (e.get("pair") or "SOL_USDT") == "SOL_USDT"
-            and str(e.get("timeframe") or "3m") == "3m"
-            and e.get("strategy") != "metax"
-            and "full" in (e.get("kind") or "")]
-    ents.sort(key=lambda e: -(e["stats"].get("monthly_growth_pct") or -9e9))
-    top_bt, seen = [], set()
-    for e in ents:
-        src = bt_source_run(e["name"], run_dirs)
-        if src and src not in seen and eligible(src, bests.get(src)):
-            seen.add(src)
-            top_bt.append(src)
-        if len(top_bt) >= 10:
-            break
+    all_ents = json.loads(raw[raw.index("["):raw.rindex("]") + 1])
+    top_opt, top_bt = [], []
+    # top 10 per MODE (lev + spot), for both optimize runs and backtests
+    for mode in ("lev", "spot"):
+        scored = [(honest_growth(b), d) for d, b in bests.items()
+                  if eligible(d, b) and b.get("mode") == mode
+                  and honest_growth(b) is not None]
+        scored.sort(reverse=True)
+        top_opt += [d for _, d in scored[:10]]
+        ents = [e for e in all_ents
+                if not e["stats"].get("liq")
+                and e.get("mode") == mode
+                and (e.get("pair") or "SOL_USDT") == "SOL_USDT"
+                and str(e.get("timeframe") or "3m") == "3m"
+                and e.get("strategy") != "metax"
+                and "full" in (e.get("kind") or "")]
+        ents.sort(key=lambda e: -(e["stats"].get("monthly_growth_pct") or -9e9))
+        seen = set()
+        for e in ents:
+            src = bt_source_run(e["name"], run_dirs)
+            if src and src not in seen and eligible(src, bests.get(src)) \
+                    and bests[src].get("mode") == mode:
+                seen.add(src)
+                top_bt.append(src)
+            if len(seen) >= 10:
+                break
     selected, skipped, jobs = [], [], []
     seen_cmds = set()
     for d in dict.fromkeys(top_opt + top_bt):        # ordered union
@@ -176,6 +180,16 @@ def make_plan():
                                  status="pending"))
     # 3m jobs first (comparable to originals), then 1m
     jobs.sort(key=lambda j: (j["tf"] != 3,))
+    # merge statuses from an existing plan (regeneration mid-queue)
+    if os.path.exists(PLAN):
+        try:
+            old = {j["name"]: j["status"]
+                   for j in json.load(open(PLAN)).get("jobs", [])}
+            for j in jobs:
+                if old.get(j["name"]) == "done":
+                    j["status"] = "done"
+        except Exception:
+            pass
     plan = dict(selected=selected, skipped=skipped, jobs=jobs,
                 made=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(plan, open(PLAN, "w"), indent=1)

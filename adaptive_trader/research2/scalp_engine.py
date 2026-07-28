@@ -262,7 +262,13 @@ def _load_scalp2_variants():
         print(f"scalpx2 variants from param_space.json unusable ({e}); using defaults")
     return dict(_SCALP2_DEFAULTS)
 
-SCALP2_VARIANTS = _load_scalp2_variants()
+def _tf1_extend2(v):
+    if os.environ.get("LAB_TF", "3") != "1":
+        return v
+    dd = lambda seq: list(dict.fromkeys(seq))
+    return {k: dd(list(vals) + [x * 3 for x in vals]) for k, vals in v.items()}
+
+SCALP2_VARIANTS = _tf1_extend2(_load_scalp2_variants())
 
 def scalp2_hash():
     import hashlib

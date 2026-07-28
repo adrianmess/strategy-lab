@@ -1,0 +1,12 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 33.49328089899677,
+  "total_mult": 1503.8795474077856,
+  "gap_mode": "skip_contaminated",
+  "backtest": "rep_camp_c2_e_macdx_vol3_xfit__sui_3m_full",
+  "at": "2026-07-27 20:58"
+ }
+}
