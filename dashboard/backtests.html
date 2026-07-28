@@ -376,7 +376,7 @@ function pairPill(p, mkt, tf){
   p = (p||'SOL_USDT').split('_')[0];
   const spot = (mkt||'perp')==='spot';
   const t = String(tf||'3m');
-  return ` <span class="pill" style="background:rgba(88,166,255,.15);color:#58a6ff" title="trading pair (vs USDT) — simulated on ${spot?'SPOT':'perp/futures'} candles, ${t} bars${spot?'':' (legacy default; spot-mode entries before 2026-07-28 used perp data too)'}">${p}${spot?'·S':''}${t!=='3m'?'·'+t:''}</span>`;
+  return ` <span class="pill" style="background:rgba(88,166,255,.15);color:#58a6ff" title="trading pair (vs USDT) — simulated on ${spot?'SPOT':'perp/futures'} candles, ${t} chart bars${spot?'':' (legacy default; spot-mode entries before 2026-07-28 used perp data too)'}">${p}${spot?'·S':''}</span><span class="pill" style="background:rgba(139,148,158,.15);color:var(--dim)" title="chart timeframe this backtest was simulated on">${t}</span>`;
 }
 (function initBtFilters(){
   const sel_ = document.getElementById('fPair');
