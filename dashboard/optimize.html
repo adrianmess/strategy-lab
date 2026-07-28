@@ -124,6 +124,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="algo" onchange="algoChanged()"><option>genetic</option><option>random</option><option>refine</option><option value="crossfit">cross-fit (genetic ×2 + merge)</option></select></div>
       <div class="field"><label data-x="mode">Mode</label>
         <select id="mode"><option>lev</option><option>spot</option></select></div>
+      <div class="field"><label data-x="tfsel">Chart</label>
+        <select id="tfsel" title="chart timeframe — indicator lengths are in BARS, so a 50-EMA on 1m is a faster indicator than on 3m. Non-3m configs are research-only until the live trader supports them."><option value="3">3 min</option><option value="1">1 min</option><option value="5">5 min</option></select></div>
       <div class="field"><label data-x="pairsel">Pair</label>
         <select id="symbol" title="trading pair (vs USDT) — selects that pair's data files and per-symbol caches; the run is tagged with it"><option value="sol">SOL</option><option value="btc">BTC</option><option value="eth">ETH</option><option value="doge">DOGE</option><option value="xrp">XRP</option><option value="sui">SUI</option></select></div>
       <div class="field"><label data-x="regime">Regime</label>
@@ -347,7 +349,8 @@ async function launch(){
     lockbox:($('algo').value==='crossfit' && $('lockbox').value.trim()) ? $('lockbox').value.trim() : undefined,
     single_set: $('perreg').value==='1',
     cadapt: $('cadapt').checked,
-    symbol: $('symbol').value};
+    symbol: $('symbol').value,
+    tf: $('tfsel').value};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
   if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
@@ -462,10 +465,11 @@ async function refreshRuns(){
   renderRuns(); fillCombine();
   if(RUNS.some(r=>r.running)) setTimeout(refreshRuns, 5000);  // live progress
 }
-function pairPill(p, mkt){
+function pairPill(p, mkt, tf){
   p = (p||'SOL_USDT').split('_')[0];
   const spot = (mkt||'perp')==='spot';
-  return ` <span class="badge" style="background:rgba(88,166,255,.15);color:#58a6ff" title="trading pair (vs USDT) — researched on ${spot?'SPOT':'perp/futures'} candles${spot?'':' (legacy default; spot-mode runs before 2026-07-28 also used perp data)'}">${p}${spot?'·S':''}</span>`;
+  const t = String(tf||'3m');
+  return ` <span class="badge" style="background:rgba(88,166,255,.15);color:#58a6ff" title="trading pair (vs USDT) — researched on ${spot?'SPOT':'perp/futures'} candles, ${t} bars${spot?'':' (legacy default; spot-mode runs before 2026-07-28 also used perp data)'}">${p}${spot?'·S':''}${t!=='3m'?'·'+t:''}</span>`;
 }
 function renderRuns(){
   const lf = $('liqFilter').value;
@@ -490,7 +494,7 @@ function renderRuns(){
       const hs = r.holdout_scan;
       return `<tr class="${r.best?'best':''} rate${r.rating||0}"><td><b>${r.name}</b></td>
       <td>${stratName(r.strategy)}</td>
-      <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data)}</td>
+      <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
       <td class="kv" style="font-size:11.5px">${optChips(r)}</td>
       <td class="kv">${r.last_run||''}</td>
@@ -525,7 +529,7 @@ function renderRuns(){
           onclick="if(['TD','B','TR'].includes(event.target.tagName)) toggleJobRow('${r.name.replace(/'/g,"\\'")}')"` : '';
     return `<tr class="${r.best?'best':''} rate${r.rating||0}"${rowToggle}><td>${r.running?'<span class="livedot" title="this run\'s search is executing right now"></span>':''}<b>${r.name}</b>${r.running?' <span class="badge b-green" title="search in progress — live job nested below, progress in the settings column">ACTIVE</span>':''}${r.trading?` <span class="livedot" style="background:${r.trading.live?'var(--red)':'var(--amber)'}"></span><span class="badge ${r.trading.live?'b-red':'b-amber'}" title="a trader instance is running a config adopted from this run: ${r.trading.name} (#${r.trading.instance}), ${r.trading.live?'REAL MONEY':'dry-run rehearsal'}">${r.trading.live?'TRADING LIVE':'DRY-RUN'} · ${r.trading.name}</span>`:''}${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
       <td>${stratName(r.strategy)}</td>
-      <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data)}</td>
+      <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
       <td class="kv" style="font-size:11.5px">${optChips(r)}</td>
       <td class="kv">${r.last_run||''}</td>
@@ -636,6 +640,7 @@ function loadRunSettings(name){
   $('perreg').value = (r.per_regime===false) ? '1' : '';
   $('cadapt').checked = (r.per_regime==='ends') || !!(r.cand&&r.cand.cadapt);
   $('symbol').value = ((r.pair||'SOL_USDT').split('_')[0]||'SOL').toLowerCase();
+  $('tfsel').value = String(r.timeframe||'3m').replace('m','');
   setSel('algo', r.algo);
   $('lockboxField').style.display = $('algo').value==='crossfit' ? '' : 'none';
   if(r.holdout_days){ $('hoMode').value='alt'; $('hoDays').value=r.holdout_days; }

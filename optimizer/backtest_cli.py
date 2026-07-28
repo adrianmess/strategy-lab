@@ -132,7 +132,7 @@ def run_single_macdx(cfg, oos_start=None, holdout_days=None,
                         unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
                         move_pct=float((mark / op["entry"] - 1) * op["dir"]),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -207,7 +207,7 @@ def run_single_rocx(cfg, oos_start=None, holdout_days=None,
                         unreal=float(op["qty"] * (mark - op["entry"])),
                         move_pct=float(mark / op["entry"] - 1),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -283,7 +283,7 @@ def run_single_rocx_opt(cfg, oos_start=None, holdout_days=None,
                         unreal=float(op["qty"] * (mark - op["entry"])),
                         move_pct=float(mark / op["entry"] - 1),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -361,7 +361,7 @@ def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
                         unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
                         move_pct=float((mark / op["entry"] - 1) * op["dir"]),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -446,7 +446,7 @@ def run_single_original(cfg, oos_start=None, holdout_days=None,
                         unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
                         move_pct=float((mark / op["entry"] - 1) * op["dir"]),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -540,7 +540,7 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
                         unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
                         move_pct=float((mark / op["entry"] - 1) * op["dir"]),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -576,17 +576,20 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
     if os.environ.get("LAB_DATA_PINNED") != "1":
         _coin = (cfg.get("pair") or "SOL_USDT").split("_")[0].lower()
         _mkt = (cfg.get("market_data") or "perp").lower()
+        _tf = str(cfg.get("timeframe") or "3m").rstrip("m")
         _prev = os.environ.get("LAB_COIN", "sol").lower()
         _prevm = os.environ.get("LAB_MARKET", "perp").lower()
-        if (_coin, _mkt) != (_prev, _prevm):
+        _prevt = os.environ.get("LAB_TF", "3")
+        if (_coin, _mkt, _tf) != (_prev, _prevm, _prevt):
             import wf2 as _W
             if _W._G:
                 raise SystemExit(
-                    f"config is {_coin.upper()}_USDT/{_mkt} but this process "
-                    f"already loaded {_prev.upper()}/{_prevm} data — run it "
-                    f"in a fresh process")
+                    f"config is {_coin.upper()}_USDT/{_mkt}/{_tf}m but this "
+                    f"process already loaded {_prev.upper()}/{_prevm}/"
+                    f"{_prevt}m data — run it in a fresh process")
         os.environ["LAB_COIN"] = _coin
         os.environ["LAB_MARKET"] = _mkt
+        os.environ["LAB_TF"] = _tf
     cand = cfg.get("cand")
     if not cand:
         raise SystemExit("This run produced NO surviving candidate (see its report) — "
@@ -684,7 +687,7 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
                         unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
                         move_pct=float((mark / op["entry"] - 1) * op["dir"]),
                         at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
-            months += (b - a) / (480 * 30.4)
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
             if len(tr):
                 m, d = mtm_curve(tr, sp["c"], initial=eq0)
                 mdd = max(mdd, d)
@@ -810,6 +813,7 @@ def main():
     entry.setdefault("pair",
                      os.environ.get("LAB_COIN", "sol").upper() + "_USDT")
     entry.setdefault("market_data", os.environ.get("LAB_MARKET", "perp"))
+    entry.setdefault("timeframe", os.environ.get("LAB_TF", "3") + "m")
     entries = [e for e in load_backtests() if e["name"] != args.name]
     entries.append(entry)
     save_backtests(entries)

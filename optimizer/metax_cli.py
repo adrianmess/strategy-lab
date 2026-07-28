@@ -429,6 +429,7 @@ def walkforward(run_dir, step_days=42, total=8000, seed=5):
     the PAST only, trade it on the NEXT unseen window, chain the windows."""
     meta = json.load(open(os.path.join(run_dir, "best_config.json")))
     os.environ["LAB_MARKET"] = (meta.get("market_data") or "perp").lower()
+    os.environ["LAB_TF"] = str(meta.get("timeframe") or "3m").rstrip("m")
     os.environ["LAB_DATA_PINNED"] = "1"
     cand, mode, buckets = meta["cand"], meta["mode"], meta["method"]
     comps = [dict(run=c["run"], file=c["file"], strategy=c["strategy"],

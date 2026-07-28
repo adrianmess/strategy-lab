@@ -21,6 +21,7 @@ TradingView semantics reproduced:
 Validated against the 2026-07-12 TradingView export.
 """
 import numpy as np
+import os
 import pandas as pd
 from numba import njit
 from engine import last_1m_metric
@@ -133,7 +134,8 @@ MAX_TRADES = 60000
 
 @njit(cache=True)
 def _core_macdx(t_ms, o, h, l, c, macd, sig, hist, dropL, incS,
-                regime, P, warmup, initial_capital, commission, no_entry):
+                regime, P, warmup, initial_capital, commission, no_entry,
+                bph):
     """Bar-close state machine with next-bar-open fills; per-regime params P.
     trade row: [entry_idx, exit_idx, dir, entry, exit, qty, net, mae, reason, lev]
     reason: 0=profit_target, 1=stop_loss, 2=LIQUIDATED, 3=reversal."""
@@ -231,7 +233,7 @@ def _core_macdx(t_ms, o, h, l, c, macd, sig, hist, dropL, incS,
         longCond = (P[r, 22] > 0 and xUp and macd[i] < P[r, 6] and histRising
                     and (P[r, 8] <= 0 or hist[i] > 0) and not actL)
         shortCond = (P[r, 23] > 0 and xDn and macd[i] > P[r, 5] and not actS)
-        can_open = (i - last_order_bar) > P[r, 4] * 20.0
+        can_open = (i - last_order_bar) > P[r, 4] * bph
 
         mark_eq = eq
         if pos != 0:
@@ -311,7 +313,8 @@ def run_macdx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
         macd, sig, hist, pre["dropL"], pre["incS"],
         np.asarray(regime, dtype=np.int32), np.asarray(P, dtype=np.float64),
         int(warmup), float(initial_capital), float(commission),
-        np.asarray(ne, dtype=np.int8))
+        np.asarray(ne, dtype=np.int8),
+        60.0 / float(os.environ.get("LAB_TF", "3")))
     t = pre["t"]
     tr = pd.DataFrame(arr, columns=["entry_idx", "exit_idx", "dir", "entry",
                                     "exit", "qty", "net", "mae", "reason", "lev"])

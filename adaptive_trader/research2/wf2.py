@@ -28,6 +28,7 @@ from adaptive import make_adaptive_pre, slice_pre
 from regimes import regime_features, make_regimes, REGIME_METHODS, DAY
 from common import load_segments
 
+_TFM = float(os.environ.get("LAB_TF", "3"))   # chart bar minutes
 IDX = {k: i for i, k in enumerate(PARAM_NAMES)}
 SIDX = {k: i for i, k in enumerate(SCALP_PARAM_NAMES)}
 
@@ -72,14 +73,18 @@ def _cache_path(fn):
     d = os.environ.get("WF2_CACHE_DIR", "")
     c = os.environ.get("LAB_COIN", "sol").lower()
     mkt = os.environ.get("LAB_MARKET", "perp").lower()
+    tf_ = os.environ.get("LAB_TF", "3")
     if d:
         if c != "sol":
             d = os.path.join(d, c)
         if mkt == "spot":
             d = os.path.join(d, "spotdata")
+        if tf_ != "3":
+            d = os.path.join(d, f"tf{tf_}")
         os.makedirs(d, exist_ok=True)
         return os.path.join(d, fn)
-    pre = ("" if c == "sol" else f"{c}_") + ("spotdata_" if mkt == "spot" else "")
+    pre = ("" if c == "sol" else f"{c}_") + ("spotdata_" if mkt == "spot" else "") \
+        + ("" if tf_ == "3" else f"tf{tf_}_")
     return pre + fn
 
 _G = {}
@@ -859,11 +864,11 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
-                                   * 3.0 / 1440.0)
+                                   * _TFM / 1440.0)
                     held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
                 if op:
                     op_held = len(sp["c"]) - 1 - op["entry_idx"]
-                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    max_hold = max(max_hold, op_held * _TFM / 1440.0)
                     held_bars += op_held
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
@@ -895,11 +900,11 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
-                                   * 3.0 / 1440.0)
+                                   * _TFM / 1440.0)
                     held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
                 if op:
                     op_held = len(sp["c"]) - 1 - op["entry_idx"]
-                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    max_hold = max(max_hold, op_held * _TFM / 1440.0)
                     held_bars += op_held
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
@@ -931,11 +936,11 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
-                                   * 3.0 / 1440.0)
+                                   * _TFM / 1440.0)
                     held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
                 if op:
                     op_held = len(sp["c"]) - 1 - op["entry_idx"]
-                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    max_hold = max(max_hold, op_held * _TFM / 1440.0)
                     held_bars += op_held
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)
@@ -978,11 +983,11 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
-                                   * 3.0 / 1440.0)
+                                   * _TFM / 1440.0)
                     held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
                 if op:
                     op_held = len(sp["c"]) - 1 - op["entry_idx"]
-                    max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                    max_hold = max(max_hold, op_held * _TFM / 1440.0)
                     held_bars += op_held
                 months += (b - a) / (DAY * 30.4)
                 all_tr.append(tr)

@@ -1255,6 +1255,11 @@ def adopt():
         src = os.path.join(OPT, src)
     target = os.path.join(AT, d.get("target", "config.json"))
     best = json.load(open(src))
+    if str(best.get("timeframe") or "3m") != "3m":
+        return jsonify(error=f"this config was researched on "
+                             f"{best.get('timeframe')} bars — the live trader "
+                             f"runs a 3-minute loop and has no other-timeframe "
+                             f"support yet. Research artifact for now."), 400
     if (best.get("cand") or {}).get("stack"):
         return jsonify(error="this is a method-STACKED router (research "
                              "artifact) — no live adapter yet. Adopt the "
@@ -1400,6 +1405,8 @@ def job_optimize2():
     if d.get("cadapt"): cmd += ["--cadapt"]
     if d.get("symbol") and d["symbol"] != "sol":
         cmd += ["--symbol", d["symbol"]]
+    if d.get("tf") and str(d["tf"]) != "3":
+        cmd += ["--tf", str(d["tf"])]
     if d.get("hours"): cmd += ["--hours", str(d["hours"])]
     if d.get("total"): cmd += ["--total", str(d["total"])]
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
@@ -1547,6 +1554,7 @@ def runs2():
                 e["method"] = bc.get("method")
                 e["pair"] = bc.get("pair", "SOL_USDT")
                 e["market_data"] = bc.get("market_data", "perp")
+                e["timeframe"] = bc.get("timeframe", "3m")
                 e["mode"] = bc.get("mode", e.get("mode"))
                 e["no_survivors"] = ("cand" in bc and bc.get("cand") is None)
                 e["holdout"] = bc.get("holdout")

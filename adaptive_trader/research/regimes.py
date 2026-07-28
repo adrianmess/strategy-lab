@@ -1,8 +1,10 @@
 """Causal regime features: trailing-percentile vol/volume/trend buckets."""
 import numpy as np
+import os
 import pandas as pd
 
-DAY = 480  # 3-min bars per day
+TF_MIN = int(os.environ.get("LAB_TF", "3"))   # chart bar minutes (1/3/5)
+DAY = 1440 // TF_MIN                          # bars per day at this timeframe
 
 def rolling_pct_rank(x: pd.Series, window: int) -> np.ndarray:
     """Causal percentile rank of latest value within trailing window."""

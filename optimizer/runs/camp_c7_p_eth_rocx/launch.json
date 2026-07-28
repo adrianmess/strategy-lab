@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 16:28:13",
+  "cmd": "python3 optimize2_cli.py --strategy rocx --mode spot --method vol3 --algo genetic --procs 14 --batch 100 --total 150000 --gap-mode skip_contaminated --max-hold-days 7 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --name camp_c7_p_eth_rocx --holdout-days 21 --symbol eth",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

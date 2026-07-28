@@ -188,7 +188,7 @@ def _core3(t_ms, o, h, l, c,
            xz_all, xup_all, xdn_all, xhist_all, hist_all,
            cd1, cd3, trend,
            regime, P, warmup, initial_capital, commission,
-           use_sl, dyn_liq, no_entry):
+           use_sl, dyn_liq, no_entry, bph):
     n = len(c)
     equity = initial_capital
     pos = 0; pend = 0; pend_sys = 0
@@ -276,7 +276,7 @@ def _core3(t_ms, o, h, l, c,
         short3m = (P[r, 41] > 0 and rsiv > P[r, 1] and mz > P[r, 3]
                    and bbv > P[r, 5] and emadn_all[vd, i] > 0 and not actS
                    and not blockShort)
-        gapBars = P[r, 36] * 20.0
+        gapBars = P[r, 36] * bph
         canL = (i - lastXL) > gapBars
         canS = (i - lastXS) > gapBars
         hist_row = vx * NHIST + vh
@@ -360,7 +360,8 @@ def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
                          pre["cd1"], pre["cd3"], pre["trend"],
                          regime.astype(np.int32), P.astype(np.float64),
                          warmup, initial_capital, commission,
-                         1 if use_sl else 0, 1 if dyn_liq else 0, no_entry)
+                         1 if use_sl else 0, 1 if dyn_liq else 0, no_entry,
+                         60.0 / float(os.environ.get("LAB_TF", "3")))
     cols = ["entry_idx", "exit_idx", "dir", "system", "entry", "exit",
             "qty", "net", "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)

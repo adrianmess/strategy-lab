@@ -8,6 +8,7 @@ threshold/exit/cooldown/leverage params. Supports:
   - per-bar parameter regime index with per-regime param matrix
 """
 import numpy as np
+import os
 import pandas as pd
 from numba import njit
 from engine import (DEFAULT_PARAMS, ema, rma, rsi, atr, sma, stdev_pop,
@@ -114,7 +115,7 @@ def _core(t_ms, o, h, l, c,
           regime,            # int32 per bar
           P,                 # (n_regimes, NP) param matrix
           warmup, initial_capital, commission,
-          use_sl, liq_threshold, no_entry):
+          use_sl, liq_threshold, no_entry, bph):
     """Returns trade array + final equity + liquidation flag.
     trade row: [entry_idx, exit_idx, dir, system(0=3m,1=cross), entry, exit,
                 qty, net, mae, reason(0=pt,1=sl,2=liq), lev]
@@ -214,7 +215,7 @@ def _core(t_ms, o, h, l, c,
                   and bbPctL[i] < P[r, 2] and emaLongUp[i] > 0 and not actL)
         short3m = (P[r, 39] > 0 and rsiL[i] > P[r, 10] and macdL[i] > P[r, 11] * c[i]
                    and bbPctL[i] > P[r, 12] and emaShortDown[i] > 0 and not actS)
-        gapBars = P[r, 32] * 20.0
+        gapBars = P[r, 32] * bph
         canL = (i - lastLongBarX) > gapBars
         canS = (i - lastShortBarX) > gapBars
         longX = (P[r, 40] > 0 and xUp[i] > 0 and xMacd[i] < P[r, 31]
@@ -298,7 +299,8 @@ def run_fast(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
                         pre["cdMetricL"], pre["cdMetricS"], pre["cdMetricXS"], cdXL,
                         regime.astype(np.int32), P.astype(np.float64),
                         warmup, initial_capital, commission,
-                        1 if use_sl else 0, liq_threshold, no_entry)
+                        1 if use_sl else 0, liq_threshold, no_entry,
+                        60.0 / float(os.environ.get("LAB_TF", "3")))
     cols = ["entry_idx", "exit_idx", "dir", "system", "entry", "exit",
             "qty", "net", "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)

@@ -591,6 +591,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                generated=time.strftime("%Y-%m-%d %H:%M"))
     out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
+    out["timeframe"] = _tf_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print(f"\nCROSS-FIT WINNER ({winner['origin']}): "
           + (f"lockbox worst {(pow(2.718281828, table_holdout['growth'])-1)*100:+.1f}%/mo"
@@ -628,6 +629,10 @@ def _pair_tag():
 def _market_tag():
     return os.environ.get("LAB_MARKET", "perp").lower()
 
+
+def _tf_tag():
+    return os.environ.get("LAB_TF", "3") + "m"
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -645,6 +650,11 @@ def main():
                              "pepe", "wif"],
                     help="trading pair (vs USDT): selects data files and "
                          "per-symbol precompute caches; stamped on the run")
+    ap.add_argument("--tf", type=int, default=3, choices=[1, 3, 5],
+                    help="chart timeframe in minutes (default 3). Indicator "
+                         "lengths are in BARS, so a 50-EMA on 1m is a "
+                         "different (faster) indicator than on 3m — that's "
+                         "the point of testing timeframes")
     ap.add_argument("--data-market", default="auto",
                     choices=["auto", "spot", "perp"],
                     help="which venue's historic candles to research on. "
@@ -737,7 +747,8 @@ def main():
     if mkt == "auto":
         mkt = "spot" if args.mode == "spot" else "perp"
     os.environ["LAB_MARKET"] = mkt
-    print(f"CHART DATA: {mkt} candles", flush=True)
+    os.environ["LAB_TF"] = str(args.tf)
+    print(f"CHART DATA: {mkt} candles, {args.tf}-minute bars", flush=True)
     if args.lev_stops:
         # env var: inherited by the mp.Pool workers AND honored by the in-process
         # finalize/holdout evaluations (see optimizer2.eval3 / wf2.eval_config)
@@ -1106,6 +1117,7 @@ def main():
                generated=time.strftime("%Y-%m-%d %H:%M"))
     out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
+    out["timeframe"] = _tf_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
     print(json.dumps(best_m, indent=1, default=float))
@@ -1198,6 +1210,7 @@ def main():
                            "Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.")
             hb["pair"] = _pair_tag()
             hb["market_data"] = _market_tag()
+            hb["timeframe"] = _tf_tag()
             json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
             out["holdout_best"] = dict(rank=best_h + 1, holdout=holdouts[best_h])
             print(f"\nOOS-BEST is pool rank #{best_h+1} -> saved to holdout_best_config.json")
@@ -1215,6 +1228,7 @@ def main():
                 pass
         out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
+    out["timeframe"] = _tf_tag()
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
     auto_backtest(args, run_dir)

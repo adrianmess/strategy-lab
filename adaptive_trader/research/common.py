@@ -33,10 +33,17 @@ def market():
     which venue's historic candles the research runs on."""
     return os.environ.get("LAB_MARKET", "perp").lower()
 
+def tf():
+    """Chart timeframe in minutes (LAB_TF: 1, 3, 5). Default 3."""
+    return int(os.environ.get("LAB_TF", "3"))
+
 def load_segments():
     c = coin()
     sfx = "_spot" if market() == "spot" else ""
-    df3 = pd.read_parquet(_data_path(f"{c}{sfx}_3min.parquet"))
+    t = tf()
+    # the "df3" chart frame is whatever LAB_TF says; df1 stays the 1-minute
+    # series used for sub-bar metrics regardless of chart timeframe
+    df3 = pd.read_parquet(_data_path(f"{c}{sfx}_{t}min.parquet"))
     df1 = pd.read_parquet(_data_path(f"{c}{sfx}_1min.parquet"))
     df3["t"] = df3["t"].dt.tz_localize(None)
     df1["t"] = df1["t"].dt.tz_localize(None)

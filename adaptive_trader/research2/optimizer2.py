@@ -14,6 +14,7 @@ liquidation, robust monthly-growth score).
 """
 import json, os
 import numpy as np
+_TFM = float(os.environ.get("LAB_TF", "3"))
 import pandas as pd
 
 from engine3 import get_pres3, run3, vec3, P3_NAMES, VARIANTS, C
@@ -36,6 +37,8 @@ def load_g3():
         cache_dir = os.path.join(cache_dir, _coin)
     if os.environ.get("LAB_MARKET", "perp").lower() == "spot":
         cache_dir = os.path.join(cache_dir, "spotdata")
+    if os.environ.get("LAB_TF", "3") != "3":
+        cache_dir = os.path.join(cache_dir, f'tf{os.environ.get("LAB_TF")}')
     os.makedirs(cache_dir, exist_ok=True)
     from engine3 import variants_hash, VARIANTS, _DEFAULT_VARIANTS
     h = variants_hash()
@@ -245,11 +248,11 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None,
             total_bars += (b - a)
             if len(tr):
                 max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
-                               * 3.0 / 1440.0)
+                               * _TFM / 1440.0)
                 held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
             if op:
                 op_held = len(sp["c"]) - 1 - op["entry_idx"]
-                max_hold = max(max_hold, op_held * 3.0 / 1440.0)
+                max_hold = max(max_hold, op_held * _TFM / 1440.0)
                 held_bars += op_held
             months += (b - a) / (DAY * 30.4)
             all_tr.append(tr)
