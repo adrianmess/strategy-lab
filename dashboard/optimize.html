@@ -200,6 +200,21 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <pre id="campReport" style="display:none;max-height:320px;margin-top:8px"></pre>
   </div>
 
+  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
+  <div class="card" id="spaceCard">
+    <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
+      <div class="grid2" id="contGrid" style="margin-top:10px"></div>
+      <div id="menuGrid" style="margin-top:8px"></div>
+    </details>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="saveSpace()">Save parameter space</button>
+      <span class="kv" id="spaceMsg"></span>
+    </div>
+  </div>
+
+  <h2>Jobs <span class="mini" id="jobsTitle"></span></h2>
+  <div class="card" id="jobs">no jobs yet</div>
+
   <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
     <span class="mini" style="float:right">
     <label style="margin-right:4px">Show</label>
@@ -234,21 +249,6 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     </tr></thead><tbody></tbody></table>
     </div>
     <div class="mini" style="margin-top:6px"><span class="badge b-amber" id="aiBadge">AI advisor: checking…</span></div>
-  </div>
-
-  <h2>Jobs <span class="mini" id="jobsTitle"></span></h2>
-  <div class="card" id="jobs">no jobs yet</div>
-
-  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
-  <div class="card" id="spaceCard">
-    <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
-      <div class="grid2" id="contGrid" style="margin-top:10px"></div>
-      <div id="menuGrid" style="margin-top:8px"></div>
-    </details>
-    <div class="row" style="margin-top:10px">
-      <button class="primary" onclick="saveSpace()">Save parameter space</button>
-      <span class="kv" id="spaceMsg"></span>
-    </div>
   </div>
 
 </div>
