@@ -114,8 +114,12 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
       </select></label>
     <label class="hint" title="hide every backtest whose simulation hit a liquidation">
       <input type="checkbox" id="fNoLiq" onchange="saveBtFilters()"> no liquidations only</label>
-    <label class="hint" title="only backtests whose simulation ended with a position still OPEN at the end of the data (shown as the ⚠ OPEN POSITION row in the detail view)">
-      <input type="checkbox" id="fOpenPos" onchange="saveBtFilters()"> open position at end</label>
+    <label class="hint">position at end
+      <select id="fOpenPos" onchange="saveBtFilters()" style="margin-left:4px" title="whether the simulation ended with a position still OPEN at the end of the data (the ⚠ OPEN POSITION row in the detail view)">
+        <option value="all">any</option>
+        <option value="open">still open</option>
+        <option value="flat">flat (no open position)</option>
+      </select></label>
     <span class="hint" id="fCount"></span>
   </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
@@ -358,7 +362,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterMode', document.getElementById('fMode').value);
   localStorage.setItem('btFilterPair', document.getElementById('fPair').value);
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
-  localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').checked ? '1' : '');
+  localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
   sel = null; render();
 }
 function pairPill(p, mkt, tf){
@@ -376,7 +380,8 @@ function pairPill(p, mkt, tf){
   const fp = localStorage.getItem('btFilterPair') || 'all';
   sel_.value = [...sel_.options].some(o=>o.value===fp) ? fp : 'all';
   document.getElementById('fNoLiq').checked = localStorage.getItem('btFilterNoLiq') === '1';
-  document.getElementById('fOpenPos').checked = localStorage.getItem('btFilterOpenPos') === '1';
+  const fop = localStorage.getItem('btFilterOpenPos');
+  document.getElementById('fOpenPos').value = ['open','flat'].includes(fop) ? fop : (fop==='1' ? 'open' : 'all');
 })();
 function render(){
   const holder = document.getElementById('detailHolder');
@@ -385,13 +390,15 @@ function render(){
   const fModeV = document.getElementById('fMode').value;
   const fPairV = document.getElementById('fPair').value;
   const fNoLiqV = document.getElementById('fNoLiq').checked;
-  const fOpenV = document.getElementById('fOpenPos').checked;
+  const fOpenV = document.getElementById('fOpenPos').value;
+  const hasOpen = i => (BT[i].open_positions||[]).some(o=>o.at==='end of data');
   if(fModeV !== 'all') order = order.filter(i=>BT[i].mode === fModeV);
   if(fPairV !== 'all') order = order.filter(i=>(BT[i].pair||'SOL_USDT') === fPairV);
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
-  if(fOpenV) order = order.filter(i=>(BT[i].open_positions||[]).some(o=>o.at==='end of data'));
+  if(fOpenV === 'open') order = order.filter(hasOpen);
+  else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
   document.getElementById('fCount').textContent =
-    (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV) ? `showing ${order.length} of ${BT.length}` : '';
+    (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
