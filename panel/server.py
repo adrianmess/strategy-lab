@@ -1255,11 +1255,10 @@ def adopt():
         src = os.path.join(OPT, src)
     target = os.path.join(AT, d.get("target", "config.json"))
     best = json.load(open(src))
-    if str(best.get("timeframe") or "3m") != "3m":
-        return jsonify(error=f"this config was researched on "
-                             f"{best.get('timeframe')} bars — the live trader "
-                             f"runs a 3-minute loop and has no other-timeframe "
-                             f"support yet. Research artifact for now."), 400
+    if str(best.get("timeframe") or "3m") not in ("1m", "3m", "5m"):
+        return jsonify(error=f"unsupported timeframe "
+                             f"{best.get('timeframe')!r} — the live trader "
+                             f"supports 1m, 3m and 5m."), 400
     if (best.get("cand") or {}).get("stack"):
         return jsonify(error="this is a method-STACKED router (research "
                              "artifact) — no live adapter yet. Adopt the "
@@ -1312,6 +1311,7 @@ def adopt():
         cfg["candidate"] = rc
         cfg["mode"] = best["mode"]
         cfg["method"] = best.get("method", "vol3")
+        cfg["timeframe"] = best.get("timeframe", "3m")
         cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
         json.dump(cfg, open(target, "w"), indent=1)
         return jsonify(ok=True, target=tname, created=created,
@@ -1334,6 +1334,7 @@ def adopt():
     cfg["candidate"] = best["cand"]
     if best.get("mode"): cfg["mode"] = best["mode"]
     if best.get("method"): cfg["method"] = best["method"]
+    cfg["timeframe"] = best.get("timeframe", "3m")
     cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(cfg, open(target, "w"), indent=1)
     return jsonify(ok=True, target=os.path.basename(target))

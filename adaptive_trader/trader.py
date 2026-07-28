@@ -240,9 +240,17 @@ def main():
     cfg["_path"] = cfg_path   # router strategies hot-reload re-assignments
     if args.live:
         cfg["dry_run"] = False
+    # chart timeframe: MUST be in the environment BEFORE any research module
+    # is imported (make_strategy) — regimes.DAY and engine bar/hour
+    # conversions read LAB_TF at import/call time
+    tf_min = int(str(cfg.get("timeframe") or "3m").rstrip("m"))
+    if tf_min not in (1, 3, 5):
+        raise SystemExit(f"unsupported timeframe {cfg.get('timeframe')!r} "
+                         f"(supported: 1m, 3m, 5m)")
+    os.environ["LAB_TF"] = str(tf_min)
     setup_logging(cfg)
     log = logging.getLogger("trader")
-    log.info("starting (dry_run=%s)", cfg["dry_run"])
+    log.info("starting (dry_run=%s, timeframe=%dm)", cfg["dry_run"], tf_min)
 
     state = load_state(cfg)
     strat = make_strategy(cfg, state)
@@ -255,7 +263,7 @@ def main():
         log.info("execution path: browser webhook")
 
     is_router = (cfg.get("candidate") or {}).get("strategy") == "metax"
-    feed = Feed(cfg["symbol"], anchored=is_router)
+    feed = Feed(cfg["symbol"], anchored=is_router, tf_min=tf_min)
     feed.backfill()
     last_closed = None
 

@@ -150,13 +150,14 @@ def fetch_range(symbol: str, interval: str, start_ts: int, end_ts: int) -> pd.Da
     return df.reset_index(drop=True)
 
 
-def resample_3m(df1: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate 1m bars into 3m bars aligned to :00/:03/:06 (TradingView-style).
-    Only emits 3m bars whose window is fully covered or partially traded —
-    same as exchange bars (bar exists if any 1m bar exists in the window)."""
-    if not len(df1):
+def resample_tf(df1: pd.DataFrame, tf_min: int = 3) -> pd.DataFrame:
+    """Aggregate 1m bars into tf-minute bars aligned to the hour
+    (TradingView-style). tf_min=1 returns the 1m bars as-is. Only emits bars
+    whose window is fully covered or partially traded — same as exchange bars
+    (bar exists if any 1m bar exists in the window)."""
+    if not len(df1) or tf_min == 1:
         return df1.copy()
-    g = df1.set_index("t").resample("3min", label="left", closed="left")
+    g = df1.set_index("t").resample(f"{tf_min}min", label="left", closed="left")
     out = pd.DataFrame({
         "open": g["open"].first(),
         "high": g["high"].max(),
@@ -167,11 +168,18 @@ def resample_3m(df1: pd.DataFrame) -> pd.DataFrame:
     return out[["t", "open", "high", "low", "close", "volume"]]
 
 
+def resample_3m(df1: pd.DataFrame) -> pd.DataFrame:
+    """Back-compat alias (3-minute bars)."""
+    return resample_tf(df1, 3)
+
+
 class Feed:
-    def __init__(self, symbol: str, live: bool = True, anchored: bool = False):
+    def __init__(self, symbol: str, live: bool = True, anchored: bool = False,
+                 tf_min: int = 3):
         self.symbol = symbol
-        self.df3 = None
-        self.df1 = None
+        self.tf_min = int(tf_min)   # chart bar minutes (1/3/5)
+        self.df3 = None             # NOTE: named df3 historically; holds
+        self.df1 = None             # tf_min-bars whatever the timeframe
         self.anchored = anchored
         self.trim_ok = False    # trader sets True when flat (anchored mode)
         self.live = LivePrice(symbol) if live else None
@@ -181,14 +189,15 @@ class Feed:
         start = end - HISTORY_DAYS * 86400
         logger.info("Backfilling %d days of klines...", HISTORY_DAYS)
         self.df1 = fetch_range(self.symbol, "Min1", start, end)
-        self.df3 = resample_3m(self.df1)
-        logger.info("Backfill done: %d 3m bars, %d 1m bars", len(self.df3), len(self.df1))
+        self.df3 = resample_tf(self.df1, self.tf_min)
+        logger.info("Backfill done: %d %dm bars, %d 1m bars",
+                    len(self.df3), self.tf_min, len(self.df1))
         if self.live:
             self.live.start()   # begin streaming real-time ticks
 
     def update(self):
         """Fetch the most recent bars and merge. Returns True if a new CLOSED
-        3m bar arrived since last call."""
+        chart bar (tf_min minutes) arrived since last call."""
         end = int(time.time())
         start = end - 3600  # last hour is plenty
         new1 = _fetch(self.symbol, "Min1", start, end)
@@ -211,14 +220,14 @@ class Feed:
             cutoff = now - pd.Timedelta(days=HISTORY_DAYS)
             logger.info("anchored feed: re-anchoring window to %s (flat)", cutoff)
             self.df1 = self.df1[self.df1["t"] >= cutoff].reset_index(drop=True)
-        self.df3 = resample_3m(self.df1)
+        self.df3 = resample_tf(self.df1, self.tf_min)
         return prev_last is None or self.df3["t"].iloc[-1] > prev_last
 
     def closed_bars(self):
-        """All 3m bars that are certainly closed (drop the in-progress bar)."""
+        """All chart bars that are certainly closed (drop the in-progress bar)."""
         now = pd.Timestamp.utcnow().tz_localize(None)
         df = self.df3
-        return df[df["t"] + pd.Timedelta(minutes=3) <= now].reset_index(drop=True)
+        return df[df["t"] + pd.Timedelta(minutes=self.tf_min) <= now].reset_index(drop=True)
 
     def last_price(self, max_age: float = 5.0) -> float:
         """Live WebSocket tick if fresh, else the most recent 1m kline close."""

@@ -69,7 +69,7 @@ def _ts16(x):
 def _extend(df3, df1):
     """Append the synthetic zero-range bar to both frames."""
     last3 = df3.iloc[-1]
-    syn3 = dict(t=last3["t"] + pd.Timedelta(minutes=3), open=last3["close"],
+    syn3 = dict(t=last3["t"] + pd.Timedelta(minutes=int(os.environ.get("LAB_TF", "3"))), open=last3["close"],
                 high=last3["close"], low=last3["close"], close=last3["close"],
                 volume=0.0)
     last1 = df1.iloc[-1]
