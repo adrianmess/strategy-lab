@@ -1,0 +1,12 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 28.787688494320562,
+  "total_mult": 604.3867321756446,
+  "gap_mode": "skip_contaminated",
+  "backtest": "rep_study_lev_vol3_gen_full_alt-14__doge_3m_full",
+  "at": "2026-07-28 00:40"
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "verdict": "PASS",
+ "oos_pct_mo": 4.89227874200151,
+ "maxdd": 0.26106268503994556,
+ "n": 317,
+ "folds": 14,
+ "step_days": 42,
+ "note": "causal by construction (per-fold past-only picks)",
+ "at": "2026-07-28 11:01"
+}

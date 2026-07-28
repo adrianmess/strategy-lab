@@ -9,7 +9,7 @@ launch backtests / optimizations / walk-forwards / refits with live logs,
 and open the results dashboard. Everything runs as local subprocesses of
 this server — closing the server stops the trader too.
 """
-import json, os, signal, subprocess, sys, time, uuid
+import json, os, re, signal, subprocess, sys, time, uuid
 from flask import Flask, jsonify, request, send_from_directory
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1381,7 +1381,18 @@ def trader_config():
 
 @app.route("/api/param_space", methods=["GET", "POST"])
 def param_space():
-    path = os.path.join(OPT, "param_space.json")
+    # ?space=<coin>_<tf>m selects a pair+timeframe space file
+    # (param_spaces/<coin>_<tf>m.json); default = canonical param_space.json
+    sel = request.args.get("space", "")
+    if sel:
+        if not re.fullmatch(r"[a-z]{2,6}_[135]m", sel):
+            return jsonify(error=f"bad space name '{sel}'"), 400
+        path = os.path.join(OPT, "param_spaces", f"{sel}.json")
+        if not os.path.exists(path):
+            return jsonify(error=f"no space file for {sel} — run "
+                                 f"gen_pair_spaces.py"), 404
+    else:
+        path = os.path.join(OPT, "param_space.json")
     if request.method == "GET":
         return jsonify(json.load(open(path)))
     d = request.get_json(force=True)
@@ -1389,6 +1400,16 @@ def param_space():
     shutil.copy(path, path + ".bak")
     json.dump(d, open(path, "w"), indent=1)
     return jsonify(ok=True)
+
+
+@app.route("/api/param_spaces")
+def param_spaces_list():
+    out = ["default (SOL 3m)"]
+    d = os.path.join(OPT, "param_spaces")
+    if os.path.isdir(d):
+        out += sorted(f[:-5] for f in os.listdir(d)
+                      if re.fullmatch(r"[a-z]{2,6}_[135]m\.json", f))
+    return jsonify(out)
 
 @app.route("/api/jobs/optimize", methods=["POST"])
 @app.route("/api/jobs/optimize2", methods=["POST"])

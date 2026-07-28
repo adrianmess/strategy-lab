@@ -1,0 +1,165 @@
+{
+ "strategy": "pairx",
+ "mode": "spot",
+ "method": "fcfs",
+ "pair": "BASKET",
+ "market_data": "spot",
+ "timeframe": "3m",
+ "algo": "fcfs-basket",
+ "cand": {
+  "strategy": "pairx",
+  "pairs": [
+   "btc",
+   "doge",
+   "eth",
+   "sol",
+   "sui",
+   "xrp"
+  ],
+  "current": {
+   "sol": {
+    "run": "camp_c1_w2_merge_prime_spot_trend3",
+    "file": "holdout_best_config.json",
+    "strategy": "prime"
+   },
+   "doge": {
+    "run": "camp_c7_p_doge_prime7",
+    "file": "holdout_best_config.json",
+    "strategy": "prime7"
+   },
+   "sui": {
+    "run": "camp_c7_w2_ref_ui_macdx",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx"
+   }
+  },
+  "fold_picks": [
+   {
+    "fold": "2025-01-01",
+    "picks": {
+     "sol": "camp_c6_ca_macdx_spot",
+     "doge": "camp_c7_w2_ref_oge_prime7"
+    },
+    "trades": 27
+   },
+   {
+    "fold": "2025-02-12",
+    "picks": {
+     "sol": "camp_c4_m_spot_vt9_walkforward_router_full",
+     "doge": "camp_c7_p_doge_prime7",
+     "sui": "camp_c7_w2_ref_ui_macdx"
+    },
+    "trades": 27
+   },
+   {
+    "fold": "2025-03-26",
+    "picks": {
+     "sui": "camp_c7_w2_ref_ui_macdx"
+    },
+    "trades": 7
+   },
+   {
+    "fold": "2025-05-07",
+    "picks": {
+     "sol": "camp_c4_m_spot_vol3_walkforward_router_full"
+    },
+    "trades": 9
+   },
+   {
+    "fold": "2025-06-18",
+    "picks": {
+     "sol": "camp_c4_m_spot_vol3_walkforward_router_full"
+    },
+    "trades": 10
+   },
+   {
+    "fold": "2025-07-30",
+    "picks": {
+     "eth": "camp_c7_p_eth_prime7",
+     "doge": "camp_c7_w2_ref_oge_prime7"
+    },
+    "trades": 1
+   },
+   {
+    "fold": "2025-09-10",
+    "picks": {
+     "sol": "camp_c6_ca_macdx_spot",
+     "eth": "camp_c7_p_eth_prime7"
+    },
+    "trades": 19
+   },
+   {
+    "fold": "2025-10-22",
+    "picks": {
+     "sol": "camp_c4_m_spot_vt9_walkforward_router_full"
+    },
+    "trades": 6
+   },
+   {
+    "fold": "2025-12-03",
+    "picks": {
+     "xrp": "rep_camp_c6_ca_v7_spot__xrp_3m"
+    },
+    "trades": 12
+   },
+   {
+    "fold": "2026-01-14",
+    "picks": {
+     "xrp": "camp_c7_p_xrp_prime7"
+    },
+    "trades": 5
+   },
+   {
+    "fold": "2026-02-25",
+    "picks": {
+     "sol": "camp_c4_m_spot_vt9_walkforward_router_full"
+    },
+    "trades": 7
+   },
+   {
+    "fold": "2026-04-08",
+    "picks": {
+     "sol": "camp_c4_m_spot_vt9_walkforward_router_full"
+    },
+    "trades": 2
+   },
+   {
+    "fold": "2026-05-20",
+    "picks": {
+     "sol": "camp_c4_m_spot_vt9_walkforward_router_full",
+     "eth": "rep_spotcamp_A3_macdx_vol3_500k__eth_3m"
+    },
+    "trades": 8
+   },
+   {
+    "fold": "2026-07-01",
+    "picks": {
+     "sol": "camp_c4_m_spot_vt9_walkforward_router_full",
+     "sui": "camp_c7_p_sui_macdx"
+    },
+    "trades": 4
+   }
+  ],
+  "top_k": 3,
+  "step_days": 42,
+  "live_replication": "multi-pair trader: run every pair's current component virtually; FCFS single slot (NOT YET BUILT \u2014 do not adopt)"
+ },
+ "metrics": {
+  "eq": 1522.8654137503197,
+  "maxdd": 0.4881862154883323,
+  "n": 144,
+  "growth": 0.023366316713097954,
+  "score": -0.026504183576176815,
+  "months": 18
+ },
+ "holdout": {
+  "eq": 1522.8654137503197,
+  "maxdd": 0.4881862154883323,
+  "n": 144,
+  "growth": 0.023366316713097954,
+  "score": -0.026504183576176815,
+  "months": 18
+ },
+ "evaluated": 21,
+ "generated": "2026-07-28 11:07"
+}

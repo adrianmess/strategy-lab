@@ -4,5 +4,11 @@
   "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo genetic --batch 100 --total 100800 --gap-mode skip_contaminated --scoring underwater --max-hold-days 7.0 --max-dd 0.5 --holdout-days 7.0 --procs 14 --symbol xrp --tf 1 --name rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__xrp_1m",
   "resume_from": [],
   "merge_mode": null
+ },
+ {
+  "at": "2026-07-28 03:31:44",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo genetic --batch 100 --total 100800 --gap-mode skip_contaminated --scoring underwater --max-hold-days 7.0 --max-dd 0.5 --holdout-days 7.0 --procs 14 --symbol xrp --tf 1 --name rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__xrp_1m",
+  "resume_from": [],
+  "merge_mode": null
  }
 ]

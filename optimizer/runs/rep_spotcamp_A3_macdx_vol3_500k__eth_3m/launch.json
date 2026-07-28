@@ -4,5 +4,11 @@
   "cmd": "python3 optimize2_cli.py --strategy macdx --mode spot --method vol3 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol eth --tf 3 --name rep_spotcamp_A3_macdx_vol3_500k__eth_3m",
   "resume_from": [],
   "merge_mode": null
+ },
+ {
+  "at": "2026-07-28 00:58:24",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode spot --method vol3 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol eth --tf 3 --name rep_spotcamp_A3_macdx_vol3_500k__eth_3m",
+  "resume_from": [],
+  "merge_mode": null
  }
 ]

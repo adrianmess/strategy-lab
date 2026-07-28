@@ -1,0 +1,22 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 1.7472419590893074,
+  "total_mult": 1.687273218738319,
+  "gap_mode": "skip_contaminated",
+  "backtest": "rep_ScalpX_spot_trend3_unified__doge_1m_full",
+  "at": "2026-07-28 05:34"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": 1.3610067370296575,
+  "total_mult": 1.5041904431441595,
+  "gap_mode": "skip_contaminated",
+  "backtest": "rep_ScalpX_spot_trend3_unified__doge_1m_oosbest_full",
+  "at": "2026-07-28 05:34"
+ }
+}

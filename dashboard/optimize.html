@@ -239,7 +239,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   <h2>Jobs <span class="mini" id="jobsTitle"></span></h2>
   <div class="card" id="jobs">no jobs yet</div>
 
-  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
+  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
   <div class="card" id="spaceCard">
     <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
@@ -916,8 +916,24 @@ async function refreshJobs(){
 }
 // ---------- parameter space ----------
 let SPACE=null;
+function spaceSel(){
+  const v = ($('spaceFile')||{}).value || '';
+  return v && v !== 'default' ? ('?space=' + v) : '';
+}
+async function initSpaceFiles(){
+  try{
+    const list = await api('param_spaces');
+    const sel = $('spaceFile');
+    sel.innerHTML = '<option value="default">default (SOL 3m)</option>' +
+      list.filter(x=>!x.startsWith('default')).map(x=>{
+        const parts=x.split('_');
+        return '<option value="'+x+'">'+parts[0].toUpperCase()+' '+parts[1]+'</option>';
+      }).join('');
+  }catch(e){}
+}
+initSpaceFiles();
 async function loadSpace(){
-  SPACE = await api('param_space');
+  SPACE = await api('param_space' + spaceSel());
   renderSpace();
 }
 // Separate parameter spaces per mode: the base entry is the LEV space, the
@@ -1077,7 +1093,7 @@ async function saveSpace(){
       }
     }
   }
-  const r = await api('param_space', SPACE);
+  const r = await api('param_space' + spaceSel(), SPACE);
   $('spaceMsg').textContent = r.ok ? (`saved ✓ (${$('mode').value==='spot'?'SPOT':'LEV'} ranges — new ${$('mode').value} runs use them)` +
     (rebuilt ? ' — length lists changed: the next run rebuilds the engine cache once' : '')) : 'error';
   if(rebuilt) renderSpace();

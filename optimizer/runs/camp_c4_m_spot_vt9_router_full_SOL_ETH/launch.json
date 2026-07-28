@@ -1,0 +1,26 @@
+[
+ {
+  "at": "2026-07-28 11:01:27",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method vol3 --procs 14 --batch 100 --name camp_c4_m_spot_vt9_router_full_SOL_ETH --symbol eth --total 100000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ },
+ {
+  "at": "2026-07-28 11:05:44",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method vol3 --procs 14 --batch 100 --name camp_c4_m_spot_vt9_router_full_SOL_ETH --symbol eth --total 100000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ },
+ {
+  "at": "2026-07-28 11:15:16",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method vol3 --procs 14 --batch 100 --name camp_c4_m_spot_vt9_router_full_SOL_ETH --total 100000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ },
+ {
+  "at": "2026-07-28 11:20:38",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method vol3 --procs 14 --batch 100 --name camp_c4_m_spot_vt9_router_full_SOL_ETH --total 1000000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

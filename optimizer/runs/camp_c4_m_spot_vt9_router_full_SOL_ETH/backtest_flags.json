@@ -1,0 +1,22 @@
+{
+ "best_config.json|full-history (in-sample fit)": {
+  "source": "best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": -0.353081480851547,
+  "total_mult": 0.8991502969415419,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_spot_vt9_router_full_SOL_ETH_full",
+  "at": "2026-07-28 11:27"
+ },
+ "holdout_best_config.json|full-history (in-sample fit)": {
+  "source": "holdout_best_config.json",
+  "kind": "full-history (in-sample fit)",
+  "liq": false,
+  "growth_pct": -0.5488027694659059,
+  "total_mult": 0.8475589850597625,
+  "gap_mode": "skip_contaminated",
+  "backtest": "camp_c4_m_spot_vt9_router_full_SOL_ETH_oosbest_full",
+  "at": "2026-07-28 11:27"
+ }
+}

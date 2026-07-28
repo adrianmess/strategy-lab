@@ -119,5 +119,103 @@ def main():
         print(f"{c}: vol x{vr:.2f}, macd x{mr:.4f} -> {n} ranges -> {p}")
 
 
+def _dd(seq):
+    out = []
+    for x in seq:
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def _ext_len(grid, kind):
+    """Extended grid length on 1m charts (exact replica of the engines'
+    3x-dedupe: same wall-clock spans become searchable)."""
+    if kind == "bb":
+        ext = grid + [(g[0] * 3, g[1]) for g in grid]
+    elif kind in ("macd", "xmacd"):
+        ext = grid + [tuple(y * 3 for y in g) for g in grid]
+    else:
+        ext = grid + [g * 3 for g in grid]
+    return len(_dd([tuple(g) if isinstance(g, (list, tuple)) else g
+                    for g in ext]))
+
+
+def materialize():
+    """Full per-pair-per-timeframe space files: param_spaces/<coin>_<tf>m.json
+    (same schema as param_space.json, independently editable). SOL 3m stays
+    the canonical param_space.json. Pair scaling baked in; 1m files also
+    materialize the widened variant menus so they're visible/editable."""
+    stats = pair_stats()
+    base_all = json.load(open(os.path.join(HERE, "param_space.json")))
+    import copy
+    v7v = (base_all.get("v7", {}).get("variants")
+           or dict(rsi=[2, 3, 4, 6, 9, 14],
+                   macd=[[3, 7], [3, 10], [5, 13], [8, 17], [12, 26]],
+                   bb=[[14, 2], [21, 2], [30, 2], [21, 2.5], [50, 2]],
+                   ema=[20, 50, 95, 150, 270],
+                   xmacd=[[12, 26, 9], [12, 26, 8], [8, 17, 9], [5, 35, 5], [20, 50, 9]],
+                   histn=[2, 4, 8, 12]))
+    s2v = (base_all.get("scalpx2", {}).get("variants")
+           or dict(rsi=[7, 10, 14, 21], cvd=[25, 50, 100],
+                   poc=[150, 300, 600], emaS=[400, 800, 1200, 2000]))
+    menu_grids = {
+        ("v7", "vRsi"): ("rsi", v7v["rsi"]), ("v7", "vMacd"): ("macd", v7v["macd"]),
+        ("v7", "vBB"): ("bb", v7v["bb"]), ("v7", "vEmaUp"): ("ema", v7v["ema"]),
+        ("v7", "vEmaDn"): ("ema", v7v["ema"]), ("v7", "vX"): ("xmacd", v7v["xmacd"]),
+        ("v7", "vHistN"): ("histn", v7v["histn"]),
+        ("scalpx2", "vR"): ("i", s2v["rsi"]), ("scalpx2", "vC"): ("i", s2v["cvd"]),
+        ("scalpx2", "vP"): ("i", s2v["poc"]), ("scalpx2", "vE"): ("i", s2v["emaS"]),
+        ("rocx", "vRoc"): ("i", [7, 10, 14, 21, 28]),
+        ("rocx", "vSma"): ("i", [9, 13, 21, 34]),
+    }
+    for c in ["sol"] + COINS:
+        vr = stats[c]["dvol"] / stats["sol"]["dvol"]
+        mr = stats[c]["macd_std"] / stats["sol"]["macd_std"]
+        for tf in (1, 3, 5):
+            if c == "sol" and tf == 3:
+                continue        # canonical param_space.json
+            sp = copy.deepcopy(base_all)
+            if c != "sol":
+                for fam, keys in PCT_KEYS.items():
+                    for var in (fam, f"{fam}@spot"):
+                        cont = (sp.get(var) or {}).get("continuous") or {}
+                        for k in keys:
+                            if k in cont and "range" in cont[k]:
+                                lo, hi = cont[k]["range"]
+                                cont[k]["range"] = [round(lo * vr, 6),
+                                                    round(hi * vr, 6)]
+                for fam, keys in RAW_MACD_KEYS.items():
+                    for var in (fam, f"{fam}@spot"):
+                        cont = (sp.get(var) or {}).get("continuous") or {}
+                        for k in keys:
+                            if k in cont and "range" in cont[k]:
+                                lo, hi = cont[k]["range"]
+                                cont[k]["range"] = [round(lo * mr, 6),
+                                                    round(hi * mr, 6)]
+            if tf == 1:
+                for (famroot, mk), (kind, grid) in menu_grids.items():
+                    n = _ext_len([tuple(g) if isinstance(g, list) else g
+                                  for g in grid], kind)
+                    for var in (famroot, f"{famroot}@spot", "prime7",
+                                "prime7@spot"):
+                        if famroot != "v7" and var.startswith("prime7"):
+                            continue
+                        m = ((sp.get(var) or {}).get("menus") or {}).get(mk)
+                        if m and len(m.get("options") or []) < n:
+                            m["options"] = list(range(n))
+                            m["labels"] = [str(i) for i in range(n)]
+            sp["_meta"] = dict(pair=f"{c.upper()}_USDT", timeframe=f"{tf}m",
+                               vol_ratio_vs_sol=round(vr, 3),
+                               macd_scale_vs_sol=round(mr, 4),
+                               generated=pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+                               note="independently editable — searches for this "
+                                    "pair+timeframe use THIS file (unless a "
+                                    "campaign passes an explicit --space)")
+            p = os.path.join(OUT, f"{c}_{tf}m.json")
+            json.dump(sp, open(p, "w"), indent=1)
+            print(f"materialized {os.path.basename(p)}")
+
+
 if __name__ == "__main__":
     main()
+    materialize()

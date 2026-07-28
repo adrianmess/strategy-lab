@@ -3010,7 +3010,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__eth_3m"
    ],
-   "status": "running"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -3052,7 +3052,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -3094,7 +3094,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -3136,7 +3136,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -3177,7 +3177,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -3218,7 +3218,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -3259,7 +3259,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -3300,7 +3300,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -3341,7 +3341,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -3382,7 +3382,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -3423,7 +3423,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -3464,7 +3464,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -3505,7 +3505,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -3546,7 +3546,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -3587,7 +3587,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -3628,7 +3628,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -3669,7 +3669,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -3710,7 +3710,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -3751,7 +3751,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -3792,7 +3792,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -3833,7 +3833,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -3874,7 +3874,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -3915,7 +3915,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -3956,7 +3956,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -3999,7 +3999,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -4042,7 +4042,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -4085,7 +4085,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -4128,7 +4128,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -4171,7 +4171,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -4208,7 +4208,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -4245,7 +4245,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -4282,7 +4282,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -4319,7 +4319,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -4356,7 +4356,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -4391,7 +4391,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -4426,7 +4426,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -4461,7 +4461,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -4496,7 +4496,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -4531,7 +4531,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -4568,7 +4568,7 @@
     "--name",
     "rep___seed_test_refined__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -4605,7 +4605,7 @@
     "--name",
     "rep___seed_test_refined__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -4642,7 +4642,7 @@
     "--name",
     "rep___seed_test_refined__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -4679,7 +4679,7 @@
     "--name",
     "rep___seed_test_refined__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -4716,7 +4716,7 @@
     "--name",
     "rep___seed_test_refined__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -4753,7 +4753,7 @@
     "--name",
     "rep___margin_test__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -4790,7 +4790,7 @@
     "--name",
     "rep___margin_test__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -4827,7 +4827,7 @@
     "--name",
     "rep___margin_test__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -4864,7 +4864,7 @@
     "--name",
     "rep___margin_test__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -4901,7 +4901,7 @@
     "--name",
     "rep___margin_test__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -4938,7 +4938,7 @@
     "--name",
     "rep_study_lev_vol3_gen__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -4975,7 +4975,7 @@
     "--name",
     "rep_study_lev_vol3_gen__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -5012,7 +5012,7 @@
     "--name",
     "rep_study_lev_vol3_gen__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -5049,7 +5049,7 @@
     "--name",
     "rep_study_lev_vol3_gen__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -5086,7 +5086,7 @@
     "--name",
     "rep_study_lev_vol3_gen__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -5123,7 +5123,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -5160,7 +5160,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -5197,7 +5197,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -5234,7 +5234,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -5271,7 +5271,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -5312,7 +5312,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -5353,7 +5353,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -5394,7 +5394,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -5435,7 +5435,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -5476,7 +5476,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -5513,7 +5513,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -5550,7 +5550,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -5587,7 +5587,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -5624,7 +5624,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -5661,7 +5661,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -5698,7 +5698,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__btc_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -5735,7 +5735,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__eth_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -5772,7 +5772,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__doge_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -5809,7 +5809,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__xrp_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -5846,7 +5846,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__sui_3m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2509",
@@ -5889,7 +5889,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2509__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2509",
@@ -5932,7 +5932,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2509__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2509",
@@ -5975,7 +5975,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2509__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2509",
@@ -6018,7 +6018,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2509__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2509",
@@ -6061,7 +6061,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2509__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2501",
@@ -6104,7 +6104,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2501__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2501",
@@ -6147,7 +6147,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2501__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2501",
@@ -6190,7 +6190,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2501__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2501",
@@ -6233,7 +6233,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2501__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_v7_vol3_ts2501",
@@ -6276,7 +6276,7 @@
     "--name",
     "rep_camp_c2_e_v7_vol3_ts2501__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_scalp_vol3_ts2509",
@@ -6319,7 +6319,7 @@
     "--name",
     "rep_camp_c2_e_scalp_vol3_ts2509__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_scalp_vol3_ts2509",
@@ -6362,7 +6362,7 @@
     "--name",
     "rep_camp_c2_e_scalp_vol3_ts2509__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_scalp_vol3_ts2509",
@@ -6405,7 +6405,7 @@
     "--name",
     "rep_camp_c2_e_scalp_vol3_ts2509__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_scalp_vol3_ts2509",
@@ -6448,7 +6448,7 @@
     "--name",
     "rep_camp_c2_e_scalp_vol3_ts2509__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_scalp_vol3_ts2509",
@@ -6491,7 +6491,7 @@
     "--name",
     "rep_camp_c2_e_scalp_vol3_ts2509__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80_",
@@ -6530,7 +6530,7 @@
     "--name",
     "rep_merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80___btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80_",
@@ -6569,7 +6569,7 @@
     "--name",
     "rep_merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80___eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80_",
@@ -6608,7 +6608,7 @@
     "--name",
     "rep_merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80___doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80_",
@@ -6647,7 +6647,7 @@
     "--name",
     "rep_merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80___xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80_",
@@ -6686,7 +6686,7 @@
     "--name",
     "rep_merge_auto_v7_D_vol3_te0901_mh7_1mil_Anc-80___sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_vol3_xfit",
@@ -6729,7 +6729,7 @@
     "--name",
     "rep_camp_c2_e_macdx_vol3_xfit__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_vol3_xfit",
@@ -6772,7 +6772,7 @@
     "--name",
     "rep_camp_c2_e_macdx_vol3_xfit__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_vol3_xfit",
@@ -6815,7 +6815,7 @@
     "--name",
     "rep_camp_c2_e_macdx_vol3_xfit__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_vol3_xfit",
@@ -6858,7 +6858,7 @@
     "--name",
     "rep_camp_c2_e_macdx_vol3_xfit__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_vol3_xfit",
@@ -6901,7 +6901,7 @@
     "--name",
     "rep_camp_c2_e_macdx_vol3_xfit__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c3_s_prime_trend3_ts2501_sl",
@@ -6947,7 +6947,7 @@
     "--name",
     "rep_camp_c3_s_prime_trend3_ts2501_sl__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c3_s_prime_trend3_ts2501_sl",
@@ -6993,7 +6993,7 @@
     "--name",
     "rep_camp_c3_s_prime_trend3_ts2501_sl__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c3_s_prime_trend3_ts2501_sl",
@@ -7039,7 +7039,7 @@
     "--name",
     "rep_camp_c3_s_prime_trend3_ts2501_sl__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c3_s_prime_trend3_ts2501_sl",
@@ -7085,7 +7085,7 @@
     "--name",
     "rep_camp_c3_s_prime_trend3_ts2501_sl__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c3_s_prime_trend3_ts2501_sl",
@@ -7131,7 +7131,7 @@
     "--name",
     "rep_camp_c3_s_prime_trend3_ts2501_sl__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_stop1.15_altD",
@@ -7172,7 +7172,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_stop1.15_altD",
@@ -7213,7 +7213,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_stop1.15_altD",
@@ -7254,7 +7254,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_stop1.15_altD",
@@ -7295,7 +7295,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_stop1.15_altD",
@@ -7336,7 +7336,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_stop1.15_altD__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2",
@@ -7377,7 +7377,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2",
@@ -7418,7 +7418,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2",
@@ -7459,7 +7459,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2",
@@ -7500,7 +7500,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2",
@@ -7541,7 +7541,7 @@
     "--name",
     "rep_auto_v7_D_vol3_te0901_mh7_1mil_Anch-0.2__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_macdx_spot",
@@ -7583,7 +7583,7 @@
     "--name",
     "rep_camp_c6_ca_macdx_spot__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_macdx_spot",
@@ -7625,7 +7625,7 @@
     "--name",
     "rep_camp_c6_ca_macdx_spot__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_macdx_spot",
@@ -7667,7 +7667,7 @@
     "--name",
     "rep_camp_c6_ca_macdx_spot__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_macdx_spot",
@@ -7709,7 +7709,7 @@
     "--name",
     "rep_camp_c6_ca_macdx_spot__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_macdx_spot",
@@ -7751,7 +7751,7 @@
     "--name",
     "rep_camp_c6_ca_macdx_spot__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_v7_spot",
@@ -7793,7 +7793,7 @@
     "--name",
     "rep_camp_c6_ca_v7_spot__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_v7_spot",
@@ -7835,7 +7835,7 @@
     "--name",
     "rep_camp_c6_ca_v7_spot__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_v7_spot",
@@ -7877,7 +7877,7 @@
     "--name",
     "rep_camp_c6_ca_v7_spot__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_v7_spot",
@@ -7919,7 +7919,7 @@
     "--name",
     "rep_camp_c6_ca_v7_spot__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_v7_spot",
@@ -7961,7 +7961,7 @@
     "--name",
     "rep_camp_c6_ca_v7_spot__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_34_prime_sp_tr3_t",
@@ -8002,7 +8002,7 @@
     "--name",
     "rep_camp_c1_w1_34_prime_sp_tr3_t__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_34_prime_sp_tr3_t",
@@ -8043,7 +8043,7 @@
     "--name",
     "rep_camp_c1_w1_34_prime_sp_tr3_t__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_34_prime_sp_tr3_t",
@@ -8084,7 +8084,7 @@
     "--name",
     "rep_camp_c1_w1_34_prime_sp_tr3_t__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_34_prime_sp_tr3_t",
@@ -8125,7 +8125,7 @@
     "--name",
     "rep_camp_c1_w1_34_prime_sp_tr3_t__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_34_prime_sp_tr3_t",
@@ -8166,7 +8166,7 @@
     "--name",
     "rep_camp_c1_w1_34_prime_sp_tr3_t__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E2_prime_trend3_100k",
@@ -8203,7 +8203,7 @@
     "--name",
     "rep_spotcamp_E2_prime_trend3_100k__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E2_prime_trend3_100k",
@@ -8240,7 +8240,7 @@
     "--name",
     "rep_spotcamp_E2_prime_trend3_100k__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E2_prime_trend3_100k",
@@ -8277,7 +8277,7 @@
     "--name",
     "rep_spotcamp_E2_prime_trend3_100k__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E2_prime_trend3_100k",
@@ -8314,7 +8314,7 @@
     "--name",
     "rep_spotcamp_E2_prime_trend3_100k__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E2_prime_trend3_100k",
@@ -8351,7 +8351,7 @@
     "--name",
     "rep_spotcamp_E2_prime_trend3_100k__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "ScalpX_spot_trend3_unified",
@@ -8388,7 +8388,7 @@
     "--name",
     "rep_ScalpX_spot_trend3_unified__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "ScalpX_spot_trend3_unified",
@@ -8425,7 +8425,7 @@
     "--name",
     "rep_ScalpX_spot_trend3_unified__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "ScalpX_spot_trend3_unified",
@@ -8462,7 +8462,7 @@
     "--name",
     "rep_ScalpX_spot_trend3_unified__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "ScalpX_spot_trend3_unified",
@@ -8499,7 +8499,7 @@
     "--name",
     "rep_ScalpX_spot_trend3_unified__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "ScalpX_spot_trend3_unified",
@@ -8536,7 +8536,7 @@
     "--name",
     "rep_ScalpX_spot_trend3_unified__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E3_prime_trend3_500k",
@@ -8573,7 +8573,7 @@
     "--name",
     "rep_spotcamp_E3_prime_trend3_500k__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E3_prime_trend3_500k",
@@ -8610,7 +8610,7 @@
     "--name",
     "rep_spotcamp_E3_prime_trend3_500k__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E3_prime_trend3_500k",
@@ -8647,7 +8647,7 @@
     "--name",
     "rep_spotcamp_E3_prime_trend3_500k__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E3_prime_trend3_500k",
@@ -8684,7 +8684,7 @@
     "--name",
     "rep_spotcamp_E3_prime_trend3_500k__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_E3_prime_trend3_500k",
@@ -8721,7 +8721,7 @@
     "--name",
     "rep_spotcamp_E3_prime_trend3_500k__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -8763,7 +8763,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -8805,7 +8805,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -8847,7 +8847,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -8889,7 +8889,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -8931,7 +8931,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -8972,7 +8972,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -9013,7 +9013,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -9054,7 +9054,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -9095,7 +9095,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_39_v7_sp_vol3_cl_t",
@@ -9136,7 +9136,7 @@
     "--name",
     "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -9177,7 +9177,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -9218,7 +9218,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -9259,7 +9259,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -9300,7 +9300,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_27_macdx_vol3_cl_d",
@@ -9341,7 +9341,7 @@
     "--name",
     "rep_camp_c1_w1_27_macdx_vol3_cl_d__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -9382,7 +9382,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -9423,7 +9423,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -9464,7 +9464,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -9505,7 +9505,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_29_macdx_trend3_cl",
@@ -9546,7 +9546,7 @@
     "--name",
     "rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -9587,7 +9587,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -9628,7 +9628,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -9669,7 +9669,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -9710,7 +9710,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_30_macdx_vol3_cl_mh1",
@@ -9751,7 +9751,7 @@
     "--name",
     "rep_camp_c1_w1_30_macdx_vol3_cl_mh1__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -9794,7 +9794,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -9837,7 +9837,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -9880,7 +9880,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -9923,7 +9923,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c2_e_macdx_trend3_ts2501",
@@ -9966,7 +9966,7 @@
     "--name",
     "rep_camp_c2_e_macdx_trend3_ts2501__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -10003,7 +10003,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -10040,7 +10040,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -10077,7 +10077,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -10114,7 +10114,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V7_regime_specialist_lev",
@@ -10151,7 +10151,7 @@
     "--name",
     "rep_V7_regime_specialist_lev__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -10186,7 +10186,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -10221,7 +10221,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -10256,7 +10256,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -10291,7 +10291,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen_full_alt-14",
@@ -10326,7 +10326,7 @@
     "--name",
     "rep_study_lev_vol3_gen_full_alt-14__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -10363,7 +10363,7 @@
     "--name",
     "rep___seed_test_refined__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -10400,7 +10400,7 @@
     "--name",
     "rep___seed_test_refined__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -10437,7 +10437,7 @@
     "--name",
     "rep___seed_test_refined__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -10474,7 +10474,7 @@
     "--name",
     "rep___seed_test_refined__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__seed_test_refined",
@@ -10511,7 +10511,7 @@
     "--name",
     "rep___seed_test_refined__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -10548,7 +10548,7 @@
     "--name",
     "rep___margin_test__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -10585,7 +10585,7 @@
     "--name",
     "rep___margin_test__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -10622,7 +10622,7 @@
     "--name",
     "rep___margin_test__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -10659,7 +10659,7 @@
     "--name",
     "rep___margin_test__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "__margin_test",
@@ -10696,7 +10696,7 @@
     "--name",
     "rep___margin_test__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -10733,7 +10733,7 @@
     "--name",
     "rep_study_lev_vol3_gen__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -10770,7 +10770,7 @@
     "--name",
     "rep_study_lev_vol3_gen__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -10807,7 +10807,7 @@
     "--name",
     "rep_study_lev_vol3_gen__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -10844,7 +10844,7 @@
     "--name",
     "rep_study_lev_vol3_gen__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "study_lev_vol3_gen",
@@ -10881,7 +10881,7 @@
     "--name",
     "rep_study_lev_vol3_gen__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -10918,7 +10918,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -10955,7 +10955,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -10992,7 +10992,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -11029,7 +11029,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A3_macdx_vol3_500k",
@@ -11066,7 +11066,7 @@
     "--name",
     "rep_spotcamp_A3_macdx_vol3_500k__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -11107,7 +11107,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -11148,7 +11148,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -11189,7 +11189,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -11230,7 +11230,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "camp_c1_w1_38_rocx_sp_ratchet",
@@ -11271,7 +11271,7 @@
     "--name",
     "rep_camp_c1_w1_38_rocx_sp_ratchet__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -11308,7 +11308,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -11345,7 +11345,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -11382,7 +11382,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -11419,7 +11419,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "V6_spot_vol3_unified_100_000",
@@ -11456,7 +11456,7 @@
     "--name",
     "rep_V6_spot_vol3_unified_100_000__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -11493,7 +11493,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__btc_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -11530,7 +11530,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__eth_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -11567,7 +11567,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__doge_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -11604,7 +11604,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__xrp_1m"
    ],
-   "status": "pending"
+   "status": "done"
   },
   {
    "run": "spotcamp_A2_macdx_vol3_100k",
@@ -11641,7 +11641,7 @@
     "--name",
     "rep_spotcamp_A2_macdx_vol3_100k__sui_1m"
    ],
-   "status": "pending"
+   "status": "done"
   }
  ],
  "made": "2026-07-27 20:26"

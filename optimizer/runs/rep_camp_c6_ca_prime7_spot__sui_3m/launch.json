@@ -4,5 +4,11 @@
   "cmd": "python3 optimize2_cli.py --strategy prime7 --mode spot --method cvol7 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --max-hold-days 7 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --holdout-days 21 --cadapt --procs 14 --symbol sui --tf 3 --name rep_camp_c6_ca_prime7_spot__sui_3m",
   "resume_from": [],
   "merge_mode": null
+ },
+ {
+  "at": "2026-07-27 23:24:56",
+  "cmd": "python3 optimize2_cli.py --strategy prime7 --mode spot --method cvol7 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --max-hold-days 7 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --holdout-days 21 --cadapt --procs 14 --symbol sui --tf 3 --name rep_camp_c6_ca_prime7_spot__sui_3m",
+  "resume_from": [],
+  "merge_mode": null
  }
 ]

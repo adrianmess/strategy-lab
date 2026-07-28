@@ -4,5 +4,11 @@
   "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --scoring classic --procs 14 --symbol btc --tf 3 --name rep_study_lev_vol3_gen_full_alt-14__btc_3m",
   "resume_from": [],
   "merge_mode": null
+ },
+ {
+  "at": "2026-07-28 00:32:04",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --scoring classic --procs 14 --symbol btc --tf 3 --name rep_study_lev_vol3_gen_full_alt-14__btc_3m",
+  "resume_from": [],
+  "merge_mode": null
  }
 ]
