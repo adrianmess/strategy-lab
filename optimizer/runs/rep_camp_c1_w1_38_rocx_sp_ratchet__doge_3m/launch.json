@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:56:42",
+  "cmd": "python3 optimize2_cli.py --strategy rocx --mode spot --method vol3 --algo genetic --batch 100 --total 150000 --train-end 2025-09-01 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/campaigns/c1/spaces/ratchet_only.json --procs 14 --symbol doge --tf 3 --name rep_camp_c1_w1_38_rocx_sp_ratchet__doge_3m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

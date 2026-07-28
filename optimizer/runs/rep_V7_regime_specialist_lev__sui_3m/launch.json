@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:56:33",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo genetic --batch 100 --total 40800 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol sui --tf 3 --name rep_V7_regime_specialist_lev__sui_3m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

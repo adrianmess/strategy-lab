@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:57:22",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode lev --method vol3 --algo refine --batch 100 --total 100800 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol btc --tf 1 --name rep___seed_test_refined__btc_1m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

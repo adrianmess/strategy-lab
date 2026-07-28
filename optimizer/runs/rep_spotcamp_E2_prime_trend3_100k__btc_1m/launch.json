@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:57:05",
+  "cmd": "python3 optimize2_cli.py --strategy prime --mode spot --method trend3 --algo genetic --batch 100 --total 102480 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol btc --tf 1 --name rep_spotcamp_E2_prime_trend3_100k__btc_1m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

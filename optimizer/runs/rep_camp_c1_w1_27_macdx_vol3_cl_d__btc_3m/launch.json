@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:56:25",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode lev --method vol3 --algo genetic --batch 100 --total 150000 --train-end 2025-09-01 --gap-mode skip_contaminated --max-hold-days 5 --scoring classic --space /Users/adrian/Code/strategy-lab/optimizer/param_space.json --procs 14 --symbol btc --tf 3 --name rep_camp_c1_w1_27_macdx_vol3_cl_d__btc_3m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

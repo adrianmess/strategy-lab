@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-27 22:57:28",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --mode spot --method vol3 --algo genetic --batch 100 --total 150000 --gap-mode skip_contaminated --scoring classic --train-end 2025-09-01 --procs 14 --symbol xrp --tf 1 --name rep_spotcamp_A3_macdx_vol3_500k__xrp_1m",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

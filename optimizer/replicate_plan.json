@@ -2968,7 +2968,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__btc_3m"
    ],
-   "status": "running"
+   "status": "done"
   },
   {
    "run": "camp_c6_ca_prime7_spot",
@@ -3010,7 +3010,7 @@
     "--name",
     "rep_camp_c6_ca_prime7_spot__eth_3m"
    ],
-   "status": "pending"
+   "status": "running"
   },
   {
    "run": "camp_c6_ca_prime7_spot",

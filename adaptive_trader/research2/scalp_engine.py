@@ -10,6 +10,7 @@ TradingView semantics:
   - gap-through fills at open
 """
 import numpy as np
+import os
 import pandas as pd
 from numba import njit
 from engine import rsi as rsi_tv, ema
