@@ -120,6 +120,12 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
         <option value="open">still open</option>
         <option value="flat">flat (no open position)</option>
       </select></label>
+    <label class="hint">no losing
+      <select id="fNoNeg" onchange="saveBtFilters()" style="margin-left:4px" title="hide runs that had ANY negative return in the chosen period: 'month' uses the stored monthly returns, 'week' is computed from the equity curve (weeks spanning a data gap are skipped)">
+        <option value="all">off</option>
+        <option value="month">month</option>
+        <option value="week">week</option>
+      </select></label>
     <span class="hint" id="fCount"></span>
   </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
@@ -363,6 +369,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterPair', document.getElementById('fPair').value);
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
+  localStorage.setItem('btFilterNoNeg', document.getElementById('fNoNeg').value);
   sel = null; render();
 }
 function pairPill(p, mkt, tf){
@@ -382,7 +389,57 @@ function pairPill(p, mkt, tf){
   document.getElementById('fNoLiq').checked = localStorage.getItem('btFilterNoLiq') === '1';
   const fop = localStorage.getItem('btFilterOpenPos');
   document.getElementById('fOpenPos').value = ['open','flat'].includes(fop) ? fop : (fop==='1' ? 'open' : 'all');
+  const fnn = localStorage.getItem('btFilterNoNeg');
+  document.getElementById('fNoNeg').value = ['month','week'].includes(fnn) ? fnn : 'all';
 })();
+// ---- "no losing period" support: weekly returns derived from the curve ----
+const _WEEKOK = new Map();   // entry index -> bool (cached)
+function _noNegWeek(i){
+  if(_WEEKOK.has(i)) return _WEEKOK.get(i);
+  const cv = BT[i].curve || [];
+  const weeks = new Map();   // ISO week key -> last equity in that week
+  let gapWeeks = new Set();
+  let prevKey = null;
+  for(const p of cv){
+    if(!p || p.eq == null || p.t === '(data gap)'){
+      if(prevKey) gapWeeks.add(prevKey);   // week around a gap: skip its return
+      prevKey = null;
+      continue;
+    }
+    const d = new Date(p.t.replace(' ', 'T'));
+    if(isNaN(d)) continue;
+    // week key: Thursday-anchored ISO-ish (good enough for filtering)
+    const day = (d.getUTCDay() + 6) % 7;
+    const th = new Date(d); th.setUTCDate(d.getUTCDate() - day + 3);
+    const key = th.getUTCFullYear() + '-' + Math.ceil(((th - new Date(Date.UTC(th.getUTCFullYear(),0,1)))/864e5 + 1)/7);
+    weeks.set(key, p.eq);
+    if(prevKey && prevKey !== key && gapWeeks.has(prevKey)) gapWeeks.add(key);
+    prevKey = key;
+  }
+  const keys = [...weeks.keys()];
+  let ok = true;
+  for(let k = 1; k < keys.length; k++){
+    if(gapWeeks.has(keys[k]) || gapWeeks.has(keys[k-1])) continue;
+    if(weeks.get(keys[k]) < weeks.get(keys[k-1]) - 1e-9){ ok = false; break; }
+  }
+  _WEEKOK.set(i, ok);
+  return ok;
+}
+function _noNegMonth(i){
+  const mo = BT[i].monthly || [];
+  if(mo.length) return mo.every(m => (m.ret_pct ?? 0) >= -1e-9);
+  // fall back to the curve (e.g. walk-forward entries store no monthly table)
+  const cv = BT[i].curve || [];
+  const months = new Map();
+  for(const p of cv){
+    if(!p || p.eq == null || p.t === '(data gap)') continue;
+    months.set(String(p.t).slice(0,7), p.eq);
+  }
+  const ks = [...months.keys()];
+  for(let k = 1; k < ks.length; k++)
+    if(months.get(ks[k]) < months.get(ks[k-1]) - 1e-9) return false;
+  return true;
+}
 function render(){
   const holder = document.getElementById('detailHolder');
   holder.style.display='none'; document.querySelector('main').appendChild(holder);
@@ -397,8 +454,11 @@ function render(){
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
+  const fNegV = document.getElementById('fNoNeg').value;
+  if(fNegV === 'month') order = order.filter(_noNegMonth);
+  else if(fNegV === 'week') order = order.filter(_noNegWeek);
   document.getElementById('fCount').textContent =
-    (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
+    (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
