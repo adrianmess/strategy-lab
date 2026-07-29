@@ -78,6 +78,11 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
 .steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .step{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:12.5px;color:var(--dim)}
 .step b{color:var(--blue)}
+.tabbar{display:flex;gap:2px;margin-bottom:-1px;position:relative;z-index:2}
+.tabbar .tab{padding:6px 18px;border:1px solid var(--border);border-bottom:1px solid var(--border);
+  border-radius:8px 8px 0 0;background:var(--bg);color:var(--dim);cursor:pointer;font-size:13px}
+.tabbar .tab:hover{color:var(--fg)}
+.tabbar .tab.active{background:var(--panel);color:var(--fg);font-weight:600;border-bottom:1px solid var(--panel)}
 </style>
 <link rel="stylesheet" href="assets/theme.css">
 <script src="assets/ui.js"></script>
@@ -200,8 +205,12 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <pre id="campReport" style="display:none;max-height:320px;margin-top:8px"></pre>
   </div>
 
-  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span id="varTabs" style="margin-left:8px"><button class="small" id="tabImported" onclick="setVariant('imported')">Imported</button><button class="small" id="tabAI" onclick="setVariant('ai')">AI</button></span> <button class="small" onclick="aiGenSpace()" title="mine every surviving config's actually-used MACD/RSI/BB%B/z-threshold values for this pair+timeframe, set ranges to [min used, max used] (+LLM sanity pass when an Anthropic key is configured) — writes the AI variant, does not activate it">AI generate</button><button class="small" id="btnRestoreDef" onclick="restoreDefaults()" title="restore the IMPORTED variant to its saved defaults snapshot (never touches the AI variant); hit Save afterwards to activate">↺ restore defaults</button><button class="small" id="btnSetDef" onclick="setDefaults()" title="snapshot the CURRENT imported values as the new defaults for this space">set as defaults</button> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
-  <div class="card" id="spaceCard">
+  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <button class="small" onclick="aiGenSpace()" title="mine every surviving config's actually-used MACD/RSI/BB%B/z-threshold values for this pair+timeframe, set ranges to [min used, max used] (+LLM sanity pass when an Anthropic key is configured) — writes the AI variant, does not activate it">AI generate</button><button class="small" id="btnRestoreDef" onclick="restoreDefaults()" title="restore the IMPORTED variant to its saved defaults snapshot (never touches the AI variant); hit Save afterwards to activate">↺ restore defaults</button><button class="small" id="btnSetDef" onclick="setDefaults()" title="snapshot the CURRENT imported values as the new defaults for this space">set as defaults</button> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
+  <div class="tabbar">
+    <button class="tab active" id="tabImported" onclick="setVariant('imported')">Imported</button>
+    <button class="tab" id="tabAI" onclick="setVariant('ai')">AI</button>
+  </div>
+  <div class="card" id="spaceCard" style="border-top-left-radius:0">
     <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
       <div id="menuGrid" style="margin-top:8px"></div>
@@ -949,8 +958,8 @@ async function loadSpace(){
     renderSpace();
   }
   const act = (r && r._meta && r._meta.active_variant) || 'imported';
-  $('tabImported').style.fontWeight = SPACE_VARIANT==='imported' ? '700' : '400';
-  $('tabAI').style.fontWeight = SPACE_VARIANT==='ai' ? '700' : '400';
+  $('tabImported').classList.toggle('active', SPACE_VARIANT==='imported');
+  $('tabAI').classList.toggle('active', SPACE_VARIANT==='ai');
   $('tabImported').textContent = 'Imported' + (act==='imported' ? ' ●' : '');
   $('tabAI').textContent = 'AI' + (act==='ai' ? ' ●' : '');
   $('btnRestoreDef').style.display = SPACE_VARIANT==='imported' ? '' : 'none';
