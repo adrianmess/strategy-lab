@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-28 11:40:25",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode spot --method volXtrend9 --procs 14 --batch 100 --name camp_c4_m_spot_vt9v_router_full_SOL_ETH --total 1000000 --train-end 2025-09-01 --max-dd 0.55 --max-hold-days 7 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

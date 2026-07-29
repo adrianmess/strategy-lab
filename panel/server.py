@@ -1379,27 +1379,127 @@ def trader_config():
     json.dump(cfg, open(path, "w"), indent=1)
     return jsonify(ok=True, changed=changed)
 
-@app.route("/api/param_space", methods=["GET", "POST"])
-def param_space():
-    # ?space=<coin>_<tf>m selects a pair+timeframe space file
-    # (param_spaces/<coin>_<tf>m.json); default = canonical param_space.json
-    sel = request.args.get("space", "")
+def _space_paths(sel):
+    """(active_path, name) for '' (canonical) or '<coin>_<tf>m'."""
     if sel:
         if not re.fullmatch(r"[a-z]{2,6}_[135]m", sel):
-            return jsonify(error=f"bad space name '{sel}'"), 400
-        path = os.path.join(OPT, "param_spaces", f"{sel}.json")
-        if not os.path.exists(path):
-            return jsonify(error=f"no space file for {sel} — run "
-                                 f"gen_pair_spaces.py"), 404
-    else:
-        path = os.path.join(OPT, "param_space.json")
+            return None, None
+        return os.path.join(OPT, "param_spaces", f"{sel}.json"), sel
+    return os.path.join(OPT, "param_space.json"), "default"
+
+
+def _variant_path(name, variant, defaults=False):
+    d = os.path.join(OPT, "param_spaces", "variants")
+    os.makedirs(d, exist_ok=True)
+    sfx = ".defaults" if defaults else ""
+    return os.path.join(d, f"{name}.{variant}{sfx}.json")
+
+
+@app.route("/api/param_space", methods=["GET", "POST"])
+def param_space():
+    """?space=<coin>_<tf>m (default: canonical param_space.json)
+    &variant=imported|ai (default: imported).
+    GET returns the variant's content (imported auto-seeds from the active
+    file, and its defaults snapshot is taken on first sight).
+    POST saves the variant AND makes it the ACTIVE space (what searches use).
+    """
+    sel = request.args.get("space", "")
+    variant = request.args.get("variant", "imported")
+    if variant not in ("imported", "ai"):
+        return jsonify(error="variant must be imported|ai"), 400
+    active, name = _space_paths(sel)
+    if active is None:
+        return jsonify(error=f"bad space name '{sel}'"), 400
+    if not os.path.exists(active):
+        return jsonify(error=f"no space file for {name} — run "
+                             f"gen_pair_spaces.py"), 404
+    vpath = _variant_path(name, variant)
+    if variant == "imported" and not os.path.exists(vpath):
+        # first sight: seed the imported variant + its defaults snapshot
+        # from the currently-active file
+        import shutil
+        shutil.copy(active, vpath)
+        dpath = _variant_path(name, "imported", defaults=True)
+        if not os.path.exists(dpath):
+            shutil.copy(active, dpath)
     if request.method == "GET":
-        return jsonify(json.load(open(path)))
+        if not os.path.exists(vpath):
+            return jsonify(error=f"no {variant} variant yet"
+                           + (" — generate it (AI generate button or "
+                              "gen_ai_spaces.py)" if variant == "ai" else "")), 404
+        j = json.load(open(vpath))
+        j.setdefault("_meta", {})["active_variant"] = _active_variant(name)
+        return jsonify(j)
     d = request.get_json(force=True)
+    d.setdefault("_meta", {})["variant"] = variant
+    d["_meta"].pop("active_variant", None)
+    json.dump(d, open(vpath, "w"), indent=1)
     import shutil
-    shutil.copy(path, path + ".bak")
-    json.dump(d, open(path, "w"), indent=1)
+    shutil.copy(active, active + ".bak")
+    json.dump(d, open(active, "w"), indent=1)   # saving ACTIVATES this variant
+    json.dump(dict(active=variant),
+              open(_variant_path(name, "active_marker"), "w"))
+    return jsonify(ok=True, activated=variant)
+
+
+def _active_variant(name):
+    p = _variant_path(name, "active_marker")
+    try:
+        return json.load(open(p))["active"]
+    except Exception:
+        return "imported"
+
+
+@app.route("/api/param_space/restore_defaults", methods=["POST"])
+def param_space_restore():
+    """Restore the IMPORTED variant to its defaults snapshot (the AI variant
+    is never touched). Does not activate — hit Save to activate."""
+    sel = (request.get_json(force=True) or {}).get("space", "")
+    active, name = _space_paths(sel)
+    if active is None:
+        return jsonify(error="bad space name"), 400
+    dpath = _variant_path(name, "imported", defaults=True)
+    if not os.path.exists(dpath):
+        return jsonify(error="no defaults snapshot yet"), 404
+    import shutil
+    shutil.copy(dpath, _variant_path(name, "imported"))
     return jsonify(ok=True)
+
+
+@app.route("/api/param_space/set_defaults", methods=["POST"])
+def param_space_set_defaults():
+    """Snapshot the CURRENT imported variant as the new defaults."""
+    sel = (request.get_json(force=True) or {}).get("space", "")
+    active, name = _space_paths(sel)
+    if active is None:
+        return jsonify(error="bad space name"), 400
+    vpath = _variant_path(name, "imported")
+    if not os.path.exists(vpath):
+        return jsonify(error="no imported variant yet"), 404
+    import shutil
+    shutil.copy(vpath, _variant_path(name, "imported", defaults=True))
+    return jsonify(ok=True)
+
+
+@app.route("/api/param_space/ai_generate", methods=["POST"])
+def param_space_ai_generate():
+    """Build/refresh the AI variant: mined min/max of actually-used indicator
+    values (+optional LLM sanity pass). Runs synchronously (seconds unless
+    the LLM is slow)."""
+    d = request.get_json(force=True) or {}
+    sel = d.get("space", "")
+    active, name = _space_paths(sel)
+    if active is None:
+        return jsonify(error="bad space name"), 400
+    import subprocess
+    cmd = [sys.executable, "gen_ai_spaces.py", "--space", name]
+    if d.get("no_llm"):
+        cmd.append("--no-llm")
+    r = subprocess.run(cmd, cwd=OPT, capture_output=True, text=True,
+                       timeout=600)
+    if r.returncode != 0:
+        return jsonify(error=(r.stderr or r.stdout)[-400:]), 500
+    return jsonify(ok=True, log=r.stdout[-600:])
 
 
 @app.route("/api/param_spaces")

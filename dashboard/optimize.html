@@ -200,7 +200,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <pre id="campReport" style="display:none;max-height:320px;margin-top:8px"></pre>
   </div>
 
-  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
+  <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span id="varTabs" style="margin-left:8px"><button class="small" id="tabImported" onclick="setVariant('imported')">Imported</button><button class="small" id="tabAI" onclick="setVariant('ai')">AI</button></span> <button class="small" onclick="aiGenSpace()" title="mine every surviving config's actually-used MACD/RSI/BB%B/z-threshold values for this pair+timeframe, set ranges to [min used, max used] (+LLM sanity pass when an Anthropic key is configured) — writes the AI variant, does not activate it">AI generate</button><button class="small" id="btnRestoreDef" onclick="restoreDefaults()" title="restore the IMPORTED variant to its saved defaults snapshot (never touches the AI variant); hit Save afterwards to activate">↺ restore defaults</button><button class="small" id="btnSetDef" onclick="setDefaults()" title="snapshot the CURRENT imported values as the new defaults for this space">set as defaults</button> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
   <div class="card" id="spaceCard">
     <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
@@ -932,9 +932,47 @@ async function initSpaceFiles(){
   }catch(e){}
 }
 initSpaceFiles();
+let SPACE_VARIANT = 'imported';
+function setVariant(v){ SPACE_VARIANT = v; loadSpace(); }
+function variantQ(){
+  const s = spaceSel();
+  return (s ? s + '&' : '?') + 'variant=' + SPACE_VARIANT;
+}
 async function loadSpace(){
-  SPACE = await api('param_space' + spaceSel());
-  renderSpace();
+  const r = await api('param_space' + variantQ());
+  if(r && r.error){
+    SPACE = null;
+    $('contGrid').innerHTML = '<span class="hint">' + r.error + '</span>';
+    $('menuGrid').innerHTML = '';
+  } else {
+    SPACE = r;
+    renderSpace();
+  }
+  const act = (r && r._meta && r._meta.active_variant) || 'imported';
+  $('tabImported').style.fontWeight = SPACE_VARIANT==='imported' ? '700' : '400';
+  $('tabAI').style.fontWeight = SPACE_VARIANT==='ai' ? '700' : '400';
+  $('tabImported').textContent = 'Imported' + (act==='imported' ? ' ●' : '');
+  $('tabAI').textContent = 'AI' + (act==='ai' ? ' ●' : '');
+  $('btnRestoreDef').style.display = SPACE_VARIANT==='imported' ? '' : 'none';
+  $('btnSetDef').style.display = SPACE_VARIANT==='imported' ? '' : 'none';
+}
+async function aiGenSpace(){
+  $('spaceMsg').textContent = 'AI generating (mining run history\u2026)';
+  const s = ($('spaceFile')||{}).value || '';
+  const r = await api('param_space/ai_generate', {space: s==='default' ? '' : s});
+  $('spaceMsg').textContent = r.ok ? 'AI variant generated \u2713 (switch to the AI tab; Save activates it)' : ('error: ' + (r.error||''));
+  if(r.ok && SPACE_VARIANT==='ai') loadSpace();
+}
+async function restoreDefaults(){
+  const s = ($('spaceFile')||{}).value || '';
+  const r = await api('param_space/restore_defaults', {space: s==='default' ? '' : s});
+  $('spaceMsg').textContent = r.ok ? 'imported variant restored to defaults \u2713 (Save to activate)' : ('error: ' + (r.error||''));
+  if(r.ok) loadSpace();
+}
+async function setDefaults(){
+  const s = ($('spaceFile')||{}).value || '';
+  const r = await api('param_space/set_defaults', {space: s==='default' ? '' : s});
+  $('spaceMsg').textContent = r.ok ? 'current imported values snapshotted as defaults \u2713' : ('error: ' + (r.error||''));
 }
 // Separate parameter spaces per mode: the base entry is the LEV space, the
 // "<strategy>@spot" sibling is the SPOT space (created on first use as a copy).
@@ -1093,8 +1131,8 @@ async function saveSpace(){
       }
     }
   }
-  const r = await api('param_space' + spaceSel(), SPACE);
-  $('spaceMsg').textContent = r.ok ? (`saved ✓ (${$('mode').value==='spot'?'SPOT':'LEV'} ranges — new ${$('mode').value} runs use them)` +
+  const r = await api('param_space' + variantQ(), SPACE);
+  $('spaceMsg').textContent = r.ok ? (`saved & ACTIVATED ${SPACE_VARIANT} variant ✓ (${$('mode').value==='spot'?'SPOT':'LEV'} ranges — new ${$('mode').value} runs use them)` +
     (rebuilt ? ' — length lists changed: the next run rebuilds the engine cache once' : '')) : 'error';
   if(rebuilt) renderSpace();
 }
