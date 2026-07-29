@@ -199,7 +199,16 @@ def _mutate_regs(rng, cand, space, mode, p_cont=0.25, p_menu=0.10, sigma=0.10):
     return out
 
 def build_P3(cand):
-    return np.vstack([vec3(reg) for reg in cand["regs"]])
+    P = np.vstack([vec3(reg) for reg in cand["regs"]])
+    # SAFETY: clamp variant indices to the current grids. A candidate bred
+    # from a different timeframe's pool can carry indices into the 1m-extended
+    # grids; numba does NOT bounds-check, so an out-of-range index would read
+    # garbage silently.
+    from engine3 import VARIANTS as _V
+    for col, g in ((45, "rsi"), (46, "macd"), (47, "bb"), (48, "ema"),
+                   (49, "ema"), (50, "xmacd"), (51, "histn")):
+        P[:, col] = np.clip(P[:, col], 0, len(_V[g]) - 1)
+    return P
 
 # ---------------- evaluation ----------------
 

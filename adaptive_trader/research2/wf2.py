@@ -732,6 +732,10 @@ def build_P_scalpx2(c, R):
         vals = c.get(key)
         for r in range(R):
             vidx[r, j] = int(vals[r]) if vals is not None else SCALP2_DEFAULT_IDX[keys[j]]
+        # SAFETY: clamp to current grid (cross-timeframe pools can carry
+        # indices into the 1m-extended grids; fancy-indexing would raise,
+        # or worse, a stale cache could read the wrong variant)
+        vidx[:, j] = np.clip(vidx[:, j], 0, len(SCALP2_VARIANTS[keys[j]]) - 1)
     return P, vidx
 
 # ---------------- evaluation ----------------

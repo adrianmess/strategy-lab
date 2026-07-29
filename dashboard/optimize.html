@@ -427,6 +427,12 @@ function combineRuns(){
         alert(`Can't combine: ${k} differs (${A.name}: ${A[k]||'?'} vs ${B.name}: ${B[k]||'?'}). Candidates from different ${k}s aren't the same genome.`); return;
       }
     }
+    if((A.pair||'SOL_USDT')!==(B.pair||'SOL_USDT')){
+      alert(`Can't combine: trading pair differs (${A.name}: ${A.pair||'SOL_USDT'} vs ${B.name}: ${B.pair||'SOL_USDT'}) — pools evolved on different price data can't be merged honestly.`); return;
+    }
+    if((A.timeframe||'3m')!==(B.timeframe||'3m')){
+      alert(`Can't combine: chart timeframe differs (${A.name}: ${A.timeframe||'3m'} vs ${B.name}: ${B.timeframe||'3m'}) — indicator lengths are in BARS, so genomes change meaning across timeframes (and 1m variant indices can exceed 3m grids).`); return;
+    }
     if((A.per_regime===false)!==(B.per_regime===false)){
       alert(`Can't combine: ${A.name} and ${B.name} differ (per-regime vs single-set) — different genome shapes.`); return;
     }
