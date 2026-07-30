@@ -857,6 +857,7 @@ def main():
         args.buckets = base.get("method", args.buckets)
         args.symbol = (base.get("pair") or "SOL_USDT").split("_")[0].lower()
         os.environ["LAB_TF"] = str(base.get("timeframe") or "3m").rstrip("m")
+        base_mkt = (base.get("market_data") or "perp").lower()
         if not args.name:
             args.name = f"{bname}_ext"
         base_comps = base["cand"]["components"]
@@ -871,7 +872,10 @@ def main():
     run_dir = os.path.join(RUNS, args.name)
     os.makedirs(run_dir, exist_ok=True)
     os.environ["LAB_COIN"] = args.symbol.lower()
-    os.environ["LAB_MARKET"] = "spot" if args.mode == "spot" else "perp"
+    # extend inherits the BASE router's dataset (legacy spot routers ran on
+    # perp candles); fresh builds follow the mode
+    os.environ["LAB_MARKET"] = (base_mkt if base_comps is not None
+                                else ("spot" if args.mode == "spot" else "perp"))
     os.environ["LAB_DATA_PINNED"] = "1"
     if base_comps is not None:
         comps, _seen = [], set()
