@@ -60,6 +60,15 @@ def mine_components(mode, max_per_family=2, cap=8):
             if b.get("strategy") == "metax" \
                     or (b.get("cand") or {}).get("strategy") == "metax":
                 continue   # never route a router (self-reference)
+            # components must match the router's DATASET: the router simulates
+            # them on ITS candles (pinned pair/market/timeframe) — a 1m or
+            # BTC config on SOL 3m data would be a different strategy
+            if (b.get("pair") or "SOL_USDT") != \
+                    os.environ.get("LAB_COIN", "sol").upper() + "_USDT":
+                continue
+            if str(b.get("timeframe") or "3m") != \
+                    os.environ.get("LAB_TF", "3") + "m":
+                continue
             h = b.get("holdout") or {}
             if fn == "best_config.json" and b.get("holdout_best"):
                 h2 = (b["holdout_best"] or {}).get("holdout") or {}
