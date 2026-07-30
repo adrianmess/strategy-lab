@@ -688,6 +688,12 @@ def main():
                     help="cross-fit lockboxes: comma-separated date ranges 'a..b' with "
                          "open sides allowed, e.g. '2025-09-01..' or "
                          "'..2024-11-01,2025-07-01..'. Judged once, at the end.")
+    ap.add_argument("--holdout-before", default=None, metavar="DATE",
+                    help="holdout = everything BEFORE this date; training "
+                         "runs on [date, end)")
+    ap.add_argument("--holdout-between", default=None, metavar="A..B",
+                    help="holdout = the window BETWEEN two dates; training "
+                         "runs on everything OUTSIDE it (before A and after B)")
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
@@ -749,6 +755,35 @@ def main():
     os.environ["LAB_MARKET"] = mkt
     os.environ["LAB_TF"] = str(args.tf)
     print(f"CHART DATA: {mkt} candles, {args.tf}-minute bars", flush=True)
+    # ---- holdout window modes ----
+    # after date (train-end) | before date | between dates | alternating days
+    args._hbetween = None
+    if args.holdout_between:
+        m2 = args.holdout_between.split("..")
+        if len(m2) != 2 or not m2[0] or not m2[1]:
+            sys.exit("--holdout-between needs 'YYYY-MM-DD..YYYY-MM-DD'")
+        if args.train_end or args.holdout_days or args.holdout_before:
+            sys.exit("--holdout-between excludes the other holdout modes")
+        args._hbetween = (m2[0], m2[1])
+        args.train_start = None
+        args.train_end = None
+        print(f"HOLDOUT: between {m2[0]} and {m2[1]} — training on "
+              f"everything outside that window", flush=True)
+    if args.holdout_before:
+        if args.train_end or args.holdout_days or args.holdout_before or args._hbetween:
+            sys.exit("--holdout-before excludes --train-end/--holdout-days")
+        args.train_start = args.holdout_before
+        args.train_end = None
+        print(f"HOLDOUT: everything before {args.holdout_before} — training "
+              f"on [{args.holdout_before}, end)", flush=True)
+
+    def _holdout_window():
+        if args._hbetween:
+            return args._hbetween
+        if args.holdout_before:
+            return (None, args.holdout_before)
+        return (args.train_end, None)
+    args._hwin = _holdout_window
     if args.lev_stops:
         # env var: inherited by the mp.Pool workers AND honored by the in-process
         # finalize/holdout evaluations (see optimizer2.eval3 / wf2.eval_config)
@@ -875,7 +910,14 @@ def main():
             print("note: --single-set applies to V7 only; "
                   f"{args.strategy} always searches per-regime values", flush=True)
         def eval_any(cand, t0, t1, part="train"):
-            alt = (args.holdout_days, part) if args.holdout_days else None
+            if args.holdout_days:
+                alt = (args.holdout_days, part)
+            elif args._hbetween and part == "train":
+                alt = dict(days=None, part="train",
+                           ranges=[[None, args._hbetween[0]],
+                                   [args._hbetween[1], None]])
+            else:
+                alt = None
             return W.eval_config(cand, args.method, args.mode, t0, t1, alt=alt,
                                  gap_mode=args.gap_mode, scoring=_scoring(args))
         def feas_any(m, c):
@@ -886,7 +928,14 @@ def main():
         O.load_g3()
         R = O.load_g3()["regimes"][args.method][1]
         def eval_any(cand, t0, t1, part="train"):
-            alt = (args.holdout_days, part) if args.holdout_days else None
+            if args.holdout_days:
+                alt = (args.holdout_days, part)
+            elif args._hbetween and part == "train":
+                alt = dict(days=None, part="train",
+                           ranges=[[None, args._hbetween[0]],
+                                   [args._hbetween[1], None]])
+            else:
+                alt = None
             return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode,
                            scoring=_scoring(args))
         def feas_any(m, c):
@@ -1090,7 +1139,11 @@ def main():
                            max_dd=args.max_dd, max_hold=args.max_hold_days,
                            gap_mode=args.gap_mode, scoring=_scoring(args),
                            anchor_cand=anchor_cand, anchor_strength=args.anchor_strength,
-                           alt=((args.holdout_days, "train") if args.holdout_days else None))
+                           alt=((args.holdout_days, "train") if args.holdout_days
+                                else dict(days=None, part="train",
+                                          ranges=[[None, args._hbetween[0]],
+                                                  [args._hbetween[1], None]])
+                                if args._hbetween else None))
             if anchor_cand is not None and len(pool) < 24 and args.algo != "random":
                 # anchored start: explore around the anchor instead of uniform randomness
                 jobs = [("refine", dict(payload, seed_cand=anchor_cand, seed=seed_base + k))
@@ -1158,6 +1211,8 @@ def main():
     out = dict(cand=best_cand, metrics=best_m, strategy=args.strategy, mode=args.mode,
                method=args.method, algo=args.algo, per_regime=per_regime,
                train_end=args.train_end, holdout_days=args.holdout_days,
+               holdout_before=args.holdout_before,
+               holdout_between=("..".join(args._hbetween) if args._hbetween else None),
                max_dd=args.max_dd, max_hold_days=args.max_hold_days,
                gap_mode=args.gap_mode, scoring=args.scoring,
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=evaluated,
@@ -1168,17 +1223,21 @@ def main():
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
     print(json.dumps(best_m, indent=1, default=float))
-    if args.train_end or args.holdout_days:
+    if args.train_end or args.holdout_days or args.holdout_before or args._hbetween:
         # Evaluate holdout for the TOP-10 train candidates, not just the winner.
         # The train-best is often overfit; a slightly lower-scoring candidate
         # frequently generalizes far better.
+        _h0, _h1 = args._hwin()
         print("\nHOLDOUT (%s) for top candidates:" %
               (f"alternating {args.holdout_days:g}-day blocks the search never saw"
-               if args.holdout_days else "unseen data after %s" % args.train_end))
+               if args.holdout_days else
+               f"unseen data between {_h0} and {_h1}" if args._hbetween else
+               f"unseen data before {_h1}" if args.holdout_before else
+               "unseen data after %s" % args.train_end))
         holdouts = []
         for rank, (s, c, m) in enumerate(pool[:10]):
             try:
-                hm = eval_any(c, args.train_end, None, part="holdout")
+                hm = eval_any(c, *args._hwin(), part="holdout")
             except Exception:
                 hm = None
             holdouts.append(hm)
@@ -1204,7 +1263,7 @@ def main():
         scan_all = (args.mode == "spot")
         while len(scan) < len(scan_src) and (scan_all or surv_n < TARGET_SURV):
             try:
-                hm = eval_any(scan_src[len(scan)][1], args.train_end, None, part="holdout")
+                hm = eval_any(scan_src[len(scan)][1], *args._hwin(), part="holdout")
             except Exception:
                 hm = None
             scan.append(hm)
@@ -1266,7 +1325,7 @@ def main():
             try:
                 seed = json.load(open("seed_cand.used.json"))
                 seed["mode"] = args.mode
-                sh = eval_any(seed, args.train_end, None, part="holdout")
+                sh = eval_any(seed, *args._hwin(), part="holdout")
                 if sh:
                     tag = "LIQUIDATED" if sh["liq"] else f"{(pow(2.718281828, sh['growth'])-1)*100:+.1f}%/mo"
                     print(f"\nSEED holdout for comparison: {tag}")

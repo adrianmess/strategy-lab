@@ -46,7 +46,7 @@ th{color:var(--dim)}
 <div class="toc">
   <b>Jump to:</b>
   <a href="#workflow">Workflow</a><a href="#live">Running live</a><a href="#strategies">Strategies</a><a href="#modes">Modes</a>
-  <a href="#regimes">Regime methods</a><a href="#routers">Routers & honesty tiers</a><a href="#optimizers">Optimizers</a><a href="#params">Parameters</a>
+  <a href="#regimes">Regime methods</a><a href="#holdout">Holdout modes</a><a href="#routers">Routers & honesty tiers</a><a href="#optimizers">Optimizers</a><a href="#params">Parameters</a>
   <a href="#metrics">Metrics</a><a href="#gaps">Data & gaps</a><a href="#ai">AI advisor</a><a href="#risk">Risk & honesty</a>
 </div>
 
@@ -110,8 +110,25 @@ th{color:var(--dim)}
 <dt>3. Walk-forward (<code>_walkforward_router_full</code> + the WF PASS/FAIL badge) — <span style="color:var(--green)">the number to believe</span></dt>
 <dd>Strictly causal: at each 42-day cutoff the assignment is re-picked from PAST data only, traded on the next unseen window, chained (e.g. spot vt9: +13.0%/mo — vs its +16.6% full merge). This is exactly what the live 42-day re-assignment cadence replicates. <b>Never adopt a router whose WF badge isn't PASS.</b></dd>
 </dl>
+<h3>Building routers from the UI</h3>
+<p>The Optimize page's <b>Routers &amp; combos</b> card launches everything as panel jobs (watch the Jobs section; results land in Runs with WF badges):</p>
+<dl>
+<dt>MetaX router</dt><dd>Single pair + timeframe: pick mode, bucketing, pair, hit Build. Components are mined automatically from that pair's surviving runs (matching timeframe/market — enforced). Router rows then offer <b>WF</b> (the honest gate), <b>Refine</b> (joint component polish — re-run WF after), <b>Cmd</b> (reproduction commands) and <b>Adopt router</b> (only after WF PASS).</dd>
+<dt>Stack</dt><dd>Router-of-routers: per 42 days picks which WF-PASS router of that mode to trust. Causal by construction — its single published entry IS its walk-forward.</dd>
+<dt>MetaX2 (cross-timeframe)</dt><dd>Routes components that each simulate on their OWN pair/timeframe candles (a 1m scalper stays a 1m scalper), bucketed by SOL-3m vol terciles. <b>Research only</b> — no live adapter; the panel refuses adoption. First results (2026-07): weak/FAIL — needs stronger per-timeframe components (SOL has no 1m/5m runs yet).</dd>
+<dt>PairX basket</dt><dd>Multi-pair FCFS: each pair's best spot configs compete for ONE slot, first-come-first-served, causal per-fold component picks. <b>Research only.</b> Measured 2026-07: best basket +6.8%/mo vs SOL-only stack +13.2%/mo — weak alt edges dilute a strong SOL under FCFS.</dd>
+</dl>
 <p><b>Exception:</b> stacked routers are causal <i>by construction</i> (every fold picks sources and assignments from past-only data), so their single <code>_router_full</code> entry ≈ their walk-forward. They carry a green <b>causal</b> pill. Note stacks have no live adapter yet — adopt the single-method router they currently pick instead (<code>cand.current</code> in their config). Also: <code>month12</code> routers (calendar routing) are seasonal-memorization research, not adoption candidates, whatever their numbers say.</p>
 <div class="tip"><b>Current honest spot ranking (walk-forward, 2026-07):</b> stack +13.2%/mo (dd 49%) · vt9 router +13.0%/mo (dd 49%) · vol3 router +7.6%/mo (calmer dd; currently live). Full research context: <code>research/2026-07_spot_research.md</code> — sustained 1%/day is not a realistic target; ~0.4%/day walk-forward is already at the credible ceiling for retail intraday systems.</div>
+
+<h2 id="holdout">Holdout modes</h2>
+<p>Every search needs unseen data to judge it. The launch card's <b>Holdout</b> selector offers four ways to carve it:</p>
+<dl>
+<dt>after date</dt><dd>Train on everything before the date; holdout = everything after. The classic. Weakness: the holdout is always the most recent era.</dd>
+<dt>before date</dt><dd>Mirror image: train on [date, end); holdout = everything before. Tests whether a config fitted to the recent era would have survived the past.</dd>
+<dt>between dates</dt><dd>Pick two dates; the window between them is held out and training uses everything OUTSIDE it (both the earlier and later data). Good for quarantining a specific regime (a crash, a chop range) as the judge.</dd>
+<dt>alternating days</dt><dd>Even/odd blocks of N days: train on even, judge on odd. Interleaved, so era drift affects both sides equally — but block boundaries leak slow-moving state, so verify with a walk-forward before believing it.</dd>
+</dl>
 
 <h2 id="optimizers">Optimizer algorithms</h2>
 <dl>

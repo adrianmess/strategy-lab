@@ -162,8 +162,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="optGap" style="width:150px"><option value="skip_contaminated">skip_contaminated</option><option value="skip_open">skip_open</option></select></div>
       <div class="field"><label data-x="trainend">Holdout</label>
         <span style="display:flex;gap:4px">
-        <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="alt">alternating days</option></select>
+        <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="before">before date</option><option value="between">between dates</option><option value="alt">alternating days</option></select>
         <input id="trainEnd" value="2025-09-01" style="width:100px">
+        <input id="hoDate2" placeholder="2026-02-01" style="width:100px;display:none" title="second date (between-dates holdout: the window between the two dates is held out; training uses everything outside it)">
         <input id="hoDays" value="30" style="width:55px;display:none"></span></div>
       <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px"></div>
       <button class="primary" onclick="launch()" style="height:34px">Start search</button>
@@ -203,6 +204,35 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       </span>
     </div>
     <pre id="campReport" style="display:none;max-height:320px;margin-top:8px"></pre>
+  </div>
+
+
+  <h2>Routers &amp; combos <span class="mini">— combine proven strategies; every result gets a causal walk-forward. Only MetaX routers are live-adoptable (the others are research until their live adapters exist).</span></h2>
+  <div class="card">
+    <div class="row" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field"><label title="single-dataset regime router: routes YOUR best runs for one pair+timeframe by market bucket. Components are mined automatically. Live-adoptable after WF PASS.">MetaX router</label>
+        <span style="display:flex;gap:4px">
+        <select id="rxMode"><option>spot</option><option>lev</option></select>
+        <select id="rxBuckets"><option>vol3</option><option>trend3</option><option>vt9</option><option value="month12">month12 (research)</option></select>
+        <select id="rxSym"><option value="sol">SOL</option><option value="btc">BTC</option><option value="eth">ETH</option><option value="doge">DOGE</option><option value="xrp">XRP</option><option value="sui">SUI</option></select>
+        <input id="rxName" placeholder="name (auto)" style="width:120px">
+        <button class="small" onclick="routerJob('metax')">Build</button></span></div>
+      <div class="field"><label title="router-of-routers: per 42d picks which WF-PASS router (vol3/vt9/trend3) to trust. Causal by construction.">Stack</label>
+        <span style="display:flex;gap:4px">
+        <select id="stMode"><option>spot</option><option>lev</option></select>
+        <input id="stName" placeholder="name (auto)" style="width:110px">
+        <button class="small" onclick="routerJob('stack')">Build</button></span></div>
+      <div class="field"><label title="cross-timeframe / cross-pair router: each component simulates on its OWN pair+timeframe candles; routed by SOL-3m vol buckets. Research only (no live adapter).">MetaX2 (cross-tf)</label>
+        <span style="display:flex;gap:4px">
+        <select id="mxPairs"><option value="sol">SOL only</option><option value="all">all pairs</option></select>
+        <input id="mxName" placeholder="name (auto)" style="width:110px">
+        <button class="small" onclick="routerJob('metax2')">Build</button></span></div>
+      <div class="field"><label title="multi-pair FCFS basket: each pair's best spot configs compete for ONE position slot, first-come-first-served. Research only (no live adapter).">PairX basket</label>
+        <span style="display:flex;gap:4px">
+        <input id="pxName" placeholder="name (auto)" style="width:110px">
+        <button class="small" onclick="routerJob('pairx')">Build basket</button></span></div>
+      <span class="kv" id="routerMsg"></span>
+    </div>
   </div>
 
   <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
@@ -349,6 +379,8 @@ async function launch(){
   const d = {strategy:$('strat').value, algo:$('algo').value, mode:$('mode').value,
     method:$('method').value, procs:+$('procs').value,
     train_end:($('hoMode').value==='date' ? ($('trainEnd').value||undefined) : undefined),
+    holdout_before:($('hoMode').value==='before' ? ($('trainEnd').value||undefined) : undefined),
+    holdout_between:($('hoMode').value==='between' && $('trainEnd').value && $('hoDate2').value ? ($('trainEnd').value+'..'+$('hoDate2').value) : undefined),
     holdout_days:($('hoMode').value==='alt' ? (+$('hoDays').value||undefined) : undefined),
     name:$('name').value||undefined,
     max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
@@ -569,6 +601,8 @@ function renderRuns(){
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="chronological walk-forward: chained out-of-sample ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
           : `<span class="badge b-amber" title="no chronological walk-forward yet — the honest gate before adopting. Runs automatically as campaign wave 3; or: python3 metax_cli.py --walkforward runs/${r.name}">no WF</span>`}
         <button class="small" title="Router runs aren't made by the Launch card, so there's no setup to load — this shows the exact metax_cli command that reproduces this run (search → refine → walk-forward)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||30000})">Cmd</button>
+        ${r.strategy==='metax' && !(r.method||'').startsWith('stack') ? `<button class="small" title="run the chronological walk-forward for this router (the honest gate) as a panel job" onclick="routerRunJob('metax_wf','${r.name}')">WF</button>
+        <button class="small" title="joint-refine component parameters under the frozen assignment (panel job); re-run WF after" onclick="routerRunJob('metax_refine','${r.name}')">Refine</button>`:''}
         <button class="small" title="Adopt this ROUTER into its own trader config (config_${r.name}.json — created if missing, own state/log, dry-run). Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adoptRouter('${r.name}','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
@@ -623,6 +657,8 @@ function optChips(r){
   if(r.running) return '<span class="kv">⏳ running…</span>';
   if(!r.algo && r.max_dd==null && !r.holdout_days && !r.train_end) return '—';
   const ho = r.holdout_days ? `holdout ${r.holdout_days}d alt` :
+             r.holdout_between ? `holdout between ${r.holdout_between}` :
+             r.holdout_before ? `holdout before ${r.holdout_before}` :
              r.train_end ? `holdout after ${r.train_end}` : 'no holdout';
   const dd = r.max_dd!=null ? `DD≤${Math.round(100*r.max_dd)}%` :
              (r.mode==='lev' ? 'DD≤80%' : 'DD≤50%');
@@ -664,7 +700,10 @@ function loadRunSettings(name){
   setSel('algo', r.algo);
   $('lockboxField').style.display = $('algo').value==='crossfit' ? '' : 'none';
   if(r.holdout_days){ $('hoMode').value='alt'; $('hoDays').value=r.holdout_days; }
+  else if(r.holdout_between){ $('hoMode').value='between'; const hb=r.holdout_between.split('..'); $('trainEnd').value=hb[0]||''; $('hoDate2').value=hb[1]||''; }
+  else if(r.holdout_before){ $('hoMode').value='before'; $('trainEnd').value=r.holdout_before; }
   else if(r.train_end){ $('hoMode').value='date'; $('trainEnd').value=r.train_end; }
+  hoModeChanged();
   const alt = $('hoMode').value==='alt';
   $('trainEnd').style.display = alt?'none':'';
   $('hoDays').style.display = alt?'':'none';
@@ -811,6 +850,22 @@ function routerCmd(name, mode, method, total){
   el.innerHTML = `<p class="kv" style="margin:0 0 6px">Router runs are built by <b>metax_cli</b> (not the Launch card) — components are re-mined from the best runs on disk at execution time, so a re-run may pick newer components. Reproduce with:</p><pre style="user-select:all;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">cd optimizer\n${cmd}</pre>`;
   if(typeof modal === 'function') modal('Reproduce '+name, el);
   else alert('cd optimizer\n'+cmd);
+}
+
+async function routerJob(kind){
+  const d = {kind};
+  if(kind==='metax'){ d.mode=$('rxMode').value; d.buckets=$('rxBuckets').value; d.symbol=$('rxSym').value;
+    d.name=$('rxName').value.trim()||`rx_${d.symbol}_${d.mode}_${d.buckets}_`+new Date().toISOString().slice(5,10).replace('-',''); }
+  if(kind==='stack'){ d.mode=$('stMode').value; d.name=$('stName').value.trim()||`stack_${d.mode}_`+new Date().toISOString().slice(5,10).replace('-',''); }
+  if(kind==='metax2'){ d.pairs=$('mxPairs').value; d.name=$('mxName').value.trim()||`metax2_${d.pairs}_`+new Date().toISOString().slice(5,10).replace('-',''); }
+  if(kind==='pairx'){ d.name=$('pxName').value.trim()||'pairx_'+new Date().toISOString().slice(5,10).replace('-',''); }
+  const r = await api('jobs/router', d);
+  $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));
+  if(typeof refreshJobs==='function') refreshJobs();
+}
+async function routerRunJob(kind, run){
+  const r = await api('jobs/router', {kind, run});
+  alert(r.id ? `${kind==='metax_wf'?'walk-forward':'refine'} started for ${run} — watch the Jobs section` : ('error: '+(r.error||'')));
 }
 async function adoptRouter(name, mode){
   // routers get their OWN config file named after the run, so several routers
@@ -1070,10 +1125,13 @@ function algoChanged(){
   explain('algorithm');
 }
 function hoModeChanged(){
-  const alt = $('hoMode').value==='alt';
-  $('trainEnd').style.display = alt?'none':'';
-  $('hoDays').style.display = alt?'':'none';
-  explain('trainend');
+  const v = $('hoMode').value;
+  $('trainEnd').style.display = (v==='alt') ? 'none' : '';
+  $('hoDate2').style.display = (v==='between') ? '' : 'none';
+  $('hoDays').style.display = (v==='alt') ? '' : 'none';
+  $('trainEnd').title = v==='before' ? 'holdout = everything BEFORE this date; training on [date, end)'
+    : v==='between' ? 'first date of the held-out middle window'
+    : 'train-end date: holdout = everything after it';
 }
 function fixParam(k){
   const sp = curSpace();

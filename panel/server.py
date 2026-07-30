@@ -1401,6 +1401,39 @@ def _variant_path(name, variant, defaults=False):
     return os.path.join(d, f"{name}.{variant}{sfx}.json")
 
 
+@app.route("/api/jobs/router", methods=["POST"])
+def job_router():
+    """Launch router/combo builders as panel jobs: metax (single-dataset
+    router), stack (router-of-routers), metax2 (cross-timeframe/pair),
+    pairx (FCFS basket), plus per-run walkforward/refine."""
+    d = request.get_json(force=True)
+    kind = d.get("kind")
+    name = _safe_name(d.get("name") or "") or f"router_{time.strftime('%m%d_%H%M')}"
+    if kind == "metax":
+        cmd = [sys.executable, "metax_cli.py", "--mode", d.get("mode", "spot"),
+               "--buckets", d.get("buckets", "vol3"),
+               "--symbol", d.get("symbol", "sol"), "--name", name,
+               "--total", str(int(d.get("total") or 30000))]
+    elif kind == "metax_wf":
+        name = _safe_name(d.get("run") or "")
+        cmd = [sys.executable, "metax_cli.py", "--walkforward", f"runs/{name}"]
+    elif kind == "metax_refine":
+        name = _safe_name(d.get("run") or "")
+        cmd = [sys.executable, "metax_cli.py", "--refine", f"runs/{name}",
+               "--iters", str(int(d.get("iters") or 400))]
+    elif kind == "stack":
+        cmd = [sys.executable, "metax_cli.py", "--stack-auto",
+               d.get("mode", "spot"), "--name", name]
+    elif kind == "metax2":
+        cmd = [sys.executable, "metax2_cli.py", "--name", name,
+               "--pairs", d.get("pairs", "sol")]
+    elif kind == "pairx":
+        cmd = [sys.executable, "pairx_cli.py", "--name", name]
+    else:
+        return jsonify(error=f"unknown router kind '{kind}'"), 400
+    return jsonify(id=spawn("router", name, cmd, OPT))
+
+
 @app.route("/api/param_space", methods=["GET", "POST"])
 def param_space():
     """?space=<coin>_<tf>m (default: canonical param_space.json)
@@ -1540,6 +1573,8 @@ def job_optimize2():
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
     if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
     if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
+    if d.get("holdout_before"): cmd += ["--holdout-before", d["holdout_before"]]
+    if d.get("holdout_between"): cmd += ["--holdout-between", d["holdout_between"]]
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
     if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     if d.get("lockbox"): cmd += ["--lockbox", d["lockbox"]]
@@ -1571,6 +1606,8 @@ def job_ai():
     if d.get("train_end"): cmd += ["--train-end", d["train_end"]]
     if d.get("max_dd"): cmd += ["--max-dd", str(d["max_dd"])]
     if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
+    if d.get("holdout_before"): cmd += ["--holdout-before", d["holdout_before"]]
+    if d.get("holdout_between"): cmd += ["--holdout-between", d["holdout_between"]]
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
     if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     return jsonify(id=spawn("ai-advisor", d["run"], cmd, OPT))
@@ -1691,6 +1728,8 @@ def runs2():
                 e["holdout_scan"] = bc.get("holdout_scan")
                 e["holdout_survivors"] = bc.get("holdout_survivors")
                 e["holdout_days"] = bc.get("holdout_days")
+                e["holdout_before"] = bc.get("holdout_before")
+                e["holdout_between"] = bc.get("holdout_between")
                 e["train_end"] = bc.get("train_end")
                 e["algo"] = bc.get("algo")
                 e["per_regime"] = bc.get("per_regime")
