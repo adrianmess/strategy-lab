@@ -808,6 +808,13 @@ def main():
     ap.add_argument("--name", default=None)
     ap.add_argument("--total", type=int, default=30000)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--extend", default=None, metavar="ROUTER",
+                    help="existing router run: reuse ITS components as the "
+                         "base (mode/pair/timeframe/buckets inherited); the "
+                         "result is a NEW run — the original is untouched")
+    ap.add_argument("--add", default=None, metavar="RUN,RUN",
+                    help="comma-separated runs to ADD as components (used "
+                         "with --extend; must match the router's dataset)")
     ap.add_argument("--symbol", default="sol",
                     choices=["sol", "btc", "eth", "doge", "xrp", "sui"],
                     help="build the router for this pair: its data, its "
@@ -837,6 +844,24 @@ def main():
             else os.path.join(HERE, args.refine)
         refine(rd, args.iters, args.seed)
         return
+    base_comps = None
+    if args.extend:
+        bname = os.path.basename(args.extend.rstrip("/"))
+        bp = os.path.join(RUNS, bname, "best_config.json")
+        if not os.path.exists(bp):
+            sys.exit(f"--extend: router '{bname}' not found")
+        base = json.load(open(bp))
+        if base.get("strategy") != "metax" or (base.get("cand") or {}).get("stack"):
+            sys.exit(f"--extend: '{bname}' is not a plain metax router")
+        args.mode = base["mode"]
+        args.buckets = base.get("method", args.buckets)
+        args.symbol = (base.get("pair") or "SOL_USDT").split("_")[0].lower()
+        os.environ["LAB_TF"] = str(base.get("timeframe") or "3m").rstrip("m")
+        if not args.name:
+            args.name = f"{bname}_ext"
+        base_comps = base["cand"]["components"]
+        print(f"extending {bname}: {len(base_comps)} base components + "
+              f"{args.add or 'none added'}", flush=True)
     if not args.mode or not args.name:
         sys.exit("--mode and --name are required (or use --refine)")
     if args.buckets == "month12":
@@ -848,9 +873,47 @@ def main():
     os.environ["LAB_COIN"] = args.symbol.lower()
     os.environ["LAB_MARKET"] = "spot" if args.mode == "spot" else "perp"
     os.environ["LAB_DATA_PINNED"] = "1"
-    print(f"mining components ({args.mode}) on "
-          f"{os.environ['LAB_MARKET']} candles…", flush=True)
-    comps = mine_components(args.mode)
+    if base_comps is not None:
+        comps, _seen = [], set()
+        for c in base_comps:
+            fn = c.get("file", "best_config.json")
+            comps.append(dict(run=c["run"], file=fn,
+                              path=os.path.join(RUNS, c["run"], fn),
+                              strategy=c.get("strategy"), holdout_pct=0.0))
+            _seen.add(c["run"])
+        for rn in [x.strip() for x in (args.add or "").split(",") if x.strip()]:
+            if rn in _seen:
+                print(f"  {rn}: already a component — skipped", flush=True)
+                continue
+            p = os.path.join(RUNS, rn, "best_config.json")
+            if not os.path.exists(p):
+                sys.exit(f"--add: run '{rn}' not found")
+            b = json.load(open(p))
+            strat = b.get("strategy") or (b.get("cand") or {}).get("strategy")
+            if strat in ("metax", "metax2", "pairx") or not b.get("cand"):
+                sys.exit(f"--add: '{rn}' is a router/empty run")
+            _want_pair = os.environ["LAB_COIN"].upper() + "_USDT"
+            _want_tf = os.environ.get("LAB_TF", "3") + "m"
+            _want_mkt = os.environ["LAB_MARKET"]
+            if b.get("mode") != args.mode                     or (b.get("pair") or "SOL_USDT") != _want_pair                     or str(b.get("timeframe") or "3m") != _want_tf                     or (b.get("market_data") or "perp") != _want_mkt:
+                sys.exit(f"--add: '{rn}' is {b.get('mode')}/"
+                         f"{b.get('pair','SOL_USDT')}/"
+                         f"{b.get('timeframe','3m')}/"
+                         f"{b.get('market_data','perp')} but this router's "
+                         f"dataset is {args.mode}/{_want_pair}/{_want_tf}/"
+                         f"{_want_mkt} — a classic MetaX router simulates "
+                         f"every component on ONE dataset (use MetaX2 to mix)")
+            fn = "holdout_best_config.json" if os.path.exists(
+                os.path.join(RUNS, rn, "holdout_best_config.json"))                 else "best_config.json"
+            comps.append(dict(run=rn, file=fn,
+                              path=os.path.join(RUNS, rn, fn),
+                              strategy=strat, holdout_pct=0.0))
+            _seen.add(rn)
+        print(f"{len(comps)} components (extended set)", flush=True)
+    else:
+        print(f"mining components ({args.mode}) on "
+              f"{os.environ['LAB_MARKET']} candles…", flush=True)
+        comps = mine_components(args.mode)
     if len(comps) < 2:
         print("fewer than 2 qualifying components — nothing to route", flush=True)
         sys.exit(1)

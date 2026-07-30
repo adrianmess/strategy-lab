@@ -136,6 +136,11 @@ def main():
                          "EXACTLY these components — pairs and timeframes may "
                          "differ (each simulates on its own candles); all "
                          "must share the same MODE")
+    ap.add_argument("--extend", default=None, metavar="ROUTER",
+                    help="existing metax2 run: reuse its components as the "
+                         "base; combine with --add")
+    ap.add_argument("--add", default=None, metavar="RUN,RUN",
+                    help="runs to ADD (with --extend)")
     ap.add_argument("--pairs", default="sol",
                     help="'sol', 'all', or comma list (reference pair for the "
                          "vol buckets is always SOL 3m)")
@@ -151,6 +156,19 @@ def main():
         collect(a.collect, a.out)
         return
 
+    if a.extend:
+        bp = os.path.join(RUNS, os.path.basename(a.extend.rstrip("/")),
+                          "best_config.json")
+        if not os.path.exists(bp):
+            sys.exit(f"--extend: '{a.extend}' not found")
+        base = json.load(open(bp))
+        if base.get("strategy") != "metax2":
+            sys.exit(f"--extend: '{a.extend}' is not a metax2 run")
+        prev = [c["run"] for c in base["cand"]["components"]]
+        adds = [x.strip() for x in (a.add or "").split(",") if x.strip()]
+        a.runs = ",".join(dict.fromkeys(prev + adds))
+        print(f"extending {os.path.basename(a.extend)}: {len(prev)} base + "
+              f"{len(adds)} added components", flush=True)
     pairs = ALL_PAIRS if a.pairs == "all" else \
         [p.strip().lower() for p in a.pairs.split(",")]
     mode = "spot"

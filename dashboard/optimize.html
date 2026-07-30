@@ -617,7 +617,8 @@ function renderRuns(){
           : `<span class="badge b-amber" title="no chronological walk-forward yet — the honest gate before adopting. Runs automatically as campaign wave 3; or: python3 metax_cli.py --walkforward runs/${r.name}">no WF</span>`}
         <button class="small" title="Router runs aren't made by the Launch card, so there's no setup to load — this shows the exact metax_cli command that reproduces this run (search → refine → walk-forward)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||30000})">Cmd</button>
         ${r.strategy==='metax' && !(r.method||'').startsWith('stack') ? `<button class="small" title="run the chronological walk-forward for this router (the honest gate) as a panel job" onclick="routerRunJob('metax_wf','${r.name}')">WF</button>
-        <button class="small" title="joint-refine component parameters under the frozen assignment (panel job); re-run WF after" onclick="routerRunJob('metax_refine','${r.name}')">Refine</button>`:''}
+        <button class="small" title="joint-refine component parameters under the frozen assignment (panel job); re-run WF after" onclick="routerRunJob('metax_refine','${r.name}')">Refine</button>
+        <button class="small" title="ADD runs as components: reuses this router's component set, adds yours, re-searches the assignment into a NEW run (this one is untouched). New runs must match this router's pair/timeframe/mode." onclick="routerExtend('${r.name}')">+comp</button>`:''}
         <button class="small" title="Adopt this ROUTER into its own trader config (config_${r.name}.json — created if missing, own state/log, dry-run). Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adoptRouter('${r.name}','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
@@ -869,6 +870,16 @@ function routerCmd(name, mode, method, total){
   else alert('cd optimizer\n'+cmd);
 }
 
+async function routerExtend(router){
+  const raw = prompt(`ADD components to ${router}\n\nComma-separated run names (must match this router's pair/timeframe/mode — use MetaX2 for mixing). Result is a NEW run "${router}_ext"; the original stays untouched. Re-run WF on the result before trusting it.`);
+  if(!raw) return;
+  const adds = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  const bad = adds.find(n=>!RUNS.some(r=>r.name===n));
+  if(bad){ alert(`run not found: "${bad}"`); return; }
+  const r = await api('jobs/router', {kind:'metax_extend', router, add:adds});
+  alert(r.id ? `extending ${router} (+${adds.length} components) — watch the Jobs section; run "${router}_ext" appears in Runs when done` : ('error: '+(r.error||'')));
+  if(typeof refreshJobs==='function') refreshJobs();
+}
 function addMxInput(){
   const box=$('mxRunsBox');
   if(box.querySelectorAll('.mxRun').length>=10){ alert('10 components max'); return; }
