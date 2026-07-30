@@ -1426,6 +1426,18 @@ def job_router():
         name = _safe_name(d.get("name") or "") or f"{base}_ext"
         cmd = [sys.executable, "metax_cli.py", "--extend", base,
                "--add", ",".join(adds), "--name", name]
+    elif kind == "metax2_extend":
+        base = _safe_name(d.get("router") or "")
+        adds = [r for r in (d.get("add") or []) if r]
+        for r in adds:
+            if not re.fullmatch(r"[A-Za-z0-9_.\-]+", r):
+                return jsonify(error=f"bad run name '{r}'"), 400
+        if not base or not adds:
+            return jsonify(error="router and at least one run to add "
+                                 "are required"), 400
+        name = _safe_name(d.get("name") or "") or f"{base}_ext"
+        cmd = [sys.executable, "metax2_cli.py", "--extend", base,
+               "--add", ",".join(adds), "--name", name]
     elif kind == "metax_wf":
         name = _safe_name(d.get("run") or "")
         cmd = [sys.executable, "metax_cli.py", "--walkforward", f"runs/{name}"]

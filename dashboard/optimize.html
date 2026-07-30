@@ -610,7 +610,17 @@ function renderRuns(){
         :r._clean===0?'<span class="badge b-red" title="Liquidated on the holdout and/or the full backtest">LIQ</span>'
         :'<span class="kv" title="Run both the holdout evaluation and a full backtest to fill this in">—</span>'}</td>
       <td>${hcell}</td>
-      <td>${r.strategy==='metax'?`
+      <td>${r.strategy==='metax2'?`
+        <span class="kv" title="Cross-timeframe/multi-pair router (metax2_cli): components each simulate on their OWN pair+timeframe candles. Research only — no live adapter yet.">router ×tf</span>
+        ${r.walkforward
+          ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="causal walk-forward (by construction): chained OOS ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}% (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
+          : `<span class="badge b-amber">no WF</span>`}
+        <button class="small" title="ADD runs as components (any pair/timeframe, same mode) — result is a NEW run; this one is untouched" onclick="metax2Extend('${r.name}')">+comp</button>
+        <button class="small" title="reproduction command" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||8000},'metax2')">Cmd</button>
+        <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
+        ${rateStars(r.name, r.rating)}
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+      :r.strategy==='metax'?`
         <span class="kv" title="Router runs are built/validated by metax_cli (campaign card); their backtests are linked in the holdout column.">router</span>
         ${r.walkforward
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="chronological walk-forward: chained out-of-sample ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
@@ -857,7 +867,14 @@ async function btH(cfg,name,hd){
   if(hd) runAndPreview(cfg, name+'_HOLDOUT', null, hd);
   else runAndPreview(cfg, name+'_HOLDOUT', $('trainEnd').value||'2025-09-01');
 }
-function routerCmd(name, mode, method, total){
+function routerCmd(name, mode, method, total, flavor){
+  if(flavor==='metax2'){
+    const r = RUNS.find(x=>x.name===name);
+    const el = document.createElement('div');
+    el.innerHTML = `<p class="kv" style="margin:0 0 6px">Cross-timeframe router (metax2_cli). Reproduce with:</p><pre style="user-select:all;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">cd optimizer\npython3 metax2_cli.py --name ${name} --pairs sol|all   # or --runs run1,run2,…</pre><p class="kv">exact component list: this run's best_config.json → cand.components</p>`;
+    if(typeof modal === 'function') modal('Reproduce '+name, el); else alert('cd optimizer && python3 metax2_cli.py --name '+name);
+    return;
+  }
   const isStack = (method||'').startsWith('stack');
   const cmd = isStack
     ? `python3 metax_cli.py --stack-auto ${mode} --name ${name}`
@@ -870,6 +887,16 @@ function routerCmd(name, mode, method, total){
   else alert('cd optimizer\n'+cmd);
 }
 
+async function metax2Extend(router){
+  const raw = prompt(`ADD components to ${router} (MetaX2)\n\nComma-separated run names — pairs and timeframes MAY differ (each simulates on its own candles); all must share the same mode. Result is a NEW run "${router}_ext".`);
+  if(!raw) return;
+  const adds = raw.split(',').map(x=>x.trim()).filter(Boolean);
+  const bad = adds.find(n=>!RUNS.some(r=>r.name===n));
+  if(bad){ alert(`run not found: "${bad}"`); return; }
+  const r = await api('jobs/router', {kind:'metax2_extend', router, add:adds});
+  alert(r.id ? `extending ${router} (+${adds.length}) — watch the Jobs section` : ('error: '+(r.error||'')));
+  if(typeof refreshJobs==='function') refreshJobs();
+}
 async function routerExtend(router){
   const raw = prompt(`ADD components to ${router}\n\nComma-separated run names (must match this router's pair/timeframe/mode — use MetaX2 for mixing). Result is a NEW run "${router}_ext"; the original stays untouched. Re-run WF on the result before trusting it.`);
   if(!raw) return;
