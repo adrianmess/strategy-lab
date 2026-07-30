@@ -368,6 +368,9 @@ def main():
                    generated=time.strftime("%Y-%m-%d %H:%M")),
               open(os.path.join(run_dir, "best_config.json"), "w"),
               indent=1, default=float)
+    json.dump(dict(pool=[], evaluated=sum(len(v) for v in tables.values()),
+                   seed_base=0, reservoir=[], res_seen=0, runtime_s=0),
+              open(os.path.join(run_dir, "pool2.json"), "w"))
     json.dump(dict(verdict=verdict, oos_pct_mo=pct, maxdd=S["maxdd"], n=S["n"],
                    folds=len(picks), step_days=a.step_days,
                    note="causal by construction (per-fold past-only picks)",

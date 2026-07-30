@@ -437,7 +437,10 @@ function updateCfgSummary(i){
   if(c) $('cfgSummary_'+i).innerHTML = `Selected config: <b>${c.file}</b> runs <b>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</b> in <b>${c.mode}</b> mode`+
     `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}, executes via `+
     venueBadge(c.api_account, c.execution, c.mode)+
-    `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}`;
+    `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}` +
+    (c.components && c.components.length ? `<details style="margin-top:4px"><summary style="cursor:pointer">router components (${c.components.length} runs${c.components.some(x=>x.assigned)?`, ${c.components.filter(x=>x.assigned).length} assigned to buckets`:''})</summary><div style="margin:4px 0 0 12px;font-size:12px">` +
+      c.components.map(x=>`<div>${x.assigned?'●':'○'} <b>${x.run}</b> <span style="color:var(--dim)">(${x.strategy}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})${x.assigned?'':' — mined but not assigned to any bucket'}</span></div>`).join('') +
+      `</div></details>` : '');
 }
 
 async function refreshInst(i){

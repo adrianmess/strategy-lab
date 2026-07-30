@@ -1359,10 +1359,19 @@ def trader_configs():
         cand = c.get("candidate") or {}
         strat = cand.get("strategy") or ("v7" if "regs" in cand else
                                          ("v6" if cand else "legacy"))
+        comps = None
+        if strat in ("metax", "metax2") and cand.get("components"):
+            assigned = {a for a in (cand.get("assign") or [])
+                        if a is not None and a >= 0}
+            comps = [dict(run=x.get("run"), strategy=x.get("strategy"),
+                          pair=x.get("pair"), timeframe=x.get("timeframe"),
+                          assigned=(k in assigned))
+                     for k, x in enumerate(cand["components"])]
         out.append(dict(file=f, strategy=strat, mode=c.get("mode"),
                         method=c.get("method"), equity=c.get("equity_usdt"),
                         execution=c.get("execution", "browser"),
                         api_account=c.get("api_account", "mexc1"),
+                        components=comps,
                         adopted_from=(c.get("adopted_from") or {}).get("source"),
                         adopted_at=(c.get("adopted_from") or {}).get("at")))
     return jsonify(out)
@@ -1764,6 +1773,17 @@ def runs2():
                 e["holdout_before"] = bc.get("holdout_before")
                 e["holdout_between"] = bc.get("holdout_between")
                 e["holdout_outside"] = bc.get("holdout_outside")
+                if e.get("strategy") in ("metax", "metax2") or \
+                        (bc.get("cand") or {}).get("strategy") in ("metax", "metax2"):
+                    _cc = (bc.get("cand") or {}).get("components") or []
+                    _asn = {a for a in ((bc.get("cand") or {}).get("assign") or [])
+                            if a is not None and a >= 0}
+                    e["components"] = [dict(run=x.get("run"),
+                                            strategy=x.get("strategy"),
+                                            pair=x.get("pair"),
+                                            timeframe=x.get("timeframe"),
+                                            assigned=(k in _asn))
+                                       for k, x in enumerate(_cc)]
                 e["train_end"] = bc.get("train_end")
                 e["algo"] = bc.get("algo")
                 e["per_regime"] = bc.get("per_regime")

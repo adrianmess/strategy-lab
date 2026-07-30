@@ -299,6 +299,9 @@ def main():
                    generated=time.strftime("%Y-%m-%d %H:%M")),
               open(os.path.join(run_dir, "best_config.json"), "w"),
               indent=1, default=float)
+    json.dump(dict(pool=[], evaluated=folds * a.total, seed_base=a.seed,
+                   reservoir=[], res_seen=0, runtime_s=0),
+              open(os.path.join(run_dir, "pool2.json"), "w"))
     json.dump(dict(verdict=verdict, oos_pct_mo=pct, maxdd=S["maxdd"], n=S["n"],
                    folds=folds, step_days=a.step_days,
                    note="causal: per-fold assignment from past-only trades",

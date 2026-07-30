@@ -305,6 +305,21 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   </div>
 
 </div>
+<div id="pickOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60" onclick="if(event.target===this)pickClose()">
+  <div style="max-width:600px;margin:10vh auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px">
+    <h3 id="pickTitle" style="margin:0 0 6px"></h3>
+    <p class="mini" id="pickHint" style="margin:0 0 10px"></p>
+    <div style="display:flex;gap:6px">
+      <input id="pickInput" list="cmbRuns" placeholder="type to filter runs, Enter to add…" style="flex:1;padding:6px 10px" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();pickAdd();}">
+      <button class="small" onclick="pickAdd()">Add</button>
+    </div>
+    <div id="pickChips" style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;min-height:24px"></div>
+    <div class="row" style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="small" onclick="pickClose()">Cancel</button>
+      <button class="primary" id="pickGo" onclick="pickGo()">Start</button>
+    </div>
+  </div>
+</div>
 <div class="sidebar">
   <div class="guide" id="guide">
     <h3 id="gTitle">Guide</h3>
@@ -563,7 +578,7 @@ function renderRuns(){
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
-      <td class="kv" style="font-size:11.5px">${optChips(r)}</td>
+      <td class="kv" style="font-size:11.5px">${optChips(r)}${componentsChip(r)}</td>
       <td class="kv">${r.last_run||''}</td>
       <td>${(r.evaluated||0).toLocaleString()}</td>
       <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
@@ -598,7 +613,7 @@ function renderRuns(){
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
-      <td class="kv" style="font-size:11.5px">${optChips(r)}</td>
+      <td class="kv" style="font-size:11.5px">${optChips(r)}${componentsChip(r)}</td>
       <td class="kv">${r.last_run||''}</td>
       <td>${(r.evaluated||0).toLocaleString()}</td>
       <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
@@ -677,6 +692,12 @@ function progressCell(r){
       <div style="height:100%;width:${pct}%;background:var(--blue);transition:width .5s"></div></div>
     <span class="kv" style="font-size:11px">⏳ ${pct.toFixed(0)}%${budget}${p.phase?` · ${p.phase}`:''} ·
       ${(p.evaluated_session||0).toLocaleString()} done · ETA ${eta}</span></div>`;
+}
+function componentsChip(r){
+  if(!r.components || !r.components.length) return '';
+  const n = r.components.length, na = r.components.filter(x=>x.assigned).length;
+  return `<details style="margin-top:2px"><summary style="cursor:pointer">components: ${n} runs${na?` (${na} assigned)`:''}</summary><div style="margin:2px 0 0 10px">` +
+    r.components.map(x=>`<div>${x.assigned?'●':'○'} ${x.run} <span style="opacity:.7">(${x.strategy}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})</span></div>`).join('') + `</div></details>`;
 }
 function optChips(r){
   if(r.running && r.progress) return progressCell(r);
@@ -887,25 +908,79 @@ function routerCmd(name, mode, method, total, flavor){
   else alert('cd optimizer\n'+cmd);
 }
 
-async function metax2Extend(router){
-  const raw = prompt(`ADD components to ${router} (MetaX2)\n\nComma-separated run names — pairs and timeframes MAY differ (each simulates on its own candles); all must share the same mode. Result is a NEW run "${router}_ext".`);
-  if(!raw) return;
-  const adds = raw.split(',').map(x=>x.trim()).filter(Boolean);
-  const bad = adds.find(n=>!RUNS.some(r=>r.name===n));
-  if(bad){ alert(`run not found: "${bad}"`); return; }
-  const r = await api('jobs/router', {kind:'metax2_extend', router, add:adds});
-  alert(r.id ? `extending ${router} (+${adds.length}) — watch the Jobs section` : ('error: '+(r.error||'')));
-  if(typeof refreshJobs==='function') refreshJobs();
+// ---------- multi-select run picker (type-to-filter dropdown + chips) ----------
+let PICK = null;
+function openRunPicker(opts){
+  PICK = Object.assign({sel: []}, opts);
+  $('pickTitle').textContent = opts.title;
+  $('pickHint').innerHTML = opts.hint || '';
+  $('pickInput').value = '';
+  renderPickChips();
+  $('pickOverlay').style.display = '';
+  $('pickInput').focus();
 }
-async function routerExtend(router){
-  const raw = prompt(`ADD components to ${router}\n\nComma-separated run names (must match this router's pair/timeframe/mode — use MetaX2 for mixing). Result is a NEW run "${router}_ext"; the original stays untouched. Re-run WF on the result before trusting it.`);
-  if(!raw) return;
-  const adds = raw.split(',').map(s=>s.trim()).filter(Boolean);
-  const bad = adds.find(n=>!RUNS.some(r=>r.name===n));
-  if(bad){ alert(`run not found: "${bad}"`); return; }
-  const r = await api('jobs/router', {kind:'metax_extend', router, add:adds});
-  alert(r.id ? `extending ${router} (+${adds.length} components) — watch the Jobs section; run "${router}_ext" appears in Runs when done` : ('error: '+(r.error||'')));
-  if(typeof refreshJobs==='function') refreshJobs();
+function renderPickChips(){
+  $('pickChips').innerHTML = PICK.sel.length
+    ? PICK.sel.map((n,i)=>`<span class="badge" style="background:rgba(88,166,255,.15);color:#58a6ff;display:inline-flex;align-items:center;gap:6px">${n} <a style="cursor:pointer;color:var(--red);text-decoration:none" onclick="PICK.sel.splice(${i},1);renderPickChips()">✕</a></span>`).join('')
+    : '<span class="mini">nothing selected yet</span>';
+  $('pickGo').disabled = !PICK.sel.length;
+}
+function pickAdd(){
+  const n = $('pickInput').value.trim();
+  if(!n) return;
+  if(!RUNS.some(r=>r.name===n)){ alert(`run not found: "${n}" — pick a name from the dropdown`); return; }
+  if(PICK.sel.includes(n)){ alert('already selected'); return; }
+  if(PICK.validate){ const err = PICK.validate(n); if(err){ alert(err); return; } }
+  PICK.sel.push(n);
+  $('pickInput').value = '';
+  renderPickChips();
+}
+function pickClose(){ $('pickOverlay').style.display='none'; PICK=null; }
+async function pickGo(){
+  if(!PICK || !PICK.sel.length) return;
+  const sel = PICK.sel.slice(), onGo = PICK.onGo;
+  pickClose();
+  await onGo(sel);
+}
+function metax2Extend(router){
+  const base = RUNS.find(r=>r.name===router);
+  openRunPicker({
+    title: `Add components to ${router} (MetaX2)`,
+    hint: `Pairs and timeframes <b>may differ</b> — each component simulates on its own candles. All picks must share <b>${base?base.mode:'the same'}</b> mode; routers can't be components. Result is a NEW run "${router}_ext"; this one stays untouched.`,
+    validate: n => {
+      const r = RUNS.find(x=>x.name===n);
+      if(['metax','metax2','pairx'].includes(r.strategy)) return 'routers can\'t be components — pick strategy runs';
+      if(base && r.mode !== base.mode) return `${n} is ${r.mode} but this router is ${base.mode} — one mode per router`;
+      return null;
+    },
+    onGo: async adds => {
+      const r = await api('jobs/router', {kind:'metax2_extend', router, add:adds});
+      alert(r.id ? `extending ${router} (+${adds.length}) — watch the Jobs section` : ('error: '+(r.error||'')));
+      if(typeof refreshJobs==='function') refreshJobs();
+    }
+  });
+}
+function routerExtend(router){
+  const base = RUNS.find(r=>r.name===router);
+  openRunPicker({
+    title: `Add components to ${router}`,
+    hint: `Classic MetaX routers simulate every component on <b>one dataset</b>: picks must match this router's pair (<b>${base?(base.pair||'SOL_USDT'):''}</b>), timeframe (<b>${base?(base.timeframe||'3m'):''}</b>) and mode (<b>${base?base.mode:''}</b>). Use MetaX2 to mix. Result is a NEW run "${router}_ext"; re-run WF on it before trusting it.`,
+    validate: n => {
+      const r = RUNS.find(x=>x.name===n);
+      if(['metax','metax2','pairx'].includes(r.strategy)) return 'routers can\'t be components — pick strategy runs';
+      if(base){
+        if(r.mode !== base.mode) return `${n} is ${r.mode}, router is ${base.mode}`;
+        if((r.pair||'SOL_USDT') !== (base.pair||'SOL_USDT')) return `${n} is ${r.pair||'SOL_USDT'}, router is ${base.pair||'SOL_USDT'} — use MetaX2 to mix pairs`;
+        if((r.timeframe||'3m') !== (base.timeframe||'3m')) return `${n} is ${r.timeframe||'3m'}, router is ${base.timeframe||'3m'} — use MetaX2 to mix timeframes`;
+      }
+      return null;
+    },
+    onGo: async adds => {
+      const r = await api('jobs/router', {kind:'metax_extend', router, add:adds});
+      alert(r.id ? `extending ${router} (+${adds.length} components) — watch the Jobs section; run "${router}_ext" appears in Runs when done` : ('error: '+(r.error||'')));
+      if(typeof refreshJobs==='function') refreshJobs();
+    }
+  });
 }
 function addMxInput(){
   const box=$('mxRunsBox');
