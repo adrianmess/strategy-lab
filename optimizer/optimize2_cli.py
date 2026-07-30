@@ -694,6 +694,10 @@ def main():
     ap.add_argument("--holdout-between", default=None, metavar="A..B",
                     help="holdout = the window BETWEEN two dates; training "
                          "runs on everything OUTSIDE it (before A and after B)")
+    ap.add_argument("--holdout-outside", default=None, metavar="A..B",
+                    help="holdout = everything OUTSIDE the two dates (before A "
+                         "and after B); training runs on the window BETWEEN "
+                         "them — the inverse of --holdout-between")
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
@@ -756,7 +760,20 @@ def main():
     os.environ["LAB_TF"] = str(args.tf)
     print(f"CHART DATA: {mkt} candles, {args.tf}-minute bars", flush=True)
     # ---- holdout window modes ----
-    # after date (train-end) | before date | between dates | alternating days
+    # after date | before date | between dates | outside dates | alternating
+    args._houtside = None
+    if args.holdout_outside:
+        m3 = args.holdout_outside.split("..")
+        if len(m3) != 2 or not m3[0] or not m3[1]:
+            sys.exit("--holdout-outside needs 'YYYY-MM-DD..YYYY-MM-DD'")
+        if args.train_end or args.holdout_days or args.holdout_before \
+                or args.holdout_between:
+            sys.exit("--holdout-outside excludes the other holdout modes")
+        args._houtside = (m3[0], m3[1])
+        args.train_start = m3[0]
+        args.train_end = m3[1]
+        print(f"HOLDOUT: everything outside {m3[0]}..{m3[1]} — training on "
+              f"the window between them", flush=True)
     args._hbetween = None
     if args.holdout_between:
         m2 = args.holdout_between.split("..")
@@ -778,6 +795,8 @@ def main():
               f"on [{args.holdout_before}, end)", flush=True)
 
     def _holdout_window():
+        if args._houtside:
+            return (None, None)     # union window comes from eval_any's alt
         if args._hbetween:
             return args._hbetween
         if args.holdout_before:
@@ -916,6 +935,10 @@ def main():
                 alt = dict(days=None, part="train",
                            ranges=[[None, args._hbetween[0]],
                                    [args._hbetween[1], None]])
+            elif args._houtside and part == "holdout":
+                alt = dict(days=None, part="holdout",
+                           ranges=[[None, args._houtside[0]],
+                                   [args._houtside[1], None]])
             else:
                 alt = None
             return W.eval_config(cand, args.method, args.mode, t0, t1, alt=alt,
@@ -934,6 +957,10 @@ def main():
                 alt = dict(days=None, part="train",
                            ranges=[[None, args._hbetween[0]],
                                    [args._hbetween[1], None]])
+            elif args._houtside and part == "holdout":
+                alt = dict(days=None, part="holdout",
+                           ranges=[[None, args._houtside[0]],
+                                   [args._houtside[1], None]])
             else:
                 alt = None
             return O.eval3(cand, args.method, t0, t1, alt=alt, gap_mode=args.gap_mode,
@@ -1213,6 +1240,7 @@ def main():
                train_end=args.train_end, holdout_days=args.holdout_days,
                holdout_before=args.holdout_before,
                holdout_between=("..".join(args._hbetween) if args._hbetween else None),
+               holdout_outside=("..".join(args._houtside) if args._houtside else None),
                max_dd=args.max_dd, max_hold_days=args.max_hold_days,
                gap_mode=args.gap_mode, scoring=args.scoring,
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=evaluated,
@@ -1231,6 +1259,7 @@ def main():
         print("\nHOLDOUT (%s) for top candidates:" %
               (f"alternating {args.holdout_days:g}-day blocks the search never saw"
                if args.holdout_days else
+               f"unseen data outside {'..'.join(args._houtside)}" if args._houtside else
                f"unseen data between {_h0} and {_h1}" if args._hbetween else
                f"unseen data before {_h1}" if args.holdout_before else
                "unseen data after %s" % args.train_end))

@@ -162,7 +162,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="optGap" style="width:150px"><option value="skip_contaminated">skip_contaminated</option><option value="skip_open">skip_open</option></select></div>
       <div class="field"><label data-x="trainend">Holdout</label>
         <span style="display:flex;gap:4px">
-        <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="before">before date</option><option value="between">between dates</option><option value="alt">alternating days</option></select>
+        <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="before">before date</option><option value="between">between dates</option><option value="outside">outside dates</option><option value="alt">alternating days</option></select>
         <input id="trainEnd" value="2025-09-01" style="width:100px">
         <input id="hoDate2" placeholder="2026-02-01" style="width:100px;display:none" title="second date (between-dates holdout: the window between the two dates is held out; training uses everything outside it)">
         <input id="hoDays" value="30" style="width:55px;display:none"></span></div>
@@ -395,6 +395,7 @@ async function launch(){
     train_end:($('hoMode').value==='date' ? ($('trainEnd').value||undefined) : undefined),
     holdout_before:($('hoMode').value==='before' ? ($('trainEnd').value||undefined) : undefined),
     holdout_between:($('hoMode').value==='between' && $('trainEnd').value && $('hoDate2').value ? ($('trainEnd').value+'..'+$('hoDate2').value) : undefined),
+    holdout_outside:($('hoMode').value==='outside' && $('trainEnd').value && $('hoDate2').value ? ($('trainEnd').value+'..'+$('hoDate2').value) : undefined),
     holdout_days:($('hoMode').value==='alt' ? (+$('hoDays').value||undefined) : undefined),
     name:$('name').value||undefined,
     max_dd:(+$('maxDD').value>0 && +$('maxDD').value!==($('mode').value==='lev'?80:50)) ? +$('maxDD').value/100 : undefined,
@@ -672,6 +673,7 @@ function optChips(r){
   if(!r.algo && r.max_dd==null && !r.holdout_days && !r.train_end) return '—';
   const ho = r.holdout_days ? `holdout ${r.holdout_days}d alt` :
              r.holdout_between ? `holdout between ${r.holdout_between}` :
+             r.holdout_outside ? `holdout outside ${r.holdout_outside}` :
              r.holdout_before ? `holdout before ${r.holdout_before}` :
              r.train_end ? `holdout after ${r.train_end}` : 'no holdout';
   const dd = r.max_dd!=null ? `DD≤${Math.round(100*r.max_dd)}%` :
@@ -714,6 +716,7 @@ function loadRunSettings(name){
   setSel('algo', r.algo);
   $('lockboxField').style.display = $('algo').value==='crossfit' ? '' : 'none';
   if(r.holdout_days){ $('hoMode').value='alt'; $('hoDays').value=r.holdout_days; }
+  else if(r.holdout_outside){ $('hoMode').value='outside'; const hoo=r.holdout_outside.split('..'); $('trainEnd').value=hoo[0]||''; $('hoDate2').value=hoo[1]||''; }
   else if(r.holdout_between){ $('hoMode').value='between'; const hb=r.holdout_between.split('..'); $('trainEnd').value=hb[0]||''; $('hoDate2').value=hb[1]||''; }
   else if(r.holdout_before){ $('hoMode').value='before'; $('trainEnd').value=r.holdout_before; }
   else if(r.train_end){ $('hoMode').value='date'; $('trainEnd').value=r.train_end; }
@@ -1160,10 +1163,11 @@ function algoChanged(){
 function hoModeChanged(){
   const v = $('hoMode').value;
   $('trainEnd').style.display = (v==='alt') ? 'none' : '';
-  $('hoDate2').style.display = (v==='between') ? '' : 'none';
+  $('hoDate2').style.display = (v==='between'||v==='outside') ? '' : 'none';
   $('hoDays').style.display = (v==='alt') ? '' : 'none';
   $('trainEnd').title = v==='before' ? 'holdout = everything BEFORE this date; training on [date, end)'
     : v==='between' ? 'first date of the held-out middle window'
+    : v==='outside' ? 'training runs BETWEEN the two dates; everything outside them is the holdout'
     : 'train-end date: holdout = everything after it';
 }
 function fixParam(k){

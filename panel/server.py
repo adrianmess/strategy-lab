@@ -1582,6 +1582,7 @@ def job_optimize2():
     if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
     if d.get("holdout_before"): cmd += ["--holdout-before", d["holdout_before"]]
     if d.get("holdout_between"): cmd += ["--holdout-between", d["holdout_between"]]
+    if d.get("holdout_outside"): cmd += ["--holdout-outside", d["holdout_outside"]]
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
     if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     if d.get("lockbox"): cmd += ["--lockbox", d["lockbox"]]
@@ -1615,6 +1616,7 @@ def job_ai():
     if d.get("holdout_days"): cmd += ["--holdout-days", str(d["holdout_days"])]
     if d.get("holdout_before"): cmd += ["--holdout-before", d["holdout_before"]]
     if d.get("holdout_between"): cmd += ["--holdout-between", d["holdout_between"]]
+    if d.get("holdout_outside"): cmd += ["--holdout-outside", d["holdout_outside"]]
     if d.get("max_hold_days"): cmd += ["--max-hold-days", str(d["max_hold_days"])]
     if d.get("gap_mode"): cmd += ["--gap-mode", d["gap_mode"]]
     return jsonify(id=spawn("ai-advisor", d["run"], cmd, OPT))
@@ -1737,6 +1739,7 @@ def runs2():
                 e["holdout_days"] = bc.get("holdout_days")
                 e["holdout_before"] = bc.get("holdout_before")
                 e["holdout_between"] = bc.get("holdout_between")
+                e["holdout_outside"] = bc.get("holdout_outside")
                 e["train_end"] = bc.get("train_end")
                 e["algo"] = bc.get("algo")
                 e["per_regime"] = bc.get("per_regime")

@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-30 12:20:48",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode lev --method trend3 --procs 14 --batch 100 --name rep_camp_c2_e_macdx_trend3_ts2501__doge_1m_full_between --total 100000 --max-dd 0.55 --holdout-between 2024-02-24..2025-01-16 --max-hold-days 5 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

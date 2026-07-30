@@ -127,6 +127,7 @@ th{color:var(--dim)}
 <dt>after date</dt><dd>Train on everything before the date; holdout = everything after. The classic. Weakness: the holdout is always the most recent era.</dd>
 <dt>before date</dt><dd>Mirror image: train on [date, end); holdout = everything before. Tests whether a config fitted to the recent era would have survived the past.</dd>
 <dt>between dates</dt><dd>Pick two dates; the window between them is held out and training uses everything OUTSIDE it (both the earlier and later data). Good for quarantining a specific regime (a crash, a chop range) as the judge.</dd>
+<dt>outside dates</dt><dd>The inverse of between: training runs on the window BETWEEN the two dates, and everything outside it (both the earlier and the later data) is the holdout. Use when you want to fit a specific era and test whether it generalizes in both directions.</dd>
 <dt>alternating days</dt><dd>Even/odd blocks of N days: train on even, judge on odd. Interleaved, so era drift affects both sides equally — but block boundaries leak slow-moving state, so verify with a walk-forward before believing it.</dd>
 </dl>
 
