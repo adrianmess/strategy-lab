@@ -233,6 +233,15 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <button class="small" onclick="routerJob('pairx')">Build basket</button></span></div>
       <span class="kv" id="routerMsg"></span>
     </div>
+    <div class="row" style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <label class="mini" data-x="rxpick">Specific components (optional)</label>
+      <span id="mxRunsBox" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">
+        <input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">
+      </span>
+      <button class="small" onclick="addMxInput()">+ run</button>
+      <span class="mini">— fill these and hit the MetaX2 <b>Build</b>: the router uses EXACTLY these runs (pairs &amp; timeframes may differ; same mode). Leave empty to auto-mine.</span>
+    </div>
   </div>
 
   <h2>Parameter space for <span id="spaceStrat" style="color:var(--blue)">…</span> <select id="spaceFile" onchange="loadSpace()" style="font-size:12px" title="which saved space file to view/edit: the canonical default (SOL 3m), or a per-pair-per-timeframe file - searches for that pair+timeframe use their own file automatically"></select> <span class="mini">— the ranges searches may explore; click a name for help</span> <span class="mini warn" id="spaceNote"></span></h2>
@@ -353,6 +362,7 @@ const X = {
  rxmetax: ["MetaX router", `The single-dataset regime router — the one with LIVE support.<dl><dt>What it does</dt><dd>Mines your best surviving runs for the chosen pair+timeframe (matching market data — enforced), backtests each as a component, then searches which VOLATILITY/TREND BUCKET each component owns. One position slot; the bucket owner trades it.</dd><dt>How to use</dt><dd>Pick mode + bucketing + pair, hit Build. Watch the Jobs section. When the run appears in Runs, hit its <b>WF</b> button — the chronological walk-forward is the honest gate. Optionally <b>Refine</b> (then re-run WF). <b>Adopt router</b> only after WF PASS.</dd><dt>Buckets</dt><dd>vol3 = volatility terciles (the proven default) · trend3 = down/flat/up · vt9 = 3×3 grid · month12 = calendar (seasonal-memorization research, never adopt).</dd></dl>`],
  rxstack: ["Stack (router-of-routers)", `Combines routers with DIFFERENT bucketing methods: every 42 days it re-picks each source router's assignment from past-only data and follows whichever method has the best trailing dd-penalized performance.<dl><dt>Sources</dt><dd>All WF-PASS single-method routers of the chosen mode (month12 excluded automatically).</dd><dt>Honesty</dt><dd>Causal BY CONSTRUCTION — its single published entry IS its walk-forward. Your best spot result (+13.2%/mo) is a stack.</dd><dt>Live</dt><dd>No stack adapter yet: adopt the single-method router it currently picks (cand.current in its config).</dd></dl>`],
  rxmetax2: ["MetaX2 (cross-timeframe router)", `Routes components that each simulate on their OWN pair+timeframe candles — a 1m scalper stays a 1m scalper — bucketed by SOL-3m volatility terciles, one slot, causal 42d walk-forward only.<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter; the panel refuses adoption. First results were weak (SOL has no 1m/5m runs to route yet; the all-pairs pool was too thin to clear the feasibility gates).</dd><dt>When useful</dt><dd>After 1m/5m searches produce honest survivors — fast strategies tend to shine exactly when volatility spikes.</dd></dl>`],
+ rxpick: ["Specific components", `Hand-pick EXACTLY which runs become the router's components (instead of auto-mining). Rules:<dl><dt>Mixing allowed</dt><dd>Different pairs AND different chart timeframes — each component is simulated on its own candles in an isolated process.</dd><dt>One mode</dt><dd>All picks must share spot OR lev (one account, one slot). Lev components keep their per-trade leverage in the sim.</dd><dt>Buckets</dt><dd>If every pick is the same pair, that pair's 3m vol terciles are the routing reference; mixed pairs use SOL's.</dd><dt>No router-in-router</dt><dd>Pick strategy runs, not other routers.</dd></dl>Then hit the MetaX2 <b>Build</b> button. Validated by the same causal 42d walk-forward as everything else.`],
  rxpairx: ["PairX basket (multi-pair FCFS)", `Every pair's best spot configs compete for ONE position slot, first-come-first-served — exactly what a multi-pair live trader would execute. Per-fold component picks use past-only trailing performance (causal).<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter yet.</dd><dt>Measured (2026-07)</dt><dd>Best basket +6.8%/mo vs SOL-only stack +13.2%/mo: with alt edges at only +2–5%/mo, FCFS lets weaker trades displace stronger SOL ones. Needs stronger per-pair components (e.g. per-pair routers) to earn its place.</dd></dl>`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
  anchor: ["Anchor", `Starts the search from a KNOWN-GOOD configuration instead of pure randomness.<dl><dt>none (default)</dt><dd>Unchanged behavior: the population starts random. Best for honest exploration.</dd><dt>strategy live defaults</dt><dd>Seeds the population with your live parameter values (the ones shown as defaults next to each parameter) and explores outward from them.</dd><dt>backtest: …</dt><dd>Anchor to any published backtest's exact config.</dd></dl>The number is the <b>anchor strength</b>: 0 = seeding only; e.g. 0.3 also subtracts 0.3 × (normalized parameter distance from the anchor) from every candidate's score, so the search pays rent for wandering. Anchoring is a deliberate bias: great for polishing what works ("better than my defaults, near my defaults"), wrong for discovering something different — use unanchored cross-fit for that.`],
@@ -856,12 +866,31 @@ function routerCmd(name, mode, method, total){
   else alert('cd optimizer\n'+cmd);
 }
 
+function addMxInput(){
+  const box=$('mxRunsBox');
+  if(box.querySelectorAll('.mxRun').length>=10){ alert('10 components max'); return; }
+  box.insertAdjacentHTML('beforeend','<input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
+}
 async function routerJob(kind){
   const d = {kind};
   if(kind==='metax'){ d.mode=$('rxMode').value; d.buckets=$('rxBuckets').value; d.symbol=$('rxSym').value;
     d.name=$('rxName').value.trim()||`rx_${d.symbol}_${d.mode}_${d.buckets}_`+new Date().toISOString().slice(5,10).replace('-',''); }
   if(kind==='stack'){ d.mode=$('stMode').value; d.name=$('stName').value.trim()||`stack_${d.mode}_`+new Date().toISOString().slice(5,10).replace('-',''); }
-  if(kind==='metax2'){ d.pairs=$('mxPairs').value; d.name=$('mxName').value.trim()||`metax2_${d.pairs}_`+new Date().toISOString().slice(5,10).replace('-',''); }
+  if(kind==='metax2'){
+    d.pairs=$('mxPairs').value;
+    const picks=[...document.querySelectorAll('.mxRun')].map(i=>i.value.trim()).filter(Boolean);
+    if(picks.length){
+      if(new Set(picks).size!==picks.length){ alert('the same run is picked twice'); return; }
+      const recs=picks.map(n=>RUNS.find(r=>r.name===n));
+      const miss=picks[recs.findIndex(r=>!r)];
+      if(recs.some(r=>!r)){ alert(`run not found: "${miss}"`); return; }
+      const modes=new Set(recs.map(r=>r.mode));
+      if(modes.size>1){ alert('all selected components must share the same MODE (spot vs lev)'); return; }
+      if(recs.some(r=>r.strategy==='metax'||r.strategy==='metax2'||r.strategy==='pairx')){ alert('routers can\'t be components of MetaX2 — pick strategy runs'); return; }
+      d.runs=picks;
+    }
+    d.name=$('mxName').value.trim()||`metax2_${picks.length?'sel':'auto'}_`+new Date().toISOString().slice(5,10).replace('-','');
+  }
   if(kind==='pairx'){ d.name=$('pxName').value.trim()||'pairx_'+new Date().toISOString().slice(5,10).replace('-',''); }
   const r = await api('jobs/router', d);
   $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));

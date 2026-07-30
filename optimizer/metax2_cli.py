@@ -79,15 +79,19 @@ def mine(pairs, mode="spot", per_group=2):
 
 
 def collect(cands_path, out_path):
-    """Subprocess: simulate one (pair, tf) group on its own dataset.
+    """Subprocess: simulate one (pair, tf, market) group on its own dataset.
     run_single self-pins the dataset from the first config; the group is
-    homogeneous so no mixing can occur."""
+    homogeneous so no mixing can occur. Mode-aware: lev components keep
+    their per-trade leverage and futures fees."""
     import backtest_cli as BT
     cands = json.load(open(cands_path))
     tabs = {}
     for g, d, fn, strat in cands:
+        cfg_path = os.path.join(RUNS, d, fn)
+        mode = (json.load(open(cfg_path)).get("mode") or "spot")
+        comm = 0.0004 if mode == "lev" else SPOT_COMM
         try:
-            e = BT.run_single(os.path.join(RUNS, d, fn))
+            e = BT.run_single(cfg_path)
         except SystemExit as ex:
             print(f"  {d}: {ex}", flush=True)
             continue
@@ -101,11 +105,14 @@ def collect(cands_path, out_path):
                 xt = int(np.datetime64(t["exit_t"]).astype("datetime64[ns]").astype("int64"))
             except Exception:
                 continue
-            move = (t["exit"] / t["entry"] - 1.0)     # spot long-only 1x
-            r = move - SPOT_COMM * (1.0 + t["exit"] / t["entry"])
-            rows.append([et, xt, r, float(t.get("mae") or 0.0)])
+            lev = float(t.get("lev") or 1.0)
+            dr = 1.0 if t.get("dir", "long") == "long" else -1.0
+            move = dr * (t["exit"] / t["entry"] - 1.0)
+            r = move * lev - comm * lev * (1.0 + t["exit"] / t["entry"])
+            rows.append([et, xt, r,
+                         float(t.get("mae") or 0.0) * lev])
         tabs[d] = dict(strategy=strat, file=fn, trades=rows)
-        print(f"  {d} ({strat}): {len(rows)} trades", flush=True)
+        print(f"  {d} ({strat}, {mode}): {len(rows)} trades", flush=True)
     json.dump(tabs, open(out_path, "w"))
 
 
@@ -124,6 +131,11 @@ def to_table(rows, times, bucket):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="metax2_spot_sol")
+    ap.add_argument("--runs", default=None,
+                    help="comma-separated run names: build the router from "
+                         "EXACTLY these components — pairs and timeframes may "
+                         "differ (each simulates on its own candles); all "
+                         "must share the same MODE")
     ap.add_argument("--pairs", default="sol",
                     help="'sol', 'all', or comma list (reference pair for the "
                          "vol buckets is always SOL 3m)")
@@ -141,28 +153,62 @@ def main():
 
     pairs = ALL_PAIRS if a.pairs == "all" else \
         [p.strip().lower() for p in a.pairs.split(",")]
-    # reference buckets: SOL 3m spot vol terciles (orchestrator pins its env)
-    os.environ.update(LAB_COIN="sol", LAB_MARKET="spot", LAB_TF="3",
+    mode = "spot"
+    if a.runs:
+        # EXPLICIT components: any mix of pairs/timeframes, one shared mode
+        groups, mode = {}, None
+        for rn in [x.strip() for x in a.runs.split(",") if x.strip()]:
+            p = os.path.join(RUNS, rn, "best_config.json")
+            if not os.path.exists(p):
+                sys.exit(f"run '{rn}' not found")
+            b = json.load(open(p))
+            strat = b.get("strategy") or (b.get("cand") or {}).get("strategy")
+            if strat in ("metax", "metax2", "pairx") or not b.get("cand"):
+                sys.exit(f"'{rn}' is a router/empty run — pick strategy runs")
+            if mode is None:
+                mode = b.get("mode")
+            elif b.get("mode") != mode:
+                sys.exit(f"'{rn}' is {b.get('mode')} but earlier runs are "
+                         f"{mode} — all components must share the mode")
+            coin = (b.get("pair") or "SOL_USDT").split("_")[0].lower()
+            tf = str(b.get("timeframe") or "3m")
+            mkt = (b.get("market_data") or "perp").lower()
+            fn = "holdout_best_config.json" if os.path.exists(
+                os.path.join(RUNS, rn, "holdout_best_config.json"))                 else "best_config.json"
+            groups.setdefault((coin, tf, mkt), []).append(
+                (honest_growth(b) or 0.0, rn, fn, strat))
+        print(f"explicit components: "
+              f"{[rn for v in groups.values() for _, rn, _, _ in v]}",
+              flush=True)
+    else:
+        groups = {(c, tf, "spot"): v
+                  for (c, tf), v in mine(pairs, per_group=a.per_group).items()}
+    if not groups:
+        sys.exit("no components")
+    # reference buckets follow the selection: single-pair selections bucket
+    # by THAT pair's 3m vol; mixed selections use SOL's
+    ref_coin = ({k[0] for k in groups}.pop()
+                if len({k[0] for k in groups}) == 1 else "sol")
+    ref_mkt = "spot" if mode == "spot" else "perp"
+    os.environ.update(LAB_COIN=ref_coin, LAB_MARKET=ref_mkt, LAB_TF="3",
                       LAB_DATA_PINNED="1")
+    print(f"reference buckets: {ref_coin.upper()} 3m {ref_mkt} vol terciles",
+          flush=True)
     from metax_cli import merge_taken, rows_stats, search_window, bucket_arrays
     times, bucket, n_b = bucket_arrays("vol3")
-
-    groups = mine(pairs, per_group=a.per_group)
-    if not groups:
-        sys.exit("no components mined")
     run_dir = os.path.join(RUNS, a.name)
     os.makedirs(run_dir, exist_ok=True)
     comps, tabs = [], []
-    for (coin, tf), cands in sorted(groups.items()):
-        cf = os.path.join(run_dir, f"_g_{coin}_{tf}.json")
-        of = os.path.join(run_dir, f"_t_{coin}_{tf}.json")
+    for (coin, tf, mkt), cands in sorted(groups.items()):
+        cf = os.path.join(run_dir, f"_g_{coin}_{tf}_{mkt}.json")
+        of = os.path.join(run_dir, f"_t_{coin}_{tf}_{mkt}.json")
         json.dump(cands, open(cf, "w"))
-        print(f"collecting {coin.upper()} {tf} "
+        print(f"collecting {coin.upper()} {tf} {mkt} "
               f"({', '.join(d for _, d, _, _ in cands)})…", flush=True)
         rc = subprocess.run([sys.executable, "metax2_cli.py",
                              "--collect", cf, "--out", of], cwd=HERE).returncode
         if rc != 0 or not os.path.exists(of):
-            print(f"  group {coin}/{tf} failed — skipped", flush=True)
+            print(f"  group {coin}/{tf}/{mkt} failed — skipped", flush=True)
             continue
         for d, tab in json.load(open(of)).items():
             if not tab["trades"]:
@@ -176,7 +222,7 @@ def main():
           f"{len({(c['pair'], c['timeframe']) for c in comps})} pair/tf groups; "
           f"walk-forward…", flush=True)
 
-    dd_gate = 0.35
+    dd_gate = 0.35 if mode == "spot" else 0.50
     step = a.step_days * _DAY_NS
     t_first = min(t[0, 0] for t in tabs if len(t))
     t_last = max(t[:, 1].max() for t in tabs if len(t))
@@ -221,9 +267,9 @@ def main():
           flush=True)
     cur = search_window(tabs, n_b, len(comps), int(t_last) + 1, a.total, rng,
                         dd_gate=dd_gate)
-    json.dump(dict(strategy="metax2", mode="spot", method="xtf-vol3",
-                   pair=("SOL_USDT" if pairs == ["sol"] else "BASKET"),
-                   market_data="spot", timeframe="multi", algo="router-xtf",
+    json.dump(dict(strategy="metax2", mode=mode, method="xtf-vol3",
+                   pair=(f"{ref_coin.upper()}_USDT" if len({k[0] for k in groups}) == 1 else "BASKET"),
+                   market_data=ref_mkt, timeframe="multi", algo="router-xtf",
                    cand=dict(strategy="metax2", components=comps,
                              assign=([int(x) for x in cur] if cur is not None
                                      else None),
@@ -274,9 +320,9 @@ def main():
                                    skipped_gaps=[],
                                    note="cross-timeframe router: components "
                                         "simulated on their own datasets"),
-                 strategy="metax2", mode="spot", method="xtf-vol3",
-                 pair=("SOL_USDT" if pairs == ["sol"] else "BASKET"),
-                 market_data="spot", timeframe="multi",
+                 strategy="metax2", mode=mode, method="xtf-vol3",
+                 pair=(f"{ref_coin.upper()}_USDT" if len({k[0] for k in groups}) == 1 else "BASKET"),
+                 market_data=ref_mkt, timeframe="multi",
                  kind="cross-timeframe router walk-forward (CAUSAL: per-fold "
                       "assignment from past-only data)",
                  config=None, created=time.strftime("%Y-%m-%d %H:%M"))

@@ -1425,8 +1425,15 @@ def job_router():
         cmd = [sys.executable, "metax_cli.py", "--stack-auto",
                d.get("mode", "spot"), "--name", name]
     elif kind == "metax2":
-        cmd = [sys.executable, "metax2_cli.py", "--name", name,
-               "--pairs", d.get("pairs", "sol")]
+        cmd = [sys.executable, "metax2_cli.py", "--name", name]
+        runs_sel = [r for r in (d.get("runs") or []) if r]
+        if runs_sel:
+            for r in runs_sel:
+                if not re.fullmatch(r"[A-Za-z0-9_.\-]+", r):
+                    return jsonify(error=f"bad run name '{r}'"), 400
+            cmd += ["--runs", ",".join(runs_sel)]
+        else:
+            cmd += ["--pairs", d.get("pairs", "sol")]
     elif kind == "pairx":
         cmd = [sys.executable, "pairx_cli.py", "--name", name]
     else:
