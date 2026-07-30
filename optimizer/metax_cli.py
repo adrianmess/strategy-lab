@@ -808,6 +808,10 @@ def main():
     ap.add_argument("--name", default=None)
     ap.add_argument("--total", type=int, default=30000)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--symbol", default="sol",
+                    choices=["sol", "btc", "eth", "doge", "xrp", "sui"],
+                    help="build the router for this pair: its data, its "
+                         "buckets, and only ITS runs are mined as components")
     args = ap.parse_args()
 
     if args.stack or args.stack_auto:
@@ -841,6 +845,7 @@ def main():
               "flagged research, not an adoption candidate.", flush=True)
     run_dir = os.path.join(RUNS, args.name)
     os.makedirs(run_dir, exist_ok=True)
+    os.environ["LAB_COIN"] = args.symbol.lower()
     os.environ["LAB_MARKET"] = "spot" if args.mode == "spot" else "perp"
     os.environ["LAB_DATA_PINNED"] = "1"
     print(f"mining components ({args.mode}) on "
