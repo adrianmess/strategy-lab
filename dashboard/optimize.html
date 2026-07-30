@@ -1293,14 +1293,48 @@ let SEED_CAND = null, SEED_NAME = null;
     fetch('/dashboard/backtests.js?t='+Date.now()).then(r=>r.text()).then(txt=>{
       const entries = JSON.parse(txt.slice(txt.indexOf('=')+1).trim().replace(/;$/,''));
       const e = entries.find(x=>x.name===q.get('seed'));
-      if(e && e.config && e.config.regs){
-        SEED_CAND = e.config; SEED_NAME = e.name;
-        $('resumeBanner').style.display='block';
-        $('resumeBanner').innerHTML = `Seeding from backtest <b>${e.name}</b> — its exact parameters will be injected as the starting candidate, and the search will try to improve on them. Tip: algorithm <b>refine</b> polishes around the seed; <b>genetic</b> explores more broadly from it.`;
-        $('name').value = (e.name+'_improved').slice(0,40);
-        if(e.strategy) $('strat').value = 'v7';
-        $('algo').value = 'refine';
-      }
+      if(!e) return;
+      if(e.config && e.config.regs){ SEED_CAND = e.config; SEED_NAME = e.name; }
+      $('resumeBanner').style.display='block';
+      $('resumeBanner').innerHTML = `Loaded from backtest <b>${e.name}</b> — every launch field (strategy, algorithm, mode, pair, chart, holdout, …) is set from it.` +
+        (SEED_CAND ? ` Its exact parameters are injected as the starting candidate; <b>refine</b> polishes around them, <b>genetic</b> explores more broadly.`
+                   : ` (No parameter seeding for this entry type — settings only.)`);
+      const applyFrom = ()=>{
+        // best source of truth: the run that produced this backtest — its
+        // structured settings restore EVERYTHING (incl. new holdout modes)
+        const src = (RUNS||[]).filter(r=>e.name===r.name||e.name.startsWith(r.name+'_'))
+                              .sort((a,b)=>b.name.length-a.name.length)[0];
+        if(src && typeof loadRunSettings==='function'){
+          loadRunSettings(src.name);
+        } else {
+          // run deleted: fill from the backtest entry itself
+          if(e.strategy && [...$('strat').options].some(o=>o.value===e.strategy)) $('strat').value=e.strategy;
+          if(e.mode) $('mode').value=e.mode;
+          if(e.method && [...$('method').options].some(o=>o.value===e.method)) $('method').value=e.method;
+          $('symbol').value=((e.pair||'SOL_USDT').split('_')[0]).toLowerCase();
+          $('tfsel').value=String(e.timeframe||'3m').replace('m','');
+          const o=e.opt||{};
+          if(o.algo && [...$('algo').options].some(x=>x.value===o.algo)) $('algo').value=o.algo;
+          if(o.scoring) $('scoring').value=o.scoring;
+          if(o.gap_mode) $('optGap').value=o.gap_mode;
+          if(o.max_dd!=null) $('maxDD').value=Math.round(o.max_dd*100);
+          if(o.max_hold_days!=null) $('maxHold').value=o.max_hold_days;
+          if(o.lockbox) $('lockbox').value=o.lockbox;
+          const h=String(o.holdout||''); let m;
+          if((m=h.match(/^after (\d{4}-\d\d-\d\d)/))){ $('hoMode').value='date'; $('trainEnd').value=m[1]; }
+          else if((m=h.match(/^before (\d{4}-\d\d-\d\d)/))){ $('hoMode').value='before'; $('trainEnd').value=m[1]; }
+          else if((m=h.match(/^between (\S+)\.\.(\S+)/))){ $('hoMode').value='between'; $('trainEnd').value=m[1]; $('hoDate2').value=m[2]; }
+          else if((m=h.match(/^outside (\S+)\.\.(\S+)/))){ $('hoMode').value='outside'; $('trainEnd').value=m[1]; $('hoDate2').value=m[2]; }
+          else if((m=h.match(/(\d+(?:\.\d+)?)\s*-?\s*d/))){ $('hoMode').value='alt'; $('hoDays').value=m[1]; }
+          if(typeof hoModeChanged==='function') hoModeChanged();
+        }
+        // seed-specific bits AFTER the restore
+        $('name').value = (e.name+'_improved').slice(0,48);
+        if(SEED_CAND) $('algo').value = 'refine';
+      };
+      const wait=()=> (typeof RUNS!=='undefined' && RUNS && RUNS.length)
+        ? applyFrom() : setTimeout(wait, 300);
+      wait();
     });
   }
   if(q.get('strategy')){ const v=q.get('strategy'); if([...$('strat').options].some(o=>o.value===v)) $('strat').value=v; }
