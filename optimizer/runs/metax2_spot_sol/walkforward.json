@@ -1,0 +1,10 @@
+{
+ "verdict": "PASS",
+ "oos_pct_mo": 0.523211227100151,
+ "maxdd": 0.2988121158329401,
+ "n": 61,
+ "folds": 13,
+ "step_days": 42,
+ "note": "causal: per-fold assignment from past-only trades",
+ "at": "2026-07-30 09:51"
+}

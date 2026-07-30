@@ -1,0 +1,165 @@
+{
+ "strategy": "metax2",
+ "mode": "spot",
+ "method": "xtf-vol3",
+ "pair": "SOL_USDT",
+ "market_data": "spot",
+ "timeframe": "multi",
+ "algo": "router-xtf",
+ "cand": {
+  "strategy": "metax2",
+  "components": [
+   {
+    "run": "camp_c6_w2_ref_macdx_spot",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "SOL_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "camp_c6_ca_macdx_spot",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "SOL_USDT",
+    "timeframe": "3m"
+   }
+  ],
+  "assign": [
+   0,
+   1,
+   -1
+  ],
+  "buckets": "vol3 (reference: SOL 3m spot)",
+  "fold_picks": [
+   {
+    "fold": "2025-01-01",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-02-12",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-03-26",
+    "assign": [
+     1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-05-07",
+    "assign": [
+     1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-06-18",
+    "assign": [
+     0,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-07-30",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-09-10",
+    "assign": [
+     -1,
+     -1,
+     0
+    ]
+   },
+   {
+    "fold": "2025-10-22",
+    "assign": [
+     1,
+     1,
+     -1
+    ]
+   },
+   {
+    "fold": "2025-12-03",
+    "assign": [
+     0,
+     1,
+     -1
+    ]
+   },
+   {
+    "fold": "2026-01-14",
+    "assign": [
+     0,
+     1,
+     -1
+    ]
+   },
+   {
+    "fold": "2026-02-25",
+    "assign": [
+     -1,
+     1,
+     -1
+    ]
+   },
+   {
+    "fold": "2026-04-08",
+    "assign": [
+     -1,
+     1,
+     -1
+    ]
+   },
+   {
+    "fold": "2026-05-20",
+    "assign": [
+     0,
+     1,
+     -1
+    ]
+   }
+  ],
+  "live_replication": "NOT YET SUPPORTED \u2014 research artifact; panel refuses adoption"
+ },
+ "metrics": {
+  "eq": 1081.4222629622604,
+  "maxdd": 0.2988121158329401,
+  "n": 61,
+  "months": 15,
+  "growth": 0.005218472328048797,
+  "score": -0.00886665191796578,
+  "tpm": 4.066666666666666,
+  "max_hold_days": 3.4875,
+  "liq": false
+ },
+ "holdout": {
+  "eq": 1081.4222629622604,
+  "maxdd": 0.2988121158329401,
+  "n": 61,
+  "months": 15,
+  "growth": 0.005218472328048797,
+  "score": -0.00886665191796578,
+  "tpm": 4.066666666666666,
+  "max_hold_days": 3.4875,
+  "liq": false
+ },
+ "evaluated": 104000,
+ "generated": "2026-07-30 09:51"
+}

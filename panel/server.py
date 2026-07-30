@@ -1259,6 +1259,12 @@ def adopt():
         return jsonify(error=f"unsupported timeframe "
                              f"{best.get('timeframe')!r} — the live trader "
                              f"supports 1m, 3m and 5m."), 400
+    _strat = best.get("strategy") or (best.get("cand") or {}).get("strategy")
+    if _strat in ("metax2", "pairx"):
+        return jsonify(error=f"'{_strat}' runs (cross-timeframe/multi-pair "
+                             f"routers) have no live adapter yet — research "
+                             f"artifacts. The multi-pair live trader is the "
+                             f"next build."), 400
     if (best.get("cand") or {}).get("stack"):
         return jsonify(error="this is a method-STACKED router (research "
                              "artifact) — no live adapter yet. Adopt the "
