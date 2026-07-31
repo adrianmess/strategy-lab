@@ -1,0 +1,292 @@
+{
+ "strategy": "metax2",
+ "mode": "spot",
+ "method": "xtf-vol3",
+ "pair": "BASKET",
+ "market_data": "spot",
+ "timeframe": "multi",
+ "algo": "router-xtf",
+ "cand": {
+  "strategy": "metax2",
+  "components": [
+   {
+    "run": "rep_ScalpX_spot_trend3_unified__btc_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx",
+    "pair": "BTC_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_camp_c6_ca_v7_spot__btc_3m",
+    "file": "holdout_best_config.json",
+    "strategy": "v7",
+    "pair": "BTC_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_V6_spot_vol3_unified_100_000__btc_3m",
+    "file": "holdout_best_config.json",
+    "strategy": "v7",
+    "pair": "BTC_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_camp_c6_ca_macdx_spot__doge_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "DOGE_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_spotcamp_A2_macdx_vol3_100k__doge_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "DOGE_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_camp_c6_ca_prime7_spot__doge_3m",
+    "file": "holdout_best_config.json",
+    "strategy": "prime7",
+    "pair": "DOGE_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "camp_c7_w2_ref_oge_prime7",
+    "file": "holdout_best_config.json",
+    "strategy": "prime7",
+    "pair": "DOGE_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_spotcamp_A2_macdx_vol3_100k__eth_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "ETH_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_spotcamp_A3_macdx_vol3_500k__eth_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "ETH_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "camp_c6_w2_ref_macdx_spot",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "SOL_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "camp_c6_ca_macdx_spot",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "SOL_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_camp_c6_ca_macdx_spot__sui_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "SUI_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_camp_c1_w1_34_prime_sp_tr3_t__sui_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "prime",
+    "pair": "SUI_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "camp_c7_p_sui_macdx",
+    "file": "holdout_best_config.json",
+    "strategy": "macdx",
+    "pair": "SUI_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_ScalpX_spot_trend3_unified__sui_3m",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx",
+    "pair": "SUI_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_camp_c6_ca_v7_spot__xrp_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "v7",
+    "pair": "XRP_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_camp_c1_w1_39_v7_sp_vol3_cl_t__xrp_1m",
+    "file": "holdout_best_config.json",
+    "strategy": "v7",
+    "pair": "XRP_USDT",
+    "timeframe": "1m"
+   },
+   {
+    "run": "rep_camp_c6_ca_v7_spot__xrp_3m",
+    "file": "holdout_best_config.json",
+    "strategy": "v7",
+    "pair": "XRP_USDT",
+    "timeframe": "3m"
+   },
+   {
+    "run": "rep_ScalpX_spot_trend3_unified__xrp_3m",
+    "file": "holdout_best_config.json",
+    "strategy": "scalpx",
+    "pair": "XRP_USDT",
+    "timeframe": "3m"
+   }
+  ],
+  "assign": [
+   5,
+   0,
+   -1
+  ],
+  "buckets": "vol3 (reference: SOL 3m spot)",
+  "fold_picks": [
+   {
+    "fold": "2025-01-01",
+    "assign": [
+     15,
+     5,
+     9
+    ]
+   },
+   {
+    "fold": "2025-02-12",
+    "assign": [
+     15,
+     6,
+     18
+    ]
+   },
+   {
+    "fold": "2025-03-26",
+    "assign": [
+     5,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-05-07",
+    "assign": [
+     5,
+     0,
+     0
+    ]
+   },
+   {
+    "fold": "2025-06-18",
+    "assign": [
+     5,
+     6,
+     7
+    ]
+   },
+   {
+    "fold": "2025-07-30",
+    "assign": [
+     5,
+     0,
+     8
+    ]
+   },
+   {
+    "fold": "2025-09-10",
+    "assign": [
+     5,
+     0,
+     8
+    ]
+   },
+   {
+    "fold": "2025-10-22",
+    "assign": [
+     5,
+     0,
+     -1
+    ]
+   },
+   {
+    "fold": "2025-12-03",
+    "assign": [
+     5,
+     0,
+     8
+    ]
+   },
+   {
+    "fold": "2026-01-14",
+    "assign": [
+     5,
+     0,
+     8
+    ]
+   },
+   {
+    "fold": "2026-02-25",
+    "assign": [
+     5,
+     0,
+     -1
+    ]
+   },
+   {
+    "fold": "2026-04-08",
+    "assign": [
+     5,
+     0,
+     7
+    ]
+   },
+   {
+    "fold": "2026-05-20",
+    "assign": [
+     5,
+     0,
+     15
+    ]
+   },
+   {
+    "fold": "2026-07-01",
+    "assign": [
+     5,
+     0,
+     7
+    ]
+   }
+  ],
+  "live_replication": "NOT YET SUPPORTED \u2014 research artifact; panel refuses adoption"
+ },
+ "metrics": {
+  "eq": 897.9901247456764,
+  "maxdd": 0.1670616952225995,
+  "n": 15,
+  "months": 6,
+  "growth": -0.017932701280476363,
+  "score": -0.025754403387153017,
+  "tpm": 2.5,
+  "max_hold_days": 2.1375,
+  "liq": false
+ },
+ "holdout": {
+  "eq": 897.9901247456764,
+  "maxdd": 0.1670616952225995,
+  "n": 15,
+  "months": 6,
+  "growth": -0.017932701280476363,
+  "score": -0.025754403387153017,
+  "tpm": 2.5,
+  "max_hold_days": 2.1375,
+  "liq": false
+ },
+ "evaluated": 112000,
+ "generated": "2026-07-30 16:35"
+}

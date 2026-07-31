@@ -54,7 +54,7 @@ th{color:var(--dim)}
 <p>Everything follows one loop:</p>
 <table>
 <tr><th>step</th><th>where</th><th>what happens</th></tr>
-<tr><td>1. Optimize</td><td>Optimize page</td><td>Search parameters on training data. Use <code>train-end</code> to hold out recent months.</td></tr>
+<tr><td>1. Optimize</td><td>Optimize page</td><td>Search parameters on training data — pick the pair, chart timeframe (1m/3m/5m) and a <b>holdout mode</b> (after/before/between/outside dates, or alternating blocks) so unseen data exists to judge the result.</td></tr>
 <tr><td>2. Verify</td><td>Optimize page → run row</td><td>Check the <b>holdout</b> column: performance on data the search never saw. This is the number that matters.</td></tr>
 <tr><td>3. Backtest</td><td>Optimize page / Backtests</td><td>Publish full equity curve, trades, monthly returns to the Backtests page.</td></tr>
 <tr><td>4. Adopt</td><td>Control panel → Configs</td><td>Copy the winning parameters into the live trader's config (backup kept automatically).</td></tr>
@@ -65,9 +65,11 @@ th{color:var(--dim)}
 <h2 id="live">Running live (Control panel)</h2>
 <dl>
 <dt>Trader configs (config.json / config_spot.json)</dt><dd>A config file = one deployable setup: which strategy's parameters (shown in the dropdown, e.g. "V5 family · V7"), which mode (lev/spot), equity size, and operational settings. "Adopt" from the Optimize page writes a run's winning parameters into one of these files. <code>config.json</code> is the leveraged futures setup; <code>config_spot.json</code> is the spot long-only setup.</dd>
-<dt>Dry-run</dt><dd>The trader runs completely — live MEXC prices, real signal evaluation on every 3-minute bar close, position tracking, logs — but instead of sending orders it writes <code>[DRY RUN] would POST: …</code> to the log. Zero risk. Always dry-run a new config for days before going live; compare its logged trades to what you expect.</dd>
+<dt>Dry-run</dt><dd>The trader runs completely — live MEXC prices, real signal evaluation on every chart-bar close (the config's timeframe: 1m/3m/5m), position tracking, logs — but instead of sending orders it writes <code>[DRY RUN] would …</code> to the log. Zero risk. Always dry-run a new config for days before going live; compare its logged trades to what you expect.</dd>
 <dt>LIVE</dt><dd>Same as dry-run except orders are actually sent to the MEXC executor. Requires typing LIVE to confirm, and the executor must be running and logged in.</dd>
-<dt>MEXC executor</dt><dd>The Playwright webhook server (<code>webhook_server.py</code>) that clicks the MEXC website to place orders (MEXC has no futures API). Requirements: <code>pip install playwright</code> then <code>playwright install chromium</code>, and you must log in to MEXC in the browser window it opens (cookies are cached afterwards). If it exits immediately, the panel shows its last output under the executor buttons — usually missing Playwright browsers or a login issue.</dd>
+<dt>Execution: native MEXC API (default since 2026-07)</dt><dd>Configs with <code>"execution": "api"</code> place orders directly through MEXC's APIs — futures (launched 2026-03) for lev, spot v3 for spot — using the account keys in <code>mexc_api_keys.json</code> (multi-account: mexc1/mexc2; keys are IP-linked to the proxy). API fees: 0.01% maker / 0.05% taker futures, ~0.05%/side spot — matching what the backtests model. The per-instance account selector and venue badge on the control panel show which account/venue each instance trades.</dd>
+<dt>Legacy executor (Playwright browser)</dt><dd>The old path before the APIs: <code>webhook_server.py</code> drives the MEXC website in a Chromium window. Still available per instance for configs without <code>execution: api</code>; needs <code>playwright install chromium</code> and a logged-in browser profile.</dd>
+<dt>Notifications</dt><dd><code>notify.py</code> writes every position open/close/error to <code>notifications.log</code> and can POST to a webhook — <code>HERMES.md</code> documents the schema for the WhatsApp agent.</dd>
 <dt>Refit</dt><dd>Re-optimizes the trader's parameters on fresh data every ~28 days. The out-of-sample evidence assumes this cadence.</dd>
 </dl>
 
@@ -79,6 +81,8 @@ th{color:var(--dim)}
 <dt>Prime7</dt><dd>Solana Prime upgraded to the full-parameter V7 engine: every indicator length (RSI/MACD/Bollinger/trend-EMA) is searchable via variant menus, entry triggers are z-scored (volatility-adjusted), and the MACD-crossover subsystem is locked off to keep Prime's dip-system character. Defaults = your live xlsx values.</dd>
 <dt>ScalpX2</dt><dd>ScalpX with searchable indicator lengths: RSI period, CVD smoothing, VRVP/POC lookback and slow-EMA length become per-regime variant menus. Thresholds and brackets as in ScalpX.</dd>
 <dt>ScalpX</dt><dd>The VRVP+CVD+EMA scalp strategy, ported exactly. Verdict from testing: <b>no edge</b> — loses in every tested configuration, including its own TradingView export (−16%). Kept for reference.</dd>
+<dt>MacdX</dt><dd>The standalone MACD-crossover pine (TP/SL/time/thresholds/histogram), reproduced exactly and made searchable per regime. MACD lengths are a variant grid (pine 12/26/9 default; searchable under cadapt/1m). Currently the strongest spot family on several pairs.</dd>
+<dt>RocX</dt><dd>The V4 ROC/SMA trend pine: ROC of 1-minute lows + SMA of 45-minute closes, dip entries on 45-min boundaries, trailing stop (pine close-follow or opt-in ratchet). ROC/SMA lengths are variant menus.</dd>
 </dl>
 
 <h2 id="modes">Modes</h2>
@@ -186,7 +190,7 @@ th{color:var(--dim)}
 <b>1. In-sample numbers are advertising; holdout/walk-forward numbers are evidence.</b> Full-history fits routinely show 1000x+; ignore them for decisions.<br><br>
 <b>2. No-stop leverage has irreducible ruin risk.</b> Your original config, run on real MEXC data, is liquidated on 2024-03-14. In the walk-forward study 35 of 36 no-stop configs died. Survivors survive because of moderate leverage and disabled shorts — not because the danger is gone. The holdout window (Sep 2025→Jul 2026) contains no March-2024-scale event.<br><br>
 <b>3. Selection bias compounds.</b> Every time you pick the best of N runs, the expected live performance of the winner drops below its backtest. Re-verify winners on walk-forward before adopting.<br><br>
-<b>4. Costs not modeled:</b> funding fees (±0.01%/8h typical), Playwright execution latency (seconds), partial fills. Compounding assumes full-equity reinvestment every trade.<br><br>
+<b>4. Costs not modeled:</b> funding fees (±0.01%/8h typical), execution latency (API round-trips ~100s of ms; the legacy browser path took seconds), partial fills, and perp-vs-spot basis for legacy perp-data spot runs (measured: round-trip error p50 1.3 / p95 4.9 bps — see research/2026-07_spot_research.md). Compounding assumes full-equity reinvestment every trade.<br><br>
 <b>5. The refit loop is part of the system.</b> The out-of-sample evidence was generated by re-optimizing every 28 days. Deploy-and-forget is a different, untested system.
 </div>
 
