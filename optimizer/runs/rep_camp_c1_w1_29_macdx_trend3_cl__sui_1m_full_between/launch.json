@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-07-31 00:31:10",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo genetic --mode lev --method trend3 --procs 14 --batch 100 --name rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m_full_between --symbol sui --tf 1 --total 100000 --holdout-between 2024-11-16..2025-08-28 --max-hold-days 5 --gap-mode skip_contaminated",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

@@ -404,6 +404,19 @@ document.addEventListener('click', ev=>{
 });
 // ---------- launch ----------
 async function launch(){
+  if(COMBINE){
+    // the merged run inherits the CURRENT form dataset — refuse to launch if
+    // it doesn't match every source run (prevents e.g. SUI pools on SOL data)
+    const srcs = COMBINE.rf.split(',').map(p=>RUNS.find(r=>'runs/'+r.name===p)).filter(Boolean);
+    for(const s0 of srcs){
+      const wantSym=((s0.pair||'SOL_USDT').split('_')[0]).toLowerCase();
+      const wantTf=String(s0.timeframe||'3m').replace('m','');
+      if($('symbol').value!==wantSym || $('tfsel').value!==wantTf || $('mode').value!==s0.mode || $('strat').value!==s0.strategy){
+        alert(`Combine mismatch: the form is ${$('strat').value}/${$('mode').value}/${$('symbol').value.toUpperCase()}/${$('tfsel').value}m but source run ${s0.name} is ${s0.strategy}/${s0.mode}/${(s0.pair||'SOL_USDT').split('_')[0]}/${s0.timeframe||'3m'}. Re-arm the combine (or fix the fields) before launching.`);
+        return;
+      }
+    }
+  }
   const bt_ = $('budgetType').value, bv_ = +$('budgetVal').value;
   const d = {strategy:$('strat').value, algo:$('algo').value, mode:$('mode').value,
     method:$('method').value, procs:+$('procs').value,
@@ -499,7 +512,15 @@ function combineRuns(){
       alert(`Can't combine: ${A.name} and ${B.name} differ (per-regime vs single-set) — different genome shapes.`); return;
     }
   }
-  loadRunSettings(names[0]);
+  try{ loadRunSettings(names[0]); }catch(e){ console.warn('loadRunSettings threw:', e); }
+  // belt & braces: the dataset fields MUST match the sources even if the
+  // full restore hiccuped (this exact failure once launched a SUI merge on SOL)
+  const A0 = recs[0];
+  $('symbol').value = ((A0.pair||'SOL_USDT').split('_')[0]).toLowerCase();
+  $('tfsel').value = String(A0.timeframe||'3m').replace('m','');
+  if([...$('mode').options].some(o=>o.value===A0.mode)) $('mode').value=A0.mode;
+  if([...$('strat').options].some(o=>o.value===A0.strategy)) $('strat').value=A0.strategy;
+  if([...$('method').options].some(o=>o.value===A0.method)) $('method').value=A0.method;
   COMBINE = {rf: names.map(n=>`runs/${n}`).join(','), mode:$('cmbMode').value};
   // unique, non-stacking name: strip existing merge_ prefixes, then dedupe vs runs
   const strip = s=>s.replace(/^(merge_)+/,'');
@@ -738,7 +759,7 @@ function loadRunSettings(name){
   const r = RUNS.find(x=>x.name===name); if(!r) return;
   const setSel = (id,v)=>{ const el=$(id); if(v!=null && [...el.options].some(o=>o.value===String(v))) el.value=String(v); };
   setSel('strat', r.strategy);
-  $('strat').onchange();                       // refresh anchors list, per-regime lock, param space
+  try{ $('strat').onchange(); }catch(e){ console.warn('strat refresh failed (fields still restore):', e); }
   setSel('mode', r.mode);
   setSel('method', r.method);
   $('perreg').value = (r.per_regime===false) ? '1' : '';
@@ -764,7 +785,7 @@ function loadRunSettings(name){
   $('anchorStr').value = (r.anchor==='defaults' && r.anchor_strength) ? r.anchor_strength : 0;
   $('lockbox').value = r.lockbox || '';
   $('name').value = r.name;
-  if(SPACE) renderSpace();          // panel follows the loaded run's mode
+  try{ if(SPACE) renderSpace(); }catch(e){ console.warn('space render failed:', e); }   // panel follows the loaded run's mode
   $('launchMsg').textContent = `settings loaded from "${r.name}" — Start search RESUMES that run; change the name for a fresh one` +
     (r.anchor==='file' ? ' (its file-based anchor can’t be reloaded — anchor set to none)' : '');
   window.scrollTo({top:0, behavior:'smooth'});
