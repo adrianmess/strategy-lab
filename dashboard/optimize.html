@@ -265,8 +265,11 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     </div>
   </div>
 
-  <h2>Jobs <span class="mini" id="jobsTitle"></span></h2>
-  <div class="card" id="jobs">no jobs yet</div>
+  <details id="jobsWrap" open ontoggle="localStorage.setItem('jobsOpen', this.open?'1':'0')">
+    <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Jobs <span class="mini" id="jobsTitle"></span></h2></summary>
+    <div class="card" id="jobs">no jobs yet</div>
+  </details>
+  <script>if(localStorage.getItem('jobsOpen')==='0') document.getElementById('jobsWrap').open=false;</script>
 
   <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
     <span class="mini" style="float:right">
