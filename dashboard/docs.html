@@ -46,7 +46,7 @@ th{color:var(--dim)}
 <div class="toc">
   <b>Jump to:</b>
   <a href="#workflow">Workflow</a><a href="#live">Running live</a><a href="#strategies">Strategies</a><a href="#modes">Modes</a>
-  <a href="#regimes">Regime methods</a><a href="#holdout">Holdout modes</a><a href="#routers">Routers & honesty tiers</a><a href="#optimizers">Optimizers</a><a href="#params">Parameters</a>
+  <a href="#regimes">Regime methods</a><a href="#holdout">Holdout modes</a><a href="#combine">Combining runs</a><a href="#routers">Routers & honesty tiers</a><a href="#optimizers">Optimizers</a><a href="#params">Parameters</a>
   <a href="#metrics">Metrics</a><a href="#gaps">Data & gaps</a><a href="#ai">AI advisor</a><a href="#risk">Risk & honesty</a>
 </div>
 
@@ -102,6 +102,24 @@ th{color:var(--dim)}
 <dt>volXtrend9</dt><dd>3×3 grid of volatility × trend = 9 buckets. <b>Warning:</b> 9 full parameter sets overfit badly in testing (huge train numbers, liquidated on holdout). As a <i>router</i> bucketing (one component strategy per bucket, not 9 param sets) it fares much better — see Routers below.</dd>
 <dt>cvol7 + Continuous adapt</dt><dd>7 fine grades of the same causal 30-day vol percentile, made for the <b>Continuous adapt</b> checkbox: the candidate is just TWO endpoint parameter sets (calm / volatile) interpolated across the grades — thresholds lerp, indicator lengths morph through the variant grids. Fewer knobs than vol3. <b>Result of campaign c6 (2026-07):</b> tested <i>worse</i> than the discrete 3-bucket champions out of sample in 9 of 10 family×mode cells — consistent with the wider literature, which has no solid out-of-sample evidence for adaptive-length indicators beating well-chosen discrete regimes. Kept as a research option; not recommended for compute.</dd>
 </dl>
+
+<h2 id="combine">Combining runs (pool merge / breed)</h2>
+<p>Combining merges the <b>candidate pools</b> of source optimizer runs — every parameter set they evolved, not just the winners — then either continues one genetic search over the union (<b>merge &amp; continue</b>) or cross-breeds survivors that hold up on both sides (<b>breed hybrids</b>). Start it from the Backtests page (tick the combine checkboxes → "combine these runs") or type run names into the Combine row on the Optimize page.</p>
+<h3>Hard requirements (enforced)</h3>
+<dl>
+<dt>Source run must exist</dt><dd>Pools live in the run directory; a backtest whose run was deleted can't participate.</dd>
+<dt>No routers/baskets</dt><dd>metax / metax2 / pairx entries have no candidate pools — their checkboxes are disabled. Combine routers with the Stack, MetaX2 +comp, or the Extend buttons instead.</dd>
+<dt>Same strategy family</dt><dd>Different families = different genome shapes.</dd>
+<dt>Same mode</dt><dd>spot and lev live under different fee/leverage/constraint regimes.</dd>
+<dt>Same regime method</dt><dd>Different bucket counts = different genome shapes.</dd>
+<dt>Same pair AND same timeframe</dt><dd>Pools evolved on different price data can't be merged honestly, and 1m-extended indicator grids don't exist on 3m. (The Backtests page enforces this visually: ticking a run hides every incompatible run.)</dd>
+<dt>Same parameter-set structure</dt><dd>Per-regime specialists can't merge with single-set runs.</dd>
+<dt>2–8 distinct runs</dt><dd>Per merge.</dd>
+</dl>
+<h3>Practical limitations</h3>
+<p>Runs that ended with zero survivors contribute empty pools. The merged run inherits the sources' dataset (pair/timeframe/mode/strategy are force-set at Arm time and re-verified at launch — a mismatch refuses to start). Merged pools are re-scored under the NEW run's settings, so a different holdout mode changes what survives.</p>
+<h3>When blocked</h3>
+<p>Cross-pair or cross-timeframe → <b>MetaX2</b>. Combining routers → <b>Stack</b> or the router <b>Extend/+comp</b> buttons. Carrying one champion's parameters onto another dataset → <b>"Optimize this"</b> (seeded fresh search) with the pair/timeframe changed — honest where a pool merge isn't.</p>
 
 <h2 id="routers">Routers (MetaX) & result honesty tiers</h2>
 <p>A <b>router</b> (strategy "metax") doesn't trade its own signals — it assigns ONE proven component strategy to each market bucket (vol3 terciles, vt9 cells, …) and mirrors the bucket owner's trades through a single position slot. Components keep their own full parameter sets; the router only decides who may open a trade. The <b>stacked router</b> (camp_c5_stk_*) goes one level up: at each 42-day fold it re-picks every source router's assignment from past data only, then follows whichever source has the best trailing dd-penalized performance.</p>

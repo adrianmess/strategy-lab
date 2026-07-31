@@ -320,7 +320,16 @@ let sel = null, chart=null,
 const CMBSEL = new Set();
 function updateCmbBar(){
   document.getElementById('cmbBar').style.display = CMBSEL.size ? '' : 'none';
-  document.getElementById('cmbCount').textContent = CMBSEL.size + ' selected';
+  document.getElementById('cmbCount').textContent = CMBSEL.size + ' selected'
+    + (CMBSEL.size ? ' — showing only runs compatible with your selection (same strategy/mode/regime/pair/chart); untick to see everything again' : '');
+}
+function cmbCompatible(ref, e){
+  if(['metax','metax2','pairx'].includes(e.strategy)) return false;
+  return e.strategy===ref.strategy && e.mode===ref.mode
+    && (e.method||'')===(ref.method||'')
+    && (e.pair||'SOL_USDT')===(ref.pair||'SOL_USDT')
+    && String(e.timeframe||'3m')===String(ref.timeframe||'3m')
+    && (((e.opt||{}).param_set)||'')===(((ref.opt||{}).param_set)||'');
 }
 function clearCmbSel(){ CMBSEL.clear(); updateCmbBar(); render(); }
 function sendToCombine(){
@@ -454,6 +463,11 @@ function render(){
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
+  // combine selection active: only compatible partners stay visible
+  if(CMBSEL.size){
+    const ref = BT.find(e=>CMBSEL.has(e.name));
+    if(ref) order = order.filter(i=>CMBSEL.has(BT[i].name) || cmbCompatible(ref, BT[i]));
+  }
   const fNegV = document.getElementById('fNoNeg').value;
   if(fNegV === 'month') order = order.filter(_noNegMonth);
   else if(fNegV === 'week') order = order.filter(_noNegWeek);
@@ -496,6 +510,7 @@ function render(){
     ev.stopPropagation();
     if(cb.checked) CMBSEL.add(cb.dataset.name); else CMBSEL.delete(cb.dataset.name);
     updateCmbBar();
+    render();   // filter the table to compatible partners (or restore it)
   });
   tb.querySelectorAll('.rstars span[data-rname]').forEach(sp=>sp.onclick=async ev=>{
     ev.stopPropagation();
