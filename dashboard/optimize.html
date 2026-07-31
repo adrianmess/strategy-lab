@@ -477,9 +477,20 @@ function applyCombineFromBacktests(){
     $('cmbInputs').insertAdjacentHTML('beforeend',
       '<span class="kv">+</span><input class="cmbRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
   [...document.querySelectorAll('.cmbRun')].forEach((inp,i)=>inp.value = runs[i]||'');
+  // apply the sources' settings IMMEDIATELY (don't wait for Arm): full
+  // restore from the first run, then hard-assert the shared dataset fields
+  const r0 = RUNS.find(x=>x.name===runs[0]);
+  if(r0){
+    try{ loadRunSettings(r0.name); }catch(e){ console.warn('restore threw:', e); }
+    $('symbol').value = ((r0.pair||'SOL_USDT').split('_')[0]).toLowerCase();
+    $('tfsel').value = String(r0.timeframe||'3m').replace('m','');
+    if([...$('mode').options].some(o=>o.value===r0.mode)) $('mode').value=r0.mode;
+    if([...$('strat').options].some(o=>o.value===r0.strategy)) $('strat').value=r0.strategy;
+    if([...$('method').options].some(o=>o.value===r0.method)) $('method').value=r0.method;
+  }
   $('cmbMsg').textContent = `${runs.length} run${runs.length>1?'s':''} loaded from the Backtests page`
     + (missing.length?` — no run found for: ${missing.join(', ')}`:'')
-    + ' — pick merge/breed, then Arm combine';
+    + ' — launch fields set from the sources; pick merge/breed, then Arm combine';
   document.querySelector('.cmbRun').scrollIntoView({behavior:'smooth', block:'center'});
 }
 function addCombineInput(){
