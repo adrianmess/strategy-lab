@@ -252,7 +252,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <div class="row" style="margin-top:10px">
       <b class="mini" data-x="gmholdouts" style="cursor:pointer;color:var(--blue)">Holdouts (each selected scheme = one more run per combo):</b><br>
       <span style="white-space:nowrap"><input type="checkbox" id="gmHoDate" checked> <span class="optx" data-x="gmholdouts">after date</span></span> <input id="gmHoDateV" value="2025-09-01" style="width:95px">
-      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoAlt"> <span class="optx" data-x="gmholdouts">alternating</span></span> days: <input id="gmHoAltV" value="21" style="width:70px" title="comma-separated list — each value is its own scheme">
+      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoAlt"> <span class="optx" data-x="gmholdouts">alternating</span></span> days: <span style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap"><span id="gmChips_alt"></span><input id="gmIn_alt" type="number" placeholder="14" style="width:50px" onkeydown="if(event.key==='Enter'){event.preventDefault();gmAdd('alt');}"><button class="small" onclick="gmAdd('alt')">+</button></span>
       <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoBefore"> <span class="optx" data-x="gmholdouts">before date</span></span> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
       <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoBetween"> <span class="optx" data-x="gmholdouts">between</span></span> <input id="gmHoBetweenA" value="2025-03-01" style="width:95px">..<input id="gmHoBetweenB" value="2025-09-01" style="width:95px">
       <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoOutside"> <span class="optx" data-x="gmholdouts">outside</span></span> <input id="gmHoOutsideA" value="2025-03-01" style="width:95px">..<input id="gmHoOutsideB" value="2025-09-01" style="width:95px">
@@ -1630,7 +1630,7 @@ function fillAnchors(){
   }
 }
 
-const GM_LISTS = JSON.parse(localStorage.getItem('gmLists')||'null') || {dd:[50], mh:[5], total:[60000]};
+const GM_LISTS = Object.assign({dd:[50], mh:[5], total:[60000], alt:[21]}, JSON.parse(localStorage.getItem('gmLists')||'null')||{});
 function gmRender(k){
   const box=$('gmChips_'+k); if(!box) return;
   box.innerHTML = GM_LISTS[k].map((v,i)=>`<span class="badge" style="background:rgba(88,166,255,.15);color:#58a6ff;margin-right:4px;white-space:nowrap">${v.toLocaleString()} <a style="cursor:pointer;color:var(--red);text-decoration:none" onclick="gmDel('${k}',${i})">✕</a></span>`).join('');
@@ -1640,6 +1640,7 @@ function gmAdd(k){
   if(!v || v<=0){ return; }
   if(k==='dd' && (v<5 || v>100)){ alert('max DD is a percent (5–100)'); return; }
   if(k==='total' && v<1000){ alert('evals per run should be at least 1000'); return; }
+  if(k==='alt' && (v<2 || v>90)){ alert('alternating block length is in days (2–90)'); return; }
   if(GM_LISTS[k].includes(v)){ el.value=''; return; }
   GM_LISTS[k].push(v); GM_LISTS[k].sort((a,b)=>a-b);
   localStorage.setItem('gmLists', JSON.stringify(GM_LISTS));
@@ -1651,12 +1652,12 @@ function gmDel(k,i){
   localStorage.setItem('gmLists', JSON.stringify(GM_LISTS));
   gmRender(k); gamutCount();
 }
-gmRender('dd'); gmRender('mh'); gmRender('total');
+gmRender('dd'); gmRender('mh'); gmRender('total'); gmRender('alt');
 function gamutChecks(id){ return [...document.querySelectorAll('#'+id+' input:checked')].map(x=>x.value); }
 function gamutHoldouts(){
   const hs=[];
   if($('gmHoDate').checked && $('gmHoDateV').value) hs.push({kind:'date', date:$('gmHoDateV').value});
-  if($('gmHoAlt').checked) $('gmHoAltV').value.split(',').map(x=>+x.trim()).filter(Boolean).forEach(d=>hs.push({kind:'alt', days:d}));
+  if($('gmHoAlt').checked) GM_LISTS.alt.forEach(d=>hs.push({kind:'alt', days:d}));
   if($('gmHoBefore').checked && $('gmHoBeforeV').value) hs.push({kind:'before', date:$('gmHoBeforeV').value});
   if($('gmHoBetween').checked && $('gmHoBetweenA').value && $('gmHoBetweenB').value) hs.push({kind:'between', a:$('gmHoBetweenA').value, b:$('gmHoBetweenB').value});
   if($('gmHoOutside').checked && $('gmHoOutsideA').value && $('gmHoOutsideB').value) hs.push({kind:'outside', a:$('gmHoOutsideA').value, b:$('gmHoOutsideB').value});
@@ -1690,7 +1691,7 @@ function gamutCount(){
 ['gmPairs','gmStrats','gmAlgos','gmModes','gmTfs','gmMethods','gmScorings'].forEach(id=>{
   document.querySelectorAll('#'+id+' input').forEach(x=>x.onchange=gamutCount);
 });
-['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmHoAltV'].forEach(id=>{
+['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside'].forEach(id=>{
   const el=$(id); if(el) el.onchange=gamutCount;
 });
 let GAMUT_NAME = localStorage.getItem('gamutName')||'';
