@@ -212,43 +212,43 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Gamut runner <span class="mini">— configure a full sweep, run it autonomously pair by pair (optimize + auto-backtests)</span></h2></summary>
     <div class="card">
     <div class="row" style="display:flex;gap:18px;flex-wrap:wrap">
-      <div class="field"><label>Pairs (in order)</label><span id="gmPairs">
+      <div class="field"><label data-x="gmpairs">Pairs (in order)</label><span id="gmPairs">
         <label><input type="checkbox" value="sol">SOL</label> <label><input type="checkbox" value="btc">BTC</label>
         <label><input type="checkbox" value="eth">ETH</label> <label><input type="checkbox" value="doge">DOGE</label>
         <label><input type="checkbox" value="xrp">XRP</label> <label><input type="checkbox" value="sui">SUI</label></span></div>
-      <div class="field"><label>Strategies</label><span id="gmStrats">
+      <div class="field"><label data-x="gmstrats">Strategies</label><span id="gmStrats">
         <label><input type="checkbox" value="v7" checked>v7</label> <label><input type="checkbox" value="prime7">prime7</label>
         <label><input type="checkbox" value="prime">prime</label> <label><input type="checkbox" value="macdx" checked>macdx</label>
         <label><input type="checkbox" value="rocx">rocx</label> <label><input type="checkbox" value="scalpx2">scalpx2</label>
         <label><input type="checkbox" value="v6">v6</label></span></div>
-      <div class="field"><label>Algorithms</label><span id="gmAlgos">
+      <div class="field"><label data-x="gmalgos">Algorithms</label><span id="gmAlgos">
         <label><input type="checkbox" value="genetic" checked>genetic</label> <label><input type="checkbox" value="random">random</label></span></div>
-      <div class="field"><label>Modes</label><span id="gmModes">
+      <div class="field"><label data-x="gmmodes">Modes</label><span id="gmModes">
         <label><input type="checkbox" value="spot" checked>spot</label> <label><input type="checkbox" value="lev">lev</label></span>
-        <label style="margin-left:8px"><input type="checkbox" id="gmLevStops" checked>lev-stops</label></div>
-      <div class="field"><label>Charts</label><span id="gmTfs">
+        <span style="margin-left:8px"><input type="checkbox" id="gmLevStops" checked> <span data-x="gmlevstops" style="cursor:pointer;color:var(--blue)">lev-stops</span></span></div>
+      <div class="field"><label data-x="gmcharts">Charts</label><span id="gmTfs">
         <label><input type="checkbox" value="3" checked>3m</label> <label><input type="checkbox" value="1">1m</label>
         <label><input type="checkbox" value="5">5m</label></span></div>
-      <div class="field"><label>Regimes</label><span id="gmMethods">
+      <div class="field"><label data-x="gmregimes">Regimes</label><span id="gmMethods">
         <label><input type="checkbox" value="vol3" checked>vol3</label> <label><input type="checkbox" value="trend3">trend3</label>
         <label><input type="checkbox" value="volXtrend9">vt9</label> <label><input type="checkbox" value="none">none</label>
         <label><input type="checkbox" value="cvol7">cvol7</label></span>
-        <label style="margin-left:8px" title="continuous adaptation (endpoint interpolation) — pairs best with cvol7"><input type="checkbox" id="gmCadapt">cadapt</label></div>
-      <div class="field"><label>Scoring</label><span id="gmScorings">
+        <span style="margin-left:8px"><input type="checkbox" id="gmCadapt"> <span data-x="gmcadapt" style="cursor:pointer;color:var(--blue)">cadapt</span></span></div>
+      <div class="field"><label data-x="gmscoring">Scoring</label><span id="gmScorings">
         <label><input type="checkbox" value="classic" checked>classic</label> <label><input type="checkbox" value="worst_window">worst-window</label>
         <label><input type="checkbox" value="underwater">underwater</label></span></div>
     </div>
     <div class="row" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-      <div class="field"><label title="comma-separated list — one run per value">Max DD % list</label><input id="gmDDs" value="50" style="width:90px"></div>
-      <div class="field"><label title="comma-separated list — one run per value">Max days in trade list</label><input id="gmMHs" value="5" style="width:90px"></div>
-      <div class="field"><label>Evals per run</label><input id="gmTotal" value="60000" style="width:80px"></div>
+      <div class="field"><label data-x="gmdd">Max DD % list</label><input id="gmDDs" value="50" style="width:90px"></div>
+      <div class="field"><label data-x="gmmh">Max days in trade list</label><input id="gmMHs" value="5" style="width:90px"></div>
+      <div class="field"><label data-x="gmevals">Evals per run</label><input id="gmTotal" value="60000" style="width:80px"></div>
       <div class="field"><label>Processes</label><input id="gmProcs" value="14" style="width:55px"></div>
-      <div class="field"><label title="which saved parameter spaces to search: the active (imported/manual) ones, or the AI-generated variants (auto-generated per pair+timeframe if missing)">Parameter space</label>
+      <div class="field"><label data-x="gmspace">Parameter space</label>
         <select id="gmSpace"><option value="active">imported / active</option><option value="ai">AI-generated</option></select></div>
       <div class="field"><label>Name</label><input id="gmName" placeholder="auto" style="width:110px"></div>
     </div>
     <div class="row" style="margin-top:10px">
-      <b class="mini">Holdouts (each selected scheme = one more run per combo):</b><br>
+      <b class="mini" data-x="gmholdouts" style="cursor:pointer;color:var(--blue)">Holdouts (each selected scheme = one more run per combo):</b><br>
       <label><input type="checkbox" id="gmHoDate" checked>after date</label> <input id="gmHoDateV" value="2025-09-01" style="width:95px">
       <label style="margin-left:10px"><input type="checkbox" id="gmHoAlt">alternating</label> days: <input id="gmHoAltV" value="21" style="width:70px" title="comma-separated list — each value is its own scheme">
       <label style="margin-left:10px"><input type="checkbox" id="gmHoBefore">before date</label> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
@@ -449,6 +449,20 @@ const X = {
  rxmetax2: ["MetaX2 (cross-timeframe router)", `Routes components that each simulate on their OWN pair+timeframe candles — a 1m scalper stays a 1m scalper — bucketed by SOL-3m volatility terciles, one slot, causal 42d walk-forward only.<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter; the panel refuses adoption. First results were weak (SOL has no 1m/5m runs to route yet; the all-pairs pool was too thin to clear the feasibility gates).</dd><dt>When useful</dt><dd>After 1m/5m searches produce honest survivors — fast strategies tend to shine exactly when volatility spikes.</dd></dl>`],
  rxpick: ["Specific components", `Hand-pick EXACTLY which runs become the router's components (instead of auto-mining). Rules:<dl><dt>Mixing allowed</dt><dd>Different pairs AND different chart timeframes — each component is simulated on its own candles in an isolated process.</dd><dt>One mode</dt><dd>All picks must share spot OR lev (one account, one slot). Lev components keep their per-trade leverage in the sim.</dd><dt>Buckets</dt><dd>If every pick is the same pair, that pair's 3m vol terciles are the routing reference; mixed pairs use SOL's.</dd><dt>No router-in-router</dt><dd>Pick strategy runs, not other routers.</dd></dl>Then hit the MetaX2 <b>Build</b> button. Validated by the same causal 42d walk-forward as everything else.`],
  rxpairx: ["PairX basket (multi-pair FCFS)", `Every pair's best spot configs compete for ONE position slot, first-come-first-served — exactly what a multi-pair live trader would execute. Per-fold component picks use past-only trailing performance (causal).<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter yet.</dd><dt>Measured (2026-07)</dt><dd>Best basket +6.8%/mo vs SOL-only stack +13.2%/mo: with alt edges at only +2–5%/mo, FCFS lets weaker trades displace stronger SOL ones. Needs stronger per-pair components (e.g. per-pair routers) to earn its place.</dd></dl>`],
+ gmpairs: ["Gamut: pairs", `Which pairs the sweep covers, run in the shown order: EVERY selected combo finishes for one pair (optimize + automatic backtests) before the next pair starts.`],
+ gmstrats: ["Gamut: strategies", `Each ticked family multiplies the run count. v7/prime7 are the full-parameter engines; macdx has been the strongest spot family recently; scalpx is historically edgeless.`],
+ gmalgos: ["Gamut: algorithms", `genetic = the proven default. random = unbiased baseline (useful as a control, rarely wins). Each ticked algo multiplies the count.`],
+ gmmodes: ["Gamut: modes", `spot (long-only, 1x, stops, spot candles) and/or lev (futures, leverage, perp candles).`],
+ gmlevstops: ["Gamut: lev-stops", `When ticked, LEV runs keep their stop-losses ACTIVE despite leverage (the c3 'survival' doctrine — cut liquidations structurally). Ignored for spot runs (stops are always on there).`],
+ gmcharts: ["Gamut: charts", `Chart timeframes to sweep. Indicator lengths are in BARS, so each timeframe is a genuinely different search. 1m/5m results are research-only until adopted configs get dry-run soaks; 1m runs also cost the most compute.`],
+ gmregimes: ["Gamut: regimes", `Bucketing methods to sweep — vol3 is the proven default. cvol7 exists mainly for cadapt (continuous adaptation), which tested WORSE than discrete regimes in campaign c6.`],
+ gmcadapt: ["Gamut: cadapt", `Continuous adaptation: candidates become two endpoint parameter sets interpolated across the regime grades. Honest history: lost to discrete vol3 in 9 of 10 cells in campaign c6. Pairs best with cvol7.`],
+ gmscoring: ["Gamut: scoring", `classic = mean monthly growth minus deviation penalty. worst-window = judged by the worst 3-month stretch. underwater = penalizes time spent in drawdown/in-trade.`],
+ gmdd: ["Gamut: max DD list", `Comma-separated maximum-drawdown caps in % — EACH value is its own run (e.g. '50,80' doubles the count). Candidates exceeding the cap are infeasible.`],
+ gmmh: ["Gamut: max days in trade", `Comma-separated hold-time caps in days — each value is its own run. Candidates whose longest trade exceeds it are disqualified (never force-closed).`],
+ gmevals: ["Gamut: evals per run", `Search budget per run. 60k is a sane sweep default (~1-3 min per run on cached data at 14 procs); your flagship single runs used 100-150k.`],
+ gmspace: ["Gamut: parameter space", `imported/active = whatever each pair+timeframe's saved space currently is (your edits included). AI-generated = the AI variant (ranges mined from every surviving config's actually-used values, LLM sanity pass when your Anthropic key is configured) — auto-generated per pair+timeframe if missing.`],
+ gmholdouts: ["Gamut: holdouts", `Every ticked scheme runs the WHOLE combo grid once more with that holdout: after/before a date, between/outside two dates, or alternating N-day blocks (the days field takes a comma list — each value is its own scheme). See Docs → Holdout modes.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
  anchor: ["Anchor", `Starts the search from a KNOWN-GOOD configuration instead of pure randomness.<dl><dt>none (default)</dt><dd>Unchanged behavior: the population starts random. Best for honest exploration.</dd><dt>strategy live defaults</dt><dd>Seeds the population with your live parameter values (the ones shown as defaults next to each parameter) and explores outward from them.</dd><dt>backtest: …</dt><dd>Anchor to any published backtest's exact config.</dd></dl>The number is the <b>anchor strength</b>: 0 = seeding only; e.g. 0.3 also subtracts 0.3 × (normalized parameter distance from the anchor) from every candidate's score, so the search pays rent for wandering. Anchoring is a deliberate bias: great for polishing what works ("better than my defaults, near my defaults"), wrong for discovering something different — use unanchored cross-fit for that.`],
  scoring: ["Scoring", `How candidates are RANKED during the search (feasibility rules are unchanged).<dl><dt>classic (default)</dt><dd>The original, untouched formula: average monthly growth minus a volatility penalty. All previous runs used this.</dd><dt>worst 3-month window</dt><dd>Ranks by the WORST rolling 3-month stretch instead of the average. A config carried by one lucky quarter stops winning; the only way up is to fix the weak periods.</dd><dt>time-in-trade penalty</dt><dd>Classic minus a penalty for the fraction of time capital sits locked in open positions. Pushes the search toward the quick-recycling character of your live defaults (max holds of days, not months).</dd></dl>New runs record their scoring in the settings chips, so runs bred under different rules are never confused.`],
@@ -470,7 +484,7 @@ function explain(key){
 }
 document.addEventListener('click', ev=>{
   const t = ev.target.closest('[data-x]');
-  if(t) explain(t.dataset.x);
+  if(t){ ev.preventDefault(); explain(t.dataset.x); }
 });
 // ---------- launch ----------
 async function launch(){
