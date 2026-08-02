@@ -24,8 +24,19 @@ Updated: 2026-08-02. Goal: cut the ~20-day gamut wall-clock by adding a second M
 4. Watch both from the existing panel on the primary (runs appear as they sync in; report.md refreshes as the primary passes skipped specs).
 - Expected gain: ~halves wall-clock if Mac 2 is comparable (scale by its core count; rates in HANDOFF are per 14 procs).
 
-## Cloud box — steps (optional add-on)
-- Provider: Hetzner CCX/AWS c-family, 48–64 vCPU Linux. Stack is Python/numba — Linux-fine. VERIFY current pricing; rough order: $1–2.50/hr ⇒ ~$150–350 to compress 20d → ~4–6d.
+## Cloud box — provider comparison (researched 2026-08-02)
+NOTE: Hetzner raised CLOUD (CCX/CPX) prices up to ~128% in June 2026 — CCX63 (48 threads) is now €1.37/hr / €853/mo. Cloud VMs are no longer the deal; DEDICATED boxes are.
+
+| Option | Specs | Price | ~20d workload cost | Verdict |
+|---|---|---|---|---|
+| **Hetzner AX162 dedicated** | 48c/96t EPYC 9454P, 2×1.92TB NVMe | €199/mo + €79 setup | **~€278** (1 month, then cancel) | **BEST DEAL** — 2× the threads of CCX63 at ⅓ the price; ~6 specs concurrently at 14 procs ⇒ 20d → ~3d |
+| Hetzner server auction | e.g. Ryzen 5950X 16c/32t boxes | often €50–90/mo, no setup fee, instant | ~€60–90 | Cheapest "second Mac equivalent"; check radar.iodev.org for live deals |
+| AWS c7a.16xlarge SPOT | 64 vCPU EPYC Genoa | $3.28/hr on-demand; spot typically 60–90% off (~$1–1.5/hr, fluctuates) | ~$150–250 for ~5 days | Best if avoiding monthly commitment; interruptions are FINE — worker skip-if-done + resumable plan absorb them |
+| Hetzner CCX63 cloud | 48 threads | €1.37/hr (€853/mo) | ~€160+ for 5d | Post-hike: dominated by AX162 |
+| Contabo big VPS | up to 64 vCPU | very cheap | ? | Shared/oversold cores — real throughput unpredictable; avoid for a deadline |
+| OVH Advance 2026 / Netcup RS G12 | ≤16c/32t / ≤24c | mid | mid | Fewer cores than AX162 for similar money |
+
+Recommendation: **AX162 for ~€278 total** (order, run ~3-4 days, cancel within the month) or **AWS spot** if hourly billing is preferred. Verify AX162 availability/provisioning time at order — some configs queue.
 - Same worker + sync pattern over ssh (or Tailscale). Box can run 3–4 specs CONCURRENTLY at 14 procs each — needs a `--jobs N` flag on gamut_worker.py (small addition).
 - Partition to avoid overlap with Mac 2: give cloud `--only-pairs` for the middle pairs, or let all workers share the same reverse frontier via the sync loop (duplicates stay bounded).
 - Teardown: destroy instance when plan.json shows all done; runs are already synced back.
