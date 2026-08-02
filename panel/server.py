@@ -1410,6 +1410,47 @@ def _variant_path(name, variant, defaults=False):
     return os.path.join(d, f"{name}.{variant}{sfx}.json")
 
 
+@app.route("/api/gamut/start", methods=["POST"])
+def gamut_start():
+    cfg = request.get_json(force=True) or {}
+    name = _safe_name(cfg.get("name") or f"g{time.strftime('%m%d_%H%M')}")
+    cfg["name"] = name
+    for k in ("pairs", "strategies", "algos", "modes", "tfs", "methods",
+              "scorings", "max_dds", "max_holds", "holdouts"):
+        if not cfg.get(k):
+            return jsonify(error=f"select at least one option for '{k}'"), 400
+    pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
+    os.makedirs(pdir, exist_ok=True)
+    cfg_p = os.path.join(pdir, "config.json")
+    json.dump(cfg, open(cfg_p, "w"), indent=1)
+    return jsonify(id=spawn("gamut", name,
+                            [sys.executable, "gamut.py", "--config", cfg_p],
+                            OPT))
+
+
+@app.route("/api/gamut/stop", methods=["POST"])
+def gamut_stop():
+    name = _safe_name((request.get_json(force=True) or {}).get("name") or "")
+    pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
+    if not os.path.isdir(pdir):
+        return jsonify(error=f"no gamut '{name}'"), 404
+    open(os.path.join(pdir, "STOP"), "w").write("")
+    return jsonify(ok=True, note="stops gracefully after the current run")
+
+
+@app.route("/api/gamut/status")
+def gamut_status():
+    name = _safe_name(request.args.get("name") or "")
+    p = os.path.join(OPT, "campaigns", f"gamut_{name}", "plan.json")
+    if not os.path.exists(p):
+        return jsonify(error="no plan"), 404
+    plan = json.load(open(p))
+    from collections import Counter
+    c = Counter(s["status"] for s in plan["specs"])
+    cur = next((s["name"] for s in plan["specs"] if s["status"] == "running"), None)
+    return jsonify(total=len(plan["specs"]), counts=dict(c), running=cur)
+
+
 @app.route("/api/story", methods=["GET", "POST"])
 def run_story():
     """Provenance story of a run. GET returns the cached story.md;

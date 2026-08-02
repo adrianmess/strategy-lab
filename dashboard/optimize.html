@@ -207,6 +207,63 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   </div>
 
 
+
+  <details id="gamutWrap" ontoggle="localStorage.setItem('gamutOpen', this.open?'1':'0')">
+    <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Gamut runner <span class="mini">— configure a full sweep, run it autonomously pair by pair (optimize + auto-backtests)</span></h2></summary>
+    <div class="card">
+    <div class="row" style="display:flex;gap:18px;flex-wrap:wrap">
+      <div class="field"><label>Pairs (in order)</label><span id="gmPairs">
+        <label><input type="checkbox" value="sol">SOL</label> <label><input type="checkbox" value="btc">BTC</label>
+        <label><input type="checkbox" value="eth">ETH</label> <label><input type="checkbox" value="doge">DOGE</label>
+        <label><input type="checkbox" value="xrp">XRP</label> <label><input type="checkbox" value="sui">SUI</label></span></div>
+      <div class="field"><label>Strategies</label><span id="gmStrats">
+        <label><input type="checkbox" value="v7" checked>v7</label> <label><input type="checkbox" value="prime7">prime7</label>
+        <label><input type="checkbox" value="prime">prime</label> <label><input type="checkbox" value="macdx" checked>macdx</label>
+        <label><input type="checkbox" value="rocx">rocx</label> <label><input type="checkbox" value="scalpx2">scalpx2</label>
+        <label><input type="checkbox" value="v6">v6</label></span></div>
+      <div class="field"><label>Algorithms</label><span id="gmAlgos">
+        <label><input type="checkbox" value="genetic" checked>genetic</label> <label><input type="checkbox" value="random">random</label></span></div>
+      <div class="field"><label>Modes</label><span id="gmModes">
+        <label><input type="checkbox" value="spot" checked>spot</label> <label><input type="checkbox" value="lev">lev</label></span>
+        <label style="margin-left:8px"><input type="checkbox" id="gmLevStops" checked>lev-stops</label></div>
+      <div class="field"><label>Charts</label><span id="gmTfs">
+        <label><input type="checkbox" value="3" checked>3m</label> <label><input type="checkbox" value="1">1m</label>
+        <label><input type="checkbox" value="5">5m</label></span></div>
+      <div class="field"><label>Regimes</label><span id="gmMethods">
+        <label><input type="checkbox" value="vol3" checked>vol3</label> <label><input type="checkbox" value="trend3">trend3</label>
+        <label><input type="checkbox" value="volXtrend9">vt9</label> <label><input type="checkbox" value="none">none</label>
+        <label><input type="checkbox" value="cvol7">cvol7</label></span>
+        <label style="margin-left:8px" title="continuous adaptation (endpoint interpolation) — pairs best with cvol7"><input type="checkbox" id="gmCadapt">cadapt</label></div>
+      <div class="field"><label>Scoring</label><span id="gmScorings">
+        <label><input type="checkbox" value="classic" checked>classic</label> <label><input type="checkbox" value="worst_window">worst-window</label>
+        <label><input type="checkbox" value="underwater">underwater</label></span></div>
+    </div>
+    <div class="row" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
+      <div class="field"><label title="comma-separated list — one run per value">Max DD % list</label><input id="gmDDs" value="50" style="width:90px"></div>
+      <div class="field"><label title="comma-separated list — one run per value">Max days in trade list</label><input id="gmMHs" value="5" style="width:90px"></div>
+      <div class="field"><label>Evals per run</label><input id="gmTotal" value="60000" style="width:80px"></div>
+      <div class="field"><label>Processes</label><input id="gmProcs" value="14" style="width:55px"></div>
+      <div class="field"><label title="which saved parameter spaces to search: the active (imported/manual) ones, or the AI-generated variants (auto-generated per pair+timeframe if missing)">Parameter space</label>
+        <select id="gmSpace"><option value="active">imported / active</option><option value="ai">AI-generated</option></select></div>
+      <div class="field"><label>Name</label><input id="gmName" placeholder="auto" style="width:110px"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <b class="mini">Holdouts (each selected scheme = one more run per combo):</b><br>
+      <label><input type="checkbox" id="gmHoDate" checked>after date</label> <input id="gmHoDateV" value="2025-09-01" style="width:95px">
+      <label style="margin-left:10px"><input type="checkbox" id="gmHoAlt">alternating</label> days: <input id="gmHoAltV" value="21" style="width:70px" title="comma-separated list — each value is its own scheme">
+      <label style="margin-left:10px"><input type="checkbox" id="gmHoBefore">before date</label> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
+      <label style="margin-left:10px"><input type="checkbox" id="gmHoBetween">between</label> <input id="gmHoBetweenA" value="2025-03-01" style="width:95px">..<input id="gmHoBetweenB" value="2025-09-01" style="width:95px">
+      <label style="margin-left:10px"><input type="checkbox" id="gmHoOutside">outside</label> <input id="gmHoOutsideA" value="2025-03-01" style="width:95px">..<input id="gmHoOutsideB" value="2025-09-01" style="width:95px">
+    </div>
+    <div class="row" style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="primary" onclick="gamutStart()">▶ Run gamut</button>
+      <button class="small" onclick="gamutStop()">■ Stop (graceful)</button>
+      <span class="kv" id="gmCount"></span>
+      <span class="kv" id="gmMsg"></span>
+    </div>
+    </div>
+  </details>
+
   <h2>Routers &amp; combos <span class="mini">— combine proven strategies; every result gets a causal walk-forward. Only MetaX routers are live-adoptable (the others are research until their live adapters exist).</span></h2>
   <div class="card">
     <div class="row" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
@@ -1555,6 +1612,82 @@ function fillAnchors(){
     sel.value = _savedAnchor; _savedAnchor = null;
   }
 }
+
+function gamutChecks(id){ return [...document.querySelectorAll('#'+id+' input:checked')].map(x=>x.value); }
+function gamutHoldouts(){
+  const hs=[];
+  if($('gmHoDate').checked && $('gmHoDateV').value) hs.push({kind:'date', date:$('gmHoDateV').value});
+  if($('gmHoAlt').checked) $('gmHoAltV').value.split(',').map(x=>+x.trim()).filter(Boolean).forEach(d=>hs.push({kind:'alt', days:d}));
+  if($('gmHoBefore').checked && $('gmHoBeforeV').value) hs.push({kind:'before', date:$('gmHoBeforeV').value});
+  if($('gmHoBetween').checked && $('gmHoBetweenA').value && $('gmHoBetweenB').value) hs.push({kind:'between', a:$('gmHoBetweenA').value, b:$('gmHoBetweenB').value});
+  if($('gmHoOutside').checked && $('gmHoOutsideA').value && $('gmHoOutsideB').value) hs.push({kind:'outside', a:$('gmHoOutsideA').value, b:$('gmHoOutsideB').value});
+  return hs;
+}
+function gamutCfg(){
+  return {
+    name: $('gmName').value.trim() || undefined,
+    procs: +$('gmProcs').value||14, total: +$('gmTotal').value||60000,
+    pairs: gamutChecks('gmPairs'), strategies: gamutChecks('gmStrats'),
+    algos: gamutChecks('gmAlgos'), modes: gamutChecks('gmModes'),
+    tfs: gamutChecks('gmTfs').map(Number), methods: gamutChecks('gmMethods'),
+    scorings: gamutChecks('gmScorings'),
+    max_dds: $('gmDDs').value.split(',').map(x=>+x.trim()/100).filter(x=>x>0),
+    max_holds: $('gmMHs').value.split(',').map(x=>+x.trim()).filter(Boolean),
+    holdouts: gamutHoldouts(),
+    space_variant: $('gmSpace').value,
+    lev_stops: $('gmLevStops').checked, cadapt: $('gmCadapt').checked };
+}
+function gamutCount(){
+  const c = gamutCfg();
+  const per = c.strategies.length*c.algos.length*c.modes.length*c.tfs.length*c.methods.length*c.scorings.length*c.max_dds.length*c.max_holds.length*c.holdouts.length;
+  const n = per*c.pairs.length;
+  const mins = Math.round(n*(c.total/40000));   // very rough: ~40k evals/min cached, first runs slower
+  $('gmCount').textContent = n ? `${n} runs (${per}/pair) — very roughly ${mins<120?mins+' min':(mins/60).toFixed(1)+' h'} of compute (+one-time cache builds for new pair/chart combos)` : '';
+  return n;
+}
+['gmPairs','gmStrats','gmAlgos','gmModes','gmTfs','gmMethods','gmScorings'].forEach(id=>{
+  document.querySelectorAll('#'+id+' input').forEach(x=>x.onchange=gamutCount);
+});
+['gmDDs','gmMHs','gmTotal','gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmHoAltV'].forEach(id=>{
+  const el=$(id); if(el) el.onchange=gamutCount;
+});
+let GAMUT_NAME = localStorage.getItem('gamutName')||'';
+async function gamutStart(){
+  const c = gamutCfg();
+  const n = gamutCount();
+  if(!n){ alert('select at least one option in every group (and one holdout scheme)'); return; }
+  if(!confirm(`Launch ${n} optimization runs (each with automatic backtests), pair by pair?\n\nRough estimate: ${$('gmCount').textContent.split('—')[1]||''}\nResumable; Stop is graceful.`)) return;
+  const r = await api('gamut/start', c);
+  if(r.error){ $('gmMsg').textContent = 'error: '+r.error; return; }
+  GAMUT_NAME = c.name || '';
+  $('gmMsg').textContent = 'running — watch the Jobs section; runs appear in Runs as they finish; report: campaigns/gamut_<name>/report.md';
+  gamutPoll();
+  if(typeof refreshJobs==='function') refreshJobs();
+}
+async function gamutStop(){
+  let name = GAMUT_NAME || $('gmName').value.trim();
+  if(!name){ name = prompt('gamut name to stop:')||''; }
+  if(!name) return;
+  const r = await api('gamut/stop', {name});
+  $('gmMsg').textContent = r.ok ? 'graceful stop requested (finishes the current run)' : ('error: '+(r.error||''));
+}
+async function gamutPoll(){
+  let name = GAMUT_NAME || $('gmName').value.trim();
+  if(!name) return;
+  localStorage.setItem('gamutName', name);
+  try{
+    const s = await fetch('/api/gamut/status?name='+encodeURIComponent(name)).then(x=>x.json());
+    if(s && s.total){
+      const done=(s.counts.done||0), fail=(s.counts.failed||0);
+      $('gmMsg').textContent = `${done}/${s.total} done${fail?`, ${fail} failed`:''}${s.running?` — running: ${s.running}`:''}`;
+      if(done+fail < s.total) setTimeout(gamutPoll, 20000);
+    }
+  }catch(e){}
+}
+gamutCount();
+if(localStorage.getItem('gamutOpen')==='1') document.getElementById('gamutWrap').open = true;
+setTimeout(gamutPoll, 3000);
+
 $('strat').onchange = ()=>{
   fillAnchors();
   const legacy = !['v7','prime7'].includes($('strat').value);
