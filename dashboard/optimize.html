@@ -308,6 +308,16 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   </div>
 
 </div>
+<div id="storyOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60" onclick="if(event.target===this)this.style.display='none'">
+  <div style="max-width:760px;max-height:80vh;overflow-y:auto;margin:6vh auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px 24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h3 id="storyTitle" style="margin:0"></h3>
+      <span><button class="small" id="storyRegen">↻ regenerate</button>
+      <button class="small" onclick="$('storyOverlay').style.display='none'">✕</button></span>
+    </div>
+    <div id="storyBody" style="margin-top:10px;font-size:13.5px;line-height:1.55"></div>
+  </div>
+</div>
 <div id="pickOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60" onclick="if(event.target===this)pickClose()">
   <div style="max-width:600px;margin:10vh auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px">
     <h3 id="pickTitle" style="margin:0 0 6px"></h3>
@@ -666,6 +676,7 @@ function renderRuns(){
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="causal walk-forward (by construction): chained OOS ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}% (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
           : `<span class="badge b-amber">no WF</span>`}
         <button class="small" title="ADD runs as components (any pair/timeframe, same mode) — result is a NEW run; this one is untouched" onclick="metax2Extend('${r.name}')">+comp</button>
+        <button class="small" title="the full provenance STORY of this router" onclick="showStory('${r.name}')">📖</button>
         <button class="small" title="reproduction command" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||8000},'metax2')">Cmd</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
@@ -675,6 +686,7 @@ function renderRuns(){
         ${r.walkforward
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="chronological walk-forward: chained out-of-sample ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
           : `<span class="badge b-amber" title="no chronological walk-forward yet — the honest gate before adopting. Runs automatically as campaign wave 3; or: python3 metax_cli.py --walkforward runs/${r.name}">no WF</span>`}
+        <button class="small" title="the full provenance STORY of this router: which strategies were optimized/combined, the bucket assignment, walk-forward verdict, adoption — plain-terms summary included" onclick="showStory('${r.name}')">📖</button>
         <button class="small" title="Router runs aren't made by the Launch card, so there's no setup to load — this shows the exact metax_cli command that reproduces this run (search → refine → walk-forward)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||30000})">Cmd</button>
         ${r.strategy==='metax' && !(r.method||'').startsWith('stack') ? `<button class="small" title="run the chronological walk-forward for this router (the honest gate) as a panel job" onclick="routerRunJob('metax_wf','${r.name}')">WF</button>
         <button class="small" title="joint-refine component parameters under the frozen assignment (panel job); re-run WF after" onclick="routerRunJob('metax_refine','${r.name}')">Refine</button>
@@ -922,6 +934,31 @@ async function bt(cfg,name){ runAndPreview(cfg, name+'_full', null); }
 async function btH(cfg,name,hd){
   if(hd) runAndPreview(cfg, name+'_HOLDOUT', null, hd);
   else runAndPreview(cfg, name+'_HOLDOUT', $('trainEnd').value||'2025-09-01');
+}
+function mdLite(md){
+  return md.split('\n').map(l=>{
+    l = l.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    l = l.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>');
+    if(l.startsWith('# ')) return '<h3 style="margin:4px 0">'+l.slice(2)+'</h3>';
+    if(l.startsWith('## ')) return '<h4 style="margin:10px 0 4px">'+l.slice(3)+'</h4>';
+    if(l.startsWith('---')) return '<hr style="border-color:var(--border)">';
+    if(/^\s*- /.test(l)) return '<div style="margin-left:'+(l.search(/- /)*6)+'px">• '+l.replace(/^\s*- /,'')+'</div>';
+    if(/^\d+\. /.test(l)) return '<div>'+l+'</div>';
+    return l ? '<p style="margin:6px 0">'+l+'</p>' : '';
+  }).join('');
+}
+async function showStory(run, regen){
+  $('storyOverlay').style.display='';
+  $('storyTitle').textContent = '📖 ' + run;
+  $('storyBody').innerHTML = '<span class="mini">' + (regen?'generating (uses your Anthropic key when configured — may take ~20s)…':'loading…') + '</span>';
+  $('storyRegen').onclick = ()=>showStory(run, true);
+  let r;
+  if(regen){ r = await api('story', {run}); }
+  else {
+    r = await fetch('/api/story?run='+encodeURIComponent(run)).then(x=>x.json()).catch(()=>({error:'panel offline?'}));
+    if(r && r.error && /no story yet/.test(r.error)){ return showStory(run, true); }
+  }
+  $('storyBody').innerHTML = r && r.story ? mdLite(r.story) : '<span class="mini">error: '+((r&&r.error)||'unknown')+'</span>';
 }
 function routerCmd(name, mode, method, total, flavor){
   if(flavor==='metax2'){

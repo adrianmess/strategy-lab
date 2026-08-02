@@ -1,0 +1,12 @@
+[
+ {
+  "at": "2026-07-31 01:19:56",
+  "cmd": "python3 optimize2_cli.py --strategy macdx --algo crossfit --mode lev --method trend3 --procs 14 --batch 100 --name merge_rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m_full_between --symbol sui --tf 1 --total 100000 --holdout-days 90 --max-hold-days 5 --gap-mode skip_contaminated --resume-from runs/rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m_full_between,runs/rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m,runs/rep_camp_c2_e_macdx_trend3_ts2501__sui_1m --merge-mode merge",
+  "resume_from": [
+   "runs/rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m_full_between",
+   "runs/rep_camp_c1_w1_29_macdx_trend3_cl__sui_1m",
+   "runs/rep_camp_c2_e_macdx_trend3_ts2501__sui_1m"
+  ],
+  "merge_mode": "merge"
+ }
+]

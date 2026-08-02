@@ -1410,6 +1410,29 @@ def _variant_path(name, variant, defaults=False):
     return os.path.join(d, f"{name}.{variant}{sfx}.json")
 
 
+@app.route("/api/story", methods=["GET", "POST"])
+def run_story():
+    """Provenance story of a run. GET returns the cached story.md;
+    POST (re)generates it via gen_story.py (LLM when a key is configured)."""
+    run = _safe_name((request.args.get("run") if request.method == "GET"
+                      else (request.get_json(force=True) or {}).get("run")) or "")
+    if not run:
+        return jsonify(error="run required"), 400
+    sp = os.path.join(OPT, "runs", run, "story.md")
+    if request.method == "GET":
+        if os.path.exists(sp):
+            return jsonify(story=open(sp).read(),
+                           at=time.strftime("%Y-%m-%d %H:%M",
+                                            time.localtime(os.path.getmtime(sp))))
+        return jsonify(error="no story yet — generate it"), 404
+    import subprocess
+    r = subprocess.run([sys.executable, "gen_story.py", "--run", run],
+                       cwd=OPT, capture_output=True, text=True, timeout=300)
+    if r.returncode != 0 or not os.path.exists(sp):
+        return jsonify(error=(r.stderr or r.stdout)[-400:]), 500
+    return jsonify(story=open(sp).read())
+
+
 @app.route("/api/jobs/router", methods=["POST"])
 def job_router():
     """Launch router/combo builders as panel jobs: metax (single-dataset

@@ -429,6 +429,29 @@ function renderManualButtons(i, mode){
       <button class="small" onclick="manual('${i}','close_short')">Close SHORT</button>
       <button class="small danger" onclick="manual('${i}','close_position')">Close ALL</button>`;
 }
+function mdLiteP(md){
+  return md.split('\n').map(l=>{
+    l = l.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    l = l.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>');
+    if(l.startsWith('# ')) return '<h3 style="margin:4px 0">'+l.slice(2)+'</h3>';
+    if(l.startsWith('## ')) return '<h4 style="margin:10px 0 4px">'+l.slice(3)+'</h4>';
+    if(l.startsWith('---')) return '<hr>';
+    if(/^\s*- /.test(l)) return '<div style="margin-left:'+(l.search(/- /)*6)+'px">• '+l.replace(/^\s*- /,'')+'</div>';
+    return l ? '<p style="margin:6px 0">'+l+'</p>' : '';
+  }).join('');
+}
+async function showCfgStory(run){
+  if(!run){ alert('no source run recorded for this config'); return; }
+  let r = await fetch('/api/story?run='+encodeURIComponent(run)).then(x=>x.json()).catch(()=>({error:'?'}));
+  if(r && r.error && /no story yet/.test(r.error)){
+    r = await api('story', {run});
+  }
+  const el = document.createElement('div');
+  el.style.maxHeight='70vh'; el.style.overflowY='auto'; el.style.fontSize='13px';
+  el.innerHTML = r && r.story ? mdLiteP(r.story) : ('error: '+((r&&r.error)||'unknown'));
+  if(typeof modal==='function') modal('📖 '+run, el);
+  else alert((r&&r.story)||'no story');
+}
 function updateCfgSummary(i){
   const sel = $('tcfg_'+i); if(!sel) return;
   fillAcctSelect(i);
@@ -438,7 +461,7 @@ function updateCfgSummary(i){
     `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}, executes via `+
     venueBadge(c.api_account, c.execution, c.mode)+
     `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}` +
-    (c.components && c.components.length ? `<details style="margin-top:4px"><summary style="cursor:pointer">router components (${c.components.length} runs${c.components.some(x=>x.assigned)?`, ${c.components.filter(x=>x.assigned).length} assigned to buckets`:''})</summary><div style="margin:4px 0 0 12px;font-size:12px">` +
+    (c.components && c.components.length ? ` <a style="cursor:pointer" title="the full provenance story of this router — which strategies were optimized/combined, bucket assignment, walk-forward, adoption" onclick="showCfgStory('${(c.adopted_from||'').split('/runs/')[1]?(c.adopted_from||'').split('/runs/')[1].split('/')[0]:''}')">📖 story</a><details style="margin-top:4px"><summary style="cursor:pointer">router components (${c.components.length} runs${c.components.some(x=>x.assigned)?`, ${c.components.filter(x=>x.assigned).length} assigned to buckets`:''})</summary><div style="margin:4px 0 0 12px;font-size:12px">` +
       c.components.map(x=>`<div>${x.assigned?'●':'○'} <b>${x.run}</b> <span style="color:var(--dim)">(${x.strategy}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})${x.assigned?'':' — mined but not assigned to any bucket'}</span></div>`).join('') +
       `</div></details>` : '');
 }
