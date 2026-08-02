@@ -256,6 +256,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoBefore"> <span class="optx" data-x="gmholdouts">before date</span></span> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
       <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoBetween"> <span class="optx" data-x="gmholdouts">between</span></span> <input id="gmHoBetweenA" value="2025-03-01" style="width:95px">..<input id="gmHoBetweenB" value="2025-09-01" style="width:95px">
       <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoOutside"> <span class="optx" data-x="gmholdouts">outside</span></span> <input id="gmHoOutsideA" value="2025-03-01" style="width:95px">..<input id="gmHoOutsideB" value="2025-09-01" style="width:95px">
+      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoNone"> <span class="optx" data-x="gmholdouts">none (train-only)</span></span>
     </div>
     <div class="row" style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="primary" onclick="gamutStart()">▶ Run gamut</button>
@@ -465,7 +466,7 @@ const X = {
  gmevals: ["Gamut: evals per run", `Search budgets — add MULTIPLE values (chips) and every combo runs once PER value (e.g. 50,000 then again at 100,000: a built-in convergence check — if the 100k result isn't better than the 50k one, more compute isn't the bottleneck). 60k is a sane sweep default; your flagship single runs used 100-150k.`],
  gmname: ["Gamut: name", `Prefix for every run and the campaigns/gamut_<name>/ folder. Leave empty for AUTO: with your Anthropic key configured, the AI names the sweep from its config; otherwise a timestamp is used. Duplicate names get _2 suffixes rather than resuming a different config.`],
  gmspace: ["Gamut: parameter space", `imported/active = whatever each pair+timeframe's saved space currently is (your edits included). AI-generated = the AI variant (ranges mined from every surviving config's actually-used values, LLM sanity pass when your Anthropic key is configured) — auto-generated per pair+timeframe if missing.`],
- gmholdouts: ["Gamut: holdouts", `Every ticked scheme runs the WHOLE combo grid once more with that holdout: after/before a date, between/outside two dates, or alternating N-day blocks (the days field takes a comma list — each value is its own scheme). See Docs → Holdout modes.`],
+ gmholdouts: ["Gamut: holdouts", `Every ticked scheme runs the WHOLE combo grid once more with that holdout: after/before a date, between/outside two dates, alternating N-day blocks (chips — each value is its own scheme), or NONE (train on everything, no holdout). Tick alternating AND none to get each combo both with and without alternating blocks. Caveat: none-runs are train-best only — no out-of-sample evidence, ranked last in the gamut report and never adoption candidates by themselves. See Docs → Holdout modes.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
  anchor: ["Anchor", `Starts the search from a KNOWN-GOOD configuration instead of pure randomness.<dl><dt>none (default)</dt><dd>Unchanged behavior: the population starts random. Best for honest exploration.</dd><dt>strategy live defaults</dt><dd>Seeds the population with your live parameter values (the ones shown as defaults next to each parameter) and explores outward from them.</dd><dt>backtest: …</dt><dd>Anchor to any published backtest's exact config.</dd></dl>The number is the <b>anchor strength</b>: 0 = seeding only; e.g. 0.3 also subtracts 0.3 × (normalized parameter distance from the anchor) from every candidate's score, so the search pays rent for wandering. Anchoring is a deliberate bias: great for polishing what works ("better than my defaults, near my defaults"), wrong for discovering something different — use unanchored cross-fit for that.`],
  scoring: ["Scoring", `How candidates are RANKED during the search (feasibility rules are unchanged).<dl><dt>classic (default)</dt><dd>The original, untouched formula: average monthly growth minus a volatility penalty. All previous runs used this.</dd><dt>worst 3-month window</dt><dd>Ranks by the WORST rolling 3-month stretch instead of the average. A config carried by one lucky quarter stops winning; the only way up is to fix the weak periods.</dd><dt>time-in-trade penalty</dt><dd>Classic minus a penalty for the fraction of time capital sits locked in open positions. Pushes the search toward the quick-recycling character of your live defaults (max holds of days, not months).</dd></dl>New runs record their scoring in the settings chips, so runs bred under different rules are never confused.`],
@@ -1661,6 +1662,7 @@ function gamutHoldouts(){
   if($('gmHoBefore').checked && $('gmHoBeforeV').value) hs.push({kind:'before', date:$('gmHoBeforeV').value});
   if($('gmHoBetween').checked && $('gmHoBetweenA').value && $('gmHoBetweenB').value) hs.push({kind:'between', a:$('gmHoBetweenA').value, b:$('gmHoBetweenB').value});
   if($('gmHoOutside').checked && $('gmHoOutsideA').value && $('gmHoOutsideB').value) hs.push({kind:'outside', a:$('gmHoOutsideA').value, b:$('gmHoOutsideB').value});
+  if($('gmHoNone').checked) hs.push({kind:'none'});
   return hs;
 }
 function gamutCfg(){
@@ -1706,7 +1708,7 @@ function gamutCount(){
 ['gmPairs','gmStrats','gmAlgos','gmModes','gmTfs','gmMethods','gmScorings'].forEach(id=>{
   document.querySelectorAll('#'+id+' input').forEach(x=>x.onchange=gamutCount);
 });
-['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmProcs','gmCadapt'].forEach(id=>{
+['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmHoNone','gmProcs','gmCadapt'].forEach(id=>{
   const el=$(id); if(el) el.onchange=gamutCount;
 });
 let GAMUT_NAME = localStorage.getItem('gamutName')||'';

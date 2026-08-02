@@ -54,6 +54,8 @@ def ho_flags(h):
                 f"hO{h['a'][2:7].replace('-', '')}")
     if k == "alt":
         return ["--holdout-days", str(h["days"])], f"hL{h['days']:g}"
+    if k == "none":            # full-history train, no holdout (train-best only)
+        return [], "hN"
     raise ValueError(f"bad holdout {h}")
 
 
@@ -116,7 +118,15 @@ def report(pdir, plan):
             h = ((b.get("holdout_best") or {}).get("holdout")
                  or b.get("holdout") or {})
             if not h or h.get("liq") or h.get("growth") is None:
-                rows.append((None, s["name"], "no survivor / liq"))
+                no_ho = not any(x.startswith(("--holdout", "--train-end"))
+                                for x in s.get("cmd", []))
+                m = b.get("metrics") or (b.get("cand") or {}).get("m") or {}
+                if no_ho and m.get("growth") is not None:
+                    rows.append((None, s["name"],
+                                 f"TRAIN-ONLY {100*(math.exp(m['growth'])-1):+.1f}%"
+                                 f"/mo (no OOS evidence — not comparable)"))
+                else:
+                    rows.append((None, s["name"], "no survivor / liq"))
                 continue
             rows.append((100 * (math.exp(h["growth"]) - 1), s["name"],
                          f"dd {100*(h.get('maxdd') or 0):.0f}%"))
