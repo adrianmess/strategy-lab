@@ -64,18 +64,22 @@ def ai_space_path(coin, tf):
 
 def build_plan(cfg):
     specs = []
+    totals = cfg.get("totals") or [cfg.get("total", 60000)]
     for coin in cfg["pairs"]:                       # PAIR-MAJOR
-        for tf, strat, algo, mode, method, scoring, dd, mh, h in itertools.product(
+        for tf, strat, algo, mode, method, scoring, dd, mh, h, total in \
+                itertools.product(
                 cfg["tfs"], cfg["strategies"], cfg["algos"], cfg["modes"],
                 cfg["methods"], cfg["scorings"], cfg["max_dds"],
-                cfg["max_holds"], cfg["holdouts"]):
+                cfg["max_holds"], cfg["holdouts"], totals):
             hf, hcode = ho_flags(h)
+            tcode = (f"_t{int(total/1000)}k" if len(totals) > 1 else "")
             name = (f"{cfg['name']}_{coin}{tf}m_{strat}_{algo[:3]}_{mode[0]}_"
-                    f"{method}_{scoring[:2]}_d{int(dd*100)}_m{mh:g}_{hcode}")[:78]
+                    f"{method}_{scoring[:2]}_d{int(dd*100)}_m{mh:g}_{hcode}"
+                    f"{tcode}")[:78]
             cmd = [sys.executable, "optimize2_cli.py",
                    "--strategy", strat, "--mode", mode, "--method", method,
                    "--algo", algo, "--procs", str(cfg.get("procs", 14)),
-                   "--batch", "100", "--total", str(cfg.get("total", 60000)),
+                   "--batch", "100", "--total", str(total),
                    "--symbol", coin, "--tf", str(tf),
                    "--gap-mode", "skip_contaminated",
                    "--max-dd", str(dd), "--max-hold-days", str(mh),

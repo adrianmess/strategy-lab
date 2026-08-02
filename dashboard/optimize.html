@@ -241,13 +241,13 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <span style="white-space:nowrap"><input type="checkbox" value="underwater"> <span class="optx" data-x="gmscoring">underwater</span></span></span></div>
     </div>
     <div class="row" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-      <div class="field"><label data-x="gmdd">Max DD % list</label><input id="gmDDs" value="50" style="width:90px"></div>
-      <div class="field"><label data-x="gmmh">Max days in trade list</label><input id="gmMHs" value="5" style="width:90px"></div>
-      <div class="field"><label data-x="gmevals">Evals per run</label><input id="gmTotal" value="60000" style="width:80px"></div>
+      <div class="field"><label data-x="gmdd">Max DD %</label><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span id="gmChips_dd"></span><input id="gmIn_dd" type="number" placeholder="80" style="width:55px" onkeydown="if(event.key==='Enter'){event.preventDefault();gmAdd('dd');}"><button class="small" onclick="gmAdd('dd')">+</button></span></div>
+      <div class="field"><label data-x="gmmh">Max days in trade</label><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span id="gmChips_mh"></span><input id="gmIn_mh" type="number" step="0.5" placeholder="7" style="width:55px" onkeydown="if(event.key==='Enter'){event.preventDefault();gmAdd('mh');}"><button class="small" onclick="gmAdd('mh')">+</button></span></div>
+      <div class="field"><label data-x="gmevals">Evals per run</label><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span id="gmChips_total"></span><input id="gmIn_total" type="number" step="10000" placeholder="100000" style="width:80px" onkeydown="if(event.key==='Enter'){event.preventDefault();gmAdd('total');}"><button class="small" onclick="gmAdd('total')">+</button></span></div>
       <div class="field"><label>Processes</label><input id="gmProcs" value="14" style="width:55px"></div>
       <div class="field"><label data-x="gmspace">Parameter space</label>
         <select id="gmSpace"><option value="active">imported / active</option><option value="ai">AI-generated</option></select></div>
-      <div class="field"><label>Name</label><input id="gmName" placeholder="auto" style="width:110px"></div>
+      <div class="field"><label data-x="gmname">Name</label><input id="gmName" placeholder="auto (AI-named)" style="width:120px"></div>
     </div>
     <div class="row" style="margin-top:10px">
       <b class="mini" data-x="gmholdouts" style="cursor:pointer;color:var(--blue)">Holdouts (each selected scheme = one more run per combo):</b><br>
@@ -460,9 +460,10 @@ const X = {
  gmregimes: ["Gamut: regimes", `Bucketing methods to sweep:<dl><dt>vol3</dt><dd>Volatility terciles (30d trailing percentile). The proven best performer.</dd><dt>trend3</dt><dd>Down / flat / up vs the 1-day EMA.</dd><dt>vt9</dt><dd>3×3 vol×trend grid — overfit badly as 9 parameter sets, but strong as a ROUTER bucketing.</dd><dt>none</dt><dd>One parameter set everywhere — fewest knobs, hardest to overfit.</dd><dt>cvol7</dt><dd>7 fine vol grades, made for cadapt. Campaign c6 verdict: continuous adaptation lost to discrete vol3 in 9 of 10 cells.</dd></dl>`],
  gmcadapt: ["Gamut: cadapt", `Continuous adaptation: candidates become two endpoint parameter sets interpolated across the regime grades. Honest history: lost to discrete vol3 in 9 of 10 cells in campaign c6. Pairs best with cvol7.`],
  gmscoring: ["Gamut: scoring", `<dl><dt>classic</dt><dd>Mean monthly log-growth minus a deviation penalty — the default that found your champions.</dd><dt>worst-window</dt><dd>Judged by the worst 3-month stretch — favors configs that never have a terrible quarter.</dd><dt>underwater</dt><dd>Penalizes time spent in drawdown / in trade — favors quick-resolution styles.</dd></dl>Each ticked scoring multiplies the run count.`],
- gmdd: ["Gamut: max DD list", `Comma-separated maximum-drawdown caps in % — EACH value is its own run (e.g. '50,80' doubles the count). Candidates exceeding the cap are infeasible.`],
- gmmh: ["Gamut: max days in trade", `Comma-separated hold-time caps in days — each value is its own run. Candidates whose longest trade exceeds it are disqualified (never force-closed).`],
- gmevals: ["Gamut: evals per run", `Search budget per run. 60k is a sane sweep default (~1-3 min per run on cached data at 14 procs); your flagship single runs used 100-150k.`],
+ gmdd: ["Gamut: max DD", `Maximum-drawdown caps in % as chips — add several with + and EACH value is its own run (50 and 80 doubles the count). Candidates exceeding the cap are infeasible.`],
+ gmmh: ["Gamut: max days in trade", `Hold-time caps in days as chips — add several with + and each value is its own run. Candidates whose longest trade exceeds it are disqualified (never force-closed).`],
+ gmevals: ["Gamut: evals per run", `Search budgets — add MULTIPLE values (chips) and every combo runs once PER value (e.g. 50,000 then again at 100,000: a built-in convergence check — if the 100k result isn't better than the 50k one, more compute isn't the bottleneck). 60k is a sane sweep default; your flagship single runs used 100-150k.`],
+ gmname: ["Gamut: name", `Prefix for every run and the campaigns/gamut_<name>/ folder. Leave empty for AUTO: with your Anthropic key configured, the AI names the sweep from its config; otherwise a timestamp is used. Duplicate names get _2 suffixes rather than resuming a different config.`],
  gmspace: ["Gamut: parameter space", `imported/active = whatever each pair+timeframe's saved space currently is (your edits included). AI-generated = the AI variant (ranges mined from every surviving config's actually-used values, LLM sanity pass when your Anthropic key is configured) — auto-generated per pair+timeframe if missing.`],
  gmholdouts: ["Gamut: holdouts", `Every ticked scheme runs the WHOLE combo grid once more with that holdout: after/before a date, between/outside two dates, or alternating N-day blocks (the days field takes a comma list — each value is its own scheme). See Docs → Holdout modes.`],
  gapmode: ["Backtest gap handling", `The price history has holes (missing bars). Two protections:<dl><dt>skip_open (always on)</dt><dd>Any trade still open when a data gap starts is discarded at the gap boundary — no P&L is invented across missing bars. Discarded trades are disclosed as OPEN (gap) rows.</dd><dt>skip_contaminated (default)</dt><dd>Additionally suppresses NEW entries while indicators re-converge after small in-segment gaps (30 bars per missing bar, min 3h, max full warmup) — indicator values right after missing data are not trustworthy. Exits are never suppressed. Most conservative.</dd></dl>`],
@@ -1629,6 +1630,28 @@ function fillAnchors(){
   }
 }
 
+const GM_LISTS = JSON.parse(localStorage.getItem('gmLists')||'null') || {dd:[50], mh:[5], total:[60000]};
+function gmRender(k){
+  const box=$('gmChips_'+k); if(!box) return;
+  box.innerHTML = GM_LISTS[k].map((v,i)=>`<span class="badge" style="background:rgba(88,166,255,.15);color:#58a6ff;margin-right:4px;white-space:nowrap">${v.toLocaleString()} <a style="cursor:pointer;color:var(--red);text-decoration:none" onclick="gmDel('${k}',${i})">✕</a></span>`).join('');
+}
+function gmAdd(k){
+  const el=$('gmIn_'+k); const v=+el.value;
+  if(!v || v<=0){ return; }
+  if(k==='dd' && (v<5 || v>100)){ alert('max DD is a percent (5–100)'); return; }
+  if(k==='total' && v<1000){ alert('evals per run should be at least 1000'); return; }
+  if(GM_LISTS[k].includes(v)){ el.value=''; return; }
+  GM_LISTS[k].push(v); GM_LISTS[k].sort((a,b)=>a-b);
+  localStorage.setItem('gmLists', JSON.stringify(GM_LISTS));
+  el.value=''; gmRender(k); gamutCount();
+}
+function gmDel(k,i){
+  if(GM_LISTS[k].length<=1){ alert('keep at least one value'); return; }
+  GM_LISTS[k].splice(i,1);
+  localStorage.setItem('gmLists', JSON.stringify(GM_LISTS));
+  gmRender(k); gamutCount();
+}
+gmRender('dd'); gmRender('mh'); gmRender('total');
 function gamutChecks(id){ return [...document.querySelectorAll('#'+id+' input:checked')].map(x=>x.value); }
 function gamutHoldouts(){
   const hs=[];
@@ -1641,30 +1664,33 @@ function gamutHoldouts(){
 }
 function gamutCfg(){
   return {
-    name: $('gmName').value.trim() || undefined,
-    procs: +$('gmProcs').value||14, total: +$('gmTotal').value||60000,
+    name: (n=>n && n.toLowerCase()!=='auto' ? n : undefined)($('gmName').value.trim()),
+    procs: +$('gmProcs').value||14,
     pairs: gamutChecks('gmPairs'), strategies: gamutChecks('gmStrats'),
     algos: gamutChecks('gmAlgos'), modes: gamutChecks('gmModes'),
     tfs: gamutChecks('gmTfs').map(Number), methods: gamutChecks('gmMethods'),
     scorings: gamutChecks('gmScorings'),
-    max_dds: $('gmDDs').value.split(',').map(x=>+x.trim()/100).filter(x=>x>0),
-    max_holds: $('gmMHs').value.split(',').map(x=>+x.trim()).filter(Boolean),
+    max_dds: GM_LISTS.dd.map(x=>x/100),
+    max_holds: GM_LISTS.mh.slice(),
+    totals: GM_LISTS.total.slice(),
     holdouts: gamutHoldouts(),
     space_variant: $('gmSpace').value,
     lev_stops: $('gmLevStops').checked, cadapt: $('gmCadapt').checked };
 }
 function gamutCount(){
   const c = gamutCfg();
-  const per = c.strategies.length*c.algos.length*c.modes.length*c.tfs.length*c.methods.length*c.scorings.length*c.max_dds.length*c.max_holds.length*c.holdouts.length;
+  const base = c.strategies.length*c.algos.length*c.modes.length*c.tfs.length*c.methods.length*c.scorings.length*c.max_dds.length*c.max_holds.length*c.holdouts.length;
+  const per = base*c.totals.length;
   const n = per*c.pairs.length;
-  const mins = Math.round(n*(c.total/40000));   // very rough: ~40k evals/min cached, first runs slower
+  const sumT = c.totals.reduce((a,b)=>a+b,0);
+  const mins = Math.round(base*c.pairs.length*(sumT/40000));   // very rough: ~40k evals/min cached
   $('gmCount').textContent = n ? `${n} runs (${per}/pair) — very roughly ${mins<120?mins+' min':(mins/60).toFixed(1)+' h'} of compute (+one-time cache builds for new pair/chart combos)` : '';
   return n;
 }
 ['gmPairs','gmStrats','gmAlgos','gmModes','gmTfs','gmMethods','gmScorings'].forEach(id=>{
   document.querySelectorAll('#'+id+' input').forEach(x=>x.onchange=gamutCount);
 });
-['gmDDs','gmMHs','gmTotal','gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmHoAltV'].forEach(id=>{
+['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmHoAltV'].forEach(id=>{
   const el=$(id); if(el) el.onchange=gamutCount;
 });
 let GAMUT_NAME = localStorage.getItem('gamutName')||'';
@@ -1675,7 +1701,8 @@ async function gamutStart(){
   if(!confirm(`Launch ${n} optimization runs (each with automatic backtests), pair by pair?\n\nRough estimate: ${$('gmCount').textContent.split('—')[1]||''}\nResumable; Stop is graceful.`)) return;
   const r = await api('gamut/start', c);
   if(r.error){ $('gmMsg').textContent = 'error: '+r.error; return; }
-  GAMUT_NAME = c.name || '';
+  GAMUT_NAME = r.name || c.name || '';
+  if(r.name && !c.name) $('gmName').value = r.name;   // show the AI/auto name
   $('gmMsg').textContent = 'running — watch the Jobs section; runs appear in Runs as they finish; report: campaigns/gamut_<name>/report.md';
   gamutPoll();
   if(typeof refreshJobs==='function') refreshJobs();

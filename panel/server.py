@@ -1413,19 +1413,46 @@ def _variant_path(name, variant, defaults=False):
 @app.route("/api/gamut/start", methods=["POST"])
 def gamut_start():
     cfg = request.get_json(force=True) or {}
-    name = _safe_name(cfg.get("name") or f"g{time.strftime('%m%d_%H%M')}")
-    cfg["name"] = name
+    name = _safe_name(cfg.get("name") or "")
+    if not name:
+        # AI-generated name when left auto (Anthropic key via ai_advisor)
+        try:
+            sys.path.insert(0, OPT)
+            from ai_advisor import get_key, call_claude
+            key = get_key()
+            if key:
+                brief = {k: cfg.get(k) for k in
+                         ("pairs", "strategies", "modes", "tfs", "methods",
+                          "holdouts", "totals")}
+                txt = call_claude(key,
+                    "Suggest ONE short lowercase run-name slug (letters/"
+                    "digits/underscores only, 6-16 chars, descriptive of the "
+                    "sweep) for this trading optimization sweep. Reply with "
+                    "ONLY the slug.\n" + json.dumps(brief))
+                m = re.search(r"[a-z][a-z0-9_]{4,20}", txt.strip().lower())
+                if m:
+                    name = _safe_name(m.group(0)[:16])
+        except Exception:
+            pass
+    name = name or f"g{time.strftime('%m%d_%H%M')}"
     for k in ("pairs", "strategies", "algos", "modes", "tfs", "methods",
-              "scorings", "max_dds", "max_holds", "holdouts"):
+              "scorings", "max_dds", "max_holds", "holdouts", "totals"):
         if not cfg.get(k):
             return jsonify(error=f"select at least one option for '{k}'"), 400
+    # never silently resume a DIFFERENT config under the same name
+    base_name, n2 = name, 2
+    while os.path.exists(os.path.join(OPT, "campaigns", f"gamut_{name}",
+                                      "plan.json")):
+        name = f"{base_name}_{n2}"
+        n2 += 1
+    cfg["name"] = name
     pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
     os.makedirs(pdir, exist_ok=True)
     cfg_p = os.path.join(pdir, "config.json")
     json.dump(cfg, open(cfg_p, "w"), indent=1)
     return jsonify(id=spawn("gamut", name,
                             [sys.executable, "gamut.py", "--config", cfg_p],
-                            OPT))
+                            OPT), name=name)
 
 
 @app.route("/api/gamut/stop", methods=["POST"])
