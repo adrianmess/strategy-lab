@@ -1678,20 +1678,35 @@ function gamutCfg(){
     space_variant: $('gmSpace').value,
     lev_stops: $('gmLevStops').checked, cadapt: $('gmCadapt').checked };
 }
+// evals/min measured from 309 completed runs at 14 procs (median, p25=slow, p75=fast);
+// tf5 has no history yet — reuse tf3 (fewer bars, so if anything it finishes sooner)
+const GM_RATE = {3:{lo:29000,mid:56000,hi:94000}, 1:{lo:25000,mid:32000,hi:49000}, 5:{lo:29000,mid:56000,hi:94000}};
+const GM_RATE_CADAPT = 142;   // continuous-adaptation runs are ~400x slower (c6 measured)
+function gmFmt(m){ return m<120 ? Math.max(1,Math.round(m))+' min' : (m/60).toFixed(1)+' h'; }
 function gamutCount(){
   const c = gamutCfg();
-  const base = c.strategies.length*c.algos.length*c.modes.length*c.tfs.length*c.methods.length*c.scorings.length*c.max_dds.length*c.max_holds.length*c.holdouts.length;
+  const noTf = c.strategies.length*c.algos.length*c.modes.length*c.methods.length*c.scorings.length*c.max_dds.length*c.max_holds.length*c.holdouts.length;
+  const base = noTf*c.tfs.length;
   const per = base*c.totals.length;
   const n = per*c.pairs.length;
-  const sumT = c.totals.reduce((a,b)=>a+b,0);
-  const mins = Math.round(base*c.pairs.length*(sumT/40000));   // very rough: ~40k evals/min cached
-  $('gmCount').textContent = n ? `${n} runs (${per}/pair) — very roughly ${mins<120?mins+' min':(mins/60).toFixed(1)+' h'} of compute (+one-time cache builds for new pair/chart combos)` : '';
+  const pscale = (c.procs||14)/14;   // rates measured at 14 procs; scale ~linearly
+  let mMid=0, mLo=0, mHi=0;
+  for(const tf of c.tfs) for(const t of c.totals){
+    const r = GM_RATE[tf]||GM_RATE[3];
+    if(c.cadapt){ mMid += t/(GM_RATE_CADAPT*pscale); mLo = mHi = 0; }
+    else { mMid += t/(r.mid*pscale); mLo += t/(r.hi*pscale); mHi += t/(r.lo*pscale); }
+  }
+  const k = noTf*c.pairs.length;
+  const est = c.cadapt
+    ? `~${gmFmt(k*mMid)} — cadapt is ~400x slower than normal runs`
+    : `~${gmFmt(k*mMid)} (typical range ${gmFmt(k*mLo)}–${gmFmt(k*mHi)})`;
+  $('gmCount').textContent = n ? `${n} runs (${per}/pair) — ${est}, calibrated from your last 309 runs at 14 procs (+one-time cache builds for new pair/chart combos)` : '';
   return n;
 }
 ['gmPairs','gmStrats','gmAlgos','gmModes','gmTfs','gmMethods','gmScorings'].forEach(id=>{
   document.querySelectorAll('#'+id+' input').forEach(x=>x.onchange=gamutCount);
 });
-['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside'].forEach(id=>{
+['gmHoDate','gmHoAlt','gmHoBefore','gmHoBetween','gmHoOutside','gmProcs','gmCadapt'].forEach(id=>{
   const el=$(id); if(el) el.onchange=gamutCount;
 });
 let GAMUT_NAME = localStorage.getItem('gamutName')||'';
