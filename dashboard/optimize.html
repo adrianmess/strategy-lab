@@ -252,10 +252,10 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <div class="row" style="margin-top:10px">
       <b class="mini" data-x="gmholdouts" style="cursor:pointer;color:var(--blue)">Holdouts (each selected scheme = one more run per combo):</b><br>
       <span style="white-space:nowrap"><input type="checkbox" id="gmHoDate" checked> <span class="optx" data-x="gmholdouts">after date</span></span> <input id="gmHoDateV" value="2025-09-01" style="width:95px">
-      <label style="margin-left:10px"><input type="checkbox" id="gmHoAlt">alternating</label> days: <input id="gmHoAltV" value="21" style="width:70px" title="comma-separated list — each value is its own scheme">
-      <label style="margin-left:10px"><input type="checkbox" id="gmHoBefore">before date</label> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
-      <label style="margin-left:10px"><input type="checkbox" id="gmHoBetween">between</label> <input id="gmHoBetweenA" value="2025-03-01" style="width:95px">..<input id="gmHoBetweenB" value="2025-09-01" style="width:95px">
-      <label style="margin-left:10px"><input type="checkbox" id="gmHoOutside">outside</label> <input id="gmHoOutsideA" value="2025-03-01" style="width:95px">..<input id="gmHoOutsideB" value="2025-09-01" style="width:95px">
+      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoAlt"> <span class="optx" data-x="gmholdouts">alternating</span></span> days: <input id="gmHoAltV" value="21" style="width:70px" title="comma-separated list — each value is its own scheme">
+      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoBefore"> <span class="optx" data-x="gmholdouts">before date</span></span> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
+      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoBetween"> <span class="optx" data-x="gmholdouts">between</span></span> <input id="gmHoBetweenA" value="2025-03-01" style="width:95px">..<input id="gmHoBetweenB" value="2025-09-01" style="width:95px">
+      <span style="margin-left:10px;white-space:nowrap"><input type="checkbox" id="gmHoOutside"> <span class="optx" data-x="gmholdouts">outside</span></span> <input id="gmHoOutsideA" value="2025-03-01" style="width:95px">..<input id="gmHoOutsideB" value="2025-09-01" style="width:95px">
     </div>
     <div class="row" style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="primary" onclick="gamutStart()">▶ Run gamut</button>
