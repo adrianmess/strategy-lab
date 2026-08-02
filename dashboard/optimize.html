@@ -26,6 +26,8 @@ input{width:90px}
 .field label{color:var(--dim);font-size:12px;cursor:pointer}
 .field label:hover{color:var(--blue)}
 .field label::after{content:" ⓘ";font-size:10px;color:var(--blue);opacity:.7}
+.optx{cursor:pointer}
+.optx::after{content:" ⓘ";font-size:10px;color:var(--blue);opacity:.7}
 .tablewrap{overflow-x:auto;border-radius:8px}
 table{border-collapse:collapse;width:100%;font-size:13px;min-width:780px}
 th,td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
@@ -213,30 +215,30 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     <div class="card">
     <div class="row" style="display:flex;gap:18px;flex-wrap:wrap">
       <div class="field"><label data-x="gmpairs">Pairs (in order)</label><span id="gmPairs">
-        <label><input type="checkbox" value="sol">SOL</label> <label><input type="checkbox" value="btc">BTC</label>
-        <label><input type="checkbox" value="eth">ETH</label> <label><input type="checkbox" value="doge">DOGE</label>
-        <label><input type="checkbox" value="xrp">XRP</label> <label><input type="checkbox" value="sui">SUI</label></span></div>
+        <span style="white-space:nowrap"><input type="checkbox" value="sol"> <span class="optx" data-x="gmpairs">SOL</span></span> <span style="white-space:nowrap"><input type="checkbox" value="btc"> <span class="optx" data-x="gmpairs">BTC</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="eth"> <span class="optx" data-x="gmpairs">ETH</span></span> <span style="white-space:nowrap"><input type="checkbox" value="doge"> <span class="optx" data-x="gmpairs">DOGE</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="xrp"> <span class="optx" data-x="gmpairs">XRP</span></span> <span style="white-space:nowrap"><input type="checkbox" value="sui"> <span class="optx" data-x="gmpairs">SUI</span></span></span></div>
       <div class="field"><label data-x="gmstrats">Strategies</label><span id="gmStrats">
-        <label><input type="checkbox" value="v7" checked>v7</label> <label><input type="checkbox" value="prime7">prime7</label>
-        <label><input type="checkbox" value="prime">prime</label> <label><input type="checkbox" value="macdx" checked>macdx</label>
-        <label><input type="checkbox" value="rocx">rocx</label> <label><input type="checkbox" value="scalpx2">scalpx2</label>
-        <label><input type="checkbox" value="v6">v6</label></span></div>
+        <span style="white-space:nowrap"><input type="checkbox" value="v7" checked> <span class="optx" data-x="gmstrats">v7</span></span> <span style="white-space:nowrap"><input type="checkbox" value="prime7"> <span class="optx" data-x="gmstrats">prime7</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="prime"> <span class="optx" data-x="gmstrats">prime</span></span> <span style="white-space:nowrap"><input type="checkbox" value="macdx" checked> <span class="optx" data-x="gmstrats">macdx</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="rocx"> <span class="optx" data-x="gmstrats">rocx</span></span> <span style="white-space:nowrap"><input type="checkbox" value="scalpx2"> <span class="optx" data-x="gmstrats">scalpx2</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="v6"> <span class="optx" data-x="gmstrats">v6</span></span></span></div>
       <div class="field"><label data-x="gmalgos">Algorithms</label><span id="gmAlgos">
-        <label><input type="checkbox" value="genetic" checked>genetic</label> <label><input type="checkbox" value="random">random</label></span></div>
+        <span style="white-space:nowrap"><input type="checkbox" value="genetic" checked> <span class="optx" data-x="gmalgos">genetic</span></span> <span style="white-space:nowrap"><input type="checkbox" value="random"> <span class="optx" data-x="gmalgos">random</span></span></span></div>
       <div class="field"><label data-x="gmmodes">Modes</label><span id="gmModes">
-        <label><input type="checkbox" value="spot" checked>spot</label> <label><input type="checkbox" value="lev">lev</label></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="spot" checked> <span class="optx" data-x="gmmodes">spot</span></span> <span style="white-space:nowrap"><input type="checkbox" value="lev"> <span class="optx" data-x="gmmodes">lev</span></span></span>
         <span style="margin-left:8px"><input type="checkbox" id="gmLevStops" checked> <span data-x="gmlevstops" style="cursor:pointer;color:var(--blue)">lev-stops</span></span></div>
       <div class="field"><label data-x="gmcharts">Charts</label><span id="gmTfs">
-        <label><input type="checkbox" value="3" checked>3m</label> <label><input type="checkbox" value="1">1m</label>
-        <label><input type="checkbox" value="5">5m</label></span></div>
+        <span style="white-space:nowrap"><input type="checkbox" value="3" checked> <span class="optx" data-x="gmcharts">3m</span></span> <span style="white-space:nowrap"><input type="checkbox" value="1"> <span class="optx" data-x="gmcharts">1m</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="5"> <span class="optx" data-x="gmcharts">5m</span></span></span></div>
       <div class="field"><label data-x="gmregimes">Regimes</label><span id="gmMethods">
-        <label><input type="checkbox" value="vol3" checked>vol3</label> <label><input type="checkbox" value="trend3">trend3</label>
-        <label><input type="checkbox" value="volXtrend9">vt9</label> <label><input type="checkbox" value="none">none</label>
-        <label><input type="checkbox" value="cvol7">cvol7</label></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="vol3" checked> <span class="optx" data-x="gmregimes">vol3</span></span> <span style="white-space:nowrap"><input type="checkbox" value="trend3"> <span class="optx" data-x="gmregimes">trend3</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="volXtrend9"> <span class="optx" data-x="gmregimes">vt9</span></span> <span style="white-space:nowrap"><input type="checkbox" value="none"> <span class="optx" data-x="gmregimes">none</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="cvol7"> <span class="optx" data-x="gmregimes">cvol7</span></span></span>
         <span style="margin-left:8px"><input type="checkbox" id="gmCadapt"> <span data-x="gmcadapt" style="cursor:pointer;color:var(--blue)">cadapt</span></span></div>
       <div class="field"><label data-x="gmscoring">Scoring</label><span id="gmScorings">
-        <label><input type="checkbox" value="classic" checked>classic</label> <label><input type="checkbox" value="worst_window">worst-window</label>
-        <label><input type="checkbox" value="underwater">underwater</label></span></div>
+        <span style="white-space:nowrap"><input type="checkbox" value="classic" checked> <span class="optx" data-x="gmscoring">classic</span></span> <span style="white-space:nowrap"><input type="checkbox" value="worst_window"> <span class="optx" data-x="gmscoring">worst-window</span></span>
+        <span style="white-space:nowrap"><input type="checkbox" value="underwater"> <span class="optx" data-x="gmscoring">underwater</span></span></span></div>
     </div>
     <div class="row" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
       <div class="field"><label data-x="gmdd">Max DD % list</label><input id="gmDDs" value="50" style="width:90px"></div>
@@ -249,7 +251,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     </div>
     <div class="row" style="margin-top:10px">
       <b class="mini" data-x="gmholdouts" style="cursor:pointer;color:var(--blue)">Holdouts (each selected scheme = one more run per combo):</b><br>
-      <label><input type="checkbox" id="gmHoDate" checked>after date</label> <input id="gmHoDateV" value="2025-09-01" style="width:95px">
+      <span style="white-space:nowrap"><input type="checkbox" id="gmHoDate" checked> <span class="optx" data-x="gmholdouts">after date</span></span> <input id="gmHoDateV" value="2025-09-01" style="width:95px">
       <label style="margin-left:10px"><input type="checkbox" id="gmHoAlt">alternating</label> days: <input id="gmHoAltV" value="21" style="width:70px" title="comma-separated list — each value is its own scheme">
       <label style="margin-left:10px"><input type="checkbox" id="gmHoBefore">before date</label> <input id="gmHoBeforeV" value="2025-01-01" style="width:95px">
       <label style="margin-left:10px"><input type="checkbox" id="gmHoBetween">between</label> <input id="gmHoBetweenA" value="2025-03-01" style="width:95px">..<input id="gmHoBetweenB" value="2025-09-01" style="width:95px">
@@ -450,14 +452,14 @@ const X = {
  rxpick: ["Specific components", `Hand-pick EXACTLY which runs become the router's components (instead of auto-mining). Rules:<dl><dt>Mixing allowed</dt><dd>Different pairs AND different chart timeframes — each component is simulated on its own candles in an isolated process.</dd><dt>One mode</dt><dd>All picks must share spot OR lev (one account, one slot). Lev components keep their per-trade leverage in the sim.</dd><dt>Buckets</dt><dd>If every pick is the same pair, that pair's 3m vol terciles are the routing reference; mixed pairs use SOL's.</dd><dt>No router-in-router</dt><dd>Pick strategy runs, not other routers.</dd></dl>Then hit the MetaX2 <b>Build</b> button. Validated by the same causal 42d walk-forward as everything else.`],
  rxpairx: ["PairX basket (multi-pair FCFS)", `Every pair's best spot configs compete for ONE position slot, first-come-first-served — exactly what a multi-pair live trader would execute. Per-fold component picks use past-only trailing performance (causal).<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter yet.</dd><dt>Measured (2026-07)</dt><dd>Best basket +6.8%/mo vs SOL-only stack +13.2%/mo: with alt edges at only +2–5%/mo, FCFS lets weaker trades displace stronger SOL ones. Needs stronger per-pair components (e.g. per-pair routers) to earn its place.</dd></dl>`],
  gmpairs: ["Gamut: pairs", `Which pairs the sweep covers, run in the shown order: EVERY selected combo finishes for one pair (optimize + automatic backtests) before the next pair starts.`],
- gmstrats: ["Gamut: strategies", `Each ticked family multiplies the run count. v7/prime7 are the full-parameter engines; macdx has been the strongest spot family recently; scalpx is historically edgeless.`],
- gmalgos: ["Gamut: algorithms", `genetic = the proven default. random = unbiased baseline (useful as a control, rarely wins). Each ticked algo multiplies the count.`],
+ gmstrats: ["Gamut: strategies", `Each ticked family multiplies the run count. What they are:<dl><dt>v7</dt><dd>Full-parameter V5-family engine — RSI+MACD+BB%B dip system + MACD crossover, EVERY indicator length searchable per regime. Your strongest lev family.</dd><dt>prime7</dt><dd>Solana Prime on the v7 engine (dip system only, crossover locked off), lengths searchable. Anchored to your live xlsx values.</dd><dt>prime</dt><dd>Solana Prime with fixed indicator lengths — thresholds only.</dd><dt>macdx</dt><dd>The standalone MACD-crossover pine (TP/SL/time/histogram), searchable per regime. Recently the strongest SPOT family.</dd><dt>rocx</dt><dd>V4 ROC/SMA trend pine — dip entries on 45-min boundaries, trailing stop (pine or ratchet).</dd><dt>scalpx2</dt><dd>VRVP+CVD+EMA scalper with searchable lengths.</dd><dt>v6</dt><dd>V5 with z-scored MACD entries, fixed lengths.</dd></dl>Honest note: scalpx (v1) is excluded here — it tested edgeless everywhere.`],
+ gmalgos: ["Gamut: algorithms", `<dl><dt>genetic</dt><dd>Population evolution (crossover + mutation + elitism). Won the head-to-head study decisively — the default.</dd><dt>random</dt><dd>Uniform sampling. Unbiased control; in the study its best pick liquidated on holdout. Useful to sanity-check that genetic is actually adding value on a new pair.</dd></dl>Each ticked algorithm multiplies the run count.`],
  gmmodes: ["Gamut: modes", `spot (long-only, 1x, stops, spot candles) and/or lev (futures, leverage, perp candles).`],
  gmlevstops: ["Gamut: lev-stops", `When ticked, LEV runs keep their stop-losses ACTIVE despite leverage (the c3 'survival' doctrine — cut liquidations structurally). Ignored for spot runs (stops are always on there).`],
- gmcharts: ["Gamut: charts", `Chart timeframes to sweep. Indicator lengths are in BARS, so each timeframe is a genuinely different search. 1m/5m results are research-only until adopted configs get dry-run soaks; 1m runs also cost the most compute.`],
- gmregimes: ["Gamut: regimes", `Bucketing methods to sweep — vol3 is the proven default. cvol7 exists mainly for cadapt (continuous adaptation), which tested WORSE than discrete regimes in campaign c6.`],
+ gmcharts: ["Gamut: charts", `Chart timeframes to sweep:<dl><dt>3m</dt><dd>The proven default — all your live evidence is here. Cheapest (caches exist).</dd><dt>1m</dt><dd>3× the bars + extended indicator grids (both same-bar-count AND same-wall-clock spans searchable). Most compute; first run per pair builds a large cache. Research-only until a live dry-run soak.</dd><dt>5m</dt><dd>Slower rhythm, fewest bars, cheapest search. Also research-only for live.</dd></dl>Indicator lengths are in BARS — each timeframe is a genuinely different search, so nothing transfers between them.`],
+ gmregimes: ["Gamut: regimes", `Bucketing methods to sweep:<dl><dt>vol3</dt><dd>Volatility terciles (30d trailing percentile). The proven best performer.</dd><dt>trend3</dt><dd>Down / flat / up vs the 1-day EMA.</dd><dt>vt9</dt><dd>3×3 vol×trend grid — overfit badly as 9 parameter sets, but strong as a ROUTER bucketing.</dd><dt>none</dt><dd>One parameter set everywhere — fewest knobs, hardest to overfit.</dd><dt>cvol7</dt><dd>7 fine vol grades, made for cadapt. Campaign c6 verdict: continuous adaptation lost to discrete vol3 in 9 of 10 cells.</dd></dl>`],
  gmcadapt: ["Gamut: cadapt", `Continuous adaptation: candidates become two endpoint parameter sets interpolated across the regime grades. Honest history: lost to discrete vol3 in 9 of 10 cells in campaign c6. Pairs best with cvol7.`],
- gmscoring: ["Gamut: scoring", `classic = mean monthly growth minus deviation penalty. worst-window = judged by the worst 3-month stretch. underwater = penalizes time spent in drawdown/in-trade.`],
+ gmscoring: ["Gamut: scoring", `<dl><dt>classic</dt><dd>Mean monthly log-growth minus a deviation penalty — the default that found your champions.</dd><dt>worst-window</dt><dd>Judged by the worst 3-month stretch — favors configs that never have a terrible quarter.</dd><dt>underwater</dt><dd>Penalizes time spent in drawdown / in trade — favors quick-resolution styles.</dd></dl>Each ticked scoring multiplies the run count.`],
  gmdd: ["Gamut: max DD list", `Comma-separated maximum-drawdown caps in % — EACH value is its own run (e.g. '50,80' doubles the count). Candidates exceeding the cap are infeasible.`],
  gmmh: ["Gamut: max days in trade", `Comma-separated hold-time caps in days — each value is its own run. Candidates whose longest trade exceeds it are disqualified (never force-closed).`],
  gmevals: ["Gamut: evals per run", `Search budget per run. 60k is a sane sweep default (~1-3 min per run on cached data at 14 procs); your flagship single runs used 100-150k.`],
