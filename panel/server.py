@@ -1478,6 +1478,103 @@ def gamut_status():
     return jsonify(total=len(plan["specs"]), counts=dict(c), running=cur)
 
 
+@app.route("/api/gamut/progress")
+def gamut_progress():
+    """Rich progress for the Progress page: merges plan.json with the
+    (possibly EC2-synced) worker_state.json and runs/ skip-markers."""
+    import math as _m
+    import datetime as _dt
+    from collections import Counter, defaultdict
+    name = _safe_name(request.args.get("name") or "")
+    if not name:   # default: newest campaign with a plan
+        cs = [d for d in sorted(os.listdir(os.path.join(OPT, "campaigns")))
+              if d.startswith("gamut_") and
+              os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))]
+        if not cs:
+            return jsonify(error="no gamut campaigns"), 404
+        cs.sort(key=lambda d: os.path.getmtime(
+            os.path.join(OPT, "campaigns", d, "plan.json")))
+        name = cs[-1][len("gamut_"):]
+    pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
+    plan_p = os.path.join(pdir, "plan.json")
+    if not os.path.exists(plan_p):
+        return jsonify(error="no plan"), 404
+    plan = json.load(open(plan_p))
+    st_p = os.path.join(pdir, "worker_state.json")
+    state = {}
+    if os.path.exists(st_p):
+        try:
+            state = json.load(open(st_p))
+        except Exception:
+            state = {}
+    now = time.time()
+    counts = Counter()
+    pairs = defaultdict(lambda: [0, 0])
+    running, failed, done_times = [], [], []
+    for s in plan["specs"]:
+        n = s["name"]
+        st = state.get(n, {})
+        sst = st.get("status")
+        if (s["status"] == "done" or sst in ("done", "skipped")
+                or os.path.exists(os.path.join(OPT, "runs", n,
+                                               "best_config.json"))):
+            eff = "done"
+        else:
+            eff = sst or "pending"
+        counts[eff] += 1
+        pairs[s["coin"]][1] += 1
+        if eff == "done":
+            pairs[s["coin"]][0] += 1
+            if st.get("at"):
+                done_times.append((st["at"], n))
+        elif eff == "running":
+            running.append(dict(name=n, since=st.get("at")))
+        elif eff == "failed":
+            failed.append(dict(name=n, at=st.get("at")))
+    done_times.sort()
+
+    def _ts(a):
+        try:
+            return _dt.datetime.strptime(a, "%Y-%m-%d %H:%M:%S").timestamp()
+        except Exception:
+            return None
+    tss = [t for t in (_ts(a) for a, _ in done_times) if t]
+    rate_hr = eta_h = None
+    if len(tss) >= 3:
+        window = [t for t in tss if t > now - 3 * 3600] or tss[-60:]
+        span = max(window) - min(window)
+        if span > 120 and len(window) >= 3:
+            rate_hr = round((len(window) - 1) / (span / 3600.0), 1)
+            remaining = counts.get("pending", 0) + counts.get("running", 0)
+            eta_h = round(remaining / rate_hr, 1)
+    recent = []
+    for a, n in done_times[-15:][::-1]:
+        try:
+            b = json.load(open(os.path.join(OPT, "runs", n,
+                                            "best_config.json")))
+        except Exception:
+            b = {}
+        h = ((b.get("holdout_best") or {}).get("holdout")
+             or b.get("holdout") or {})
+        g = h.get("growth")
+        recent.append(dict(
+            name=n, at=a,
+            holdout_pct_mo=(round(100 * (_m.exp(g) - 1), 1)
+                            if g is not None else None),
+            dd_pct=(round(100 * (h.get("maxdd") or 0)) if h else None),
+            liq=bool(h.get("liq")) if h else None))
+    return jsonify(
+        name=name, total=len(plan["specs"]), counts=dict(counts),
+        pairs={k: dict(done=v[0], total=v[1]) for k, v in sorted(pairs.items())},
+        running=sorted(running, key=lambda r: r.get("since") or ""),
+        failed=failed[-20:], recent=recent,
+        rate_per_hour=rate_hr, eta_hours=eta_h,
+        first_done=(done_times[0][0] if done_times else None),
+        last_done=(done_times[-1][0] if done_times else None),
+        worker_state_age_sec=(int(now - os.path.getmtime(st_p))
+                              if os.path.exists(st_p) else None))
+
+
 @app.route("/api/story", methods=["GET", "POST"])
 def run_story():
     """Provenance story of a run. GET returns the cached story.md;
