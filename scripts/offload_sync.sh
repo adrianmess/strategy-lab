@@ -12,6 +12,11 @@ while true; do
   rsync -az -e "$SSH" \
     "ubuntu@$IP:strategy-lab/optimizer/campaigns/$CAMP/worker_state.json" \
     "$LAB/optimizer/campaigns/$CAMP/worker_state.json" 2>/dev/null
+  # backtest entries are PUBLISHED on the box that ran them — pull its
+  # backtests.js and merge new entries into the local Backtests page
+  rsync -az -e "$SSH" \
+    "ubuntu@$IP:strategy-lab/dashboard/backtests.js" /tmp/ec2_backtests.js \
+    2>/dev/null && python3 "$LAB/scripts/merge_backtests.py" /tmp/ec2_backtests.js
   echo "[$(date '+%H:%M:%S')] sync ok — $(python3 -c "
 import json;d=json.load(open('$LAB/optimizer/campaigns/$CAMP/worker_state.json'))
 from collections import Counter;print(dict(Counter(v['status'] for v in d.values())))" 2>/dev/null || echo 'no state yet')"
