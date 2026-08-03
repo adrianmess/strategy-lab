@@ -34,6 +34,20 @@ def main():
             local.append(e)
             have.add(e.get("name"))
             added += 1
+    # per-run payload copies (runs/<run>/bts/<entry>.json) arrive with the
+    # runs/ sync and survive any backtests.js corruption — merge those too
+    import glob
+    runs_glob = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                             "optimizer", "runs", "*", "bts", "*.json")
+    for p in glob.glob(runs_glob):
+        nm = os.path.basename(p)[:-5]
+        if nm not in have:
+            try:
+                local.append(json.load(open(p)))
+                have.add(nm)
+                added += 1
+            except Exception:
+                pass
     if added or dirty:
         tmp = LOCAL + ".tmp"
         with open(tmp, "w") as f:

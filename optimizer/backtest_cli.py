@@ -750,14 +750,20 @@ def load_backtests():
     if not os.path.exists(BACKTESTS_JS):
         return []
     txt = open(BACKTESTS_JS).read()
-    return json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
+    body = txt[txt.index("=") + 1:].lstrip()
+    # tolerant: parse the first valid JSON array, ignore any garbage tail
+    # left by historic non-atomic writers
+    val, _end = json.JSONDecoder().raw_decode(body)
+    return val
 
 
 def save_backtests(entries):
-    with open(BACKTESTS_JS, "w") as f:
+    tmp = f"{BACKTESTS_JS}.tmp{os.getpid()}"
+    with open(tmp, "w") as f:
         f.write("window.BACKTESTS = ")
         json.dump(entries, f, default=float)
         f.write(";")
+    os.replace(tmp, BACKTESTS_JS)      # atomic — readers never see partials
 
 
 def main():
@@ -814,9 +820,24 @@ def main():
                      os.environ.get("LAB_COIN", "sol").upper() + "_USDT")
     entry.setdefault("market_data", os.environ.get("LAB_MARKET", "perp"))
     entry.setdefault("timeframe", os.environ.get("LAB_TF", "3") + "m")
-    entries = [e for e in load_backtests() if e["name"] != args.name]
-    entries.append(entry)
-    save_backtests(entries)
+    # portable per-run copy FIRST: survives backtests.js trouble entirely and
+    # lets offload boxes ship entries via the runs/ sync
+    if args.config:
+        rd = os.path.dirname(os.path.abspath(
+            args.config if os.path.isabs(args.config)
+            else os.path.join(cwd0, args.config)))
+        if os.path.basename(os.path.dirname(rd)) == "runs":
+            os.makedirs(os.path.join(rd, "bts"), exist_ok=True)
+            with open(os.path.join(rd, "bts", args.name + ".json"), "w") as f:
+                json.dump(entry, f, default=float)
+    # serialize concurrent publishers (13-way parallel on offload boxes
+    # corrupted the file with the old read-modify-write)
+    import fcntl
+    with open(BACKTESTS_JS + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        entries = [e for e in load_backtests() if e["name"] != args.name]
+        entries.append(entry)
+        save_backtests(entries)
     print(f"published '{args.name}' -> dashboard/backtests.html ({len(entries)} entries)")
     print(json.dumps(entry["stats"], indent=1, default=float))
 
