@@ -647,7 +647,7 @@ def main():
                              "volXtrend9", "cvol7"])
     ap.add_argument("--symbol", default="sol",
                     choices=["sol", "btc", "eth", "doge", "xrp", "sui",
-                             "pepe", "wif"],
+                             "hype", "pepe", "wif"],
                     help="trading pair (vs USDT): selects data files and "
                          "per-symbol precompute caches; stamped on the run")
     ap.add_argument("--tf", type=int, default=3, choices=[1, 3, 5],

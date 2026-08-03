@@ -23,7 +23,7 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "adaptive_trader", "research", "data")
 OUT = os.path.join(HERE, "param_spaces")
-COINS = ["btc", "eth", "doge", "xrp", "sui"]
+COINS = ["btc", "eth", "doge", "xrp", "sui", "hype"]
 
 # %-denominated continuous params per family (everything else stays SOL-range)
 PCT_KEYS = {
@@ -54,8 +54,10 @@ BTC_REF = dict(ptLong=0.0083, slLong=0.01)
 def pair_stats():
     out = {}
     for c in ["sol"] + COINS:
-        px = pd.read_parquet(os.path.join(
-            DATA, f"{c}_spot_3min.parquet"))["close"].astype(float)
+        p = os.path.join(DATA, f"{c}_spot_3min.parquet")
+        if not os.path.exists(p):     # perp-only pairs (e.g. hype)
+            p = os.path.join(DATA, f"{c}_3min.parquet")
+        px = pd.read_parquet(p)["close"].astype(float)
         r = np.log(px).diff()
         dvol = (r.rolling(480).std() * np.sqrt(480)).dropna().median()
         ema = lambda s, n: s.ewm(span=n, adjust=False).mean()

@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-08-03 03:36:27",
+  "cmd": "python3 optimize2_cli.py --strategy scalpx2 --mode spot --method vol3 --algo genetic --procs 14 --batch 100 --total 60000 --symbol btc --tf 3 --gap-mode skip_contaminated --max-dd 0.5 --max-hold-days 7 --scoring underwater --name g0801_2122_btc3m_scalpx2_gen_s_vol3_un_d50_m7_hA2508_t60k --train-end 2025-08-28 --space /home/ubuntu/strategy-lab/optimizer/param_spaces/variants/btc_3m.ai.json",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

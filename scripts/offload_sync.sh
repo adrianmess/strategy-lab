@@ -9,9 +9,12 @@ SSH="ssh -i $PEM -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30"
 while true; do
   rsync -az --ignore-existing -e "$SSH" \
     "ubuntu@$IP:strategy-lab/optimizer/runs/" "$LAB/optimizer/runs/" 2>/dev/null
-  rsync -az -e "$SSH" \
-    "ubuntu@$IP:strategy-lab/optimizer/campaigns/$CAMP/worker_state.json" \
-    "$LAB/optimizer/campaigns/$CAMP/worker_state.json" 2>/dev/null
+  for cdir in "$LAB"/optimizer/campaigns/gamut_*/; do
+    cn=$(basename "$cdir")
+    rsync -az -e "$SSH" \
+      "ubuntu@$IP:strategy-lab/optimizer/campaigns/$cn/worker_state.json" \
+      "$cdir/worker_state.json" 2>/dev/null
+  done
   # backtest entries are PUBLISHED on the box that ran them — pull its
   # backtests.js and merge new entries into the local Backtests page
   rsync -az -e "$SSH" \

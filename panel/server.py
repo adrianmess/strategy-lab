@@ -1486,15 +1486,19 @@ def gamut_progress():
     import datetime as _dt
     from collections import Counter, defaultdict
     name = _safe_name(request.args.get("name") or "")
-    if not name:   # default: newest campaign with a plan
-        cs = [d for d in sorted(os.listdir(os.path.join(OPT, "campaigns")))
-              if d.startswith("gamut_") and
-              os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))]
-        if not cs:
-            return jsonify(error="no gamut campaigns"), 404
-        cs.sort(key=lambda d: os.path.getmtime(
-            os.path.join(OPT, "campaigns", d, "plan.json")))
-        name = cs[-1][len("gamut_"):]
+    cs = [d for d in sorted(os.listdir(os.path.join(OPT, "campaigns")))
+          if d.startswith("gamut_") and
+          os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))]
+    if not cs:
+        return jsonify(error="no gamut campaigns"), 404
+    if not name:   # default: the campaign with the freshest WORKER ACTIVITY
+        def _act(d):
+            ws = os.path.join(OPT, "campaigns", d, "worker_state.json")
+            return (os.path.getmtime(ws) if os.path.exists(ws) else
+                    os.path.getmtime(os.path.join(OPT, "campaigns", d,
+                                                  "plan.json")) - 1e9)
+        name = sorted(cs, key=_act)[-1][len("gamut_"):]
+    campaign_names = [d[len("gamut_"):] for d in cs]
     pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
     plan_p = os.path.join(pdir, "plan.json")
     if not os.path.exists(plan_p):
@@ -1564,7 +1568,8 @@ def gamut_progress():
             dd_pct=(round(100 * (h.get("maxdd") or 0)) if h else None),
             liq=bool(h.get("liq")) if h else None))
     return jsonify(
-        name=name, total=len(plan["specs"]), counts=dict(counts),
+        name=name, campaigns=campaign_names,
+        total=len(plan["specs"]), counts=dict(counts),
         pairs={k: dict(done=v[0], total=v[1]) for k, v in sorted(pairs.items())},
         running=sorted(running, key=lambda r: r.get("since") or ""),
         failed=failed[-20:], recent=recent,

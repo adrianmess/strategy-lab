@@ -50,7 +50,7 @@ h2{font-size:15px;margin:0 0 10px}
 <div class="wrap">
   <div class="panelbox">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <h2 style="margin:0">Gamut <span id="campName" class="mono"></span></h2>
+      <h2 style="margin:0">Gamut <select id="campSel" class="mono" style="font-size:13px" title="campaign — defaults to the one with the freshest worker activity"></select></h2>
       <span class="mut" id="syncInfo"></span>
     </div>
     <div class="bar" id="mainBar" title=""></div>
@@ -96,12 +96,17 @@ function fmtH(h){ if(h==null) return '–'; if(h<1) return Math.round(h*60)+' mi
 function ago(ts){ if(!ts) return '';
   const s=(Date.now()-new Date(ts.replace(' ','T')))/1000;
   if(s<90) return Math.round(s)+'s'; if(s<5400) return Math.round(s/60)+'m'; return (s/3600).toFixed(1)+'h'; }
+let CAMP = '';   // '' = server picks the most active campaign
+$('campSel').onchange = ()=>{ CAMP = $('campSel').value; refresh(); };
 async function refresh(){
   let d;
-  try{ d = await fetch('/api/gamut/progress').then(r=>r.json()); }
+  try{ d = await fetch('/api/gamut/progress'+(CAMP?`?name=${encodeURIComponent(CAMP)}`:'')).then(r=>r.json()); }
   catch(e){ $('syncInfo').textContent='panel unreachable'; return; }
   if(d.error){ $('syncInfo').textContent=d.error; return; }
-  $('campName').textContent = d.name;
+  if(d.campaigns && $('campSel').options.length !== d.campaigns.length){
+    $('campSel').innerHTML = d.campaigns.map(n=>`<option value="${n}">${n}</option>`).join('');
+  }
+  $('campSel').value = d.name;
   const c=d.counts, done=c.done||0, run=c.running||0, pend=c.pending||0, fail=c.failed||0;
   $('cDone').textContent=done.toLocaleString(); $('cRun').textContent=run;
   $('cPend').textContent=pend.toLocaleString(); $('cFail').textContent=fail;

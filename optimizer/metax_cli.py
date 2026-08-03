@@ -816,7 +816,7 @@ def main():
                     help="comma-separated runs to ADD as components (used "
                          "with --extend; must match the router's dataset)")
     ap.add_argument("--symbol", default="sol",
-                    choices=["sol", "btc", "eth", "doge", "xrp", "sui"],
+                    choices=["sol", "btc", "eth", "doge", "xrp", "sui", "hype"],
                     help="build the router for this pair: its data, its "
                          "buckets, and only ITS runs are mined as components")
     args = ap.parse_args()

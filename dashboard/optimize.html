@@ -135,7 +135,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="tfsel">Chart</label>
         <select id="tfsel" title="chart timeframe — indicator lengths are in BARS, so a 50-EMA on 1m is a faster indicator than on 3m. Non-3m configs are research-only until the live trader supports them."><option value="3">3 min</option><option value="1">1 min</option><option value="5">5 min</option></select></div>
       <div class="field"><label data-x="pairsel">Pair</label>
-        <select id="symbol" title="trading pair (vs USDT) — selects that pair's data files and per-symbol caches; the run is tagged with it"><option value="sol">SOL</option><option value="btc">BTC</option><option value="eth">ETH</option><option value="doge">DOGE</option><option value="xrp">XRP</option><option value="sui">SUI</option></select></div>
+        <select id="symbol" title="trading pair (vs USDT) — selects that pair's data files and per-symbol caches; the run is tagged with it"><option value="sol">SOL</option><option value="btc">BTC</option><option value="eth">ETH</option><option value="doge">DOGE</option><option value="xrp">XRP</option><option value="sui">SUI</option><option value="hype">HYPE</option></select></div>
       <div class="field"><label data-x="regime">Regime</label>
         <select id="method"><option>vol3</option><option>none</option><option>vol3_7d</option><option>volume3</option><option>trend3</option><option>volXtrend9</option><option>cvol7</option></select></div>
       <div class="field"><label data-x="cadapt">Continuous adapt</label>
@@ -218,7 +218,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="gmpairs">Pairs (in order)</label><span id="gmPairs">
         <span style="white-space:nowrap"><input type="checkbox" value="sol"> <span class="optx" data-x="gmpairs">SOL</span></span> <span style="white-space:nowrap"><input type="checkbox" value="btc"> <span class="optx" data-x="gmpairs">BTC</span></span>
         <span style="white-space:nowrap"><input type="checkbox" value="eth"> <span class="optx" data-x="gmpairs">ETH</span></span> <span style="white-space:nowrap"><input type="checkbox" value="doge"> <span class="optx" data-x="gmpairs">DOGE</span></span>
-        <span style="white-space:nowrap"><input type="checkbox" value="xrp"> <span class="optx" data-x="gmpairs">XRP</span></span> <span style="white-space:nowrap"><input type="checkbox" value="sui"> <span class="optx" data-x="gmpairs">SUI</span></span></span></div>
+        <span style="white-space:nowrap"><input type="checkbox" value="xrp"> <span class="optx" data-x="gmpairs">XRP</span></span> <span style="white-space:nowrap"><input type="checkbox" value="sui"> <span class="optx" data-x="gmpairs">SUI</span></span> <span style="white-space:nowrap"><input type="checkbox" value="hype"> <span class="optx" data-x="gmpairs">HYPE</span></span></span></div>
       <div class="field"><label data-x="gmstrats">Strategies</label><span id="gmStrats">
         <span style="white-space:nowrap"><input type="checkbox" value="v7" checked> <span class="optx" data-x="gmstrats">v7</span></span> <span style="white-space:nowrap"><input type="checkbox" value="prime7"> <span class="optx" data-x="gmstrats">prime7</span></span>
         <span style="white-space:nowrap"><input type="checkbox" value="prime"> <span class="optx" data-x="gmstrats">prime</span></span> <span style="white-space:nowrap"><input type="checkbox" value="macdx" checked> <span class="optx" data-x="gmstrats">macdx</span></span>
@@ -275,7 +275,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <span style="display:flex;gap:4px">
         <select id="rxMode"><option>spot</option><option>lev</option></select>
         <select id="rxBuckets"><option>vol3</option><option>trend3</option><option>vt9</option><option value="month12">month12 (research)</option></select>
-        <select id="rxSym"><option value="sol">SOL</option><option value="btc">BTC</option><option value="eth">ETH</option><option value="doge">DOGE</option><option value="xrp">XRP</option><option value="sui">SUI</option></select>
+        <select id="rxSym"><option value="sol">SOL</option><option value="btc">BTC</option><option value="eth">ETH</option><option value="doge">DOGE</option><option value="xrp">XRP</option><option value="sui">SUI</option><option value="hype">HYPE</option></select>
         <input id="rxName" placeholder="name (auto)" style="width:120px">
         <button class="small" onclick="routerJob('metax')">Build</button></span></div>
       <div class="field"><label data-x="rxstack">Stack</label>

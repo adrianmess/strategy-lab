@@ -1,0 +1,108 @@
+{
+ "cand": {
+  "strategy": "scalpx2",
+  "tpL": [
+   0.002883684904360955,
+   0.007454982777650374,
+   0.007705391482403742
+  ],
+  "tpS": [
+   0.005778212593313164,
+   0.0018700718656970497,
+   0.001128
+  ],
+  "rsiOB": [
+   65.06205724215567,
+   51.11704822002959,
+   71.57913184404947
+  ],
+  "rsiOS": [
+   35.10218565484221,
+   35.00924213263307,
+   44.654151
+  ],
+  "useCvd": [
+   1.0,
+   0.0,
+   1.0
+  ],
+  "useEma": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "eL": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "eS": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "lev": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "sl": 0.08807540088323429,
+  "slOn": 1.0,
+  "vR": [
+   1.0,
+   2.0,
+   3.0
+  ],
+  "vC": [
+   1.0,
+   2.0,
+   1.0
+  ],
+  "vP": [
+   1.0,
+   2.0,
+   2.0
+  ],
+  "vE": [
+   3.0,
+   0.0,
+   1.0
+  ]
+ },
+ "metrics": {
+  "n": 87,
+  "months": 29.74540844298246,
+  "eq": 1661.8101753727722,
+  "growth": 0.017075155525489105,
+  "liq": false,
+  "maxdd": 0.0,
+  "tpm": 2.924821159096407,
+  "sl_hits": 0,
+  "worst_mae": -0.0472955057669362,
+  "win": 1.0,
+  "max_hold_days": 4.425,
+  "in_market": 0.058890207236576855,
+  "score": 0.01621285678901388
+ },
+ "strategy": "scalpx2",
+ "mode": "spot",
+ "method": "trend3",
+ "algo": "genetic",
+ "per_regime": true,
+ "train_end": null,
+ "holdout_days": null,
+ "holdout_before": null,
+ "holdout_between": null,
+ "holdout_outside": null,
+ "max_dd": 0.5,
+ "max_hold_days": 5.0,
+ "gap_mode": "skip_contaminated",
+ "scoring": "classic",
+ "anchor": null,
+ "anchor_strength": 0.0,
+ "evaluated": 60200,
+ "generated": "2026-08-03 03:47",
+ "pair": "BTC_USDT",
+ "market_data": "spot",
+ "timeframe": "3m"
+}
