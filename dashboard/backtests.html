@@ -263,11 +263,22 @@ async function watchJob(jid, name){
     }catch(e){}
   }
 }
+async function loadBtMeta(){
+  // ratings + best marks live in a tiny sidecar so setting them is instant
+  try{
+    const m = await fetch('/dashboard/bt_meta.json?t='+Date.now()).then(x=>x.json());
+    for(const e of BT){ const x=m[e.name];
+      if(x){ if(x.rating) e.rating=x.rating; else delete e.rating;
+             if(x.best) e.best=true; else delete e.best; }
+      else { delete e.rating; delete e.best; } }
+  }catch(e){}
+}
 async function reloadBacktests(selectName){
   const t = await fetch('/dashboard/backtests.js?t='+Date.now()).then(x=>x.text());
   let list;
   try{ list = JSON.parse(t.slice(t.indexOf('=')+1).trim().replace(/;$/,'')); }catch(e){ return; }
   BT.length = 0; list.forEach(e=>BT.push(e));
+  await loadBtMeta();
   const idx = selectName ? BT.findIndex(e=>e.name===selectName) : -1;
   sel = null; render();
   if(idx >= 0) select(idx);
@@ -647,7 +658,8 @@ function renderTrades(e){
 }
 document.getElementById('maeTh').oninput = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
 document.getElementById('maeBasis').onchange = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
-(function(){
+(async function(){
+  await loadBtMeta();   // sidecar ratings/best marks (instant to update)
   if(!BT.length){ render(); return; }
   // only auto-expand when a specific backtest was linked to (?sel=name)
   const want = new URLSearchParams(location.search).get('sel');

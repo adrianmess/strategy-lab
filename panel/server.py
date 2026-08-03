@@ -2114,29 +2114,39 @@ def runs2_rate():
     return jsonify(ok=True, name=name, rating=rating)
 
 
+BT_META = os.path.join(DASH, "bt_meta.json")
+
+
+def _bt_meta_set(name, key, val):
+    """Ratings/best marks live in a tiny sidecar (bt_meta.json) — updating
+    them used to rewrite the entire multi-hundred-MB backtests.js (~5s) and
+    could be clobbered by the offload merge loop."""
+    import fcntl
+    with open(BT_META + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        try:
+            m = json.load(open(BT_META))
+        except Exception:
+            m = {}
+        ent = m.setdefault(name, {})
+        if val:
+            ent[key] = val
+        else:
+            ent.pop(key, None)
+        if not ent:
+            m.pop(name, None)
+        tmp = BT_META + ".tmp"
+        json.dump(m, open(tmp, "w"))
+        os.replace(tmp, BT_META)
+
+
 @app.route("/api/backtests/mark", methods=["POST"])
 def backtests_mark():
     """Toggle the 'best' star on a published backtest entry."""
     d = request.get_json(force=True)
     name = d.get("name")
     best = bool(d.get("best"))
-    path = os.path.join(DASH, "backtests.js")
-    txt = open(path).read()
-    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
-    hit = False
-    for e in entries:
-        if e.get("name") == name:
-            if best:
-                e["best"] = True
-            else:
-                e.pop("best", None)
-            hit = True
-    if not hit:
-        return jsonify(error=f"backtest '{name}' not found"), 404
-    with open(path, "w") as f:
-        f.write("window.BACKTESTS = ")
-        json.dump(entries, f, default=float)
-        f.write(";")
+    _bt_meta_set(name, "best", True if best else None)
     return jsonify(ok=True, name=name, best=best)
 
 
@@ -2146,29 +2156,15 @@ def backtests_rate():
     d = request.get_json(force=True)
     name = d.get("name")
     rating = max(0, min(3, int(d.get("rating", 0))))
-    path = os.path.join(DASH, "backtests.js")
-    txt = open(path).read()
-    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
-    hit = False
-    for e in entries:
-        if e.get("name") == name:
-            if rating:
-                e["rating"] = rating
-            else:
-                e.pop("rating", None)
-            hit = True
-    if not hit:
-        return jsonify(error=f"backtest '{name}' not found"), 404
-    with open(path, "w") as f:
-        f.write("window.BACKTESTS = ")
-        json.dump(entries, f, default=float)
-        f.write(";")
+    _bt_meta_set(name, "rating", rating or None)
     return jsonify(ok=True, name=name, rating=rating)
 
 
 @app.route("/api/backtests/delete", methods=["POST"])
 def backtests_delete():
     name = request.get_json(force=True).get("name")
+    _bt_meta_set(name, "rating", None)
+    _bt_meta_set(name, "best", None)
     path = os.path.join(DASH, "backtests.js")
     txt = open(path).read()
     entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
