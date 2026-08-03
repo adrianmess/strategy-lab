@@ -1539,7 +1539,12 @@ def gamut_progress():
 
     def _ts(a):
         try:
-            return _dt.datetime.strptime(a, "%Y-%m-%d %H:%M:%S").timestamp()
+            t = _dt.datetime.strptime(a, "%Y-%m-%d %H:%M:%S").timestamp()
+            # heal the 2026-08-03 incident: the EC2 box stamped UTC (=+7h)
+            # before its timezone was fixed — timestamps can't be in the future
+            if t > now + 600:
+                t -= 7 * 3600
+            return t
         except Exception:
             return None
     tss = [t for t in (_ts(a) for a, _ in done_times) if t]
