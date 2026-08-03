@@ -1656,12 +1656,13 @@ function gmDel(k,i){
 gmRender('dd'); gmRender('mh'); gmRender('total'); gmRender('alt');
 function gamutChecks(id){ return [...document.querySelectorAll('#'+id+' input:checked')].map(x=>x.value); }
 function gamutHoldouts(){
+  const D=v=>String(v).trim().slice(0,10);   // guard: a pasted/duplicated date once produced '2024-11-162024-11-16' and silently poisoned 3240 specs
   const hs=[];
-  if($('gmHoDate').checked && $('gmHoDateV').value) hs.push({kind:'date', date:$('gmHoDateV').value});
+  if($('gmHoDate').checked && $('gmHoDateV').value) hs.push({kind:'date', date:D($('gmHoDateV').value)});
   if($('gmHoAlt').checked) GM_LISTS.alt.forEach(d=>hs.push({kind:'alt', days:d}));
-  if($('gmHoBefore').checked && $('gmHoBeforeV').value) hs.push({kind:'before', date:$('gmHoBeforeV').value});
-  if($('gmHoBetween').checked && $('gmHoBetweenA').value && $('gmHoBetweenB').value) hs.push({kind:'between', a:$('gmHoBetweenA').value, b:$('gmHoBetweenB').value});
-  if($('gmHoOutside').checked && $('gmHoOutsideA').value && $('gmHoOutsideB').value) hs.push({kind:'outside', a:$('gmHoOutsideA').value, b:$('gmHoOutsideB').value});
+  if($('gmHoBefore').checked && $('gmHoBeforeV').value) hs.push({kind:'before', date:D($('gmHoBeforeV').value)});
+  if($('gmHoBetween').checked && $('gmHoBetweenA').value && $('gmHoBetweenB').value) hs.push({kind:'between', a:D($('gmHoBetweenA').value), b:D($('gmHoBetweenB').value)});
+  if($('gmHoOutside').checked && $('gmHoOutsideA').value && $('gmHoOutsideB').value) hs.push({kind:'outside', a:D($('gmHoOutsideA').value), b:D($('gmHoOutsideB').value)});
   if($('gmHoNone').checked) hs.push({kind:'none'});
   return hs;
 }

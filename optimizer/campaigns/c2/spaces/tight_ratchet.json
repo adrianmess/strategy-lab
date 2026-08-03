@@ -249,8 +249,8 @@
     "label": "Cooldown Price Drop Percentage (%) (Long)",
     "order": 13,
     "range": [
-     50,
-     50
+     0,
+     75
     ]
    },
    "cdPS": {
@@ -258,8 +258,8 @@
     "label": "Cooldown Price Increase Percentage (%) (Short)",
     "order": 19,
     "range": [
-     50,
-     50
+     0,
+     999
     ]
    },
    "cdTL": {
@@ -267,8 +267,8 @@
     "label": "Cooldown Period (Minutes) (Long)",
     "order": 14,
     "range": [
-     1,
-     1
+     0,
+     999
     ]
    },
    "cdTS": {
@@ -276,8 +276,8 @@
     "label": "Cooldown Period (Minutes) (Short)",
     "order": 20,
     "range": [
-     50,
-     50
+     0,
+     999
     ]
    },
    "d1L": {
@@ -313,7 +313,7 @@
     "order": 18,
     "range": [
      0,
-     24
+     48
     ]
    },
    "hrb": {
@@ -339,8 +339,8 @@
     "label": "MACD Max for Long Entry",
     "order": 7,
     "range": [
-     -0.7,
-     2
+     -10,
+     0
     ]
    },
    "mMinS": {
@@ -348,8 +348,8 @@
     "label": "MACD Min for Short Entry",
     "order": 6,
     "range": [
-     -2,
-     0.6
+     0,
+     10
     ]
    },
    "minT": {
@@ -357,8 +357,8 @@
     "label": "Min Time Between Orders (minutes)",
     "order": 5,
     "range": [
-     1,
-     1
+     0,
+     999
     ]
    },
    "slL": {
@@ -367,7 +367,7 @@
     "order": 3,
     "range": [
      0,
-     0.05
+     0.1
     ]
    },
    "slS": {
@@ -376,7 +376,7 @@
     "order": 4,
     "range": [
      0,
-     0.05
+     0.1
     ]
    },
    "tpL": {
@@ -1214,6 +1214,228 @@
    }
   },
   "note": "Prime7 = Solana Prime upgraded to the full-parameter V7 engine: every indicator length (RSI / MACD / Bollinger / trend-EMA) is searchable via the variant menus, entry triggers are z-scored (volatility-adjusted) instead of raw %, and the MACD-crossover subsystem is locked OFF to preserve Prime's dip-system character. Defaults marked on parameters are your live xlsx values. Indicator length LIBRARIES are shared with V7 (same engine) \u2014 edit them under the V7 strategy."
+ },
+ "rocx": {
+  "continuous": {
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage Factor",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "pt": {
+    "doc": "vs the SIGNAL close (pine longEntryPrice, reset by re-signals).",
+    "label": "Profit Target (%)",
+    "order": 1,
+    "range": [
+     0.005,
+     0.02
+    ]
+   },
+   "rocN": {
+    "doc": "Integer; sampled 1-min ROC(low) strictly falling toward the present.",
+    "label": "Number of ROC Bars for Trend Detection",
+    "order": 3,
+    "range": [
+     2,
+     8
+    ]
+   },
+   "smaN": {
+    "doc": "Integer; 45-min SMA slope lookback in chart bars.",
+    "label": "Number of SMA Bars for Trend Detection",
+    "order": 4,
+    "range": [
+     1,
+     8
+    ]
+   },
+   "tsl": {
+    "doc": "Close-follow trail (pine-exact: follows the close in both directions).",
+    "label": "Trailing Stop Loss (%)",
+    "order": 2,
+    "range": [
+     0.005,
+     0.03
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   }
+  },
+  "menus": {
+   "tslm": {
+    "doc": "Which trailing-stop algorithm the engine simulates (applies to every rocx search/backtest, per regime). Pine (0) = exactly what your Pine script does: the trail follows the close DOWN too, so loss from entry is NOT capped \u2014 validated vs TradingView. Ratchet (1) = trail only moves up: high-water trail + ~tsl% max loss from the signal close (NOT pine-faithful). Tick 'search' on Ratchet to let the optimizer use/choose it; tick only Ratchet to force it.",
+    "label": "Trailing Stop Mode",
+    "labels": [
+     "Pine (close-follow)",
+     "Ratchet (capped loss)"
+    ],
+    "options": [
+     0,
+     1
+    ],
+    "order": 7,
+    "values": [
+     0,
+     1
+    ]
+   },
+   "vRoc": {
+    "doc": "ROC Length (1-min lows). Each choice is a precomputed variant.",
+    "label": "ROC Length",
+    "labels": [
+     "ROC 7",
+     "ROC 10",
+     "ROC 14",
+     "ROC 21",
+     "ROC 28"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 5
+   },
+   "vSma": {
+    "doc": "SMA Length (45-min closes).",
+    "label": "SMA Length",
+    "labels": [
+     "SMA 9",
+     "SMA 13",
+     "SMA 21",
+     "SMA 34"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "order": 6
+   }
+  },
+  "note": "V4 ROC/SMA pine. ROC/SMA Time Frames fixed at 1min/45min (engine); lengths are menu variants."
+ },
+ "rocx@spot": {
+  "continuous": {
+   "leverage": {
+    "doc": "Position leverage (lev mode).",
+    "label": "Leverage Factor",
+    "order": 0,
+    "range": [
+     1.2,
+     10
+    ]
+   },
+   "pt": {
+    "doc": "vs the SIGNAL close (pine longEntryPrice, reset by re-signals).",
+    "label": "Profit Target (%)",
+    "order": 1,
+    "range": [
+     0.005,
+     0.02
+    ]
+   },
+   "rocN": {
+    "doc": "Integer; sampled 1-min ROC(low) strictly falling toward the present.",
+    "label": "Number of ROC Bars for Trend Detection",
+    "order": 3,
+    "range": [
+     2,
+     8
+    ]
+   },
+   "smaN": {
+    "doc": "Integer; 45-min SMA slope lookback in chart bars.",
+    "label": "Number of SMA Bars for Trend Detection",
+    "order": 4,
+    "range": [
+     1,
+     8
+    ]
+   },
+   "tsl": {
+    "doc": "Close-follow trail (pine-exact: follows the close in both directions).",
+    "label": "Trailing Stop Loss (%)",
+    "order": 2,
+    "range": [
+     0.005,
+     0.03
+    ]
+   }
+  },
+  "flags": {
+   "eL": {
+    "doc": "Sampled on/off in lev mode.",
+    "label": "Longs on/off"
+   }
+  },
+  "menus": {
+   "tslm": {
+    "doc": "Which trailing-stop algorithm the engine simulates (applies to every rocx search/backtest, per regime). Pine (0) = exactly what your Pine script does: the trail follows the close DOWN too, so loss from entry is NOT capped \u2014 validated vs TradingView. Ratchet (1) = trail only moves up: high-water trail + ~tsl% max loss from the signal close (NOT pine-faithful). Tick 'search' on Ratchet to let the optimizer use/choose it; tick only Ratchet to force it.",
+    "label": "Trailing Stop Mode",
+    "labels": [
+     "Pine (close-follow)",
+     "Ratchet (capped loss)"
+    ],
+    "options": [
+     0,
+     1
+    ],
+    "order": 7,
+    "values": [
+     0,
+     1
+    ]
+   },
+   "vRoc": {
+    "doc": "ROC Length (1-min lows). Each choice is a precomputed variant.",
+    "label": "ROC Length",
+    "labels": [
+     "ROC 7",
+     "ROC 10",
+     "ROC 14",
+     "ROC 21",
+     "ROC 28"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "order": 5
+   },
+   "vSma": {
+    "doc": "SMA Length (45-min closes).",
+    "label": "SMA Length",
+    "labels": [
+     "SMA 9",
+     "SMA 13",
+     "SMA 21",
+     "SMA 34"
+    ],
+    "options": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "order": 6
+   }
+  },
+  "note": "SPOT parameter space (independent of the lev one), wide exits."
  },
  "scalpx": {
   "continuous": {
@@ -2194,227 +2416,5 @@
     ]
    ]
   }
- },
- "rocx": {
-  "continuous": {
-   "leverage": {
-    "doc": "Position leverage (lev mode).",
-    "label": "Leverage Factor",
-    "order": 0,
-    "range": [
-     1.2,
-     10.0
-    ]
-   },
-   "pt": {
-    "doc": "vs the SIGNAL close (pine longEntryPrice, reset by re-signals).",
-    "label": "Profit Target (%)",
-    "order": 1,
-    "range": [
-     0.005,
-     0.02
-    ]
-   },
-   "tsl": {
-    "doc": "Close-follow trail (pine-exact: follows the close in both directions).",
-    "label": "Trailing Stop Loss (%)",
-    "order": 2,
-    "range": [
-     0.005,
-     0.03
-    ]
-   },
-   "rocN": {
-    "doc": "Integer; sampled 1-min ROC(low) strictly falling toward the present.",
-    "label": "Number of ROC Bars for Trend Detection",
-    "order": 3,
-    "range": [
-     2,
-     8
-    ]
-   },
-   "smaN": {
-    "doc": "Integer; 45-min SMA slope lookback in chart bars.",
-    "label": "Number of SMA Bars for Trend Detection",
-    "order": 4,
-    "range": [
-     1,
-     8
-    ]
-   }
-  },
-  "menus": {
-   "vRoc": {
-    "doc": "ROC Length (1-min lows). Each choice is a precomputed variant.",
-    "label": "ROC Length",
-    "order": 5,
-    "options": [
-     0,
-     1,
-     2,
-     3,
-     4
-    ],
-    "labels": [
-     "ROC 7",
-     "ROC 10",
-     "ROC 14",
-     "ROC 21",
-     "ROC 28"
-    ]
-   },
-   "vSma": {
-    "doc": "SMA Length (45-min closes).",
-    "label": "SMA Length",
-    "order": 6,
-    "options": [
-     0,
-     1,
-     2,
-     3
-    ],
-    "labels": [
-     "SMA 9",
-     "SMA 13",
-     "SMA 21",
-     "SMA 34"
-    ]
-   },
-   "tslm": {
-    "doc": "Which trailing-stop algorithm the engine simulates (applies to every rocx search/backtest, per regime). Pine (0) = exactly what your Pine script does: the trail follows the close DOWN too, so loss from entry is NOT capped \u2014 validated vs TradingView. Ratchet (1) = trail only moves up: high-water trail + ~tsl% max loss from the signal close (NOT pine-faithful). Tick 'search' on Ratchet to let the optimizer use/choose it; tick only Ratchet to force it.",
-    "label": "Trailing Stop Mode",
-    "order": 7,
-    "options": [
-     0,
-     1
-    ],
-    "labels": [
-     "Pine (close-follow)",
-     "Ratchet (capped loss)"
-    ],
-    "values": [
-     0,
-     1
-    ]
-   }
-  },
-  "flags": {
-   "eL": {
-    "doc": "Sampled on/off in lev mode.",
-    "label": "Longs on/off"
-   }
-  },
-  "note": "V4 ROC/SMA pine. ROC/SMA Time Frames fixed at 1min/45min (engine); lengths are menu variants."
- },
- "rocx@spot": {
-  "continuous": {
-   "leverage": {
-    "doc": "Position leverage (lev mode).",
-    "label": "Leverage Factor",
-    "order": 0,
-    "range": [
-     1.2,
-     10.0
-    ]
-   },
-   "pt": {
-    "doc": "vs the SIGNAL close (pine longEntryPrice, reset by re-signals).",
-    "label": "Profit Target (%)",
-    "order": 1,
-    "range": [
-     0.005,
-     0.02
-    ]
-   },
-   "tsl": {
-    "doc": "Close-follow trail (pine-exact: follows the close in both directions).",
-    "label": "Trailing Stop Loss (%)",
-    "order": 2,
-    "range": [
-     0.005,
-     0.03
-    ]
-   },
-   "rocN": {
-    "doc": "Integer; sampled 1-min ROC(low) strictly falling toward the present.",
-    "label": "Number of ROC Bars for Trend Detection",
-    "order": 3,
-    "range": [
-     2,
-     8
-    ]
-   },
-   "smaN": {
-    "doc": "Integer; 45-min SMA slope lookback in chart bars.",
-    "label": "Number of SMA Bars for Trend Detection",
-    "order": 4,
-    "range": [
-     1,
-     8
-    ]
-   }
-  },
-  "menus": {
-   "vRoc": {
-    "doc": "ROC Length (1-min lows). Each choice is a precomputed variant.",
-    "label": "ROC Length",
-    "order": 5,
-    "options": [
-     0,
-     1,
-     2,
-     3,
-     4
-    ],
-    "labels": [
-     "ROC 7",
-     "ROC 10",
-     "ROC 14",
-     "ROC 21",
-     "ROC 28"
-    ]
-   },
-   "vSma": {
-    "doc": "SMA Length (45-min closes).",
-    "label": "SMA Length",
-    "order": 6,
-    "options": [
-     0,
-     1,
-     2,
-     3
-    ],
-    "labels": [
-     "SMA 9",
-     "SMA 13",
-     "SMA 21",
-     "SMA 34"
-    ]
-   },
-   "tslm": {
-    "doc": "Which trailing-stop algorithm the engine simulates (applies to every rocx search/backtest, per regime). Pine (0) = exactly what your Pine script does: the trail follows the close DOWN too, so loss from entry is NOT capped \u2014 validated vs TradingView. Ratchet (1) = trail only moves up: high-water trail + ~tsl% max loss from the signal close (NOT pine-faithful). Tick 'search' on Ratchet to let the optimizer use/choose it; tick only Ratchet to force it.",
-    "label": "Trailing Stop Mode",
-    "order": 7,
-    "options": [
-     0,
-     1
-    ],
-    "labels": [
-     "Pine (close-follow)",
-     "Ratchet (capped loss)"
-    ],
-    "values": [
-     0,
-     1
-    ]
-   }
-  },
-  "flags": {
-   "eL": {
-    "doc": "Sampled on/off in lev mode.",
-    "label": "Longs on/off"
-   }
-  },
-  "note": "SPOT parameter space (independent of the lev one), wide exits."
  }
 }

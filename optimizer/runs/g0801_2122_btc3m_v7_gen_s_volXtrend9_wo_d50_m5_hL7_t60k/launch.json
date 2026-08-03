@@ -1,0 +1,8 @@
+[
+ {
+  "at": "2026-08-02 01:35:32",
+  "cmd": "python3 optimize2_cli.py --strategy v7 --mode spot --method volXtrend9 --algo genetic --procs 14 --batch 100 --total 60000 --symbol btc --tf 3 --gap-mode skip_contaminated --max-dd 0.5 --max-hold-days 5 --scoring worst_window --name g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hL7_t60k --holdout-days 7 --space /Users/adrian/Code/strategy-lab/optimizer/param_spaces/variants/btc_3m.ai.json",
+  "resume_from": [],
+  "merge_mode": null
+ }
+]

@@ -1,0 +1,459 @@
+# Gamut g0801_2122 — report
+updated 2026-08-02 19:41
+
+Ranked by honest holdout %/mo (OOS-best preferred, no liq).
+
+## BTC
+- +75.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m7_hL7_t60k · dd 52%
+- +54.6%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m7_hL7_t100k · dd 84%
+- +54.2%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m7_hL7_t60k · dd 85%
+- +49.3%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m7_hL7_t60k · dd 39%
+- +45.0%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m5_hL7_t100k · dd 67%
+- +40.2%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m7_hL7_t100k · dd 62%
+- +38.9%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m7_hL7_t100k · dd 93%
+- +34.8%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m5_hL7_t60k · dd 73%
+- +34.4%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m7_hL7_t60k · dd 63%
+- +33.0%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m7_hL7_t60k · dd 63%
+- +25.2%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m7_hL7_t60k · dd 67%
+- +24.2%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m7_hL7_t100k · dd 92%
+- +23.2%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m7_hL7_t100k · dd 70%
+- +21.6%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m7_hL7_t100k · dd 69%
+- +21.3%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m7_hL7_t60k · dd 55%
+- +21.3%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m7_hL7_t100k · dd 55%
+- +20.7%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m7_hL7_t100k · dd 52%
+- +17.4%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m5_hL7_t60k · dd 86%
+- +16.1%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m5_hL7_t60k · dd 75%
+- +15.7%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m5_hA2508_t60k · dd 56%
+- +15.6%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m7_hL7_t100k · dd 73%
+- +15.4%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m5_hL7_t100k · dd 63%
+- +14.4%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m7_hL7_t100k · dd 64%
+- +13.7%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m5_hL7_t100k · dd 48%
+- +13.4%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m5_hL7_t60k · dd 62%
+- +13.4%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m5_hL7_t60k · dd 54%
+- +13.2%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m5_hL7_t60k · dd 71%
+- +12.6%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m5_hL7_t60k · dd 50%
+- +12.5%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m7_hL7_t60k · dd 82%
+- +11.3%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m5_hL7_t100k · dd 84%
+- +10.8%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m5_hL7_t100k · dd 94%
+- +10.7%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m5_hL7_t100k · dd 66%
+- +9.9%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m5_hL7_t100k · dd 30%
+- +9.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m5_hA2508_t60k · dd 79%
+- +9.6%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m7_hL7_t60k · dd 23%
+- +9.6%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m7_hL7_t100k · dd 23%
+- +9.4%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m7_hL7_t60k · dd 31%
+- +9.4%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m7_hL7_t100k · dd 31%
+- +8.2%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m5_hL7_t60k · dd 75%
+- +8.1%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m7_hL7_t100k · dd 34%
+- +8.1%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m7_hL7_t60k · dd 28%
+- +8.0%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m7_hA2508_t60k · dd 49%
+- +7.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m5_hA2508_t100k · dd 74%
+- +7.6%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m7_hL7_t100k · dd 55%
+- +7.1%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m7_hA2508_t100k · dd 63%
+- +7.0%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m5_hL7_t60k · dd 30%
+- +6.7%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m5_hL7_t100k · dd 71%
+- +6.6%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m7_hL7_t100k · dd 27%
+- +6.6%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m7_hL7_t60k · dd 28%
+- +6.6%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m7_hL7_t60k · dd 0%
+- +6.5%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m7_hL7_t100k · dd 0%
+- +6.5%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m7_hL7_t100k · dd 72%
+- +5.4%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m7_hL7_t60k · dd 84%
+- +5.2%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m7_hL7_t60k · dd 12%
+- +5.1%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m7_hL7_t100k · dd 13%
+- +5.1%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m7_hA2508_t100k · dd 79%
+- +4.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m7_hL7_t100k · dd 93%
+- +4.8%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m7_hL7_t100k · dd 13%
+- +4.8%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m7_hL7_t100k · dd 12%
+- +4.5%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m7_hL7_t60k · dd 8%
+- +4.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m7_hL7_t100k · dd 12%
+- +4.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m7_hL7_t60k · dd 10%
+- +3.7%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m5_hA2508_t100k · dd 88%
+- +3.6%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m7_hL7_t60k · dd 12%
+- +3.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m7_hL7_t100k · dd 18%
+- +3.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m7_hL7_t60k · dd 12%
+- +3.3%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m5_hL7_t60k · dd 5%
+- +3.3%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m5_hL7_t60k · dd 5%
+- +3.3%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m5_hL7_t60k · dd 5%
+- +3.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m7_hL7_t100k · dd 9%
+- +3.1%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m5_hL7_t60k · dd 10%
+- +3.0%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m5_hL7_t60k · dd 9%
+- +3.0%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m5_hL7_t100k · dd 9%
+- +2.9%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m7_hL7_t60k · dd 80%
+- +2.8%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m7_hL7_t60k · dd 33%
+- +2.8%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m7_hL7_t100k · dd 33%
+- +2.8%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m7_hA2508_t100k · dd 11%
+- +2.7%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hL7_t60k · dd 12%
+- +2.6%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m5_hL7_t100k · dd 15%
+- +2.6%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m7_hL7_t100k · dd 10%
+- +2.6%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m7_hA2508_t100k · dd 8%
+- +2.5%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m7_hL7_t100k · dd 11%
+- +2.4%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m7_hL7_t100k · dd 7%
+- +2.4%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m5_hL7_t100k · dd 9%
+- +2.4%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m5_hL7_t100k · dd 61%
+- +2.3%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m7_hA2508_t60k · dd 7%
+- +2.3%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m7_hL7_t60k · dd 53%
+- +2.3%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m7_hL7_t60k · dd 9%
+- +2.2%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m7_hA2508_t100k · dd 9%
+- +2.2%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m7_hA2508_t100k · dd 6%
+- +2.2%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m5_hL7_t100k · dd 7%
+- +2.2%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m7_hA2508_t60k · dd 6%
+- +2.1%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m7_hA2508_t60k · dd 8%
+- +2.1%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m5_hA2508_t60k · dd 7%
+- +2.1%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m5_hA2508_t100k · dd 7%
+- +2.1%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m7_hA2508_t100k · dd 8%
+- +2.1%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m7_hA2508_t60k · dd 10%
+- +2.1%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m5_hA2508_t60k · dd 14%
+- +2.1%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m5_hA2508_t60k · dd 15%
+- +2.0%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hL7_t100k · dd 10%
+- +2.0%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m5_hL7_t100k · dd 9%
+- +2.0%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m7_hA2508_t60k · dd 6%
+- +2.0%/mo · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m5_hA2508_t100k · dd 11%
+- +1.9%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m5_hL7_t60k · dd 10%
+- +1.9%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m5_hA2508_t100k · dd 9%
+- +1.9%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m5_hL7_t100k · dd 10%
+- +1.8%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m7_hL7_t60k · dd 6%
+- +1.8%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m7_hA2508_t60k · dd 12%
+- +1.8%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m7_hA2508_t100k · dd 12%
+- +1.7%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m7_hA2508_t100k · dd 5%
+- +1.7%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m5_hL7_t100k · dd 12%
+- +1.7%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m7_hL7_t60k · dd 20%
+- +1.7%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m7_hL7_t100k · dd 20%
+- +1.7%/mo · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m5_hA2508_t100k · dd 9%
+- +1.7%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m7_hA2508_t60k · dd 5%
+- +1.7%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m7_hL7_t60k · dd 13%
+- +1.7%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m7_hA2508_t60k · dd 6%
+- +1.6%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m7_hA2508_t100k · dd 0%
+- +1.6%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m7_hA2508_t60k · dd 5%
+- +1.6%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m7_hA2508_t100k · dd 5%
+- +1.6%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m7_hL7_t100k · dd 95%
+- +1.6%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m7_hA2508_t100k · dd 12%
+- +1.5%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m5_hL7_t60k · dd 10%
+- +1.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m7_hL7_t60k · dd 11%
+- +1.5%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m5_hA2508_t60k · dd 7%
+- +1.5%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m5_hA2508_t60k · dd 5%
+- +1.5%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m5_hA2508_t100k · dd 5%
+- +1.5%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m5_hL7_t60k · dd 7%
+- +1.5%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m5_hL7_t100k · dd 7%
+- +1.4%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m7_hA2508_t60k · dd 0%
+- +1.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m5_hA2508_t60k · dd 6%
+- +1.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m7_hA2508_t100k · dd 13%
+- +1.3%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m5_hA2508_t60k · dd 4%
+- +1.3%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m7_hL7_t60k · dd 4%
+- +1.3%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m7_hL7_t100k · dd 4%
+- +1.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m5_hL7_t100k · dd 5%
+- +1.3%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m7_hA2508_t60k · dd 8%
+- +1.3%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m5_hL7_t100k · dd 26%
+- +1.2%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m5_hL7_t60k · dd 5%
+- +1.2%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m7_hL7_t60k · dd 91%
+- +1.2%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m5_hL7_t100k · dd 7%
+- +1.2%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m5_hA2508_t60k · dd 5%
+- +1.2%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m5_hA2508_t60k · dd 7%
+- +1.2%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m5_hA2508_t100k · dd 7%
+- +1.2%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m7_hA2508_t60k · dd 9%
+- +1.2%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m5_hA2508_t100k · dd 9%
+- +1.2%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m5_hA2508_t100k · dd 6%
+- +1.2%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m7_hA2508_t100k · dd 5%
+- +1.1%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m5_hA2508_t60k · dd 14%
+- +1.1%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m5_hL7_t60k · dd 18%
+- +1.1%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m7_hA2508_t60k · dd 7%
+- +1.1%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m7_hA2508_t60k · dd 7%
+- +1.1%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m7_hA2508_t100k · dd 7%
+- +1.1%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m5_hL7_t60k · dd 7%
+- +1.1%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m7_hA2508_t100k · dd 5%
+- +1.1%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m5_hA2508_t100k · dd 6%
+- +1.1%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m5_hL7_t60k · dd 10%
+- +1.0%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m5_hA2508_t60k · dd 5%
+- +1.0%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m5_hA2508_t100k · dd 8%
+- +1.0%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m7_hA2508_t60k · dd 14%
+- +1.0%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m5_hA2508_t60k · dd 9%
+- +1.0%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m5_hA2508_t100k · dd 9%
+- +1.0%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m5_hA2508_t60k · dd 5%
+- +1.0%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m5_hL7_t60k · dd 7%
+- +1.0%/mo · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m5_hL7_t100k · dd 6%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m5_hA2508_t60k · dd 5%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m5_hA2508_t100k · dd 5%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m7_hA2508_t60k · dd 0%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m5_hA2508_t60k · dd 0%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m5_hL7_t100k · dd 0%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m5_hA2508_t100k · dd 8%
+- +0.9%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m5_hA2508_t60k · dd 9%
+- +0.9%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m5_hA2508_t100k · dd 9%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m5_hL7_t60k · dd 8%
+- +0.9%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m5_hL7_t100k · dd 8%
+- +0.9%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m7_hA2508_t100k · dd 5%
+- +0.8%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m5_hL7_t60k · dd 13%
+- +0.8%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m5_hL7_t100k · dd 13%
+- +0.8%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m7_hA2508_t60k · dd 11%
+- +0.8%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m7_hL7_t100k · dd 3%
+- +0.8%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m5_hL7_t60k · dd 15%
+- +0.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m5_hL7_t100k · dd 77%
+- +0.8%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m5_hL7_t100k · dd 8%
+- +0.8%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hA2508_t100k · dd 7%
+- +0.7%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_wo_d50_m5_hA2508_t60k · dd 5%
+- +0.7%/mo · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m7_hL7_t60k · dd 15%
+- +0.7%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m5_hA2508_t60k · dd 6%
+- +0.7%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m7_hL7_t100k · dd 79%
+- +0.7%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m5_hL7_t60k · dd 12%
+- +0.7%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m5_hL7_t100k · dd 12%
+- +0.7%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m5_hA2508_t100k · dd 8%
+- +0.7%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m7_hL7_t60k · dd 0%
+- +0.7%/mo · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m7_hL7_t100k · dd 0%
+- +0.6%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m5_hL7_t60k · dd 5%
+- +0.6%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m7_hA2508_t60k · dd 0%
+- +0.6%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m5_hA2508_t60k · dd 5%
+- +0.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m7_hA2508_t100k · dd 7%
+- +0.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m7_hA2508_t60k · dd 9%
+- +0.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m5_hA2508_t100k · dd 8%
+- +0.5%/mo · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m5_hL7_t100k · dd 11%
+- +0.5%/mo · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m5_hA2508_t100k · dd 5%
+- +0.4%/mo · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m7_hA2508_t100k · dd 3%
+- +0.4%/mo · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m7_hA2508_t100k · dd 10%
+- +0.4%/mo · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m5_hA2508_t100k · dd 15%
+- +0.4%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hA2508_t60k · dd 5%
+- +0.2%/mo · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m7_hA2508_t100k · dd 14%
+- -0.1%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m5_hA2508_t100k · dd 86%
+- -0.8%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m7_hL7_t60k · dd 83%
+- -1.2%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m5_hA2508_t60k · dd 70%
+- -1.5%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m7_hA2508_t100k · dd 88%
+- -1.6%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m7_hL7_t60k · dd 89%
+- -1.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m5_hL7_t60k · dd 86%
+- -2.2%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m5_hL7_t100k · dd 83%
+- -2.2%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m7_hL7_t100k · dd 91%
+- -2.3%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m5_hL7_t60k · dd 72%
+- -3.0%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m7_hA2508_t60k · dd 93%
+- -3.4%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m5_hA2508_t100k · dd 75%
+- -3.6%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m5_hL7_t100k · dd 85%
+- -4.0%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m5_hL7_t100k · dd 81%
+- -4.5%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m5_hL7_t60k · dd 89%
+- -4.7%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m5_hL7_t100k · dd 76%
+- -5.2%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m7_hA2508_t100k · dd 95%
+- -5.3%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m5_hA2508_t100k · dd 92%
+- -7.0%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m7_hL7_t100k · dd 68%
+- -7.2%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m5_hA2508_t60k · dd 86%
+- -7.4%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m7_hL7_t60k · dd 82%
+- -7.8%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m5_hA2508_t100k · dd 95%
+- -8.5%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m7_hA2508_t100k · dd 83%
+- -8.7%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m7_hL7_t60k · dd 75%
+- -8.8%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m5_hL7_t60k · dd 75%
+- -8.8%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m7_hA2508_t60k · dd 80%
+- -8.9%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m5_hA2508_t100k · dd 95%
+- -9.1%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m5_hL7_t100k · dd 76%
+- -9.9%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m7_hA2508_t60k · dd 83%
+- -11.1%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m7_hL7_t60k · dd 79%
+- -11.4%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m5_hA2508_t60k · dd 94%
+- -12.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m5_hA2508_t100k · dd 82%
+- -13.1%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m5_hA2508_t60k · dd 98%
+- -13.4%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m7_hA2508_t60k · dd 84%
+- -15.4%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m7_hA2508_t100k · dd 97%
+- -15.7%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m5_hL7_t60k · dd 92%
+- -16.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m5_hL7_t60k · dd 71%
+- -16.3%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m7_hA2508_t100k · dd 99%
+- -16.9%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m7_hA2508_t100k · dd 90%
+- -17.5%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m5_hA2508_t60k · dd 98%
+- -18.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m7_hA2508_t60k · dd 89%
+- -18.6%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m7_hL7_t60k · dd 82%
+- -19.1%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m7_hA2508_t100k · dd 91%
+- -19.2%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m5_hA2508_t60k · dd 97%
+- -19.3%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m7_hA2508_t60k · dd 98%
+- -19.6%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m7_hA2508_t60k · dd 95%
+- -21.1%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m7_hA2508_t100k · dd 97%
+- -22.0%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m5_hA2508_t100k · dd 98%
+- -22.2%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m7_hA2508_t60k · dd 94%
+- -22.3%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m7_hA2508_t100k · dd 100%
+- -23.3%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m7_hA2508_t60k · dd 96%
+- -23.6%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m5_hA2508_t60k · dd 99%
+- -24.5%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m7_hA2508_t100k · dd 99%
+- -26.0%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m7_hA2508_t60k · dd 96%
+- -26.8%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m5_hL7_t100k · dd 100%
+- -28.5%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m5_hA2508_t100k · dd 99%
+- -28.5%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m5_hL7_t60k · dd 100%
+- -29.0%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m7_hA2508_t100k · dd 93%
+- -30.0%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m5_hA2508_t100k · dd 99%
+- -30.1%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m7_hA2508_t60k · dd 95%
+- -30.6%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m7_hL7_t100k · dd 95%
+- -30.7%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m7_hA2508_t60k · dd 99%
+- -31.3%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m5_hA2508_t60k · dd 100%
+- -31.4%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m7_hA2508_t100k · dd 100%
+- -31.4%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m5_hL7_t60k · dd 100%
+- -32.7%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m7_hA2508_t100k · dd 99%
+- -33.0%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m7_hA2508_t100k · dd 100%
+- -33.1%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m5_hL7_t100k · dd 100%
+- -33.5%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m5_hA2508_t100k · dd 100%
+- -34.6%/mo · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m7_hA2508_t60k · dd 100%
+- -35.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m7_hA2508_t100k · dd 99%
+- -35.6%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m7_hA2508_t60k · dd 98%
+- -35.7%/mo · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m7_hA2508_t60k · dd 100%
+- -35.8%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m5_hA2508_t100k · dd 96%
+- -36.6%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m5_hA2508_t100k · dd 97%
+- -38.0%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m5_hA2508_t100k · dd 100%
+- -38.6%/mo · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m5_hA2508_t60k · dd 99%
+- -38.8%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m5_hA2508_t60k · dd 100%
+- -40.1%/mo · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m5_hL7_t60k · dd 100%
+- -40.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m5_hA2508_t60k · dd 100%
+- -41.5%/mo · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m5_hA2508_t60k · dd 99%
+- -41.7%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m5_hA2508_t100k · dd 99%
+- -41.8%/mo · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m7_hA2508_t60k · dd 100%
+- -44.3%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m7_hA2508_t100k · dd 100%
+- -44.5%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m5_hL7_t100k · dd 100%
+- -44.7%/mo · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m5_hA2508_t100k · dd 100%
+- -45.0%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m5_hA2508_t60k · dd 100%
+- -45.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m5_hA2508_t60k · dd 100%
+- -47.2%/mo · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m5_hA2508_t60k · dd 100%
+- -48.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m5_hA2508_t100k · dd 100%
+- -54.3%/mo · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m7_hA2508_t60k · dd 100%
+- -57.9%/mo · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m5_hA2508_t60k · dd 100%
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m5_hN_t60k · TRAIN-ONLY +3.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m5_hN_t100k · TRAIN-ONLY +4.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m7_hN_t60k · TRAIN-ONLY +4.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_cl_d50_m7_hN_t100k · TRAIN-ONLY +4.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m5_hN_t60k · TRAIN-ONLY +2.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m5_hN_t100k · TRAIN-ONLY +2.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m7_hN_t60k · TRAIN-ONLY +1.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_wo_d50_m7_hN_t100k · TRAIN-ONLY +3.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m5_hN_t60k · TRAIN-ONLY +1.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m5_hN_t100k · TRAIN-ONLY +1.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m7_hN_t60k · TRAIN-ONLY +1.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_vol3_un_d50_m7_hN_t100k · TRAIN-ONLY +1.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m5_hN_t60k · TRAIN-ONLY +4.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m5_hN_t100k · TRAIN-ONLY +3.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m7_hN_t60k · TRAIN-ONLY +3.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_cl_d50_m7_hN_t100k · TRAIN-ONLY +4.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m5_hN_t60k · TRAIN-ONLY +2.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m5_hN_t100k · TRAIN-ONLY +3.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m7_hN_t60k · TRAIN-ONLY +3.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_wo_d50_m7_hN_t100k · TRAIN-ONLY +3.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m5_hN_t60k · TRAIN-ONLY +1.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m5_hN_t100k · TRAIN-ONLY +0.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m7_hN_t60k · TRAIN-ONLY +0.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_trend3_un_d50_m7_hN_t100k · TRAIN-ONLY +0.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m5_hN_t60k · TRAIN-ONLY +4.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m5_hN_t100k · TRAIN-ONLY +4.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m7_hN_t60k · TRAIN-ONLY +5.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_cl_d50_m7_hN_t100k · TRAIN-ONLY +6.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hN_t60k · TRAIN-ONLY +2.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m5_hN_t100k · TRAIN-ONLY +3.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m7_hN_t60k · TRAIN-ONLY +3.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_wo_d50_m7_hN_t100k · TRAIN-ONLY +3.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m5_hN_t60k · TRAIN-ONLY +1.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m5_hN_t100k · TRAIN-ONLY +2.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m7_hN_t60k · TRAIN-ONLY +1.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_s_volXtrend9_un_d50_m7_hN_t100k · TRAIN-ONLY +1.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m5_hN_t60k · TRAIN-ONLY +46.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m5_hN_t100k · TRAIN-ONLY +59.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m7_hN_t60k · TRAIN-ONLY +74.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_cl_d50_m7_hN_t100k · TRAIN-ONLY +68.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m5_hN_t60k · TRAIN-ONLY +44.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m5_hN_t100k · TRAIN-ONLY +29.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m7_hN_t60k · TRAIN-ONLY +45.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_wo_d50_m7_hN_t100k · TRAIN-ONLY +48.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m5_hN_t60k · TRAIN-ONLY +45.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m5_hN_t100k · TRAIN-ONLY +56.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m7_hN_t60k · TRAIN-ONLY +58.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_vol3_un_d50_m7_hN_t100k · TRAIN-ONLY +88.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m5_hN_t60k · TRAIN-ONLY +54.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m5_hN_t100k · TRAIN-ONLY +76.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m7_hN_t60k · TRAIN-ONLY +68.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_cl_d50_m7_hN_t100k · TRAIN-ONLY +82.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m5_hN_t60k · TRAIN-ONLY +37.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m5_hN_t100k · TRAIN-ONLY +47.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m7_hN_t60k · TRAIN-ONLY +29.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_wo_d50_m7_hN_t100k · TRAIN-ONLY +37.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m5_hN_t60k · TRAIN-ONLY +50.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m5_hN_t100k · TRAIN-ONLY +53.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m7_hN_t60k · TRAIN-ONLY +63.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_trend3_un_d50_m7_hN_t100k · TRAIN-ONLY +89.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m5_hN_t60k · TRAIN-ONLY +55.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m5_hN_t100k · TRAIN-ONLY +52.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m7_hN_t60k · TRAIN-ONLY +64.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_cl_d50_m7_hN_t100k · TRAIN-ONLY +56.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m5_hN_t60k · TRAIN-ONLY +36.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m5_hN_t100k · TRAIN-ONLY +36.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m7_hN_t60k · TRAIN-ONLY +28.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_wo_d50_m7_hN_t100k · TRAIN-ONLY +29.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m5_hN_t60k · TRAIN-ONLY +28.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m5_hN_t100k · TRAIN-ONLY +51.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m7_hN_t60k · TRAIN-ONLY +48.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_v7_gen_l_volXtrend9_un_d50_m7_hN_t100k · TRAIN-ONLY +80.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m5_hN_t60k · TRAIN-ONLY +3.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m5_hN_t100k · TRAIN-ONLY +3.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m7_hN_t60k · TRAIN-ONLY +2.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_cl_d50_m7_hN_t100k · TRAIN-ONLY +3.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m5_hN_t60k · TRAIN-ONLY +1.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m5_hN_t100k · TRAIN-ONLY +1.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m7_hN_t60k · TRAIN-ONLY +2.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_wo_d50_m7_hN_t100k · TRAIN-ONLY +2.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m5_hN_t60k · TRAIN-ONLY +0.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m5_hN_t100k · TRAIN-ONLY +0.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m7_hN_t60k · TRAIN-ONLY +0.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_vol3_un_d50_m7_hN_t100k · TRAIN-ONLY +0.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m5_hN_t60k · TRAIN-ONLY +4.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m5_hN_t100k · TRAIN-ONLY +4.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m7_hN_t60k · TRAIN-ONLY +3.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_cl_d50_m7_hN_t100k · TRAIN-ONLY +3.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m5_hN_t60k · TRAIN-ONLY +1.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m5_hN_t100k · TRAIN-ONLY +1.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m7_hN_t60k · TRAIN-ONLY +1.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_wo_d50_m7_hN_t100k · TRAIN-ONLY +1.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m5_hN_t60k · TRAIN-ONLY +0.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m5_hN_t100k · TRAIN-ONLY +0.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m7_hN_t60k · TRAIN-ONLY +0.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_trend3_un_d50_m7_hN_t100k · TRAIN-ONLY +0.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m5_hN_t60k · TRAIN-ONLY +3.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m5_hN_t100k · TRAIN-ONLY +3.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m7_hN_t60k · TRAIN-ONLY +4.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_cl_d50_m7_hN_t100k · TRAIN-ONLY +5.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m5_hN_t60k · TRAIN-ONLY +1.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m5_hN_t100k · TRAIN-ONLY +1.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m7_hN_t60k · TRAIN-ONLY +1.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_wo_d50_m7_hN_t100k · TRAIN-ONLY +1.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m5_hN_t60k · TRAIN-ONLY +0.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m5_hN_t100k · TRAIN-ONLY +1.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m7_hN_t60k · TRAIN-ONLY +1.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_s_volXtrend9_un_d50_m7_hN_t100k · TRAIN-ONLY +1.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m5_hN_t60k · TRAIN-ONLY +35.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m5_hN_t100k · TRAIN-ONLY +49.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m7_hN_t60k · TRAIN-ONLY +34.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_cl_d50_m7_hN_t100k · TRAIN-ONLY +40.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m5_hN_t60k · TRAIN-ONLY +19.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m5_hN_t100k · TRAIN-ONLY +24.3%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m7_hN_t60k · TRAIN-ONLY +21.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_wo_d50_m7_hN_t100k · TRAIN-ONLY +23.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m5_hN_t60k · TRAIN-ONLY +18.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m5_hN_t100k · TRAIN-ONLY +21.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m7_hN_t60k · TRAIN-ONLY +18.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_vol3_un_d50_m7_hN_t100k · TRAIN-ONLY +30.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m5_hN_t60k · TRAIN-ONLY +74.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m5_hN_t100k · TRAIN-ONLY +80.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m7_hN_t60k · TRAIN-ONLY +68.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_cl_d50_m7_hN_t100k · TRAIN-ONLY +94.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m5_hN_t60k · TRAIN-ONLY +18.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m5_hN_t100k · TRAIN-ONLY +20.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m7_hN_t60k · TRAIN-ONLY +12.7%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_wo_d50_m7_hN_t100k · TRAIN-ONLY +13.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m5_hN_t60k · TRAIN-ONLY +16.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m5_hN_t100k · TRAIN-ONLY +17.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m7_hN_t60k · TRAIN-ONLY +16.5%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_trend3_un_d50_m7_hN_t100k · TRAIN-ONLY +18.9%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m5_hN_t60k · TRAIN-ONLY +70.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m5_hN_t100k · TRAIN-ONLY +77.1%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m7_hN_t60k · TRAIN-ONLY +35.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_cl_d50_m7_hN_t100k · TRAIN-ONLY +43.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m5_hN_t60k · TRAIN-ONLY +13.2%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m5_hN_t100k · TRAIN-ONLY +21.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m7_hN_t60k · TRAIN-ONLY +9.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_wo_d50_m7_hN_t100k · TRAIN-ONLY +23.4%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m5_hN_t60k · TRAIN-ONLY +7.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m5_hN_t100k · TRAIN-ONLY +10.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m7_hN_t60k · TRAIN-ONLY +23.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_macdx_gen_l_volXtrend9_un_d50_m7_hN_t100k · TRAIN-ONLY +25.0%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m5_hN_t60k · TRAIN-ONLY +1.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m5_hN_t100k · TRAIN-ONLY +1.6%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m7_hN_t60k · TRAIN-ONLY +1.8%/mo (no OOS evidence — not comparable)
+-   —   · g0801_2122_btc3m_scalpx2_gen_s_vol3_cl_d50_m7_hN_t100k · TRAIN-ONLY +1.8%/mo (no OOS evidence — not comparable)
+
+## ETH
+
+## DOGE
+
+## XRP
+
+## SUI

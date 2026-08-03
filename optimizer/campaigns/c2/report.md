@@ -1,5 +1,5 @@
 # Campaign c2 — report
-updated 2026-07-20 22:16
+updated 2026-08-01 21:23
 
 Ranked by OOS-best holdout %/mo (the honest number). tpm = trades/month; prefer high tpm + modest %/trade (many-small-gains goal). Verify with walk-forward before adopting.
 

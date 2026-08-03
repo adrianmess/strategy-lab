@@ -1,0 +1,70 @@
+{
+ "procs": 14,
+ "pairs": [
+  "btc",
+  "eth",
+  "doge",
+  "xrp",
+  "sui"
+ ],
+ "strategies": [
+  "v7",
+  "macdx",
+  "scalpx2"
+ ],
+ "algos": [
+  "genetic"
+ ],
+ "modes": [
+  "spot",
+  "lev"
+ ],
+ "tfs": [
+  3,
+  1,
+  5
+ ],
+ "methods": [
+  "vol3",
+  "trend3",
+  "volXtrend9"
+ ],
+ "scorings": [
+  "classic",
+  "worst_window",
+  "underwater"
+ ],
+ "max_dds": [
+  0.5
+ ],
+ "max_holds": [
+  5,
+  7
+ ],
+ "totals": [
+  60000,
+  100000
+ ],
+ "holdouts": [
+  {
+   "kind": "date",
+   "date": "2025-08-28"
+  },
+  {
+   "kind": "alt",
+   "days": 7
+  },
+  {
+   "kind": "outside",
+   "a": "2024-11-16",
+   "b": "2025-08-28"
+  },
+  {
+   "kind": "none"
+  }
+ ],
+ "space_variant": "ai",
+ "lev_stops": true,
+ "cadapt": false,
+ "name": "g0801_2122"
+}
