@@ -1,5 +1,13 @@
 # Strategy Lab — Session Handoff
-Updated: 2026-08-01. Paste into a new session to resume. Keep this file updated as work progresses.
+Updated: 2026-08-02 (EC2 offload live). Paste into a new session to resume. Keep this file updated as work progresses.
+
+## ACTIVE: EC2 gamut offload (2026-08-02)
+- Campaign gamut_g0801_2122 (12,960 specs; 445 done locally; ~12,515 remaining) OFFLOADED to AWS. Local gamut STOPPED (STOP file). Plan repaired: dup-date bug '2024-11-16&#50;024-11-16' fixed in 3,240 cmds, 148 failed reset (UI now clamps dates).
+- Instance: c8a.48xlarge SPOT, i-0a1df362705645c84, us-east-2b, IP 18.219.187.235, ~$3.54/hr (2a had no capacity), persistent spot + stop-on-interrupt, 200GB gp3, SG gamut-ssh (sg-0b1b15deb810aa8ad, SSH only from 97.120.254.99). Key: ~/Downloads/gamut-key.pem. Expect ~$170-200 total over ~2-3 days.
+- On the box: repo at ~/strategy-lab (no 36GB caches — rebuilt on demand from 590MB data/), venv at ~/venv (numpy 2.4.6/pandas 3.0.5/numba 0.66/pyarrow 24.0), worker in tmux session 'gamut': `gamut_worker.py --jobs 13` (13×14 procs), log ~/worker.log, per-spec logs in campaigns/.../logs/. All 16 AI space variants synced. Worker fixes applied: local python + local AI-space path resolution (plans embed builder-machine paths).
+- Mac side: sync loop running (scripts/offload_sync.sh, /tmp/offload_sync.log) — pulls completed runs + worker_state.json every 5 min, additive only. Monitor: `python3 -c "import json,collections;print(collections.Counter(v['status'] for v in json.load(open('optimizer/campaigns/gamut_g0801_2122/worker_state.json')).values()))"`.
+- Graceful stop: `ssh -i ~/Downloads/gamut-key.pem ubuntu@18.219.187.235 'touch strategy-lab/optimizer/campaigns/gamut_g0801_2122/STOP_WORKER'`.
+- TEARDOWN WHEN DONE (Adrian or with his OK): cancel the PERSISTENT spot request FIRST, then terminate instance, else it relaunches: `aws ec2 describe-spot-instance-requests` → cancel-spot-instance-requests → terminate-instances i-0a1df362705645c84. EBS deletes on termination.
 
 ## 1. Goal
 Personal platform (`/Users/adrian/Code/strategy-lab`) for optimizing, backtesting, and live-trading TradingView-ported strategies on MEXC (native API — Playwright era is over). Current focus: SPOT, multi-pair (SOL/BTC/ETH/DOGE/XRP/SUI vs USDT), one-position-at-a-time FCFS. Core doctrine: HONEST evaluation — holdout/walk-forward beats train-best; only walk-forward PASS runs may be adopted to live.
