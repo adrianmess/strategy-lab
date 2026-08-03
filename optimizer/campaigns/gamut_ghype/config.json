@@ -59,7 +59,7 @@
   }
  ],
  "space_variant": "ai",
- "lev_stops": true,
+ "lev_stops": "both",
  "cadapt": false,
  "name": "ghype"
 }
