@@ -36,8 +36,12 @@ def done_already(name):
 
 
 def ensure_ai_space(spec):
-    """Generate the AI space once per space name (thread-safe)."""
-    sp_name, sp_path = spec["ai_space"]
+    """Generate the AI space once per space name (thread-safe).
+    NOTE: the plan stores the path from the machine that BUILT it — recompute
+    locally so offload boxes resolve their own copy."""
+    sp_name = spec["ai_space"][0]
+    sp_path = os.path.join(HERE, "param_spaces", "variants",
+                           f"{sp_name}.ai.json")
     with _lock:
         lk = _space_locks.setdefault(sp_name, threading.Lock())
     with lk:
@@ -102,7 +106,8 @@ def main():
                     state.get(name, {}).get("status") == "done":
                 note(name, "skipped")
                 continue
-            cmd = list(s["cmd"])
+            # cmd[0] is the python of the machine that BUILT the plan — use ours
+            cmd = [sys.executable] + list(s["cmd"])[1:]
             if s.get("ai_space"):
                 sp = ensure_ai_space(s)
                 if sp:
@@ -110,9 +115,13 @@ def main():
             print(f"[{time.strftime('%H:%M:%S')}] T{tid} start {name}",
                   flush=True)
             note(name, "running")
-            with open(os.path.join(logs, name + ".log"), "w") as lf:
-                rc = subprocess.run(cmd, cwd=HERE, stdout=lf,
-                                    stderr=subprocess.STDOUT).returncode
+            try:
+                with open(os.path.join(logs, name + ".log"), "w") as lf:
+                    rc = subprocess.run(cmd, cwd=HERE, stdout=lf,
+                                        stderr=subprocess.STDOUT).returncode
+            except Exception as e:
+                print(f"T{tid} spawn error {name}: {e}", flush=True)
+                rc = 1
             note(name, "done" if rc == 0 else "failed")
             print(f"[{time.strftime('%H:%M:%S')}] T{tid} {name} -> "
                   f"{'done' if rc == 0 else 'FAILED'} "
