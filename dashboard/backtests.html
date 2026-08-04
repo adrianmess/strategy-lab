@@ -571,6 +571,17 @@ function select(i){
   sel=i; render();
   if(i===null){ if(chart){chart.destroy();chart=null;} return; }
   const e = BT[i];
+  // full curve + trades live in per-entry detail files (the single-file
+  // backtests.js grew to 548MB and crashed the tab) — fetch on first view
+  if(e.detail && !e._dl){
+    e._dl = true;
+    fetch('bt_detail/'+encodeURIComponent(e.name)+'.json')
+      .then(r=>r.json())
+      .then(d=>{ e.curve=d.curve||e.curve; e.trades=d.trades||[];
+                 if(sel===i) select(i); })
+      .catch(()=>{ e._dl=false; });
+    // fall through: render coarse curve now, re-render when detail lands
+  }
   const tm = e.stats && e.stats.total_mult;
   let totalHtml = '';
   if(!e.stats.liq && tm!=null && isFinite(tm)){
