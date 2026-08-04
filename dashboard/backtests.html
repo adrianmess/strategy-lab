@@ -127,6 +127,10 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
         <option value="month">month</option>
         <option value="week">week</option>
       </select></label>
+    <label style="margin-left:10px" title="only show runs whose LONGEST single trade lasted at most this many days (actual hold computed from the full trade list; runs with no trades are hidden while active)">longest hold ≤
+      <input id="fMaxHold" type="number" step="0.5" min="0" placeholder="—" style="width:52px" onchange="saveBtFilters()">d</label>
+    <label style="margin-left:10px" title="only show runs whose mark-to-market max drawdown is at most this percent">max DD ≤
+      <input id="fMaxDD" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
     <span class="hint" id="fCount"></span>
   </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
@@ -391,6 +395,8 @@ function saveBtFilters(){
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
   localStorage.setItem('btFilterNoNeg', document.getElementById('fNoNeg').value);
+  localStorage.setItem('btFilterMaxHold', document.getElementById('fMaxHold').value);
+  localStorage.setItem('btFilterMaxDD', document.getElementById('fMaxDD').value);
   sel = null; render();
 }
 function pairPill(p, mkt, tf){
@@ -412,6 +418,8 @@ function pairPill(p, mkt, tf){
   document.getElementById('fOpenPos').value = ['open','flat'].includes(fop) ? fop : (fop==='1' ? 'open' : 'all');
   const fnn = localStorage.getItem('btFilterNoNeg');
   document.getElementById('fNoNeg').value = ['month','week'].includes(fnn) ? fnn : 'all';
+  document.getElementById('fMaxHold').value = localStorage.getItem('btFilterMaxHold') || '';
+  document.getElementById('fMaxDD').value = localStorage.getItem('btFilterMaxDD') || '';
 })();
 // ---- "no losing period" support: weekly returns derived from the curve ----
 const _WEEKOK = new Map();   // entry index -> bool (cached)
@@ -483,6 +491,10 @@ function render(){
   const fNegV = document.getElementById('fNoNeg').value;
   if(fNegV === 'month') order = order.filter(_noNegMonth);
   else if(fNegV === 'week') order = order.filter(_noNegWeek);
+  const fMH = +document.getElementById('fMaxHold').value;
+  if(fMH > 0) order = order.filter(i=>BT[i].max_hold_days != null && BT[i].max_hold_days <= fMH);
+  const fDD = +document.getElementById('fMaxDD').value;
+  if(fDD > 0) order = order.filter(i=>{const st=BT[i].stats||{}; const v = st.maxdd_mtm!=null? st.maxdd_mtm : st.maxdd_closed; return v!=null && 100*v <= fDD;});
   document.getElementById('fCount').textContent =
     (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){

@@ -13,7 +13,23 @@ P = os.path.join(HERE, "..", "dashboard", "backtests.js")
 DETAIL_DIR = os.path.join(HERE, "..", "dashboard", "bt_detail")
 
 
+def max_hold_days(trades):
+    import datetime as dt
+    mx = 0.0
+    for t in trades or []:
+        try:
+            a = dt.datetime.strptime(t["entry_t"], "%Y-%m-%d %H:%M:%S")
+            b = dt.datetime.strptime(t["exit_t"], "%Y-%m-%d %H:%M:%S")
+            mx = max(mx, (b - a).total_seconds() / 86400.0)
+        except Exception:
+            pass
+    return round(mx, 2)
+
+
 def prune_entry(e, max_curve=500, max_trades=300):
+    # stamp actual longest hold BEFORE trades get capped/stripped
+    if e.get("max_hold_days") is None and e.get("trades"):
+        e["max_hold_days"] = max_hold_days(e["trades"])
     c = e.get("curve") or []
     if len(c) > max_curve:
         step = (len(c) - 1) / (max_curve - 1)
