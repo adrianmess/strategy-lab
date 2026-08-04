@@ -1504,13 +1504,20 @@ def gamut_progress():
     if not os.path.exists(plan_p):
         return jsonify(error="no plan"), 404
     plan = json.load(open(plan_p))
-    st_p = os.path.join(pdir, "worker_state.json")
+    # merge state from every box (worker_state.json, worker_state_b.json, …)
+    import glob as _glob
     state = {}
-    if os.path.exists(st_p):
+    st_p = None
+    for sp in sorted(_glob.glob(os.path.join(pdir, "worker_state*.json"))):
+        st_p = st_p or sp
         try:
-            state = json.load(open(st_p))
+            for k, v in json.load(open(sp)).items():
+                if k not in state or (v.get("at") or "") > (state[k].get("at") or ""):
+                    state[k] = v
         except Exception:
-            state = {}
+            pass
+    st_p = max(_glob.glob(os.path.join(pdir, "worker_state*.json")),
+               key=os.path.getmtime, default=None)
     now = time.time()
     counts = Counter()
     pairs = defaultdict(lambda: [0, 0])
