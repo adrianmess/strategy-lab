@@ -1532,6 +1532,19 @@ def gamut_progress():
             eff = "done"
         else:
             eff = sst or "pending"
+        if eff == "running":
+            # ghost-buster: spot interruptions strand 'running' entries that
+            # never resolve — anything older than 90 min with no result is
+            # really pending (it will be re-picked by a worker)
+            try:
+                t = _dt.datetime.strptime(st.get("at", ""),
+                                          "%Y-%m-%d %H:%M:%S").timestamp()
+                if t > now + 600:
+                    t -= 7 * 3600          # pre-TZ-fix UTC stamps
+                if now - t > 90 * 60:
+                    eff = "pending"
+            except Exception:
+                eff = "pending"
         counts[eff] += 1
         pairs[s["coin"]][1] += 1
         if eff == "done":
