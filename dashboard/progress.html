@@ -140,7 +140,7 @@ async function refresh(){
     const g=r.holdout_pct_mo;
     let txt, cls;
     if(g!=null){ txt=(g>0?'+':'')+g+'%'; cls=g>=0?'pos':'neg'; }
-    else if(r.survivor===false){ txt='no survivor'; cls='mut'; }
+    else if(r.survivor===false){ txt='no survivor'; cls='neg'; }
     else { txt='train-only'; cls='mut'; }
     return `<tr><td class="mut">${r.at||''}</td><td class="mono">${r.name}</td><td class="${cls}" ${r.survivor===false?'title="the search found no config passing the feasibility gates (max DD / max hold) — a legitimate negative result; nothing to backtest"':''}>${txt}${r.liq?' ⚠liq':''}</td><td class="mut">${r.dd_pct!=null? r.dd_pct+'%':''}</td></tr>`;
   }).join('') || '<tr><td colspan="4" class="mut">nothing finished yet</td></tr>';
