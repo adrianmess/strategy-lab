@@ -19,6 +19,9 @@ while true; do
       "ubuntu@$IP:strategy-lab/optimizer/runs/" "$LAB/optimizer/runs/" 2>/dev/null
     rsync -az --timeout=60 --include='*/' --include='best_config.json' --exclude='*' \
       -e "$SSH" "$LAB/optimizer/runs/" "ubuntu@$IP:strategy-lab/optimizer/runs/" 2>/dev/null
+    # keep worker code current on the boxes (applies at their next restart)
+    rsync -az --timeout=30 -e "$SSH" "$LAB/optimizer/gamut_worker.py" \
+      "ubuntu@$IP:strategy-lab/optimizer/gamut_worker.py" 2>/dev/null
     for cdir in "$LAB"/optimizer/campaigns/gamut_*/; do
       cn=$(basename "$cdir")
       rsync -az --timeout=30 -e "$SSH" \

@@ -1549,7 +1549,9 @@ def gamut_progress():
         pairs[s["coin"]][1] += 1
         if eff == "done":
             pairs[s["coin"]][0] += 1
-            if st.get("at"):
+            # rate/recent lists use REAL completions only — 'skipped'
+            # re-stamps from worker restarts inflated the rate/ETA
+            if st.get("at") and sst == "done":
                 done_times.append((st["at"], n))
         elif eff == "running":
             running.append(dict(name=n, since=st.get("at")))

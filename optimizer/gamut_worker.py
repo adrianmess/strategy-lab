@@ -103,8 +103,12 @@ def main():
                     return
             name = s["name"]
             if done_already(name) or \
-                    state.get(name, {}).get("status") == "done":
-                note(name, "skipped")
+                    state.get(name, {}).get("status") in ("done", "skipped"):
+                # record the skip ONCE and never overwrite a real 'done'
+                # entry — restart skip-floods used to re-stamp thousands of
+                # entries and poison the completion-rate/ETA math
+                if name not in state:
+                    note(name, "skipped")
                 continue
             # cmd[0] is the python of the machine that BUILT the plan — use ours
             cmd = [sys.executable] + list(s["cmd"])[1:]
