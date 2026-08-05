@@ -115,7 +115,8 @@ async function refresh(){
   // progress bar
   const pct=x=>100*x/d.total;
   $('mainBar').innerHTML = `<div class="done" style="width:${pct(done)}%"></div><div class="run" style="width:${pct(run)}%"></div><div class="fail" style="width:${pct(fail)}%"></div>`;
-  $('barLegend').textContent = `${done.toLocaleString()} / ${d.total.toLocaleString()} done (${(100*done/d.total).toFixed(1)}%) · ${run} running · ${fail} failed`;
+  const intr = c.interrupted||0;
+  $('barLegend').textContent = `${done.toLocaleString()} / ${d.total.toLocaleString()} done (${(100*done/d.total).toFixed(1)}%) · ${run} running · ${fail} failed${intr?` · ${intr} interrupted (awaiting retry)`:''}`;
   // sync freshness (worker_state.json is rsynced from the EC2 box every ~5 min)
   if(d.worker_state_age_sec!=null){
     const m=Math.round(d.worker_state_age_sec/60);
@@ -134,7 +135,7 @@ async function refresh(){
   }).join('');
   // running table
   $('runCt').textContent = run? `(${run})` : '';
-  $('runBody').innerHTML = d.running.map(r=>`<tr><td class="mono">${r.name}</td><td class="mut">${r.since||''}</td><td>${ago(r.since)}</td></tr>`).join('') || '<tr><td colspan="3" class="mut">none</td></tr>';
+  $('runBody').innerHTML = d.running.map(r=>`<tr><td class="mono">${r.name}${r.try>1?` <span style="color:var(--amber,#d29922)" title="killed ${r.try-1}× by spot interruptions; elapsed restarts from each re-pick">⟳ retry #${r.try}</span>`:''}</td><td class="mut">${r.since||''}</td><td>${ago(r.since)}</td></tr>`).join('') || '<tr><td colspan="3" class="mut">none</td></tr>';
   // recent
   $('recBody').innerHTML = d.recent.map(r=>{
     const g=r.holdout_pct_mo;

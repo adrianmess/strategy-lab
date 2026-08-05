@@ -1533,18 +1533,17 @@ def gamut_progress():
         else:
             eff = sst or "pending"
         if eff == "running":
-            # ghost-buster: spot interruptions strand 'running' entries that
-            # never resolve — anything older than 90 min with no result is
-            # really pending (it will be re-picked by a worker)
+            # ghost-buster fallback (workers now mark strandings themselves
+            # at startup): stale 'running' with no result = interrupted
             try:
                 t = _dt.datetime.strptime(st.get("at", ""),
                                           "%Y-%m-%d %H:%M:%S").timestamp()
                 if t > now + 600:
                     t -= 7 * 3600          # pre-TZ-fix UTC stamps
-                if now - t > 45 * 60:   # kill-wave corpses clear faster
-                    eff = "pending"
+                if now - t > 45 * 60:
+                    eff = "interrupted"
             except Exception:
-                eff = "pending"
+                eff = "interrupted"
         counts[eff] += 1
         pairs[s["coin"]][1] += 1
         if eff == "done":
@@ -1554,7 +1553,8 @@ def gamut_progress():
             if st.get("at") and sst == "done":
                 done_times.append((st["at"], n))
         elif eff == "running":
-            running.append(dict(name=n, since=st.get("at")))
+            running.append(dict(name=n, since=st.get("at"),
+                                **({"try": st["try"]} if st.get("try") else {})))
         elif eff == "failed":
             failed.append(dict(name=n, at=st.get("at")))
     done_times.sort()
@@ -1576,7 +1576,8 @@ def gamut_progress():
         span = max(window) - min(window)
         if span > 120 and len(window) >= 3:
             rate_hr = round((len(window) - 1) / (span / 3600.0), 1)
-            remaining = counts.get("pending", 0) + counts.get("running", 0)
+            remaining = (counts.get("pending", 0) + counts.get("running", 0)
+                         + counts.get("interrupted", 0))
             eta_h = round(remaining / rate_hr, 1)
     recent = []
     for a, n in done_times[-15:][::-1]:

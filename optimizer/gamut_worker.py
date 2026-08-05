@@ -79,15 +79,30 @@ def main():
             state = json.load(open(state_p))
         except Exception:
             state = {}
+    # startup sweep: nothing is running yet, so any 'running' entries are
+    # strandings from a previous incarnation (spot interruption) — mark them
+    # so the dashboard can show them honestly
+    swept = 0
+    for k, v in state.items():
+        if v.get("status") == "running":
+            v["status"] = "interrupted"
+            swept += 1
+    if swept:
+        _atomic_dump(state, state_p)
+        print(f"startup: marked {swept} stranded 'running' entries as "
+              f"interrupted (will retry)", flush=True)
     n_total = len(specs)
     print(f"worker: {n_total} candidate specs, jobs={a.jobs}", flush=True)
 
     it = iter(specs)
     counters = dict(done=0, failed=0, skipped=0)
 
-    def note(name, status):
+    def note(name, status, tries=None):
         with _lock:
-            state[name] = dict(status=status, at=time.strftime("%F %T"))
+            e = dict(status=status, at=time.strftime("%F %T"))
+            if tries and tries > 1:
+                e["try"] = tries
+            state[name] = e
             if status in counters:
                 counters[status] += 1
             _atomic_dump(state, state_p)
@@ -116,9 +131,12 @@ def main():
                 sp = ensure_ai_space(s)
                 if sp:
                     cmd += ["--space", sp]
-            print(f"[{time.strftime('%H:%M:%S')}] T{tid} start {name}",
-                  flush=True)
-            note(name, "running")
+            prev = state.get(name, {})
+            tries = (prev.get("try", 1) + 1
+                     if prev.get("status") in ("interrupted", "failed") else 1)
+            print(f"[{time.strftime('%H:%M:%S')}] T{tid} start {name}"
+                  + (f" (retry #{tries})" if tries > 1 else ""), flush=True)
+            note(name, "running", tries)
             try:
                 with open(os.path.join(logs, name + ".log"), "w") as lf:
                     rc = subprocess.run(cmd, cwd=HERE, stdout=lf,
@@ -126,7 +144,7 @@ def main():
             except Exception as e:
                 print(f"T{tid} spawn error {name}: {e}", flush=True)
                 rc = 1
-            note(name, "done" if rc == 0 else "failed")
+            note(name, "done" if rc == 0 else "failed", tries)
             print(f"[{time.strftime('%H:%M:%S')}] T{tid} {name} -> "
                   f"{'done' if rc == 0 else 'FAILED'} "
                   f"({counters['done']}d/{counters['failed']}f)", flush=True)
