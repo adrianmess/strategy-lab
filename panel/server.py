@@ -1526,9 +1526,10 @@ def gamut_progress():
         n = s["name"]
         st = state.get(n, {})
         sst = st.get("status")
+        rd = os.path.join(OPT, "runs", n)
         if (s["status"] == "done" or sst in ("done", "skipped")
-                or os.path.exists(os.path.join(OPT, "runs", n,
-                                               "best_config.json"))):
+                or os.path.exists(os.path.join(rd, "best_config.json"))
+                or os.path.exists(os.path.join(rd, "no_survivor.json"))):
             eff = "done"
         else:
             eff = sst or "pending"

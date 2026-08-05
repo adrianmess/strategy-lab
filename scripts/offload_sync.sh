@@ -17,7 +17,8 @@ while true; do
     sfx=""; [ $idx -gt 0 ] && sfx="_b"
     rsync -az --ignore-existing --timeout=60 -e "$SSH" \
       "ubuntu@$IP:strategy-lab/optimizer/runs/" "$LAB/optimizer/runs/" 2>/dev/null
-    rsync -az --timeout=60 --include='*/' --include='best_config.json' --exclude='*' \
+    rsync -az --timeout=60 --include='*/' --include='best_config.json' \
+      --include='no_survivor.json' --exclude='*' \
       -e "$SSH" "$LAB/optimizer/runs/" "ubuntu@$IP:strategy-lab/optimizer/runs/" 2>/dev/null
     # keep worker code current on the boxes (applies at their next restart)
     rsync -az --timeout=30 -e "$SSH" "$LAB/optimizer/gamut_worker.py" \

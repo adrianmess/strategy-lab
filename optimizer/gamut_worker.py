@@ -32,7 +32,9 @@ def _atomic_dump(obj, path):
 
 
 def done_already(name):
-    return os.path.exists(os.path.join(RUNS, name, "best_config.json"))
+    d = os.path.join(RUNS, name)
+    return (os.path.exists(os.path.join(d, "best_config.json"))
+            or os.path.exists(os.path.join(d, "no_survivor.json")))
 
 
 def ensure_ai_space(spec):
@@ -144,6 +146,19 @@ def main():
             except Exception as e:
                 print(f"T{tid} spawn error {name}: {e}", flush=True)
                 rc = 1
+            if rc == 0 and not os.path.exists(
+                    os.path.join(RUNS, name, "best_config.json")):
+                # durable no-survivor marker: without it, this outcome's only
+                # record is the state file, which AMI-fresh replacement boxes
+                # clobber — forcing pointless re-runs of feasibility deserts
+                try:
+                    os.makedirs(os.path.join(RUNS, name), exist_ok=True)
+                    json.dump(dict(at=time.strftime("%F %T"),
+                                   note="search completed; no feasible config"),
+                              open(os.path.join(RUNS, name,
+                                                "no_survivor.json"), "w"))
+                except Exception:
+                    pass
             note(name, "done" if rc == 0 else "failed", tries)
             print(f"[{time.strftime('%H:%M:%S')}] T{tid} {name} -> "
                   f"{'done' if rc == 0 else 'FAILED'} "
