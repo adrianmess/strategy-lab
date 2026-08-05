@@ -1541,7 +1541,7 @@ def gamut_progress():
                                           "%Y-%m-%d %H:%M:%S").timestamp()
                 if t > now + 600:
                     t -= 7 * 3600          # pre-TZ-fix UTC stamps
-                if now - t > 90 * 60:
+                if now - t > 45 * 60:   # kill-wave corpses clear faster
                     eff = "pending"
             except Exception:
                 eff = "pending"
