@@ -1590,6 +1590,7 @@ def gamut_progress():
         g = h.get("growth")
         recent.append(dict(
             name=n, at=a,
+            survivor=bool(b),           # False = search found NO feasible config
             holdout_pct_mo=(round(100 * (_m.exp(g) - 1), 1)
                             if g is not None else None),
             dd_pct=(round(100 * (h.get("maxdd") or 0)) if h else None),
