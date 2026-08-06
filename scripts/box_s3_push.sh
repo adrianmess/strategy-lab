@@ -11,4 +11,5 @@ for c in optimizer/campaigns/gamut_*/; do
     "$B/state/$(basename "$c")/worker_state_$(hostname).json" --region $R >/dev/null 2>&1
 done
 aws s3 cp dashboard/backtests.js "$B/backtests/backtests_$(hostname).js" --region $R >/dev/null 2>&1
+aws s3 cp "$HOME/strategy-lab/optimizer/gamut_worker.py" "$B/code/gamut_worker.py" --region $R >/dev/null 2>&1
 echo "[$(date '+%F %T')] s3 push ok" >> ~/s3_push.log
