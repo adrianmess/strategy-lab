@@ -1896,6 +1896,19 @@ def _scrub(o):
         return [_scrub(v) for v in o]
     return o
 
+_R2C = {"loaded": False, "d": {}}          # dir -> [key, static_entry]
+_R2C_PATH = os.path.join(OPT, "runs2_cache.json")
+
+
+def _r2c_load():
+    if not _R2C["loaded"]:
+        try:
+            _R2C["d"] = json.load(open(_R2C_PATH))
+        except Exception:
+            _R2C["d"] = {}
+        _R2C["loaded"] = True
+
+
 @app.route("/api/runs2")
 def runs2():
     out = []
@@ -1927,6 +1940,40 @@ def runs2():
         best_p = os.path.join(runs_dir, d, "best_config.json")
         if not os.path.exists(pool_p):
             continue
+        # ---- mtime-keyed cache: pool2.json is ~MBs and there are ~9k runs;
+        # parsing everything per request froze the page (combine bug) ----
+        _r2c_load()
+        _key = []
+        for _f in (pool_p, best_p, os.path.join(runs_dir, d, "walkforward.json"),
+                   os.path.join(runs_dir, d, "launch.json")):
+            try:
+                _key.append(os.path.getmtime(_f))
+            except OSError:
+                _key.append(0)
+        _hit = _R2C["d"].get(d)
+        if _hit and _hit[0] == _key:
+            e = dict(_hit[1])
+            e.update(best=os.path.exists(os.path.join(runs_dir, d, "marked_best")),
+                     trading=trading_map.get(d), running=(d in running_names))
+            try:
+                e["rating"] = int(open(os.path.join(runs_dir, d, "rating")).read().strip())
+            except Exception:
+                e["rating"] = e.get("rating", 0)
+            if d in running_names:
+                prog_p = os.path.join(runs_dir, d, "progress.json")
+                if os.path.exists(prog_p):
+                    try:
+                        pr = json.load(open(prog_p))
+                        if time.time() - pr.get("updated", 0) < 900:
+                            e["progress"] = dict(pct=pr.get("pct"), eta_s=pr.get("eta_s"),
+                                evaluated_session=pr.get("evaluated_session"),
+                                budget=pr.get("budget"), budget_type=pr.get("budget_type"),
+                                phase=pr.get("phase"))
+                    except Exception:
+                        pass
+            out.append(e)
+            continue
+        _R2C.setdefault("dirty", True)
         rating_p = os.path.join(runs_dir, d, "rating")
         try:
             rating = int(open(rating_p).read().strip()) if os.path.exists(rating_p) else 0
@@ -2038,7 +2085,20 @@ def runs2():
             nm = d.lower()
             e["strategy"] = "scalpx" if "scalp" in nm else \
                 ("v7" if pool_p.endswith("pool2.json") else "v6")
+        # store the static portion in the cache (dynamic bits recomputed per hit)
+        _static = {k: v for k, v in e.items()
+                   if k not in ("best", "trading", "running", "progress", "rating")}
+        _static["rating"] = e.get("rating", 0)
+        _R2C["d"][d] = [_key, _static]
+        _R2C["dirty"] = True
         out.append(e)
+    if _R2C.pop("dirty", False):
+        try:
+            _tmp = _R2C_PATH + ".tmp"
+            json.dump(_R2C["d"], open(_tmp, "w"))
+            os.replace(_tmp, _R2C_PATH)
+        except Exception:
+            pass
     return jsonify(_scrub(out))
 
 @app.route("/api/runs2/rename", methods=["POST"])
