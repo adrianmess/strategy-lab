@@ -10,7 +10,7 @@ set -u
 PEM="$1"; CAMP="$2"; shift 2
 IPS=("$@")
 LAB="$(cd "$(dirname "$0")/.." && pwd)"
-SSH="ssh -i $PEM -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30"
+SSH="ssh -i $PEM -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=10 -o ServerAliveInterval=30"
 while true; do
   idx=0
   for IP in "${IPS[@]}"; do
