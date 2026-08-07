@@ -316,7 +316,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <button class="small" id="btnRestoreDef" onclick="restoreDefaults()" title="restore the IMPORTED variant to its saved defaults snapshot (never touches the AI variant); hit Save afterwards to activate">↺ restore defaults</button>
       <button class="small" id="btnSetDef" onclick="setDefaults()" title="snapshot the CURRENT imported values as the new defaults for this space">set as defaults</button>
     </div>
-    <details open><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
+    <details id="paramWrap" ontoggle="localStorage.setItem('paramOpen', this.open?'1':'0')"><summary>Parameters (min / max — searched as ranges; indicator lengths are choice lists, searched per regime among the checked options)</summary>
       <div class="grid2" id="contGrid" style="margin-top:10px"></div>
       <div id="menuGrid" style="margin-top:8px"></div>
     </details>
@@ -326,7 +326,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
     </div>
   </div>
 
-  <details id="jobsWrap" open ontoggle="localStorage.setItem('jobsOpen', this.open?'1':'0')">
+  <details id="jobsWrap" ontoggle="localStorage.setItem('jobsOpen', this.open?'1':'0')">
     <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Jobs <span class="mini" id="jobsTitle"></span></h2></summary>
     <div class="card" id="jobs">no jobs yet</div>
   </details>
@@ -644,8 +644,15 @@ function fTotPct(p, scope){ if(p==null||!isFinite(p)) return '';
   return ` <span class="${p>=0?'pos':'neg'}" title="total gain over ${scope||'the whole period'}">${t} tot</span>`; }
 function fTotM(m){ return (m && m.eq!=null) ? fTotPct((m.eq/1000-1)*100,
   'the HOLDOUT window only — the full-history total on the Backtests page will be much larger (longer period, includes in-sample data)') : ''; }
+let _runsHash='', RUNS_ALL=false;
+function _djb(t){ let h=5381; const step=Math.max(1,(t.length/4096)|0);
+  for(let i=0;i<t.length;i+=step) h=((h*33)^t.charCodeAt(i))>>>0; return h+':'+t.length; }
 async function refreshRuns(){
-  RUNS = await api('runs2');
+  const resp = await fetch('/api/runs2'+(RUNS_ALL?'?lim=0':'')).then(r=>r.text());
+  const hh = _djb(resp);
+  if(hh === _runsHash){ if(RUNS.some(r=>r.running)) setTimeout(refreshRuns, 5000); return; }
+  _runsHash = hh;
+  RUNS = JSON.parse(resp);
   RUNS.forEach(r=>{
     const fl = r.backtest_flags||[];
     const btBest = fl.find(f=>f.source==='best_config.json' && (f.kind||'').startsWith('full'));
@@ -691,7 +698,10 @@ function renderRuns(){
     if(typeof va==='string'||typeof vb==='string') return sortDir*String(va??'').localeCompare(String(vb??''));
     return sortDir*(((va??-1e18))-((vb??-1e18)));
   });
-  document.querySelector('#runsT tbody').innerHTML = rs.map(r=>{
+  const CAP = 500;
+  const rsShown = rs.length > CAP ? rs.slice(0, CAP) : rs;
+  const capNote = rs.length > CAP ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(rs.length-CAP).toLocaleString()} more runs match — refine the filter above${RUNS_ALL?'':' · <a style="cursor:pointer;color:var(--blue)" onclick="RUNS_ALL=true;_runsHash=\'\';refreshRuns()">load ALL runs from server (slow)</a>'}</td></tr>` : '';
+  document.querySelector('#runsT tbody').innerHTML = capNote + rsShown.map(r=>{
     const h = r.holdout;
     if(r.no_survivors){
       const hs = r.holdout_scan;
@@ -1259,8 +1269,13 @@ function toggleJobRow(name){
   if(JOBHIDE.has(name)) JOBHIDE.delete(name); else JOBHIDE.add(name);
   renderRuns();
 }
+let _jobsHash='';
 async function refreshJobs(){
-  const jobs = await api('jobs');
+  const _jt = await fetch('/api/jobs').then(r=>r.text());
+  const _jh = _djb(_jt);
+  if(_jh === _jobsHash) return;   // nothing changed — skip the re-render
+  _jobsHash = _jh;
+  const jobs = JSON.parse(_jt);
   OPTJOBS = jobs;
   // keep visible nested job rows fresh without a full table re-render
   let missing = false;
@@ -1749,6 +1764,8 @@ async function gamutPoll(){
 }
 gamutCount();
 if(localStorage.getItem('gamutOpen')==='1') document.getElementById('gamutWrap').open = true;
+if(localStorage.getItem('paramOpen')==='1') document.getElementById('paramWrap').open = true;
+if(localStorage.getItem('jobsOpen')==='1') document.getElementById('jobsWrap').open = true;
 setTimeout(gamutPoll, 3000);
 
 $('strat').onchange = ()=>{

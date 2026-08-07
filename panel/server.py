@@ -2092,6 +2092,19 @@ def runs2():
         _R2C["d"][d] = [_key, _static]
         _R2C["dirty"] = True
         out.append(e)
+    # LIMIT: with ~9k runs the full list is heavy; default to the newest
+    # 1500 by activity plus everything running/trading/marked/rated.
+    try:
+        lim = int(request.args.get("lim", 1500))
+    except Exception:
+        lim = 1500
+    if lim and len(out) > lim:
+        keep = [e for e in out if e.get("running") or e.get("trading")
+                or e.get("best") or (e.get("rating") or 0) > 0]
+        _kid = set(map(id, keep))
+        rest = [e for e in out if id(e) not in _kid]
+        rest.sort(key=lambda e: e.get("last_run") or "", reverse=True)
+        out = keep + rest[:max(0, lim - len(keep))]
     if _R2C.pop("dirty", False):
         try:
             _tmp = _R2C_PATH + ".tmp"
@@ -2263,4 +2276,4 @@ def backtests_delete():
 
 if __name__ == "__main__":
     print("Control panel: http://127.0.0.1:8800")
-    app.run(host="127.0.0.1", port=8800, debug=False)
+    app.run(host="127.0.0.1", port=8800, debug=False, threaded=True)
