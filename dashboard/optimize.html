@@ -547,11 +547,13 @@ function fillCombine(){
     .sort((a,b)=>(b.best?1:0)-(a.best?1:0))   // starred runs first
     .map(r=>`<option value="${r.name}" label="${r.best?'★ best · ':''}${stratName(r.strategy)} · ${r.mode||'?'} · ${r.method||'?'}"></option>`).join('');
 }
-function applyCombineFromBacktests(){
-  let names = null;
-  try{ names = JSON.parse(localStorage.getItem('cmbFromBt')||'null'); }catch(e){}
-  if(!names || !names.length) return;
-  localStorage.removeItem('cmbFromBt');
+async function applyCombineFromBacktests(_names){
+  let names = Array.isArray(_names) ? _names : null;
+  if(!names){
+    try{ names = JSON.parse(localStorage.getItem('cmbFromBt')||'null'); }catch(e){}
+    if(!names || !names.length) return;
+    localStorage.removeItem('cmbFromBt');
+  }
   const runs = [], missing = [];
   for(const bn of names){
     // map backtest -> source run: exact match via the run's backtest_flags,
@@ -560,6 +562,13 @@ function applyCombineFromBacktests(){
            || RUNS.filter(x=>bn.startsWith(x.name)).sort((a,b)=>b.name.length-a.name.length)[0];
     if(r){ if(!runs.includes(r.name)) runs.push(r.name); }
     else missing.push(bn);
+  }
+  if((!runs.length || missing.length) && !RUNS_ALL){
+    // sources may be older than the quick newest-1500 window — fetch ALL runs once
+    $('cmbMsg').textContent = 'sources not in the quick list — loading the full run list…';
+    RUNS_ALL = true; _runsHash = '';
+    await refreshRuns();
+    return applyCombineFromBacktests(names);
   }
   if(!runs.length){ $('cmbMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
   runs.splice(8);   // combine caps at 8
