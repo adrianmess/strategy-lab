@@ -1632,11 +1632,9 @@ $('mode').onchange = ()=>{
   explain('mode');
 };
 let BT_ANCHORS = [];
-fetch('/dashboard/backtests.js').then(r=>r.text()).then(t=>{
-  try{ BT_ANCHORS = JSON.parse(t.slice(t.indexOf('=')+1).trim().replace(/;$/,''))
-        .filter(e=>e.config && e.config.strategy); }catch(e){}
-  fillAnchors();
-}).catch(()=>{});
+// anchors = starred/rated backtests only (tiny endpoint — the old path
+// downloaded the entire multi-hundred-MB backtests.js for a dropdown)
+fetch('/api/bt_anchors').then(r=>r.json()).then(a=>{ BT_ANCHORS=a; fillAnchors(); }).catch(()=>{});
 function fillAnchors(){
   const strat = $('strat').value;
   const sel = $('anchor'); const keep = sel.value;

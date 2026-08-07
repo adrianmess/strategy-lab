@@ -424,6 +424,7 @@ function pairPill(p, mkt, tf){
 // ---- "no losing period" support: weekly returns derived from the curve ----
 const _WEEKOK = new Map();   // entry index -> bool (cached)
 function _noNegWeek(i){
+  if(BT[i].wk_ok !== undefined) return BT[i].wk_ok;   // precomputed from FULL curve
   if(_WEEKOK.has(i)) return _WEEKOK.get(i);
   const cv = BT[i].curve || [];
   const weeks = new Map();   // ISO week key -> last equity in that week
@@ -457,6 +458,7 @@ function _noNegWeek(i){
 function _noNegMonth(i){
   const mo = BT[i].monthly || [];
   if(mo.length) return mo.every(m => (m.ret_pct ?? 0) >= -1e-9);
+  if(BT[i].mo_ok !== undefined) return BT[i].mo_ok;   // precomputed fallback
   // fall back to the curve (e.g. walk-forward entries store no monthly table)
   const cv = BT[i].curve || [];
   const months = new Map();
@@ -504,7 +506,9 @@ function render(){
       return sortDir*((va??-1e18)-(vb??-1e18));
     });
   }
-  tb.innerHTML = order.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
+  const _cap=500, _shown = order.length>_cap ? order.slice(0,_cap) : order;
+  const _capNote = order.length>_cap ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(order.length-_cap).toLocaleString()} more match — use the filters or search to narrow down</td></tr>` : '';
+  tb.innerHTML = _capNote + _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
     <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const tr=tradedOf(e.name);return tr?` <span class="pill" style="background:${tr.live?'rgba(248,81,73,.15)':'rgba(210,153,34,.15)'};color:${tr.live?'var(--red)':'var(--amber)'}" title="the run behind this backtest is being traded by ${tr.name} (#${tr.instance}) — ${tr.live?'REAL MONEY':'dry-run'}">${tr.live?'TRADING LIVE':'DRY-RUN'}</span>`:''})()}</td><td>${e.kind||''}${kindBadge(e)}</td><td>${stratName(e.strategy)}</td>
     <td><span class="pill ${e.mode}">${e.mode||''}</span>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td>${e.method||''}</td>
     <td class="hint" style="font-size:11.5px">${e.opt ? [e.opt.algo, e.opt.param_set, 'holdout: '+e.opt.holdout, e.opt.max_dd!=null?('DD≤'+Math.round(100*e.opt.max_dd)+'%'):(e.mode==='lev'?'DD≤80%':'DD≤50%'), e.opt.max_hold_days?('≤'+e.opt.max_hold_days+'d in trade'):null, e.opt.gap_mode?('gaps: '+e.opt.gap_mode.replace('skip_','')):null, e.opt.lockbox?('lockbox '+e.opt.lockbox):null, (e.opt.scoring&&e.opt.scoring!=='classic')?('scoring: '+e.opt.scoring.replace('_','-')):null, e.opt.anchor?('anchored ('+e.opt.anchor+(e.opt.anchor_strength?(', λ'+e.opt.anchor_strength):'')+')'):null, e.opt.evaluated?(e.opt.evaluated.toLocaleString()+' evals'):null].filter(Boolean).join(' · ') : '—'}</td>
@@ -590,6 +594,7 @@ function select(i){
     fetch('bt_detail/'+encodeURIComponent(e.name)+'.json')
       .then(r=>r.json())
       .then(d=>{ e.curve=d.curve||e.curve; e.trades=d.trades||[];
+                 if(d.config) e.config=d.config;
                  if(sel===i) select(i); })
       .catch(()=>{ e._dl=false; });
     // fall through: render coarse curve now, re-render when detail lands

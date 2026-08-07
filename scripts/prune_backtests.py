@@ -53,10 +53,11 @@ def split_entry(e, list_curve=200):
         return e
     os.makedirs(DETAIL_DIR, exist_ok=True)
     with open(os.path.join(DETAIL_DIR, e["name"] + ".json"), "w") as f:
-        json.dump(dict(curve=c, trades=t), f)
-    if len(c) > list_curve:
-        step = (len(c) - 1) / (list_curve - 1)
-        e["curve"] = [c[round(i * step)] for i in range(list_curve - 1)] + [c[-1]]
+        json.dump(dict(curve=c, trades=t, config=e.get("config")), f)
+    wk, mo = period_flags(c)
+    e["wk_ok"], e["mo_ok"] = wk, mo
+    e.pop("curve", None)      # curves+configs live in the detail file now —
+    e.pop("config", None)     # they were 85% of a 177MB list file
     e["trades"] = []
     e["detail"] = True
     return e
@@ -92,3 +93,50 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def _week_key(dt_):
+    import datetime as _dt
+    day = dt_.weekday()                      # Mon=0 (matches JS (getUTCDay+6)%7)
+    th = dt_ + _dt.timedelta(days=3 - day)   # Thursday of this week
+    doy = (th - _dt.datetime(th.year, 1, 1)).days + 1
+    return f"{th.year}-{-(-doy // 7)}"       # ceil(doy/7)
+
+
+def period_flags(curve):
+    """(wk_ok, mo_ok) computed from the FULL curve — ports the page's
+    _noNegWeek/_noNegMonth so the list file doesn't need curves at all."""
+    import datetime as _dt
+    weeks, months, gapw = {}, {}, set()
+    prev = None
+    for p in curve or []:
+        if not p or p.get("eq") is None or p.get("t") == "(data gap)":
+            if prev:
+                gapw.add(prev)
+            prev = None
+            continue
+        try:
+            d = _dt.datetime.strptime(str(p["t"])[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            try:
+                d = _dt.datetime.strptime(str(p["t"])[:16], "%Y-%m-%d %H:%M")
+            except ValueError:
+                continue
+        k = _week_key(d)
+        weeks[k] = p["eq"]
+        months[str(p["t"])[:7]] = p["eq"]
+        if prev and prev != k and prev in gapw:
+            gapw.add(k)
+        prev = k
+    ks = list(weeks)
+    wk_ok = True
+    for i in range(1, len(ks)):
+        if ks[i] in gapw or ks[i - 1] in gapw:
+            continue
+        if weeks[ks[i]] < weeks[ks[i - 1]] - 1e-9:
+            wk_ok = False
+            break
+    ms = list(months)
+    mo_ok = all(months[ms[i]] >= months[ms[i - 1]] - 1e-9
+                for i in range(1, len(ms)))
+    return wk_ok, mo_ok

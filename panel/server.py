@@ -2238,6 +2238,29 @@ def _bt_meta_set(name, key, val):
         os.replace(tmp, BT_META)
 
 
+@app.route("/api/bt_anchors")
+def bt_anchors():
+    """Anchor candidates for the Optimize page: STARRED/RATED backtests only
+    (the old path parsed the entire backtests.js — 177MB — for a dropdown).
+    Configs come from the per-entry detail files."""
+    try:
+        meta = json.load(open(BT_META))
+    except Exception:
+        meta = {}
+    out = []
+    det = os.path.join(DASH, "bt_detail")
+    for nm, m in meta.items():
+        if not (m.get("best") or (m.get("rating") or 0) > 0):
+            continue
+        try:
+            cfg = json.load(open(os.path.join(det, nm + ".json"))).get("config")
+        except Exception:
+            cfg = None
+        if cfg and cfg.get("strategy"):
+            out.append(dict(name=nm, config=cfg))
+    return jsonify(out)
+
+
 @app.route("/api/backtests/mark", methods=["POST"])
 def backtests_mark():
     """Toggle the 'best' star on a published backtest entry."""
