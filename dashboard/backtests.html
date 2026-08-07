@@ -140,6 +140,7 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
         <option value="outside">outside dates</option>
         <option value="alternating">alternating days</option>
         <option value="none">holdout: none</option>
+        <option value="notnone">any holdout (exclude none)</option>
       </select></label>
     <label class="hint">search
       <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
@@ -514,6 +515,7 @@ function render(){
   const fHo = document.getElementById('fHold').value;
   if(fHo !== 'all') order = order.filter(i=>{
     const h = ((BT[i].opt||{}).holdout) || 'none';
+    if(fHo === 'notnone') return h !== 'none';
     return h === 'none' ? fHo === 'none' : h.startsWith(fHo);});
   const fq = (document.getElementById('fFind').value||'').trim().toLowerCase();
   if(fq) order = order.filter(i=>{const e=BT[i];
