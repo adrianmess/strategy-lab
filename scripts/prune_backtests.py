@@ -154,7 +154,10 @@ def _opt_from_cfg(cfg):
     backtest_cli would drag in numpy/pandas/_bootstrap for the merge loop)."""
     if not isinstance(cfg, dict) or ("algo" not in cfg and "evaluated" not in cfg):
         return None
-    ho = (f"alternating {cfg['holdout_days']:g}d blocks" if cfg.get("holdout_days")
+    ho = (f"outside {cfg['holdout_outside']}" if cfg.get("holdout_outside")
+          else f"between {cfg['holdout_between']}" if cfg.get("holdout_between")
+          else f"before {cfg['holdout_before']}" if cfg.get("holdout_before")
+          else f"alternating {cfg['holdout_days']:g}d blocks" if cfg.get("holdout_days")
           else f"after {cfg['train_end']}" if cfg.get("train_end") else "none")
     return dict(algo=cfg.get("algo"),
                 param_set=("per-regime" if cfg.get("per_regime", True)

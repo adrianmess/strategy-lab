@@ -475,7 +475,10 @@ def opt_settings(cfg):
     """Optimizer settings recorded in a best_config, for display on dashboards."""
     if not isinstance(cfg, dict) or "algo" not in cfg and "evaluated" not in cfg:
         return None
-    ho = (f"alternating {cfg['holdout_days']:g}d blocks" if cfg.get("holdout_days")
+    ho = (f"outside {cfg['holdout_outside']}" if cfg.get("holdout_outside")
+          else f"between {cfg['holdout_between']}" if cfg.get("holdout_between")
+          else f"before {cfg['holdout_before']}" if cfg.get("holdout_before")
+          else f"alternating {cfg['holdout_days']:g}d blocks" if cfg.get("holdout_days")
           else f"after {cfg['train_end']}" if cfg.get("train_end") else "none")
     return dict(algo=cfg.get("algo"),
                 param_set=("per-regime" if cfg.get("per_regime", True) else "single set"),
@@ -575,6 +578,7 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
             try:
                 _bc = json.load(open(sib))
                 for _k in ("algo", "evaluated", "train_end", "holdout_days",
+                           "holdout_before", "holdout_between", "holdout_outside",
                            "max_dd", "max_hold_days", "gap_mode", "lockbox",
                            "scoring", "anchor", "anchor_strength", "per_regime"):
                     if _k not in cfg and _k in _bc:
