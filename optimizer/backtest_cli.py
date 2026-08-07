@@ -814,6 +814,17 @@ def main():
                      method=r["cid"].split("__")[2], kind="walk-forward continuous OOS",
                      config=None)
     entry["name"] = args.name
+    # stamp actual longest hold so the Backtests page hold-filter sees it
+    try:
+        import datetime as _dt
+        _mx = 0.0
+        for _t in entry.get("trades") or []:
+            _a = _dt.datetime.strptime(_t["entry_t"], "%Y-%m-%d %H:%M:%S")
+            _b = _dt.datetime.strptime(_t["exit_t"], "%Y-%m-%d %H:%M:%S")
+            _mx = max(_mx, (_b - _a).total_seconds() / 86400.0)
+        entry["max_hold_days"] = round(_mx, 2)
+    except Exception:
+        pass
     entry["created"] = str(pd.Timestamp.now())[:16]
     entry["gap_handling"] = gap_info()
     entry.setdefault("pair",
