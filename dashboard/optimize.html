@@ -1452,6 +1452,10 @@ function hoModeChanged(){
   $('trainEnd').style.display = (v==='alt') ? 'none' : '';
   $('hoDate2').style.display = (v==='between'||v==='outside') ? '' : 'none';
   $('hoDays').style.display = (v==='alt') ? '' : 'none';
+  if(v==='between' || v==='outside'){        // auto-load the standard window
+    $('trainEnd').value = '2024-11-16';
+    $('hoDate2').value  = '2025-08-28';
+  }
   $('trainEnd').title = v==='before' ? 'holdout = everything BEFORE this date; training on [date, end)'
     : v==='between' ? 'first date of the held-out middle window'
     : v==='outside' ? 'training runs BETWEEN the two dates; everything outside them is the holdout'
