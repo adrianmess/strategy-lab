@@ -534,6 +534,7 @@ async function launch(){
   if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
   saveLaunchSettings();
   const r = await api('jobs/optimize2', d);
+  document.getElementById('jobsWrap').open = true;
   $('launchMsg').textContent = 'started job '+r.id;
   if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed — arm again for another merge'; }
   refreshJobs(); setTimeout(refreshRuns, 3000);
@@ -971,6 +972,7 @@ async function runAndPreview(cfg, name, oos, hd){
   if(oos) body.oos_start = oos;
   if(hd) body.holdout_days = hd;
   const r = await api('jobs/backtest', body);
+  document.getElementById('jobsWrap').open = true;
   $('preview').style.display='block';
   $('pvName').textContent = name;
   $('pvState').textContent = 'running…';
