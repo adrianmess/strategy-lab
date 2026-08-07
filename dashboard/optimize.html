@@ -189,6 +189,11 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <button class="small" style="height:30px" onclick="combineRuns()">Arm combine →</button>
         <span class="kv" id="cmbMsg"></span></span></div>
     </div>
+    <div id="searchProg" style="display:none;margin-top:12px">
+      <div style="height:8px;border-radius:4px;background:var(--hover);overflow:hidden">
+        <div id="searchProgBar" style="height:100%;width:0%;background:var(--blue);transition:width .5s"></div></div>
+      <span class="kv" id="searchProgTxt"></span>
+    </div>
   </div>
 
   <h2>Autonomous campaign <span class="mini">— curated experiment matrix (mh≤5d, small-gains bias), runs sequentially at 14 procs; stop any time, resume later</span></h2>
@@ -342,6 +347,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <option value="clean">✓ no-liq only</option>
       <option value="liq">liquidated only</option>
       <option value="camp">campaign runs only</option>
+      <option value="merged">merged runs only</option>
       <option value="nocamp">manual runs only</option>
     </select>
     <label data-x="gapmode" style="cursor:pointer;margin-left:14px">Backtest gap handling</label>
@@ -534,7 +540,10 @@ async function launch(){
   if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
   saveLaunchSettings();
   const r = await api('jobs/optimize2', d);
-  document.getElementById('jobsWrap').open = true;
+  if(r.id){ SEARCH_JOB = r.id; localStorage.setItem('searchJob', r.id);
+    const w=$('searchProg'); w.style.display='';
+    $('searchProgBar').style.width='2%';
+    $('searchProgTxt').textContent='starting…'; }
   $('launchMsg').textContent = 'started job '+r.id;
   if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed — arm again for another merge'; }
   refreshJobs(); setTimeout(refreshRuns, 3000);
@@ -698,6 +707,8 @@ function renderRuns(){
              : lf==='liq'   ? RUNS.filter(r=>r._clean===0)
              : lf==='camp'  ? RUNS.filter(r=>r.name.startsWith('camp_'))
              : lf==='nocamp'? RUNS.filter(r=>!r.name.startsWith('camp_'))
+             : lf==='merged'? RUNS.filter(r=>(r.launches||[]).some(l=>l&&(l.resume_from||l.merge_mode))
+                                             || /(^|_)merge(_|d_|$)/.test(r.name))
              : lf==='trading'? RUNS.filter(r=>r.trading||r.running)
              : RUNS;
   if(q) base = base.filter(r=>r.name.toLowerCase().includes(q)
@@ -1281,6 +1292,22 @@ function toggleJobRow(name){
   renderRuns();
 }
 let _jobsHash='';
+let SEARCH_JOB = localStorage.getItem('searchJob') || null;
+function updateSearchProg(jobs){
+  const w = document.getElementById('searchProg'); if(!w) return;
+  if(!SEARCH_JOB){ w.style.display='none'; return; }
+  const j = jobs.find(x=>x.id===SEARCH_JOB);
+  if(!j || j.status!=='running'){            // finished (or gone) — hide the bar
+    w.style.display='none'; SEARCH_JOB=null; localStorage.removeItem('searchJob');
+    return;
+  }
+  w.style.display='';
+  const p = j.progress;
+  document.getElementById('searchProgBar').style.width = p ? Math.round(100*p.pct)+'%' : '2%';
+  document.getElementById('searchProgTxt').textContent = p
+    ? `${j.name} — ${Math.round(100*p.pct)}% of ${p.budget.toLocaleString()} ${p.budget_type} · ${p.evaluated_session.toLocaleString()} done · ETA ${fmtEta(p.eta_s)}`
+    : j.name+' — starting…';
+}
 async function refreshJobs(){
   const _jt = await fetch('/api/jobs').then(r=>r.text());
   const _jh = _djb(_jt);
@@ -1288,6 +1315,7 @@ async function refreshJobs(){
   _jobsHash = _jh;
   const jobs = JSON.parse(_jt);
   OPTJOBS = jobs;
+  updateSearchProg(jobs);
   // keep visible nested job rows fresh without a full table re-render
   let missing = false;
   jobs.filter(j=>j.status==='running' && (j.kind||'').startsWith('optimize')).forEach(j=>{
