@@ -131,6 +131,8 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
       <input id="fMaxHold" type="number" step="0.5" min="0" placeholder="—" style="width:52px" onchange="saveBtFilters()">d</label>
     <label style="margin-left:10px" title="only show runs whose mark-to-market max drawdown is at most this percent">max DD ≤
       <input id="fMaxDD" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
+    <label class="hint">search
+      <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
     <span class="hint" id="fCount"></span>
   </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
@@ -497,6 +499,10 @@ function render(){
   if(fMH > 0) order = order.filter(i=>BT[i].max_hold_days != null && BT[i].max_hold_days <= fMH);
   const fDD = +document.getElementById('fMaxDD').value;
   if(fDD > 0) order = order.filter(i=>{const st=BT[i].stats||{}; const v = st.maxdd_mtm!=null? st.maxdd_mtm : st.maxdd_closed; return v!=null && 100*v <= fDD;});
+  const fq = (document.getElementById('fFind').value||'').trim().toLowerCase();
+  if(fq) order = order.filter(i=>{const e=BT[i];
+    return (e.name||'').toLowerCase().includes(fq) || (e.strategy||'').toLowerCase().includes(fq)
+        || (e.kind||'').toLowerCase().includes(fq) || (e.method||'').toLowerCase().includes(fq);});
   document.getElementById('fCount').textContent =
     (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
@@ -507,7 +513,7 @@ function render(){
     });
   }
   const _cap=500, _shown = order.length>_cap ? order.slice(0,_cap) : order;
-  const _capNote = order.length>_cap ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(order.length-_cap).toLocaleString()} more match — use the filters or search to narrow down</td></tr>` : '';
+  const _capNote = order.length>_cap ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(order.length-_cap).toLocaleString()} more match — use the filters or the search box above to narrow down</td></tr>` : '';
   tb.innerHTML = _capNote + _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
     <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const tr=tradedOf(e.name);return tr?` <span class="pill" style="background:${tr.live?'rgba(248,81,73,.15)':'rgba(210,153,34,.15)'};color:${tr.live?'var(--red)':'var(--amber)'}" title="the run behind this backtest is being traded by ${tr.name} (#${tr.instance}) — ${tr.live?'REAL MONEY':'dry-run'}">${tr.live?'TRADING LIVE':'DRY-RUN'}</span>`:''})()}</td><td>${e.kind||''}${kindBadge(e)}</td><td>${stratName(e.strategy)}</td>
     <td><span class="pill ${e.mode}">${e.mode||''}</span>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td>${e.method||''}</td>
