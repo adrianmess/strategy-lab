@@ -154,7 +154,7 @@ def run_single_macdx(cfg, oos_start=None, holdout_days=None,
                                         strategy="macdx_original", mode=mode, method="none",
                                         kind=("original engine (full pine logic)"
                                               if oos_start is None else f"original, from {oos_start}"),
-                                        config=cfg["cand"]))
+                                        config=cfg["cand"], opt=opt_settings(cfg)))
 
 
 def run_single_rocx(cfg, oos_start=None, holdout_days=None,
@@ -229,7 +229,7 @@ def run_single_rocx(cfg, oos_start=None, holdout_days=None,
                                         strategy="rocx_original", mode=mode, method="none",
                                         kind=("original engine (full pine logic)"
                                               if oos_start is None else f"original, from {oos_start}"),
-                                        config=cfg["cand"]))
+                                        config=cfg["cand"], opt=opt_settings(cfg)))
 
 
 def run_single_rocx_opt(cfg, oos_start=None, holdout_days=None,
@@ -306,7 +306,7 @@ def run_single_rocx_opt(cfg, oos_start=None, holdout_days=None,
                                         kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days
                                               else "full-history (in-sample fit)" if oos_start is None
                                               else f"from {oos_start}"),
-                                        config=cand))
+                                        config=cand, opt=opt_settings(cfg)))
 
 
 def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
@@ -384,7 +384,7 @@ def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
                                         kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days
                                               else "full-history (in-sample fit)" if oos_start is None
                                               else f"from {oos_start}"),
-                                        config=cand))
+                                        config=cand, opt=opt_settings(cfg)))
 
 
 def run_single_original(cfg, oos_start=None, holdout_days=None,
@@ -468,7 +468,7 @@ def run_single_original(cfg, oos_start=None, holdout_days=None,
                                         strategy=strategy, mode=mode, method="none",
                                         kind=("original engine (full pine logic)"
                                               if oos_start is None else f"original, from {oos_start}"),
-                                        config=cfg["cand"]))
+                                        config=cfg["cand"], opt=opt_settings(cfg)))
 
 
 def opt_settings(cfg):
@@ -567,6 +567,20 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
 
 def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_contaminated"):
     cfg = json.load(open(cfg_path))
+    # holdout_best_config.json lacks the run-level optimizer settings — borrow
+    # them from the sibling best_config.json so `opt` shows on the dashboard
+    if "algo" not in cfg and "evaluated" not in cfg:
+        sib = os.path.join(os.path.dirname(cfg_path), "best_config.json")
+        if os.path.exists(sib) and os.path.abspath(sib) != os.path.abspath(cfg_path):
+            try:
+                _bc = json.load(open(sib))
+                for _k in ("algo", "evaluated", "train_end", "holdout_days",
+                           "max_dd", "max_hold_days", "gap_mode", "lockbox",
+                           "scoring", "anchor", "anchor_strength", "per_regime"):
+                    if _k not in cfg and _k in _bc:
+                        cfg[_k] = _bc[_k]
+            except Exception:
+                pass
     # trading pair + chart-data venue: select the config's data/caches BEFORE
     # any globals load. Configs without market_data are legacy (perp candles).
     # A process that already loaded one dataset must not silently sim another

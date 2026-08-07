@@ -20,7 +20,7 @@ def load(path):
 
 
 def main():
-    from prune_backtests import prune_entry, split_entry   # keep file loadable
+    from prune_backtests import prune_entry, split_entry, stamp_opt
     remote_p = sys.argv[1]
     if not os.path.exists(remote_p):
         print("no remote file"); return
@@ -32,7 +32,7 @@ def main():
     remote_entries, _ = load(remote_p)
     for e in remote_entries:
         if e.get("name") not in have:
-            local.append(split_entry(prune_entry(e)))
+            local.append(split_entry(stamp_opt(prune_entry(e))))
             have.add(e.get("name"))
             added += 1
     # per-run payload copies (runs/<run>/bts/<entry>.json) arrive with the
@@ -44,7 +44,7 @@ def main():
         nm = os.path.basename(p)[:-5]
         if nm not in have:
             try:
-                local.append(split_entry(prune_entry(json.load(open(p)))))
+                local.append(split_entry(stamp_opt(prune_entry(json.load(open(p))))))
                 have.add(nm)
                 added += 1
             except Exception:

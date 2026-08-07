@@ -140,3 +140,48 @@ def period_flags(curve):
     mo_ok = all(months[ms[i]] >= months[ms[i - 1]] - 1e-9
                 for i in range(1, len(ms)))
     return wk_ok, mo_ok
+
+
+# ---------- optimizer-settings backfill ----------
+RUNS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                        "optimizer", "runs")
+_BT_SUFFIXES = ("_oosbest_full", "_oosbest", "_full", "_holdout",
+                "_best_full", "_best")
+
+
+def _opt_from_cfg(cfg):
+    """Mirror of backtest_cli.opt_settings (kept standalone: importing
+    backtest_cli would drag in numpy/pandas/_bootstrap for the merge loop)."""
+    if not isinstance(cfg, dict) or ("algo" not in cfg and "evaluated" not in cfg):
+        return None
+    ho = (f"alternating {cfg['holdout_days']:g}d blocks" if cfg.get("holdout_days")
+          else f"after {cfg['train_end']}" if cfg.get("train_end") else "none")
+    return dict(algo=cfg.get("algo"),
+                param_set=("per-regime" if cfg.get("per_regime", True)
+                           else "single set"),
+                holdout=ho, max_dd=cfg.get("max_dd"),
+                max_hold_days=cfg.get("max_hold_days"),
+                gap_mode=cfg.get("gap_mode"), lockbox=cfg.get("lockbox"),
+                scoring=cfg.get("scoring"),
+                anchor=cfg.get("anchor"),
+                anchor_strength=cfg.get("anchor_strength"),
+                evaluated=cfg.get("evaluated"))
+
+
+def stamp_opt(e):
+    """Backfill e['opt'] from the source run's best_config.json when the
+    publisher didn't record it (older backtest_cli paths, oosbest configs)."""
+    if e.get("opt") or not e.get("name"):
+        return e
+    nm = e["name"]
+    for c in [nm] + [nm[:-len(sf)] for sf in _BT_SUFFIXES if nm.endswith(sf)]:
+        p = os.path.join(RUNS_DIR, c, "best_config.json")
+        if os.path.exists(p):
+            try:
+                o = _opt_from_cfg(json.load(open(p)))
+                if o:
+                    e["opt"] = o
+            except Exception:
+                pass
+            break
+    return e
