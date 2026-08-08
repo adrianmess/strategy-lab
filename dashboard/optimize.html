@@ -813,7 +813,18 @@ function renderRuns(){
         :r._clean===0?'<span class="badge b-red" title="Liquidated on the holdout and/or the full backtest">LIQ</span>'
         :'<span class="kv" title="Run both the holdout evaluation and a full backtest to fill this in">—</span>'}</td>
       <td>${hcell}</td>
-      <td>${r.strategy==='metax2'?`
+      <td>${r.strategy==='fcfsx'?`
+        <span class="kv" title="First-come-first-served combo (fcfsx_cli): your exact components all live simultaneously, one shared slot, first signal wins. Research only — no live adapter; the panel refuses adoption. Backtest/Adopt/AI/Load-setup don't apply: there is no candidate pool and no launch-card setup behind this run.">FCFS combo</span>
+        ${r.walkforward
+          ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="causal walk-forward: per-fold roster from past-only trades — chained OOS ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
+          : `<span class="badge b-amber">no WF</span>`}
+        <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_fcfs_full')}" title="full-history FCFS replay (parameter-free merge; component choice is the hindsight)">bt full ↗</a>
+        <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_fcfs_wf')}" title="causal walk-forward sibling — the honest number">bt WF ↗</a>
+        <button class="small" title="reproduction command (exact component list included)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',0,'fcfsx')">Cmd</button>
+        <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
+        ${rateStars(r.name, r.rating)}
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+      :r.strategy==='metax2'?`
         <span class="kv" title="Cross-timeframe/multi-pair router (metax2_cli): components each simulate on their OWN pair+timeframe candles. Research only — no live adapter yet.">router ×tf</span>
         ${r.walkforward
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="causal walk-forward (by construction): chained OOS ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}% (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
@@ -1105,6 +1116,14 @@ async function showStory(run, regen){
   $('storyBody').innerHTML = r && r.story ? mdLite(r.story) : '<span class="mini">error: '+((r&&r.error)||'unknown')+'</span>';
 }
 function routerCmd(name, mode, method, total, flavor){
+  if(flavor==='fcfsx'){
+    const r = RUNS.find(x=>x.name===name);
+    const runs = ((r&&r.components)||[]).map(c=>c.run).join(',');
+    const el = document.createElement('div');
+    el.innerHTML = `<p class="kv" style="margin:0 0 6px">FCFS combo (fcfsx_cli). Reproduce with:</p><pre style="user-select:all;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">cd optimizer\npython3 fcfsx_cli.py --name ${name} --runs ${runs||'run1,run2,…'}</pre>`;
+    if(typeof modal === 'function') modal('Reproduce '+name, el); else alert('cd optimizer && python3 fcfsx_cli.py --name '+name+' --runs '+runs);
+    return;
+  }
   if(flavor==='metax2'){
     const r = RUNS.find(x=>x.name===name);
     const el = document.createElement('div');
