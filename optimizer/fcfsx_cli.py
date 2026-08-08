@@ -54,24 +54,39 @@ def fcfs_merge(tabs, t_lo=-np.inf, t_hi=np.inf, start_busy=-np.inf,
 
 
 def replay_stats(taken):
-    """Equity/DD/monthly stats from FCFS rows (compounded, 1000 start)."""
+    """Equity/DD/monthly stats from FCFS rows (compounded, 1000 start).
+    MAE-aware: drawdown uses the intra-trade mark-to-market trough, and a
+    trade whose adverse excursion reaches -100% is a LIQUIDATION even if it
+    closed green (this is what a leveraged account would experience).
+    Returns (stats-for-backtests-entry, monthly-map, metax-style-holdout)."""
     eq, peak, mdd, liq = 1000.0, 1000.0, 0.0, False
-    mo, wins = {}, 0
+    mo, wins, mo_log, max_hold = {}, 0, {}, 0.0
     for et, xt, r, mae, ci in taken:
         r = max(r, -0.999)
-        liq = liq or r <= -0.999
+        liq = liq or r <= -0.999 or (1.0 + min(mae, 0.0)) <= 0.0
+        trough = eq * (1.0 + min(mae, 0.0))
         eq *= (1.0 + r)
         peak = max(peak, eq)
-        mdd = max(mdd, 1.0 - eq / peak)
+        mdd = max(mdd, 1.0 - min(trough, eq) / peak)
         wins += r > 0
         m = str(np.datetime64(int(et), "ns"))[:7]
         mo[m] = mo.get(m, 1.0) * (1.0 + r)
+        mk = int(et // (30.44 * _DAY_NS))
+        mo_log[mk] = mo_log.get(mk, 0.0) + math.log(max(1e-9, 1.0 + r))
+        max_hold = max(max_hold, (xt - et) / _DAY_NS)
     months = max(len(mo), 1)
-    return dict(final_eq=eq, total_mult=eq / 1000.0, months=months,
-                monthly_growth_pct=100 * ((max(eq, 1e-9) / 1000.0) ** (1 / months) - 1),
-                liq=liq, maxdd_mtm=mdd, n=len(taken),
-                tpm=len(taken) / months, sl_hits=0,
-                win=wins / max(len(taken), 1)), mo
+    g = list(mo_log.values()) or [0.0]
+    gm = float(np.mean(g))
+    m2 = max(len(mo_log), 1)
+    S = dict(final_eq=eq, total_mult=eq / 1000.0, months=months,
+             monthly_growth_pct=100 * ((max(eq, 1e-9) / 1000.0) ** (1 / months) - 1),
+             liq=liq, maxdd_mtm=mdd, n=len(taken),
+             tpm=len(taken) / months, sl_hits=0,
+             win=wins / max(len(taken), 1))
+    H = dict(eq=eq, maxdd=mdd, n=len(taken), months=m2, growth=gm,
+             score=float(gm - 0.25 * float(np.std(g))),
+             tpm=len(taken) / m2, max_hold_days=max_hold, liq=liq)
+    return S, mo, H
 
 
 def publish(name, kind, taken, comps, mode, S, mo, note):
@@ -182,7 +197,7 @@ def main():
 
     # ---------- full-history replay ----------
     taken, _ = fcfs_merge(tabs)
-    S, mo = replay_stats(taken)
+    S, mo, H = replay_stats(taken)
     print(f"FULL replay: {S['monthly_growth_pct']:+.1f}%/mo, "
           f"dd {100*S['maxdd_mtm']:.0f}%, {S['n']} trades"
           + (" — LIQUIDATED" if S["liq"] else ""), flush=True)
@@ -225,7 +240,7 @@ def main():
             chained += took
         folds += 1
         T += step
-    S2, mo2 = replay_stats(chained)
+    S2, mo2, H2 = replay_stats(chained)
     pct = S2["monthly_growth_pct"]
     verdict = "PASS" if (pct > 0 and not S2["liq"] and S2["maxdd_mtm"] <= 0.5) \
         else "FAIL"
@@ -247,7 +262,7 @@ def main():
                    cand=dict(strategy="fcfsx", components=comps,
                              live_replication="NOT YET SUPPORTED — research "
                              "artifact; panel refuses adoption"),
-                   metrics=S2, holdout=S2, evaluated=folds,
+                   metrics=H2, holdout=H2, evaluated=folds,
                    generated=time.strftime("%Y-%m-%d %H:%M")),
               open(os.path.join(run_dir, "best_config.json"), "w"),
               indent=1, default=float)
