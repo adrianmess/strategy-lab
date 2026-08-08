@@ -131,6 +131,8 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
       <input id="fMaxHold" type="number" step="0.5" min="0" placeholder="—" style="width:52px" onchange="saveBtFilters()">d</label>
     <label style="margin-left:10px" title="only show runs whose mark-to-market max drawdown is at most this percent">max DD ≤
       <input id="fMaxDD" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
+    <label style="margin-left:10px" title="only show runs whose win rate (share of closed trades that were profitable) is at least this percent">win ≥
+      <input id="fWinMin" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
     <label style="margin-left:10px" title="the optimizer HOLDOUT mode the source run was searched with (from its recorded settings; 'none' = no holdout, full in-sample fit)">holdout
       <select id="fHold" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -411,6 +413,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterMaxHold', document.getElementById('fMaxHold').value);
   localStorage.setItem('btFilterMaxDD', document.getElementById('fMaxDD').value);
   localStorage.setItem('btFilterHold', document.getElementById('fHold').value);
+  localStorage.setItem('btFilterWinMin', document.getElementById('fWinMin').value);
   sel = null; render();
 }
 function pairPill(p, mkt, tf){
@@ -435,6 +438,7 @@ function pairPill(p, mkt, tf){
   document.getElementById('fMaxHold').value = localStorage.getItem('btFilterMaxHold') || '';
   document.getElementById('fMaxDD').value = localStorage.getItem('btFilterMaxDD') || '';
   document.getElementById('fHold').value = localStorage.getItem('btFilterHold') || 'all';
+  document.getElementById('fWinMin').value = localStorage.getItem('btFilterWinMin') || '';
 })();
 // ---- "no losing period" support: weekly returns derived from the curve ----
 const _WEEKOK = new Map();   // entry index -> bool (cached)
@@ -512,6 +516,8 @@ function render(){
   if(fMH > 0) order = order.filter(i=>BT[i].max_hold_days != null && BT[i].max_hold_days <= fMH);
   const fDD = +document.getElementById('fMaxDD').value;
   if(fDD > 0) order = order.filter(i=>{const st=BT[i].stats||{}; const v = st.maxdd_mtm!=null? st.maxdd_mtm : st.maxdd_closed; return v!=null && 100*v <= fDD;});
+  const fWin = +document.getElementById('fWinMin').value;
+  if(fWin > 0) order = order.filter(i=>{const w=(BT[i].stats||{}).win; return w!=null && 100*w >= fWin;});
   const fHo = document.getElementById('fHold').value;
   if(fHo !== 'all') order = order.filter(i=>{
     const h = ((BT[i].opt||{}).holdout) || 'none';
