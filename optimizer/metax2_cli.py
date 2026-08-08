@@ -21,7 +21,7 @@ Usage:
 No live adapter yet — the panel refuses to adopt metax2 runs.
 """
 import _bootstrap as B
-import argparse, json, math, os, subprocess, sys, time
+import argparse, fcntl, json, math, os, subprocess, sys, time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -348,15 +348,18 @@ def main():
                       "assignment from past-only data)",
                  config=None, created=time.strftime("%Y-%m-%d %H:%M"))
     p = os.path.join(DASH, "backtests.js")
-    txt = open(p).read()
-    entries = [e for e in json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
-               if e.get("name") != entry["name"]] + [entry]
-    tmp = p + ".tmp"
-    with open(tmp, "w") as f:
-        f.write("window.BACKTESTS = ")
-        json.dump(entries, f, default=float)
-        f.write(";")
-    os.replace(tmp, p)
+    with open(p + ".lock", "w") as lk:      # serialize with all publishers
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        txt = open(p).read()
+        entries = [e for e in json.JSONDecoder().raw_decode(
+                       txt[txt.index("=") + 1:].lstrip())[0]
+                   if e.get("name") != entry["name"]] + [entry]
+        tmp = p + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("window.BACKTESTS = ")
+            json.dump(entries, f, default=float)
+            f.write(";")
+        os.replace(tmp, p)
     print(f"published '{entry['name']}'", flush=True)
 
 

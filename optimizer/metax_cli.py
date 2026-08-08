@@ -27,7 +27,7 @@ Usage:
   python3 metax_cli.py --refine runs/camp_c4_lev_vt9 --iters 400
 """
 import _bootstrap as B
-import argparse, json, math, os, sys, time
+import argparse, fcntl, json, math, os, sys, time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -322,13 +322,18 @@ def publish_backtest(name, mode, buckets, comps, assign, taken, tr_s, ho_s):
         config=dict(assign=assign, components=[c["run"] for c in comps]),
         created=time.strftime("%Y-%m-%d %H:%M"))
     p = os.path.join(DASH, "backtests.js")
-    txt = open(p).read()
-    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
-    entries = [e for e in entries if e.get("name") != entry["name"]] + [entry]
-    with open(p, "w") as f:
-        f.write("window.BACKTESTS = ")
-        json.dump(entries, f, default=float)
-        f.write(";")
+    with open(p + ".lock", "w") as lk:      # serialize with all publishers
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        txt = open(p).read()
+        entries = json.JSONDecoder().raw_decode(
+            txt[txt.index("=") + 1:].lstrip())[0]
+        entries = [e for e in entries if e.get("name") != entry["name"]] + [entry]
+        tmp = p + ".tmp"
+        with open(tmp, "w") as f:           # atomic: never a half-written file
+            f.write("window.BACKTESTS = ")
+            json.dump(entries, f, default=float)
+            f.write(";")
+        os.replace(tmp, p)
     print(f"published '{entry['name']}' ({len(entries)} entries)", flush=True)
     # link the backtest from the run's row on the Optimize page
     base = name[:-8] if name.endswith("_refined") else name

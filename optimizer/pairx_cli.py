@@ -26,7 +26,7 @@ Usage:
   python3 pairx_cli.py --collect btc --out /tmp/x.json   (internal)
 """
 import _bootstrap as B
-import argparse, json, math, os, subprocess, sys, time
+import argparse, fcntl, json, math, os, subprocess, sys, time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -117,6 +117,18 @@ CAUSAL_SOL_ENTRIES = ["camp_c4_m_spot_vol3_walkforward_router_full",
                       "camp_c4_m_spot_vt9_walkforward_router_full",
                       "camp_c5_stk_spot_router_full"]
 
+def _hydrate(e):
+    """Slim backtest entries keep curve/trades in bt_detail/<name>.json."""
+    if e and e.get("detail") and not e.get("curve"):
+        try:
+            d = json.load(open(os.path.join(DASH, "bt_detail",
+                                            e["name"] + ".json")))
+            e = dict(e, curve=d.get("curve") or [], trades=d.get("trades") or [])
+        except Exception:
+            pass
+    return e
+
+
 def causal_router_tables():
     """SOL's routers as basket components — ONLY their causal streams
     (chronological walk-forwards + the stack, which is causal by
@@ -137,8 +149,9 @@ def causal_router_tables():
         return {}
     out = {}
     for name in CAUSAL_SOL_ENTRIES:
-        e = entries.get(name)
-        if not e or len(e.get("curve") or []) != len(e.get("trades") or []):
+        e = _hydrate(entries.get(name))
+        if not e or not e.get("curve") \
+                or len(e.get("curve") or []) != len(e.get("trades") or []):
             continue
         rows, prev = [], 1000.0
         ok = True
@@ -290,14 +303,17 @@ def publish(name, chained, S):
              "past-only data — this IS the honest number)",
         config=None, created=time.strftime("%Y-%m-%d %H:%M"))
     p = os.path.join(DASH, "backtests.js")
-    txt = open(p).read()
-    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
-    entries = [e for e in entries if e.get("name") != entry["name"]] + [entry]
-    tmp = p + ".tmp"
-    with open(tmp, "w") as f:               # atomic: never a half-written file
-        f.write("window.BACKTESTS = ")
-        json.dump(entries, f, default=float)
-        f.write(";")
+    with open(p + ".lock", "w") as lk:      # serialize with all publishers
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        txt = open(p).read()
+        entries = json.JSONDecoder().raw_decode(
+            txt[txt.index("=") + 1:].lstrip())[0]
+        entries = [e for e in entries if e.get("name") != entry["name"]] + [entry]
+        tmp = p + ".tmp"
+        with open(tmp, "w") as f:           # atomic: never a half-written file
+            f.write("window.BACKTESTS = ")
+            json.dump(entries, f, default=float)
+            f.write(";")
     os.replace(tmp, p)
     print(f"published '{entry['name']}'", flush=True)
 
