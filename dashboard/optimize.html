@@ -824,6 +824,16 @@ function renderRuns(){
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
         <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+      :r.strategy==='pairx'?`
+        <span class="kv" title="Multi-pair FCFS basket (pairx_cli): every pair's best spot configs compete for ONE slot, first-come-first-served; per-fold rosters picked causally from past-only data. Research only — no live adapter; the panel refuses adoption. Backtest/Adopt/AI/Load-setup don't apply: components are re-mined at build time, there is no candidate pool behind this run.">FCFS basket</span>
+        ${r.walkforward
+          ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="causal walk-forward (by construction): chained OOS ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
+          : `<span class="badge b-amber">no WF</span>`}
+        <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_basket_full')}" title="the published causal basket walk-forward on the Backtests page">bt basket ↗</a>
+        <button class="small" title="reproduction command (components are re-mined from the best spot runs on disk at execution time)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',0,'pairx')">Cmd</button>
+        <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
+        ${rateStars(r.name, r.rating)}
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
       :r.strategy==='metax2'?`
         <span class="kv" title="Cross-timeframe/multi-pair router (metax2_cli): components each simulate on their OWN pair+timeframe candles. Research only — no live adapter yet.">router ×tf</span>
         ${r.walkforward
@@ -1122,6 +1132,12 @@ function routerCmd(name, mode, method, total, flavor){
     const el = document.createElement('div');
     el.innerHTML = `<p class="kv" style="margin:0 0 6px">FCFS combo (fcfsx_cli). Reproduce with:</p><pre style="user-select:all;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">cd optimizer\npython3 fcfsx_cli.py --name ${name} --runs ${runs||'run1,run2,…'}</pre>`;
     if(typeof modal === 'function') modal('Reproduce '+name, el); else alert('cd optimizer && python3 fcfsx_cli.py --name '+name+' --runs '+runs);
+    return;
+  }
+  if(flavor==='pairx'){
+    const el = document.createElement('div');
+    el.innerHTML = `<p class="kv" style="margin:0 0 6px">Multi-pair FCFS basket (pairx_cli). Components are re-mined from the best spot runs on disk at execution time, so a re-run may pick newer components. Reproduce with:</p><pre style="user-select:all;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">cd optimizer\npython3 pairx_cli.py --name ${name}</pre>`;
+    if(typeof modal === 'function') modal('Reproduce '+name, el); else alert('cd optimizer && python3 pairx_cli.py --name '+name);
     return;
   }
   if(flavor==='metax2'){
