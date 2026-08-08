@@ -122,7 +122,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default=f"fcfsx_{time.strftime('%m%d_%H%M')}")
     ap.add_argument("--runs", required=True,
-                    help="comma-separated run names (2..10): the EXACT "
+                    help="comma-separated run names (2+): the EXACT "
                          "components — any pairs/timeframes, one shared mode")
     ap.add_argument("--step-days", type=int, default=42)
     ap.add_argument("--lookback-folds", type=int, default=2,
@@ -131,8 +131,8 @@ def main():
     a = ap.parse_args()
 
     names = [x.strip() for x in a.runs.split(",") if x.strip()]
-    if not 2 <= len(names) <= 10:
-        sys.exit(f"need 2..10 runs, got {len(names)}")
+    if len(names) < 2:
+        sys.exit(f"need at least 2 runs, got {len(names)}")
     groups, mode = {}, None
     for rn in dict.fromkeys(names):
         p = os.path.join(RUNS, rn, "best_config.json")

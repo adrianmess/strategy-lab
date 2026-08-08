@@ -388,10 +388,7 @@ function rtrClick(e){
     alert("Routers can't be components of another router — pick strategy runs."); return; }
   const i = RTRSEL.indexOf(e.name);
   if(i >= 0) RTRSEL.splice(i, 1);
-  else{
-    if(RTRSEL.length >= 10){ alert('10 components max'); return; }
-    RTRSEL.push(e.name);
-  }
+  else RTRSEL.push(e.name);
   rtrRender();
 }
 function rtrRemove(name){ const i=RTRSEL.indexOf(name); if(i>=0) RTRSEL.splice(i,1); rtrRender(); }

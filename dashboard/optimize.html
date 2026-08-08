@@ -628,7 +628,6 @@ async function applyMxFromBacktests(_names){
     return applyMxFromBacktests(names);
   }
   if(!runs.length){ $('routerMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
-  runs.splice(10);   // Specific-components cap
   const box = $('mxRunsBox');
   while(box.querySelectorAll('.mxRun').length < Math.max(2, runs.length))
     box.insertAdjacentHTML('beforeend','<input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
@@ -1201,7 +1200,6 @@ function routerExtend(router){
 }
 function addMxInput(){
   const box=$('mxRunsBox');
-  if(box.querySelectorAll('.mxRun').length>=10){ alert('10 components max'); return; }
   box.insertAdjacentHTML('beforeend','<input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
 }
 async function routerJob(kind){
