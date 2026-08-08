@@ -602,6 +602,37 @@ async function applyCombineFromBacktests(_names){
     + ' — launch fields set from the sources; pick merge/breed, then Arm combine';
   document.querySelector('.cmbRun').scrollIntoView({behavior:'smooth', block:'center'});
 }
+async function applyMxFromBacktests(_names){
+  let names = Array.isArray(_names) ? _names : null;
+  if(!names){
+    try{ names = JSON.parse(localStorage.getItem('mxFromBt')||'null'); }catch(e){}
+    if(!names || !names.length) return;
+    localStorage.removeItem('mxFromBt');
+  }
+  const runs = [], missing = [];
+  for(const bn of names){
+    const r = RUNS.find(x=>(x.backtest_flags||[]).some(f=>f.backtest===bn))
+           || RUNS.filter(x=>bn.startsWith(x.name)).sort((a,b)=>b.name.length-a.name.length)[0];
+    if(r){ if(!runs.includes(r.name)) runs.push(r.name); }
+    else missing.push(bn);
+  }
+  if((!runs.length || missing.length) && !RUNS_ALL){
+    $('routerMsg').textContent = 'sources not in the quick list — loading the full run list…';
+    RUNS_ALL = true; _runsHash = '';
+    await refreshRuns();
+    return applyMxFromBacktests(names);
+  }
+  if(!runs.length){ $('routerMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
+  runs.splice(10);   // Specific-components cap
+  const box = $('mxRunsBox');
+  while(box.querySelectorAll('.mxRun').length < Math.max(2, runs.length))
+    box.insertAdjacentHTML('beforeend','<input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
+  [...box.querySelectorAll('.mxRun')].forEach((inp,i)=>inp.value = runs[i]||'');
+  $('routerMsg').textContent = `${runs.length} component run${runs.length>1?'s':''} loaded from the Backtests page`
+    + (missing.length?` — no run found for: ${missing.join(', ')}`:'')
+    + ' — set a name and hit the MetaX2 Build button (components must share one MODE)';
+  box.scrollIntoView({behavior:'smooth', block:'center'});
+}
 function addCombineInput(){
   const box = $('cmbInputs');
   if(box.querySelectorAll('.cmbRun').length >= 8){ alert('8 runs max per merge'); return; }
@@ -1818,7 +1849,7 @@ $('strat').onchange = ()=>{
   explain('strategy');
 };
 $('perreg').disabled = !['v7','prime7'].includes($('strat').value);  // sync after restore
-refreshRuns().then(applyCombineFromBacktests); refreshJobs(); loadSpace(); aiKey(); refreshCampaign();
+refreshRuns().then(applyCombineFromBacktests).then(()=>applyMxFromBacktests()); refreshJobs(); loadSpace(); aiKey(); refreshCampaign();
 setInterval(refreshJobs, 4000); setInterval(refreshRuns, 15000); setInterval(refreshCampaign, 10000);
 </script>
 </body>
