@@ -57,7 +57,7 @@ def mine(pairs, mode="spot", per_group=2):
             continue
         strat = b.get("strategy") or (b.get("cand") or {}).get("strategy")
         if b.get("mode") != mode or not b.get("cand") \
-                or strat in ("metax", "metax2", "pairx"):
+                or strat in ("metax", "metax2", "pairx", "fcfsx"):
             continue
         coin = (b.get("pair") or "SOL_USDT").split("_")[0].lower()
         if coin not in pairs:
@@ -181,7 +181,7 @@ def main():
                 sys.exit(f"run '{rn}' not found")
             b = json.load(open(p))
             strat = b.get("strategy") or (b.get("cand") or {}).get("strategy")
-            if strat in ("metax", "metax2", "pairx") or not b.get("cand"):
+            if strat in ("metax", "metax2", "pairx", "fcfsx") or not b.get("cand"):
                 sys.exit(f"'{rn}' is a router/empty run — pick strategy runs")
             if mode is None:
                 mode = b.get("mode")

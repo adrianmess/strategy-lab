@@ -899,7 +899,7 @@ def main():
                 sys.exit(f"--add: run '{rn}' not found")
             b = json.load(open(p))
             strat = b.get("strategy") or (b.get("cand") or {}).get("strategy")
-            if strat in ("metax", "metax2", "pairx") or not b.get("cand"):
+            if strat in ("metax", "metax2", "pairx", "fcfsx") or not b.get("cand"):
                 sys.exit(f"--add: '{rn}' is a router/empty run")
             _want_pair = os.environ["LAB_COIN"].upper() + "_USDT"
             _want_tf = os.environ.get("LAB_TF", "3") + "m"

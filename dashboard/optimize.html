@@ -297,6 +297,10 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <span style="display:flex;gap:4px">
         <input id="pxName" placeholder="name (auto)" style="width:110px">
         <button class="small" onclick="routerJob('pairx')">Build basket</button></span></div>
+      <div class="field"><label data-x="rxfcfs">FCFS combo</label>
+        <span style="display:flex;gap:4px">
+        <input id="fcName" placeholder="name (auto)" style="width:110px">
+        <button class="small" onclick="routerJob('fcfsx')">Build</button></span></div>
       <span class="kv" id="routerMsg"></span>
     </div>
     <div class="row" style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -306,7 +310,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">
       </span>
       <button class="small" onclick="addMxInput()">+ run</button>
-      <span class="mini">— fill these and hit the MetaX2 <b>Build</b>: the router uses EXACTLY these runs (pairs &amp; timeframes may differ; same mode). Leave empty to auto-mine.</span>
+      <span class="mini">— fill these, then hit the MetaX2 <b>Build</b> (regime-gated) or the FCFS combo <b>Build</b> (first signal wins): both use EXACTLY these runs (pairs &amp; timeframes may differ; same mode). Leave empty and MetaX2 auto-mines.</span>
     </div>
   </div>
 
@@ -459,6 +463,7 @@ const X = {
  rxstack: ["Stack (router-of-routers)", `Combines routers with DIFFERENT bucketing methods: every 42 days it re-picks each source router's assignment from past-only data and follows whichever method has the best trailing dd-penalized performance.<dl><dt>Sources</dt><dd>All WF-PASS single-method routers of the chosen mode (month12 excluded automatically).</dd><dt>Honesty</dt><dd>Causal BY CONSTRUCTION — its single published entry IS its walk-forward. Your best spot result (+13.2%/mo) is a stack.</dd><dt>Live</dt><dd>No stack adapter yet: adopt the single-method router it currently picks (cand.current in its config).</dd></dl>`],
  rxmetax2: ["MetaX2 (cross-timeframe router)", `Routes components that each simulate on their OWN pair+timeframe candles — a 1m scalper stays a 1m scalper — bucketed by SOL-3m volatility terciles, one slot, causal 42d walk-forward only.<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter; the panel refuses adoption. First results were weak (SOL has no 1m/5m runs to route yet; the all-pairs pool was too thin to clear the feasibility gates).</dd><dt>When useful</dt><dd>After 1m/5m searches produce honest survivors — fast strategies tend to shine exactly when volatility spikes.</dd></dl>`],
  rxpick: ["Specific components", `Hand-pick EXACTLY which runs become the router's components (instead of auto-mining). Rules:<dl><dt>Mixing allowed</dt><dd>Different pairs AND different chart timeframes — each component is simulated on its own candles in an isolated process.</dd><dt>One mode</dt><dd>All picks must share spot OR lev (one account, one slot). Lev components keep their per-trade leverage in the sim.</dd><dt>Buckets</dt><dd>If every pick is the same pair, that pair's 3m vol terciles are the routing reference; mixed pairs use SOL's.</dd><dt>No router-in-router</dt><dd>Pick strategy runs, not other routers.</dd></dl>Then hit the MetaX2 <b>Build</b> button. Validated by the same causal 42d walk-forward as everything else.`],
+ rxfcfs: ["FCFS combo", `The what-you-meant router: EXACTLY your picked runs, all live simultaneously (each simulated on its own pair/timeframe candles), ONE shared position slot — whichever component signals first takes it; when the trade closes the slot frees; repeat. No regime gating, pure time priority.<dl><dt>Two published numbers</dt><dd><b>_fcfs_full</b> = full-history replay. The merge has no fitted parameters, but your component choice is hindsight. <b>_fcfs_wf</b> = causal sibling: every 42d a component is only in the roster if its own trailing past-only trades were profitable — believe THIS one.</dd><dt>Known risk</dt><dd>Time priority lets an early mediocre signal block a better one minutes later (this is what sank PairX). Liquidating components are excluded at collect.</dd><dt>Status</dt><dd>RESEARCH ONLY — no live adapter; the panel refuses adoption.</dd></dl>`],
  rxpairx: ["PairX basket (multi-pair FCFS)", `Every pair's best spot configs compete for ONE position slot, first-come-first-served — exactly what a multi-pair live trader would execute. Per-fold component picks use past-only trailing performance (causal).<dl><dt>Status</dt><dd>RESEARCH ONLY — no live adapter yet.</dd><dt>Measured (2026-07)</dt><dd>Best basket +6.8%/mo vs SOL-only stack +13.2%/mo: with alt edges at only +2–5%/mo, FCFS lets weaker trades displace stronger SOL ones. Needs stronger per-pair components (e.g. per-pair routers) to earn its place.</dd></dl>`],
  gmpairs: ["Gamut: pairs", `Which pairs the sweep covers, run in the shown order: EVERY selected combo finishes for one pair (optimize + automatic backtests) before the next pair starts.`],
  gmstrats: ["Gamut: strategies", `Each ticked family multiplies the run count. What they are:<dl><dt>v7</dt><dd>Full-parameter V5-family engine — RSI+MACD+BB%B dip system + MACD crossover, EVERY indicator length searchable per regime. Your strongest lev family.</dd><dt>prime7</dt><dd>Solana Prime on the v7 engine (dip system only, crossover locked off), lengths searchable. Anchored to your live xlsx values.</dd><dt>prime</dt><dd>Solana Prime with fixed indicator lengths — thresholds only.</dd><dt>macdx</dt><dd>The standalone MACD-crossover pine (TP/SL/time/histogram), searchable per regime. Recently the strongest SPOT family.</dd><dt>rocx</dt><dd>V4 ROC/SMA trend pine — dip entries on 45-min boundaries, trailing stop (pine or ratchet).</dd><dt>scalpx2</dt><dd>VRVP+CVD+EMA scalper with searchable lengths.</dd><dt>v6</dt><dd>V5 with z-scored MACD entries, fixed lengths.</dd></dl>Honest note: scalpx (v1) is excluded here — it tested edgeless everywhere.`],
@@ -1161,7 +1166,7 @@ function metax2Extend(router){
     hint: `Pairs and timeframes <b>may differ</b> — each component simulates on its own candles. All picks must share <b>${base?base.mode:'the same'}</b> mode; routers can't be components. Result is a NEW run "${router}_ext"; this one stays untouched.`,
     validate: n => {
       const r = RUNS.find(x=>x.name===n);
-      if(['metax','metax2','pairx'].includes(r.strategy)) return 'routers can\'t be components — pick strategy runs';
+      if(['metax','metax2','pairx','fcfsx'].includes(r.strategy)) return 'routers can\'t be components — pick strategy runs';
       if(base && r.mode !== base.mode) return `${n} is ${r.mode} but this router is ${base.mode} — one mode per router`;
       return null;
     },
@@ -1179,7 +1184,7 @@ function routerExtend(router){
     hint: `Classic MetaX routers simulate every component on <b>one dataset</b>: picks must match this router's pair (<b>${base?(base.pair||'SOL_USDT'):''}</b>), timeframe (<b>${base?(base.timeframe||'3m'):''}</b>) and mode (<b>${base?base.mode:''}</b>). Use MetaX2 to mix. Result is a NEW run "${router}_ext"; re-run WF on it before trusting it.`,
     validate: n => {
       const r = RUNS.find(x=>x.name===n);
-      if(['metax','metax2','pairx'].includes(r.strategy)) return 'routers can\'t be components — pick strategy runs';
+      if(['metax','metax2','pairx','fcfsx'].includes(r.strategy)) return 'routers can\'t be components — pick strategy runs';
       if(base){
         if(r.mode !== base.mode) return `${n} is ${r.mode}, router is ${base.mode}`;
         if((r.pair||'SOL_USDT') !== (base.pair||'SOL_USDT')) return `${n} is ${r.pair||'SOL_USDT'}, router is ${base.pair||'SOL_USDT'} — use MetaX2 to mix pairs`;
@@ -1220,6 +1225,18 @@ async function routerJob(kind){
     d.name=$('mxName').value.trim()||`metax2_${picks.length?'sel':'auto'}_`+new Date().toISOString().slice(5,10).replace('-','');
   }
   if(kind==='pairx'){ d.name=$('pxName').value.trim()||'pairx_'+new Date().toISOString().slice(5,10).replace('-',''); }
+  if(kind==='fcfsx'){
+    const picks=[...document.querySelectorAll('.mxRun')].map(i=>i.value.trim()).filter(Boolean);
+    if(picks.length<2){ alert('FCFS combo needs at least 2 runs — fill the Specific components row (or send runs over from the Backtests page router picker)'); return; }
+    if(new Set(picks).size!==picks.length){ alert('the same run is picked twice'); return; }
+    const recs=picks.map(n=>RUNS.find(r=>r.name===n));
+    const miss=picks[recs.findIndex(r=>!r)];
+    if(recs.some(r=>!r)){ alert(`run not found: "${miss}"`); return; }
+    if(new Set(recs.map(r=>r.mode)).size>1){ alert('all selected components must share the same MODE (spot vs lev)'); return; }
+    if(recs.some(r=>['metax','metax2','pairx','fcfsx'].includes(r.strategy))){ alert('routers can\'t be components — pick strategy runs'); return; }
+    d.runs=picks;
+    d.name=$('fcName').value.trim()||'fcfs_'+new Date().toISOString().slice(5,10).replace('-','');
+  }
   const r = await api('jobs/router', d);
   $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));
   if(typeof refreshJobs==='function') refreshJobs();

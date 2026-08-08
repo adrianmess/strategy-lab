@@ -384,7 +384,7 @@ function rtrToggle(){
   rtrRender();
 }
 function rtrClick(e){
-  if(['metax','metax2','pairx'].includes(e.strategy)){
+  if(['metax','metax2','pairx','fcfsx'].includes(e.strategy)){
     alert("Routers can't be components of another router — pick strategy runs."); return; }
   const i = RTRSEL.indexOf(e.name);
   if(i >= 0) RTRSEL.splice(i, 1);

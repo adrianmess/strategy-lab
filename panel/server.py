@@ -1260,7 +1260,7 @@ def adopt():
                              f"{best.get('timeframe')!r} — the live trader "
                              f"supports 1m, 3m and 5m."), 400
     _strat = best.get("strategy") or (best.get("cand") or {}).get("strategy")
-    if _strat in ("metax2", "pairx"):
+    if _strat in ("metax2", "pairx", "fcfsx"):
         return jsonify(error=f"'{_strat}' runs (cross-timeframe/multi-pair "
                              f"routers) have no live adapter yet — research "
                              f"artifacts. The multi-pair live trader is the "
@@ -1692,6 +1692,16 @@ def job_router():
             cmd += ["--pairs", d.get("pairs", "sol")]
     elif kind == "pairx":
         cmd = [sys.executable, "pairx_cli.py", "--name", name]
+    elif kind == "fcfsx":
+        runs_sel = [r for r in (d.get("runs") or []) if r]
+        if len(runs_sel) < 2:
+            return jsonify(error="FCFS combo needs at least 2 component "
+                                 "runs (fill the Specific components row)"), 400
+        for r in runs_sel:
+            if not re.fullmatch(r"[A-Za-z0-9_.\-]+", r):
+                return jsonify(error=f"bad run name '{r}'"), 400
+        cmd = [sys.executable, "fcfsx_cli.py", "--name", name,
+               "--runs", ",".join(runs_sel)]
     else:
         return jsonify(error=f"unknown router kind '{kind}'"), 400
     return jsonify(id=spawn("router", name, cmd, OPT))
