@@ -50,6 +50,8 @@ pre{font-size:11px;overflow:auto;background:#1c2129;padding:10px;border-radius:6
 .mcell{background:var(--hover);border-radius:6px;padding:6px 8px;font-size:11px;text-align:center}
 .hint{color:var(--dim);font-size:12px}
 th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
+#rtrT{width:auto} #rtrT th,#rtrT td{text-align:left;padding:3px 14px 3px 0;white-space:nowrap}
+#rtrT th{cursor:default} #rtrT th:hover{color:var(--dim)} #rtrT tr:hover td{background:transparent}
 .tablewrap{overflow-x:auto}
 </style>
 <link rel="stylesheet" href="assets/theme.css">
@@ -158,11 +160,9 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
   </div>
   <div id="rtrBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(88,166,255,.06)">
     <div style="font-weight:600;margin-bottom:6px">Router components <span class="hint" id="rtrCount"></span></div>
-    <table style="font-size:12px;border-collapse:collapse" id="rtrT"><thead><tr>
-      <th style="text-align:left;padding:2px 10px 2px 0">name</th><th style="text-align:left;padding:2px 10px 2px 0">kind</th>
-      <th style="text-align:left;padding:2px 10px 2px 0">strategy</th><th style="text-align:left;padding:2px 10px 2px 0">mode</th>
-      <th style="text-align:left;padding:2px 10px 2px 0">method</th><th></th></tr></thead>
-      <tbody id="rtrList"><tr><td colspan="6" class="hint">click rows in the table below to add runs…</td></tr></tbody></table>
+    <table style="font-size:12px" id="rtrT"><thead><tr>
+      <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th></th></tr></thead>
+      <tbody id="rtrList"><tr><td colspan="7" class="hint">click rows in the table below to add runs…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button onclick="clearRtr()">clear</button>
@@ -399,12 +399,12 @@ function clearRtr(){ RTRSEL.length = 0; rtrRender(); }
 function rtrRender(){
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
-  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="6" class="hint">click rows in the table below to add runs…</td></tr>'; return; }
+  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="7" class="hint">click rows in the table below to add runs…</td></tr>'; return; }
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
-    return `<tr><td style="padding:2px 10px 2px 0">${e.name}</td><td style="padding:2px 10px 2px 0" class="hint">${e.kind||''}</td>
-      <td style="padding:2px 10px 2px 0">${e.strategy||''}</td><td style="padding:2px 10px 2px 0"><span class="pill ${e.mode}">${e.mode||''}</span></td>
-      <td style="padding:2px 10px 2px 0">${e.method||''}</td>
+    return `<tr><td>${e.name}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
+      <td>${e.strategy||''}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
+      <td>${e.method||''}</td>
       <td><button onclick="rtrRemove('${e.name}')" title="remove">✕</button></td></tr>`;}).join('');
 }
 function sendToRouter(){
