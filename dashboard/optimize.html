@@ -779,6 +779,33 @@ async function refreshRuns(){
       g = Math.max(g ?? -1e9, r.holdout_best.holdout.growth);
     r._hg = (r.holdout || r.holdout_best) ? (g === null ? -99 : g) : null;
   });
+  // ---- holdout GAUNTLET: group sweep legs (base name x scoring suffix);
+  // a leg PASSES when its winner (train-best or OOS-best) survived its own
+  // holdout without liquidating. All 5 split types passing = the family is
+  // robust under every holdout regime (each leg is OOS on its own window).
+  const _gt = {};
+  RUNS.forEach(r=>{
+    const m = r.name.match(/^(.+)_(hA|hB|hBtw|hOut|hAlt\d+)(_(?:cls|wor|und))?$/);
+    if(!m) return;
+    const key = m[1] + (m[3]||'');
+    const type = m[2].startsWith('hAlt') ? 'hAlt' : m[2];
+    const pass = !r.no_survivors && !r.running &&
+      ((r.holdout && !r.holdout.liq) ||
+       (r.holdout_best && r.holdout_best.holdout && !r.holdout_best.holdout.liq));
+    (_gt[key] = _gt[key] || {});
+    // a type can appear once per group; running legs count as pending
+    _gt[key][type] = r.running ? 'pending' : (pass ? 'pass' : 'fail');
+    r._gtKey = key;
+  });
+  RUNS.forEach(r=>{
+    if(!r._gtKey) return;
+    const g = _gt[r._gtKey], types = ['hA','hB','hBtw','hOut','hAlt'];
+    const have = types.filter(t=>g[t]), passed = types.filter(t=>g[t]==='pass');
+    if(have.length < 2){ r._gauntlet = null; return; }
+    r._gauntlet = {have:have.length, passed:passed.length,
+      full: have.length===5 && !have.some(t=>g[t]==='pending'),
+      detail: types.map(t=>`${t}: ${g[t]||'—'}`).join(' · ')};
+  });
   renderRuns(); fillCombine();
   if(RUNS.some(r=>r.running)) setTimeout(refreshRuns, 5000);  // live progress
 }
@@ -849,7 +876,11 @@ function renderRuns(){
     const rowToggle = (r.running && runJob(r.name))
       ? ` style="cursor:pointer" title="click to show/hide this run's live job"
           onclick="if(['TD','B','TR'].includes(event.target.tagName)) toggleJobRow('${r.name.replace(/'/g,"\\'")}')"` : '';
-    return `<tr class="${r.best?'best':''} rate${r.rating||0}"${rowToggle}><td>${r.running?'<span class="livedot" title="this run\'s search is executing right now"></span>':''}<b>${r.name}</b>${r.running?' <span class="badge b-green" title="search in progress — live job nested below, progress in the settings column">ACTIVE</span>':''}${r.trading?` <span class="livedot" style="background:${r.trading.live?'var(--red)':'var(--amber)'}"></span><span class="badge ${r.trading.live?'b-red':'b-amber'}" title="a trader instance is running a config adopted from this run: ${r.trading.name} (#${r.trading.instance}), ${r.trading.live?'REAL MONEY':'dry-run rehearsal'}">${r.trading.live?'TRADING LIVE':'DRY-RUN'} · ${r.trading.name}</span>`:''}${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
+    return `<tr class="${r.best?'best':''} rate${r.rating||0}"${rowToggle}><td>${r.running?'<span class="livedot" title="this run\'s search is executing right now"></span>':''}<b>${r.name}</b>${r.running?' <span class="badge b-green" title="search in progress — live job nested below, progress in the settings column">ACTIVE</span>':''}${r.trading?` <span class="livedot" style="background:${r.trading.live?'var(--red)':'var(--amber)'}"></span><span class="badge ${r.trading.live?'b-red':'b-amber'}" title="a trader instance is running a config adopted from this run: ${r.trading.name} (#${r.trading.instance}), ${r.trading.live?'REAL MONEY':'dry-run rehearsal'}">${r.trading.live?'TRADING LIVE':'DRY-RUN'} · ${r.trading.name}</span>`:''}${r._gauntlet?(r._gauntlet.full
+    ? (r._gauntlet.passed===5
+      ? ` <span class="badge b-green" title="HOLDOUT GAUNTLET: this sweep family passed ALL 5 holdout types — every leg's winner survived its own (out-of-sample) holdout without liquidating. ${r._gauntlet.detail}">✓ ALL 5 HOLDOUTS</span>`
+      : ` <span class="badge b-red" title="HOLDOUT GAUNTLET: only ${r._gauntlet.passed} of 5 holdout types passed. ${r._gauntlet.detail}">HOLDOUTS ${r._gauntlet.passed}/5</span>`)
+    : ` <span class="badge b-amber" title="HOLDOUT GAUNTLET in progress: ${r._gauntlet.passed} passed of ${r._gauntlet.have} legs run so far (5 types total). ${r._gauntlet.detail}">holdouts ${r._gauntlet.passed}/${r._gauntlet.have}</span>`):''}${clean?' <span class="badge b-green" title="No liquidation on the holdout AND on the full backtest — worth a closer look (walk-forward is still the final check before adopting)">✓ no-liq</span>':''}</td>
       <td>${stratName(r.strategy)}</td>
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
