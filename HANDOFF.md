@@ -1,7 +1,11 @@
 # Strategy Lab — Session Handoff
 Updated: 2026-08-02 (EC2 offload live). Paste into a new session to resume. Keep this file updated as work progresses.
 
-## ACTIVE: EC2 gamut offload (2026-08-02)
+## CLOSED: EC2 gamut offload (2026-08-02 → 2026-08-09)
+FULLY TORN DOWN 2026-08-09 (verified via CloudShell sweep: 0 fleets, 0 instances, 0 spot requests, 0 EIPs, 0 EBS volumes, 0 S3 buckets, IAM role gamut-box deleted, launch template gamut-A deleted, AMI ami-041e982838c990d16 + snap-0660b53012508ec22 deregistered/deleted, all monitor/launcher scheduled tasks deleted, Mac sync loops stopped). NOTHING BILLABLE REMAINS.
+Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide: docs/EC2_OFFLOAD_RUNBOOK.md (+ docs/ec2/box_snapshot.txt).
+
+## ARCHIVED DETAIL (historical): EC2 gamut offload (2026-08-02)
 - Campaign gamut_g0801_2122 (12,960 specs; 445 done locally; ~12,515 remaining) OFFLOADED to AWS. Local gamut STOPPED (STOP file). Plan repaired: dup-date bug '2024-11-16&#50;024-11-16' fixed in 3,240 cmds, 148 failed reset (UI now clamps dates).
 - Instance: BOX A PENDING RELAUNCH (monitor 2026-08-05 ~14:20 PDT): old c7a.48xlarge i-016786d5b788d3a12 (us-east-2c) was spot-stopped 13:35 PDT; during authorized AZ move its request sir-mzrqhjkq was cancelled + instance terminated, but ALL 48xlarge types (c8a/c7a/c6a) were dry in 2a, 2b AND 2c. Fallback: open PERSISTENT spot request **sir-tqkzgchn** (c7a.48xlarge, 2c, stop-on-interrupt) — fulfills when capacity returns. NEXT MONITOR RUN: if fulfilled, associate EIP 3.20.175.238 (eipalloc-0d7a1245b58d910ba, --allow-reassociation) to the new instance and re-arm offload_watch.sh with ec2_boot_workers.sh. 17 in-flight specs lost (accepted). Elastic IP 3.20.175.238, persistent spot + stop-on-interrupt, 200GB gp3, SG gamut-ssh (sg-0b1b15deb810aa8ad, SSH only from 97.120.254.99). Key: ~/Downloads/gamut-key.pem.
 - On the box: repo at ~/strategy-lab (no 36GB caches — rebuilt on demand from 590MB data/), venv at ~/venv (numpy 2.4.6/pandas 3.0.5/numba 0.66/pyarrow 24.0), worker in tmux session 'gamut': `gamut_worker.py --jobs 13` (13×14 procs), log ~/worker.log, per-spec logs in campaigns/.../logs/. All 16 AI space variants synced. Worker fixes applied: local python + local AI-space path resolution (plans embed builder-machine paths).
