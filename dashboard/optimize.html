@@ -602,8 +602,10 @@ async function launch(){
   if(r.id){ SEARCH_JOB = r.id; localStorage.setItem('searchJob', r.id);
     const w=$('searchProg'); w.style.display='';
     $('searchProgBar').style.width='2%';
-    $('searchProgTxt').textContent='starting…'; }
-  $('launchMsg').textContent = 'started job '+r.id;
+    $('searchProgTxt').textContent = r.queued ? `queued #${r.position} — starts when the running search finishes` : 'starting…'; }
+  $('launchMsg').textContent = r.queued
+    ? `queued (#${r.position} in line) — searches run one at a time; it starts automatically when the current one finishes`
+    : 'started job '+r.id;
   if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed — arm again for another merge'; }
   refreshJobs(); setTimeout(refreshRuns, 3000);
 }
@@ -1464,6 +1466,12 @@ function updateSearchProg(jobs){
   const w = document.getElementById('searchProg'); if(!w) return;
   if(!SEARCH_JOB){ w.style.display='none'; return; }
   const j = jobs.find(x=>x.id===SEARCH_JOB);
+  if(j && j.status.startsWith('queued')){    // waiting in the launch queue
+    w.style.display='';
+    document.getElementById('searchProgBar').style.width='2%';
+    document.getElementById('searchProgTxt').textContent = `${j.name} — ${j.status}`;
+    return;
+  }
   if(!j || j.status!=='running'){            // finished (or gone) — hide the bar
     w.style.display='none'; SEARCH_JOB=null; localStorage.removeItem('searchJob');
     return;
@@ -1503,7 +1511,8 @@ async function refreshJobs(){
     return `<div style="border-bottom:1px solid var(--border);padding:8px 0">
     <div class="row" style="justify-content:space-between">
       <span><b>${j.kind}</b> · ${j.name} · <span class="${j.status==='running'?'pos':'kv'}">${j.status}</span> <span class="kv">since ${j.started}</span></span>
-      ${j.status==='running'?`<button class="small" onclick="stopJob('${j.id}')">${j.stopping?'force stop':'stop'}</button>${j.stopping?' <span class="kv">finishing generation, then computing holdout…</span>':''}`:''}
+      ${j.status==='running'?`<button class="small" onclick="stopJob('${j.id}')">${j.stopping?'force stop':'stop'}</button>${j.stopping?' <span class="kv">finishing generation, then computing holdout…</span>':''}`
+        :j.status.startsWith('queued')?`<button class="small" onclick="stopJob('${j.id}')">remove from queue</button>`:''}
     </div>${bar}<pre>${(j.log||[]).join('\n')}</pre></div>`;
   }).join('') : 'no jobs yet';
 }

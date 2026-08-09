@@ -205,8 +205,8 @@ def api_version():
     return jsonify(stale=(cur != _LOADED_MTIME))
 
 
-def spawn(kind, name, cmd, cwd):
-    jid = f"{kind}_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
+def spawn(kind, name, cmd, cwd, jid=None):
+    jid = jid or f"{kind}_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
     log = os.path.join(JOBS_DIR, jid + ".log")
     with open(log, "w") as lf:
         proc = subprocess.Popen(cmd, cwd=cwd, stdout=lf, stderr=subprocess.STDOUT)
@@ -341,12 +341,12 @@ def jobs_list():
             except Exception:
                 pass
         out.append(entry)
-    for sid, st in SWEEPS.items():
-        for n in st["pending"]:
-            out.append(dict(id=f"{sid}:{n}", kind="optimize-v2", name=n,
+    with _OPTQ_LOCK:
+        for i, (jid, n, _) in enumerate(OPTQ["items"]):
+            out.append(dict(id=jid, kind="optimize-v2", name=n,
                             cmd="(queued)", started="—", stopping=False,
-                            status="queued (sweep — starts when the previous "
-                                   "leg finishes)", log=[]))
+                            status=f"queued #{i+1} — starts when the running "
+                                   f"search finishes", log=[]))
     return jsonify(out)
 
 def _safe_name(n):
@@ -490,6 +490,11 @@ def job_data():
 @app.route("/api/jobs/<jid>/stop", methods=["POST"])
 def job_stop(jid):
     import signal as _sig
+    with _OPTQ_LOCK:
+        for it in list(OPTQ["items"]):
+            if it[0] == jid:
+                OPTQ["items"].remove(it)
+                return jsonify(ok=True, note="removed from the queue")
     j = jobs.get(jid)
     if not j:
         return jsonify(error="unknown job"), 404
@@ -1919,22 +1924,69 @@ def _opt2_cmd(d, name):
     return cmd
 
 
+OPTQ = dict(items=[], running=None)   # items: [jid, name, payload]
+_OPTQ_LOCK = threading.Lock()
+_OPTQ_WATCH = {"t": None}
+
+
+def _optq_watch():
+    """Consumer: starts the next queued search when the current one ends."""
+    while True:
+        time.sleep(4)
+        with _OPTQ_LOCK:
+            r = OPTQ["running"]
+            busy = r is not None and r in jobs and jobs[r]["proc"].poll() is None
+            if busy:
+                continue
+            if not OPTQ["items"]:
+                OPTQ["running"] = None
+                _OPTQ_WATCH["t"] = None
+                return
+            jid, name, d = OPTQ["items"].pop(0)
+            OPTQ["running"] = jid
+        spawn("optimize-v2", name, _opt2_cmd(d, name), OPT, jid=jid)
+
+
+def _optq_launch(name, d):
+    """Run now if no search is active, else queue (searches use all procs —
+    parallel searches would thrash). Returns (jid, queued, position)."""
+    with _OPTQ_LOCK:
+        r = OPTQ["running"]
+        busy = (r is not None and r in jobs and jobs[r]["proc"].poll() is None)             or bool(OPTQ["items"])
+        jid = f"optimize-v2_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
+        if busy:
+            OPTQ["items"].append([jid, name, d])
+            pos = len(OPTQ["items"])
+            if _OPTQ_WATCH["t"] is None or not _OPTQ_WATCH["t"].is_alive():
+                _OPTQ_WATCH["t"] = threading.Thread(target=_optq_watch, daemon=True)
+                _OPTQ_WATCH["t"].start()
+            return jid, True, pos
+        OPTQ["running"] = jid
+    spawn("optimize-v2", name, _opt2_cmd(d, name), OPT, jid=jid)
+    with _OPTQ_LOCK:
+        if _OPTQ_WATCH["t"] is None or not _OPTQ_WATCH["t"].is_alive():
+            _OPTQ_WATCH["t"] = threading.Thread(target=_optq_watch, daemon=True)
+            _OPTQ_WATCH["t"].start()
+    return jid, False, 0
+
+
 def job_optimize2():
-    """One optimizer for every strategy (v7 / prime / v6 / scalpx)."""
+    """One optimizer for every strategy (v7 / prime / v6 / scalpx).
+    Sequential by design: a second launch queues behind the running one."""
     d = request.get_json(force=True)
     name = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
-    return jsonify(id=spawn("optimize-v2", name, _opt2_cmd(d, name), OPT))
+    jid, queued, pos = _optq_launch(name, d)
+    return jsonify(id=jid, queued=queued, position=pos)
 
 
-SWEEPS = {}          # sweep_id -> dict(pending=[names], current=jid, done=[])
 _SC_SUF = {"classic": "cls", "worst_window": "wor", "underwater": "und"}
 
 
 @app.route("/api/jobs/optimize2_sweep", methods=["POST"])
 def job_optimize2_sweep():
-    """Cross-product sweep: one sequential search per (holdout x scoring)
-    variation, each saved under a suffixed name so nothing is overwritten.
-    Works with combine (resume_from/merge_mode ride along on every leg)."""
+    """Cross-product sweep: one search per (holdout x scoring) variation,
+    each saved under a suffixed name. All legs go through the same global
+    sequential queue as plain launches."""
     d = request.get_json(force=True)
     sweep = d.pop("sweep", None) or {}
     holds = sweep.get("holdouts") or [None]
@@ -1962,22 +2014,12 @@ def job_optimize2_sweep():
     if len(variants) < 2:
         return jsonify(error="sweep needs at least 2 variations — tick more "
                              "holdout/scoring boxes (or use plain Start search)"), 400
-    sid = f"sweep_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
-    SWEEPS[sid] = dict(pending=[n for n, _ in variants], current=None, done=[])
-
-    def shepherd():
-        st = SWEEPS[sid]
-        for vname, v in variants:
-            jid = spawn("optimize-v2", vname, _opt2_cmd(v, vname), OPT)
-            st["pending"].remove(vname)
-            st["current"] = jid
-            while jobs[jid]["proc"].poll() is None:
-                time.sleep(5)
-            st["done"].append(vname)
-        st["current"] = None
-
-    threading.Thread(target=shepherd, daemon=True).start()
-    return jsonify(id=sid, count=len(variants), names=[n for n, _ in variants])
+    first = None
+    for vname, v in variants:
+        jid, _, _ = _optq_launch(vname, v)
+        first = first or jid
+    return jsonify(id=first, count=len(variants),
+                   names=[n for n, _ in variants])
 
 @app.route("/api/jobs/ai_suggest", methods=["POST"])
 def job_ai():
