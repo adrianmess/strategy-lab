@@ -165,6 +165,11 @@ button.rtradd.on{opacity:1;filter:none}
     <button onclick="sendToCombine()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are prefilled in the Combine row on the Optimize page">→ combine these runs on the Optimize page</button>
     <button onclick="clearCmbSel()">clear</button>
   </div>
+  <div id="delBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--red);border-radius:6px;background:rgba(248,81,73,.06)">
+    <span id="delCount" style="font-weight:600"></span>
+    <button style="color:var(--red)" onclick="delSelected()">✕ delete selected</button>
+    <button onclick="clearDelSel()">clear</button>
+  </div>
   <div id="rtrBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(88,166,255,.06)">
     <div style="font-weight:600;margin-bottom:6px">Router components <span class="hint" id="rtrCount"></span></div>
     <table style="font-size:12px" id="rtrT"><thead><tr>
@@ -393,6 +398,22 @@ function gauntOf(name){
     if(name.endsWith(sf) && GAUNT[name.slice(0,-sf.length)])
       return GAUNT[name.slice(0,-sf.length)];
   return null;
+}
+const DELSEL = new Set();
+function delBarUpd(){
+  document.getElementById('delBar').style.display = DELSEL.size ? '' : 'none';
+  document.getElementById('delCount').textContent = DELSEL.size + ' selected for deletion';
+}
+function clearDelSel(){ DELSEL.clear(); delBarUpd(); render(); }
+async function delSelected(){
+  if(!DELSEL.size) return;
+  const names=[...DELSEL];
+  if(!confirm(`Delete ${names.length} backtest entr${names.length>1?'ies':'y'}?\n\n${names.slice(0,12).join('\n')}${names.length>12?`\n…and ${names.length-12} more`:''}`)) return;
+  try{
+    const r = await fetch('/api/backtests/delete',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({names})});
+    if(r.ok) location.reload(); else alert('delete failed');
+  }catch(e){alert('Delete needs the control-panel server (open this page via http://127.0.0.1:8800)');}
 }
 const RTRSEL = [];
 function rtrClick(e){
@@ -638,7 +659,7 @@ function render(){
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
-      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
@@ -675,6 +696,11 @@ function render(){
       if(!e.best) e.best = true; else delete e.best;
       render();
     }catch(err){alert('Marking needs the control-panel server (open this page via http://127.0.0.1:8800)');}
+  });
+  tb.querySelectorAll('input.delSel').forEach(cb=>cb.onclick=ev=>{
+    ev.stopPropagation();
+    if(cb.checked) DELSEL.add(cb.dataset.name); else DELSEL.delete(cb.dataset.name);
+    delBarUpd();
   });
   tb.querySelectorAll('button.rtradd').forEach(b=>b.onclick=ev=>{
     ev.stopPropagation();

@@ -2442,18 +2442,44 @@ def backtests_rate():
 
 @app.route("/api/backtests/delete", methods=["POST"])
 def backtests_delete():
-    name = request.get_json(force=True).get("name")
-    _bt_meta_set(name, "rating", None)
-    _bt_meta_set(name, "best", None)
+    """Delete one entry ({name}) or many ({names:[...]}). Tombstones every
+    deleted name in dashboard/bt_deleted.json so the 5-minute merge loop
+    can't resurrect it from per-run payload copies or box mirrors."""
+    d = request.get_json(force=True)
+    names = set(d.get("names") or ([d["name"]] if d.get("name") else []))
+    if not names:
+        return jsonify(error="no names"), 400
     path = os.path.join(DASH, "backtests.js")
-    txt = open(path).read()
-    entries = json.loads(txt[txt.index("=") + 1:].rstrip().rstrip(";"))
-    entries = [e for e in entries if e.get("name") != name]
-    with open(path, "w") as f:
-        f.write("window.BACKTESTS = ")
-        json.dump(entries, f, default=float)
-        f.write(";")
-    return jsonify(ok=True, remaining=len(entries))
+    tomb_p = os.path.join(DASH, "bt_deleted.json")
+    import fcntl
+    with open(path + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        txt = open(path).read()
+        entries = json.JSONDecoder().raw_decode(
+            txt[txt.index("=") + 1:].lstrip())[0]
+        entries = [e for e in entries if e.get("name") not in names]
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("window.BACKTESTS = ")
+            json.dump(entries, f, default=float)
+            f.write(";")
+        os.replace(tmp, path)
+        try:
+            tomb = set(json.load(open(tomb_p))) if os.path.exists(tomb_p) else set()
+        except Exception:
+            tomb = set()
+        tomb |= names
+        json.dump(sorted(tomb), open(tomb_p, "w"))
+    for name in names:
+        _bt_meta_set(name, "rating", None)
+        _bt_meta_set(name, "best", None)
+        try:
+            dp = os.path.join(DASH, "bt_detail", name + ".json")
+            if os.path.exists(dp):
+                os.remove(dp)
+        except OSError:
+            pass
+    return jsonify(ok=True, deleted=len(names), remaining=len(entries))
 
 
 if __name__ == "__main__":

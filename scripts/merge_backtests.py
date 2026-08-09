@@ -24,6 +24,11 @@ def main():
     remote_p = sys.argv[1]
     if not os.path.exists(remote_p):
         print("no remote file"); return
+    tomb_p = os.path.join(os.path.dirname(LOCAL), "bt_deleted.json")
+    try:
+        tomb = set(json.load(open(tomb_p))) if os.path.exists(tomb_p) else set()
+    except Exception:
+        tomb = set()
     local, dirty = load(LOCAL) if os.path.exists(LOCAL) else ([], False)
     if dirty:
         print("local backtests.js had trailing garbage — will rewrite clean")
@@ -31,6 +36,8 @@ def main():
     added = 0
     remote_entries, _ = load(remote_p)
     for e in remote_entries:
+        if e.get("name") in tomb:
+            continue                     # deleted by the user — stay deleted
         if e.get("name") not in have:
             local.append(split_entry(stamp_opt(prune_entry(e))))
             have.add(e.get("name"))
@@ -42,6 +49,8 @@ def main():
                              "optimizer", "runs", "*", "bts", "*.json")
     for p in glob.glob(runs_glob):
         nm = os.path.basename(p)[:-5]
+        if nm in tomb:
+            continue
         if nm not in have:
             try:
                 local.append(split_entry(stamp_opt(prune_entry(json.load(open(p))))))
