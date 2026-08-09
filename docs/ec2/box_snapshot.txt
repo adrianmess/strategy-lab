@@ -1,0 +1,17 @@
+certifi==2026.7.22
+charset-normalizer==3.4.9
+idna==3.18
+llvmlite==0.48.0
+numba==0.66.0
+numpy==2.4.6
+pandas==3.0.5
+pyarrow==24.0.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+requests==2.34.2
+six==1.17.0
+urllib3==2.7.0
+===
+@reboot sleep 30 && ~/ec2_boot_workers.sh
+*/5 * * * * ~/box_s3_push.sh
+===
