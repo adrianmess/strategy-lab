@@ -659,7 +659,9 @@ async function applyCombineFromBacktests(_names){
     if([...$('strat').options].some(o=>o.value===r0.strategy)) $('strat').value=r0.strategy;
     if([...$('method').options].some(o=>o.value===r0.method)) $('method').value=r0.method;
   }
+  const dedup = names.length - missing.length - runs.length;
   $('cmbMsg').textContent = `${runs.length} run${runs.length>1?'s':''} loaded from the Backtests page`
+    + (dedup>0?` (${names.length-missing.length} backtests → ${runs.length} unique source runs: ${dedup+1>2?'several':'two'} of your selections are different backtests of the SAME run — its full and OOS-best entries count once for combine)`:'')
     + (missing.length?` — no run found for: ${missing.join(', ')}`:'')
     + ' — launch fields set from the sources; pick merge/breed, then Arm combine';
   document.querySelector('.cmbRun').scrollIntoView({behavior:'smooth', block:'center'});
@@ -690,7 +692,9 @@ async function applyMxFromBacktests(_names){
   while(box.querySelectorAll('.mxRun').length < Math.max(2, runs.length))
     box.insertAdjacentHTML('beforeend','<input class="mxRun" list="cmbRuns" placeholder="type to filter runs…" style="width:210px" autocomplete="off">');
   [...box.querySelectorAll('.mxRun')].forEach((inp,i)=>inp.value = runs[i]||'');
+  const dedupMx = names.length - missing.length - runs.length;
   $('routerMsg').textContent = `${runs.length} component run${runs.length>1?'s':''} loaded from the Backtests page`
+    + (dedupMx>0?` (${names.length-missing.length} backtests deduped to ${runs.length} unique runs)`:'')
     + (missing.length?` — no run found for: ${missing.join(', ')}`:'')
     + ' — set a name and hit the MetaX2 Build button (components must share one MODE)';
   box.scrollIntoView({behavior:'smooth', block:'center'});
