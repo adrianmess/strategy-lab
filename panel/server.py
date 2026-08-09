@@ -9,7 +9,7 @@ launch backtests / optimizations / walk-forwards / refits with live logs,
 and open the results dashboard. Everything runs as local subprocesses of
 this server — closing the server stops the trader too.
 """
-import json, os, re, signal, subprocess, sys, time, uuid
+import json, os, re, signal, subprocess, sys, threading, time, uuid
 from flask import Flask, jsonify, request, send_from_directory
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -341,6 +341,12 @@ def jobs_list():
             except Exception:
                 pass
         out.append(entry)
+    for sid, st in SWEEPS.items():
+        for n in st["pending"]:
+            out.append(dict(id=f"{sid}:{n}", kind="optimize-v2", name=n,
+                            cmd="(queued)", started="—", stopping=False,
+                            status="queued (sweep — starts when the previous "
+                                   "leg finishes)", log=[]))
     return jsonify(out)
 
 def _safe_name(n):
@@ -1825,10 +1831,8 @@ def param_spaces_list():
 
 @app.route("/api/jobs/optimize", methods=["POST"])
 @app.route("/api/jobs/optimize2", methods=["POST"])
-def job_optimize2():
-    """One optimizer for every strategy (v7 / prime / v6 / scalpx)."""
-    d = request.get_json(force=True)
-    name = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
+def _opt2_cmd(d, name):
+    """Payload -> optimize2_cli command (shared by single launch and sweep)."""
     cmd = [sys.executable, "optimize2_cli.py",
            "--strategy", d.get("strategy", "v7"),
            "--algo", d.get("algo", "genetic"),
@@ -1870,7 +1874,68 @@ def job_optimize2():
         cmd += ["--anchor", "defaults"]
     if d.get("anchor_strength"):
         cmd += ["--anchor-strength", str(d["anchor_strength"])]
-    return jsonify(id=spawn("optimize-v2", name, cmd, OPT))
+    return cmd
+
+
+def job_optimize2():
+    """One optimizer for every strategy (v7 / prime / v6 / scalpx)."""
+    d = request.get_json(force=True)
+    name = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
+    return jsonify(id=spawn("optimize-v2", name, _opt2_cmd(d, name), OPT))
+
+
+SWEEPS = {}          # sweep_id -> dict(pending=[names], current=jid, done=[])
+_SC_SUF = {"classic": "cls", "worst_window": "wor", "underwater": "und"}
+
+
+@app.route("/api/jobs/optimize2_sweep", methods=["POST"])
+def job_optimize2_sweep():
+    """Cross-product sweep: one sequential search per (holdout x scoring)
+    variation, each saved under a suffixed name so nothing is overwritten.
+    Works with combine (resume_from/merge_mode ride along on every leg)."""
+    d = request.get_json(force=True)
+    sweep = d.pop("sweep", None) or {}
+    holds = sweep.get("holdouts") or [None]
+    scores = sweep.get("scorings") or [None]
+    base = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
+    variants = []
+    for h in holds:
+        for sc in scores:
+            v = dict(d)
+            for k in ("train_end", "holdout_days", "holdout_before",
+                      "holdout_between", "holdout_outside", "scoring"):
+                v.pop(k, None)
+            suf = ""
+            if h:
+                for k in ("train_end", "holdout_days", "holdout_before",
+                          "holdout_between", "holdout_outside"):
+                    if h.get(k):
+                        v[k] = h[k]
+                suf += "_" + _safe_name(h.get("suffix") or "h")
+            if sc:
+                if sc != "classic":
+                    v["scoring"] = sc
+                suf += "_" + _SC_SUF.get(sc, _safe_name(sc))
+            variants.append((base + suf, v))
+    if len(variants) < 2:
+        return jsonify(error="sweep needs at least 2 variations — tick more "
+                             "holdout/scoring boxes (or use plain Start search)"), 400
+    sid = f"sweep_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
+    SWEEPS[sid] = dict(pending=[n for n, _ in variants], current=None, done=[])
+
+    def shepherd():
+        st = SWEEPS[sid]
+        for vname, v in variants:
+            jid = spawn("optimize-v2", vname, _opt2_cmd(v, vname), OPT)
+            st["pending"].remove(vname)
+            st["current"] = jid
+            while jobs[jid]["proc"].poll() is None:
+                time.sleep(5)
+            st["done"].append(vname)
+        st["current"] = None
+
+    threading.Thread(target=shepherd, daemon=True).start()
+    return jsonify(id=sid, count=len(variants), names=[n for n, _ in variants])
 
 @app.route("/api/jobs/ai_suggest", methods=["POST"])
 def job_ai():

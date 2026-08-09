@@ -168,9 +168,31 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <select id="hoMode" style="width:130px" onchange="hoModeChanged()"><option value="date">after date</option><option value="before">before date</option><option value="between">between dates</option><option value="outside">outside dates</option><option value="alt">alternating days</option></select>
         <input id="trainEnd" value="2025-09-01" style="width:100px">
         <input id="hoDate2" placeholder="2026-02-01" style="width:100px;display:none" title="second date (between-dates holdout: the window between the two dates is held out; training uses everything outside it)">
-        <input id="hoDays" value="30" style="width:55px;display:none"></span></div>
-      <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px"></div>
+        <input id="hoDays" value="30" style="width:55px;display:none"></span>
+        <label style="cursor:pointer;font-size:11px;color:var(--dim);margin-top:2px" title="sweep EVERY ticked holdout type: one full search per type, saved as its own run (name suffixed _hA/_hB/_hBtw/_hOut/_hAltN — nothing overwritten), queued sequentially. Combine works: the armed merge rides along on every leg.">
+          <input type="checkbox" id="hoMulti" onchange="$('hoMultiBox').style.display=this.checked?'':'none'"> sweep all holdout types</label></div>
+      <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px">
+        <label style="cursor:pointer;font-size:11px;color:var(--dim);margin-top:2px" title="sweep EVERY ticked scoring: one full search per scoring, saved as its own run (name suffixed _cls/_wor/_und). Combine with the holdout sweep for the full cross-product.">
+          <input type="checkbox" id="scMulti" onchange="$('scMultiBox').style.display=this.checked?'':'none'"> sweep scorings</label></div>
       <button class="primary" onclick="launch()" style="height:34px">Start search</button>
+      <div id="hoMultiBox" style="display:none;flex-basis:100%;margin-top:6px;padding:8px 10px;border:1px dashed var(--border);border-radius:6px;font-size:12px">
+        <b style="font-size:11px;color:var(--dim)">HOLDOUT SWEEP</b> — one search per ticked type:
+        <label style="margin-left:8px"><input type="checkbox" class="hoSw" value="after" checked> after</label>
+        <label style="margin-left:6px"><input type="checkbox" class="hoSw" value="before" checked> before</label>
+        <input id="swDateA" value="2025-09-01" style="width:96px;margin-left:2px" title="date used by the after/before legs">
+        <label style="margin-left:10px"><input type="checkbox" class="hoSw" value="between" checked> between</label>
+        <label style="margin-left:6px"><input type="checkbox" class="hoSw" value="outside" checked> outside</label>
+        <input id="swDateW1" value="2024-11-16" style="width:96px;margin-left:2px" title="window start for the between/outside legs">
+        <span class="kv">..</span><input id="swDateW2" value="2025-08-28" style="width:96px" title="window end for the between/outside legs">
+        <label style="margin-left:10px"><input type="checkbox" class="hoSw" value="alt" checked> alternating</label>
+        <input id="swAltDays" value="30" style="width:44px;margin-left:2px" title="block days for the alternating leg">d
+      </div>
+      <div id="scMultiBox" style="display:none;flex-basis:100%;margin-top:6px;padding:8px 10px;border:1px dashed var(--border);border-radius:6px;font-size:12px">
+        <b style="font-size:11px;color:var(--dim)">SCORING SWEEP</b> — one search per ticked scoring:
+        <label style="margin-left:8px"><input type="checkbox" class="scSw" value="classic" checked> classic</label>
+        <label style="margin-left:6px"><input type="checkbox" class="scSw" value="worst_window" checked> worst 3-month window</label>
+        <label style="margin-left:6px"><input type="checkbox" class="scSw" value="underwater" checked> underwater</label>
+      </div>
       <span class="kv" id="launchMsg"></span>
     </div>
     <div class="row" style="align-items:flex-end;margin-top:10px">
@@ -545,6 +567,36 @@ async function launch(){
   if(SEED_CAND) d.seed_cand = SEED_CAND;
   if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
   saveLaunchSettings();
+  // ---- multi-sweep: one queued search per holdout/scoring variation ----
+  let sweep = null;
+  if($('hoMulti').checked || $('scMulti').checked){
+    sweep = {holdouts:null, scorings:null};
+    if($('hoMulti').checked){
+      const dA=$('swDateA').value.trim()||'2025-09-01';
+      const w1=$('swDateW1').value.trim()||'2024-11-16', w2=$('swDateW2').value.trim()||'2025-08-28';
+      const ad=+$('swAltDays').value||30;
+      const mk={after:  {suffix:'hA',   train_end:dA},
+                before: {suffix:'hB',   holdout_before:dA},
+                between:{suffix:'hBtw', holdout_between:w1+'..'+w2},
+                outside:{suffix:'hOut', holdout_outside:w1+'..'+w2},
+                alt:    {suffix:'hAlt'+ad, holdout_days:ad}};
+      sweep.holdouts=[...document.querySelectorAll('.hoSw:checked')].map(c=>mk[c.value]);
+      if(!sweep.holdouts.length){ alert('holdout sweep is on but no types are ticked'); return; }
+    }
+    if($('scMulti').checked){
+      sweep.scorings=[...document.querySelectorAll('.scSw:checked')].map(c=>c.value);
+      if(!sweep.scorings.length){ alert('scoring sweep is on but no scorings are ticked'); return; }
+    }
+    const nvar=(sweep.holdouts?sweep.holdouts.length:1)*(sweep.scorings?sweep.scorings.length:1);
+    if(nvar<2){ alert('only one variation selected — untick the sweep boxes and use plain Start search, or tick more options'); return; }
+    d.sweep=sweep;
+    const r2 = await api('jobs/optimize2_sweep', d);
+    if(r2.error){ $('launchMsg').textContent='error: '+r2.error; return; }
+    $('launchMsg').textContent = `sweep started: ${r2.count} searches queued sequentially — ${r2.names.join(', ')}`;
+    if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed — the armed merge rides along on EVERY sweep leg'; }
+    refreshJobs(); setTimeout(refreshRuns, 3000);
+    return;
+  }
   const r = await api('jobs/optimize2', d);
   if(r.id){ SEARCH_JOB = r.id; localStorage.setItem('searchJob', r.id);
     const w=$('searchProg'); w.style.display='';
