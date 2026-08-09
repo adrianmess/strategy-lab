@@ -374,6 +374,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <option value="liq">liquidated only</option>
       <option value="camp">campaign runs only</option>
       <option value="merged">merged runs only</option>
+      <option value="gauntlet">✓ passed all 5 holdouts</option>
       <option value="nocamp">manual runs only</option>
     </select>
     <label data-x="gapmode" style="cursor:pointer;margin-left:14px">Backtest gap handling</label>
@@ -824,6 +825,7 @@ function renderRuns(){
              : lf==='nocamp'? RUNS.filter(r=>!r.name.startsWith('camp_'))
              : lf==='merged'? RUNS.filter(r=>(r.launches||[]).some(l=>l&&(l.resume_from||l.merge_mode))
                                              || /(^|_)merge(_|d_|$)/.test(r.name))
+             : lf==='gauntlet'? RUNS.filter(r=>r._gauntlet && r._gauntlet.full && r._gauntlet.passed===5)
              : lf==='trading'? RUNS.filter(r=>r.trading||r.running)
              : RUNS;
   if(q) base = base.filter(r=>r.name.toLowerCase().includes(q)

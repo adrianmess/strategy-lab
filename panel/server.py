@@ -353,6 +353,48 @@ def _safe_name(n):
     import re
     return re.sub(r"[^A-Za-z0-9._-]+", "_", n or "")
 
+@app.route("/api/gauntlet")
+def gauntlet_api():
+    """Holdout-gauntlet verdicts for sweep families: run name ->
+    {key, have, passed, full}. A leg passes when its winner (train-best or
+    OOS-best) survived its own out-of-sample holdout without liquidating."""
+    pat = re.compile(r"^(.+)_(hA|hB|hBtw|hOut|hAlt\d+)((?:_(?:cls|wor|und))?)$")
+    runs_dir = os.path.join(OPT, "runs")
+    running_names = {j.get("name") for j in jobs.values()
+                     if j["proc"].poll() is None and "optimize" in j.get("kind", "")}
+    groups, names = {}, {}
+    for d in os.listdir(runs_dir):
+        m = pat.match(d)
+        if not m:
+            continue
+        key = m.group(1) + (m.group(3) or "")
+        typ = "hAlt" if m.group(2).startswith("hAlt") else m.group(2)
+        if d in running_names:
+            st = "pending"
+        else:
+            st = "fail"
+            bp = os.path.join(runs_dir, d, "best_config.json")
+            if os.path.exists(bp):
+                try:
+                    b = json.load(open(bp))
+                    h = b.get("holdout") or {}
+                    hb = ((b.get("holdout_best") or {}).get("holdout") or {})
+                    if b.get("cand") is not None and                             ((h and not h.get("liq")) or (hb and not hb.get("liq"))):
+                        st = "pass"
+                except Exception:
+                    pass
+        groups.setdefault(key, {})[typ] = st
+        names[d] = key
+    out, types = {}, ["hA", "hB", "hBtw", "hOut", "hAlt"]
+    for d, key in names.items():
+        g = groups[key]
+        have = [t for t in types if t in g]
+        passed = [t for t in types if g.get(t) == "pass"]
+        out[d] = dict(key=key, have=len(have), passed=len(passed),
+                      full=(len(have) == 5 and "pending" not in g.values()))
+    return jsonify(out)
+
+
 @app.route("/api/defaults")
 def api_defaults():
     """The strategy's stored live-default parameters as an editable candidate."""
