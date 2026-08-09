@@ -622,7 +622,8 @@ async function applyCombineFromBacktests(_names){
   if(!names){
     try{ names = JSON.parse(localStorage.getItem('cmbFromBt')||'null'); }catch(e){}
     if(!names || !names.length) return;
-    localStorage.removeItem('cmbFromBt');
+    // NOT consumed yet: a reload during the slow full-list load must not
+    // destroy the selection — it's removed only on a terminal outcome below
   }
   const runs = [], missing = [];
   for(const bn of names){
@@ -640,6 +641,7 @@ async function applyCombineFromBacktests(_names){
     await refreshRuns();
     return applyCombineFromBacktests(names);
   }
+  localStorage.removeItem('cmbFromBt');
   if(!runs.length){ $('cmbMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
   runs.splice(8);   // combine caps at 8
   while($('cmbInputs').querySelectorAll('.cmbRun').length < Math.max(2, runs.length))
@@ -667,7 +669,7 @@ async function applyMxFromBacktests(_names){
   if(!names){
     try{ names = JSON.parse(localStorage.getItem('mxFromBt')||'null'); }catch(e){}
     if(!names || !names.length) return;
-    localStorage.removeItem('mxFromBt');
+    // consumed only on a terminal outcome (survives mid-load reloads)
   }
   const runs = [], missing = [];
   for(const bn of names){
@@ -682,6 +684,7 @@ async function applyMxFromBacktests(_names){
     await refreshRuns();
     return applyMxFromBacktests(names);
   }
+  localStorage.removeItem('mxFromBt');
   if(!runs.length){ $('routerMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
   const box = $('mxRunsBox');
   while(box.querySelectorAll('.mxRun').length < Math.max(2, runs.length))
