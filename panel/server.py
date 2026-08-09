@@ -2097,6 +2097,10 @@ def runs2():
         if not os.path.exists(pool_p):
             pool_p = os.path.join(runs_dir, d, "pool.json")   # legacy v6 runs
         best_p = os.path.join(runs_dir, d, "best_config.json")
+        if not os.path.exists(pool_p) and os.path.exists(best_p):
+            # a run with a best_config is real even if its pool file went
+            # missing (2026-08-09 merge-run incident) — use it for mtime
+            pool_p = best_p
         if not os.path.exists(pool_p):
             continue
         # ---- mtime-keyed cache: pool2.json is ~MBs and there are ~9k runs;
