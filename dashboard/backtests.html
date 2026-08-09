@@ -114,6 +114,10 @@ button.rtradd.on{opacity:1;filter:none}
         <option value="spot">spot only</option>
         <option value="lev">lev only</option>
       </select></label>
+    <label class="hint">strategy
+      <select id="fStrat" onchange="saveBtFilters()" style="margin-left:4px">
+        <option value="all">all</option>
+      </select></label>
     <label class="hint">pair
       <select id="fPair" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -462,6 +466,7 @@ function gapBadge(e){
 function saveBtFilters(){
   localStorage.setItem('btFilterMode', document.getElementById('fMode').value);
   localStorage.setItem('btFilterPair', document.getElementById('fPair').value);
+  localStorage.setItem('btFilterStrat', document.getElementById('fStrat').value);
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
   localStorage.setItem('btFilterNoNeg', document.getElementById('fNoNeg').value);
@@ -483,6 +488,12 @@ function pairPill(p, mkt, tf){
   [...new Set(BT.map(e=>(e.pair||'SOL_USDT')))].sort().forEach(p=>{
     const o=document.createElement('option'); o.value=p; o.textContent=p.split('_')[0]; sel_.appendChild(o);
   });
+  const ss_ = document.getElementById('fStrat');
+  [...new Set(BT.map(e=>e.strategy||'unknown'))].sort().forEach(st=>{
+    const o=document.createElement('option'); o.value=st; o.textContent=stratName(st); ss_.appendChild(o);
+  });
+  const fst = localStorage.getItem('btFilterStrat') || 'all';
+  ss_.value = [...ss_.options].some(o=>o.value===fst) ? fst : 'all';
   document.getElementById('fMode').value = localStorage.getItem('btFilterMode') || 'all';
   const fp = localStorage.getItem('btFilterPair') || 'all';
   sel_.value = [...sel_.options].some(o=>o.value===fp) ? fp : 'all';
@@ -558,6 +569,8 @@ function render(){
   const hasOpen = i => (BT[i].open_positions||[]).some(o=>o.at==='end of data');
   if(fModeV !== 'all') order = order.filter(i=>BT[i].mode === fModeV);
   if(fPairV !== 'all') order = order.filter(i=>(BT[i].pair||'SOL_USDT') === fPairV);
+  const fStratV = document.getElementById('fStrat').value;
+  if(fStratV !== 'all') order = order.filter(i=>(BT[i].strategy||'unknown') === fStratV);
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
@@ -587,7 +600,7 @@ function render(){
     return (e.name||'').toLowerCase().includes(fq) || (e.strategy||'').toLowerCase().includes(fq)
         || (e.kind||'').toLowerCase().includes(fq) || (e.method||'').toLowerCase().includes(fq);});
   document.getElementById('fCount').textContent =
-    (fModeV!=='all'||fPairV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
+    (fModeV!=='all'||fPairV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
