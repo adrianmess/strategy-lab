@@ -50,6 +50,9 @@ pre{font-size:11px;overflow:auto;background:#1c2129;padding:10px;border-radius:6
 .mcell{background:var(--hover);border-radius:6px;padding:6px 8px;font-size:11px;text-align:center}
 .hint{color:var(--dim);font-size:12px}
 th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
+button.rtradd{background:none;border:none;cursor:pointer;font-size:13px;opacity:.4;filter:grayscale(1)}
+button.rtradd:hover{opacity:1;filter:none}
+button.rtradd.on{opacity:1;filter:none}
 #rtrT{width:auto} #rtrT th,#rtrT td{text-align:left;padding:3px 14px 3px 0;white-space:nowrap}
 #rtrT th{cursor:default} #rtrT th:hover{color:var(--dim)} #rtrT tr:hover td{background:transparent}
 .tablewrap{overflow-x:auto}
@@ -148,8 +151,6 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
       </select></label>
     <label class="hint">search
       <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
-    <label style="margin-left:14px;cursor:pointer" title="router picker: while enabled, clicking a row ADDS its run to a component list (instead of opening the detail view); then send the list to the Routers & combos section on the Optimize page">
-      <input type="checkbox" id="rtrMode" onchange="rtrToggle()"> 🔀 router picker</label>
     <span class="hint" id="fCount"></span>
   </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
@@ -162,7 +163,7 @@ th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
     <div style="font-weight:600;margin-bottom:6px">Router components <span class="hint" id="rtrCount"></span></div>
     <table style="font-size:12px" id="rtrT"><thead><tr>
       <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th></th></tr></thead>
-      <tbody id="rtrList"><tr><td colspan="7" class="hint">click rows in the table below to add runs…</td></tr></tbody></table>
+      <tbody id="rtrList"><tr><td colspan="7" class="hint">use the 🔀 button on any run to add it…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button onclick="clearRtr()">clear</button>
@@ -378,25 +379,21 @@ function cmbCompatible(ref, e){
 }
 function clearCmbSel(){ CMBSEL.clear(); updateCmbBar(); render(); }
 const RTRSEL = [];
-function rtrOn(){ return document.getElementById('rtrMode').checked; }
-function rtrToggle(){
-  document.getElementById('rtrBar').style.display = rtrOn() ? '' : 'none';
-  rtrRender();
-}
 function rtrClick(e){
-  if(['metax','metax2','pairx','fcfsx'].includes(e.strategy)){
-    alert("Routers can't be components of another router — pick strategy runs."); return; }
   const i = RTRSEL.indexOf(e.name);
   if(i >= 0) RTRSEL.splice(i, 1);
   else RTRSEL.push(e.name);
   rtrRender();
+  document.querySelectorAll(`button.rtradd[data-name="${CSS.escape(e.name)}"]`)
+    .forEach(b=>b.classList.toggle('on', RTRSEL.includes(e.name)));
 }
 function rtrRemove(name){ const i=RTRSEL.indexOf(name); if(i>=0) RTRSEL.splice(i,1); rtrRender(); }
 function clearRtr(){ RTRSEL.length = 0; rtrRender(); }
 function rtrRender(){
+  document.getElementById('rtrBar').style.display = RTRSEL.length ? '' : 'none';
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
-  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="7" class="hint">click rows in the table below to add runs…</td></tr>'; return; }
+  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="7" class="hint">use the 🔀 button on any run to add it…</td></tr>'; return; }
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
     return `<tr><td>${e.name}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
@@ -600,11 +597,8 @@ function render(){
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
-      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
-  tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=(ev)=>{
-    const i = +tr.dataset.i;
-    if(rtrOn() && !ev.target.closest('button,input,.rstars')){ rtrClick(BT[i]); return; }
-    select(i===sel?null:i);});
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+  tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
     if(row){
@@ -640,6 +634,11 @@ function render(){
       if(!e.best) e.best = true; else delete e.best;
       render();
     }catch(err){alert('Marking needs the control-panel server (open this page via http://127.0.0.1:8800)');}
+  });
+  tb.querySelectorAll('button.rtradd').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();
+    const e = BT.find(x=>x.name===b.dataset.name);
+    if(e) rtrClick(e);
   });
   tb.querySelectorAll('button.del').forEach(b=>b.onclick=async ev=>{
     ev.stopPropagation();
