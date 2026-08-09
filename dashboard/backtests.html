@@ -492,6 +492,7 @@ function pairPill(p, mkt, tf){
   [...new Set(BT.map(e=>e.strategy||'unknown'))].sort().forEach(st=>{
     const o=document.createElement('option'); o.value=st; o.textContent=stratName(st); ss_.appendChild(o);
   });
+  ss_.dataset.opts = '(init)';
   const fst = localStorage.getItem('btFilterStrat') || 'all';
   ss_.value = [...ss_.options].some(o=>o.value===fst) ? fst : 'all';
   document.getElementById('fMode').value = localStorage.getItem('btFilterMode') || 'all';
@@ -569,8 +570,6 @@ function render(){
   const hasOpen = i => (BT[i].open_positions||[]).some(o=>o.at==='end of data');
   if(fModeV !== 'all') order = order.filter(i=>BT[i].mode === fModeV);
   if(fPairV !== 'all') order = order.filter(i=>(BT[i].pair||'SOL_USDT') === fPairV);
-  const fStratV = document.getElementById('fStrat').value;
-  if(fStratV !== 'all') order = order.filter(i=>(BT[i].strategy||'unknown') === fStratV);
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
@@ -599,6 +598,19 @@ function render(){
   if(fq) order = order.filter(i=>{const e=BT[i];
     return (e.name||'').toLowerCase().includes(fq) || (e.strategy||'').toLowerCase().includes(fq)
         || (e.kind||'').toLowerCase().includes(fq) || (e.method||'').toLowerCase().includes(fq);});
+  // strategy dropdown only offers strategies with at least one entry under
+  // the OTHER active filters (options rebuild as filters change)
+  const ss_ = document.getElementById('fStrat');
+  const avail = [...new Set(order.map(i=>BT[i].strategy||'unknown'))].sort();
+  if(ss_.dataset.opts !== avail.join(',')){
+    const cur = ss_.value;
+    ss_.dataset.opts = avail.join(',');
+    ss_.innerHTML = '<option value="all">all</option>' +
+      avail.map(st=>`<option value="${st}">${stratName(st)}</option>`).join('');
+    ss_.value = avail.includes(cur) ? cur : 'all';
+  }
+  const fStratV = ss_.value;
+  if(fStratV !== 'all') order = order.filter(i=>(BT[i].strategy||'unknown') === fStratV);
   document.getElementById('fCount').textContent =
     (fModeV!=='all'||fPairV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
