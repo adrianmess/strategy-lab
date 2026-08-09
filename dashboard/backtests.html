@@ -641,7 +641,10 @@ function render(){
       return sortDir*((va??-1e18)-(vb??-1e18));
     });
   }
-  const _cap=500, _shown = order.length>_cap ? order.slice(0,_cap) : order;
+  const _cap=500; let _shown = order.length>_cap ? order.slice(0,_cap) : order;
+  // the SELECTED entry is always rendered (pinned on top when the current
+  // sort/filters/500-row cap would hide it — e.g. arriving via a ?sel= link)
+  if(sel!==null && !_shown.includes(sel)) _shown = [sel, ..._shown];
   const _capNote = order.length>_cap ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(order.length-_cap).toLocaleString()} more match — use the filters or the search box above to narrow down</td></tr>` : '';
   tb.innerHTML = _capNote + _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
     <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const g=gauntOf(e.name);return g&&g.full&&g.passed===5?` <span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="HOLDOUT GAUNTLET: this run's sweep family passed ALL 5 holdout types (after/before/between/outside/alternating) — every leg's winner survived its own out-of-sample holdout without liquidating">✓ 5/5 holdouts</span>`:''})()}${(()=>{const tr=tradedOf(e.name);return tr?` <span class="pill" style="background:${tr.live?'rgba(248,81,73,.15)':'rgba(210,153,34,.15)'};color:${tr.live?'var(--red)':'var(--amber)'}" title="the run behind this backtest is being traded by ${tr.name} (#${tr.instance}) — ${tr.live?'REAL MONEY':'dry-run'}">${tr.live?'TRADING LIVE':'DRY-RUN'}</span>`:''})()}</td><td>${e.kind||''}${kindBadge(e)}</td><td>${stratName(e.strategy)}</td>
