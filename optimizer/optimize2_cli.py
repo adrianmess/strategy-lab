@@ -797,7 +797,9 @@ def main():
         print(f"HOLDOUT: between {m2[0]} and {m2[1]} — training on "
               f"everything outside that window", flush=True)
     if args.holdout_before:
-        if args.train_end or args.holdout_days or args.holdout_before or args._hbetween:
+        # (guard used to include holdout_before ITSELF — every 'before date'
+        # launch self-destructed here since the 5-mode feature shipped)
+        if args.train_end or args.holdout_days or args._hbetween:
             sys.exit("--holdout-before excludes --train-end/--holdout-days")
         args.train_start = args.holdout_before
         args.train_end = None
