@@ -353,6 +353,30 @@ def _safe_name(n):
     import re
     return re.sub(r"[^A-Za-z0-9._-]+", "_", n or "")
 
+@app.route("/api/oos_map")
+def oos_map():
+    """Every run's out-of-sample verdicts, from the runs2 cache:
+    {run: {tb: verdict, ob: verdict}} — tb = train-best config on its
+    holdout, ob = OOS-best config on its holdout. Verdicts: 'P' positive &
+    non-liq, 'N' non-liq but <=0, 'L' liquidated, null = never OOS-tested."""
+    _r2c_load()
+
+    def _v(h):
+        if not h:
+            return None
+        if h.get("liq"):
+            return "L"
+        return "P" if (h.get("growth") or 0) > 0 else "N"
+
+    out = {}
+    for d_, (key_, st) in _R2C["d"].items():
+        tb = _v(st.get("holdout"))
+        ob = _v(((st.get("holdout_best") or {}).get("holdout")))
+        if tb or ob:
+            out[d_] = dict(tb=tb, ob=ob)
+    return jsonify(out)
+
+
 @app.route("/api/gauntlet")
 def gauntlet_api():
     """Holdout-gauntlet verdicts for sweep families: run name ->
