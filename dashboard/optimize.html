@@ -532,8 +532,24 @@ document.addEventListener('click', ev=>{
   if(t){ ev.preventDefault(); explain(t.dataset.x); }
 });
 // ---------- launch ----------
+function cmbName(base){
+  // name reflects the settings that make this merge distinct (scoring,
+  // evals budget), then dedupes against known runs
+  const sc = $('scoring').value;
+  let nm = base + (sc==='worst_window'?'_wor':sc==='underwater'?'_und':'');
+  if($('budgetType').value!=='hours' && +$('budgetVal').value>0)
+    nm += '_' + Math.round(+$('budgetVal').value/1000) + 'k';
+  const b2 = nm; let i = 2;
+  while(RUNS.some(r=>r.name===nm)) nm = `${b2}_${i++}`;
+  return nm;
+}
 async function launch(){
   if(COMBINE){
+    // re-derive the name from the FINAL settings (you may have changed
+    // scoring/budget after arming) — unless you typed a custom name
+    if(COMBINE.base && (!$('name').value.trim() ||
+        $('name').value.startsWith(COMBINE.base)))
+      $('name').value = cmbName(COMBINE.base);
     // the merged run inherits the CURRENT form dataset — refuse to launch if
     // it doesn't match every source run (prevents e.g. SUI pools on SOL data)
     const srcs = COMBINE.rf.split(',').map(p=>RUNS.find(r=>'runs/'+r.name===p)).filter(Boolean);
@@ -735,7 +751,19 @@ function combineRuns(){
       alert(`Can't combine: ${A.name} and ${B.name} differ (per-regime vs single-set) — different genome shapes.`); return;
     }
   }
+  // Arm must NOT clobber settings you just chose (scoring, budget, holdout,
+  // gates…): capture the launch card, restore the sources' baseline, then put
+  // YOUR values back — only dataset/genome fields are forced from the sources.
+  const KEEP = ['scoring','budgetType','budgetVal','stopScore','maxDD','maxHold',
+                'optGap','hoMode','trainEnd','hoDate2','hoDays','anchor',
+                'anchorStr','perreg'];
+  const kept = {};
+  KEEP.forEach(id=>{ const el=$(id); if(el) kept[id]=el.value; });
+  const keptChk = {cadapt:$('cadapt').checked, stickyOos:$('stickyOos').checked};
   try{ loadRunSettings(names[0]); }catch(e){ console.warn('loadRunSettings threw:', e); }
+  KEEP.forEach(id=>{ const el=$(id); if(el && kept[id]!==undefined) el.value=kept[id]; });
+  $('cadapt').checked = keptChk.cadapt; $('stickyOos').checked = keptChk.stickyOos;
+  try{ hoModeChanged(); }catch(e){}
   // belt & braces: the dataset fields MUST match the sources even if the
   // full restore hiccuped (this exact failure once launched a SUI merge on SOL)
   const A0 = recs[0];
@@ -747,12 +775,11 @@ function combineRuns(){
   COMBINE = {rf: names.map(n=>`runs/${n}`).join(','), mode:$('cmbMode').value};
   // unique, non-stacking name: strip existing merge_ prefixes, then dedupe vs runs
   const strip = s=>s.replace(/^(merge_)+/,'');
-  let nm = ('merge_'+names.map(strip).join('__')).slice(0,60);
-  const base = nm; let i = 2;
-  while(RUNS.some(r=>r.name===nm)) nm = `${base}_${i++}`;
-  $('name').value = nm;
+  const nmBase = ('merge_'+names.map(strip).join('__')).slice(0,60);
+  COMBINE.base = nmBase;
+  $('name').value = cmbName(nmBase);
   $('cmbMsg').innerHTML = `<b>armed</b> (${names.length} runs, ${$('cmbMode').value==='breed'?'breed hybrids':'merge & continue'})`;
-  let msg = `combine armed: ${names.join(' + ')} — settings prefilled from ${names[0]}; adjust anything (incl. gates/scoring — imports are re-scored under what you set), then Start search.`;
+  let msg = `combine armed: ${names.join(' + ')} — YOUR current search settings kept (dataset/genome fields locked to the sources); imports are re-scored under what you set. The name updates from final scoring/budget at Start search.`;
   if($('stopScore').value.trim()!=='')
     msg += ` ⚠ Stop-at-score is set (${$('stopScore').value}): a merged pool usually starts ABOVE it, which ends the run after one generation — clear it unless intended.`;
   $('launchMsg').textContent = msg;

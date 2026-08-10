@@ -2022,13 +2022,29 @@ if _pending:
     _OPTQ_WATCH["t"].start()
 
 
+def _merge_name_guard(name, d):
+    """A merge (resume_from with 2+ sources) must land in a FRESH run dir —
+    the browser's dedupe only sees its loaded slice of runs; disk is truth."""
+    rf = d.get("resume_from") or ""
+    if "," not in rf:
+        return name
+    if f"runs/{name}" in rf.split(","):
+        return name          # deliberate self-resume, leave it alone
+    base, i = name, 2
+    while os.path.isdir(os.path.join(OPT, "runs", name)):
+        name = f"{base}_{i}"
+        i += 1
+    return name
+
+
 def job_optimize2():
     """One optimizer for every strategy (v7 / prime / v6 / scalpx).
     Sequential by design: a second launch queues behind the running one."""
     d = request.get_json(force=True)
     name = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
+    name = _merge_name_guard(name, d)
     jid, queued, pos = _optq_launch(name, d)
-    return jsonify(id=jid, queued=queued, position=pos)
+    return jsonify(id=jid, queued=queued, position=pos, name=name)
 
 
 _SC_SUF = {"classic": "cls", "worst_window": "wor", "underwater": "und"}
