@@ -392,7 +392,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <th data-k="runtime_s">compute</th>
       <th data-k="best_score">score</th>
       <th data-k="best_eq">train eq</th>
-      <th data-k="maxdd">DD</th>
+      <th data-k="_dd" title="max drawdown — the full-history MARK-TO-MARKET number from the run's published backtest when one exists (OOS-best preferred), else the train-window DD from the search (greyed)">DD</th>
       <th data-k="_clean">no-liq</th>
       <th data-k="_hg">holdout</th>
       <th>actions</th>
@@ -788,6 +788,12 @@ async function refreshRuns(){
     if(r.holdout_best && r.holdout_best.holdout && !r.holdout_best.holdout.liq)
       g = Math.max(g ?? -1e9, r.holdout_best.holdout.growth);
     r._hg = (r.holdout || r.holdout_best) ? (g === null ? -99 : g) : null;
+    // DD column: prefer the honest full-history MTM dd from published
+    // backtests (OOS-best first, then best); train-window dd as fallback
+    const fO = (r.backtest_flags||[]).find(f=>f.source==='holdout_best_config.json' && (f.kind||'').startsWith('full') && f.maxdd!=null);
+    const fB = (r.backtest_flags||[]).find(f=>f.source==='best_config.json' && (f.kind||'').startsWith('full') && f.maxdd!=null);
+    r._dd = fO ? fO.maxdd : fB ? fB.maxdd : r.maxdd;
+    r._ddSrc = fO ? 'oos' : fB ? 'best' : 'train';
   });
   // ---- holdout GAUNTLET: group sweep legs (base name x scoring suffix);
   // a leg PASSES when its winner (train-best or OOS-best) survived its own
@@ -901,7 +907,7 @@ function renderRuns(){
       <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
       <td>${r.best_score!=null?r.best_score.toFixed(3):''}</td>
       <td>${r.best_eq?('$'+Math.round(r.best_eq).toLocaleString()):''}</td>
-      <td>${r.maxdd!=null?(100*r.maxdd).toFixed(0)+'%':''}</td>
+      <td>${r._dd!=null?`<span${r._ddSrc==='train'?' class="kv"':(r._dd>0.5?' class="warn"':'')} title="${r._ddSrc==='oos'?'full-history MARK-TO-MARKET max DD of the OOS-best config (from bt OOS-best full — the honest number)':r._ddSrc==='best'?'full-history MARK-TO-MARKET max DD of the best config (from bt best full)':'train-window DD from the search (no full backtest published yet — hit Backtest for the honest MTM number)'}">${(100*r._dd).toFixed(0)}%</span>${r._ddSrc!=='train'&&r.maxdd!=null&&Math.abs(r.maxdd-r._dd)>=0.005?` <span class="kv" style="font-size:10.5px" title="train-window DD (what the search's max-DD gate saw)">tr ${(100*r.maxdd).toFixed(0)}%</span>`:''}`:''}</td>
       <td>${r._clean===3?'<span class="badge b-green" title="The BEST config survived the holdout AND the full backtest">✓</span>'
         :r._clean===2?'<span class="badge b-green" title="The OOS-BEST config survived the holdout AND the full backtest — this is the one to go live with (Adopt OOS-best)">✓ OOS</span>'
         :r._clean===0?'<span class="badge b-red" title="Liquidated on the holdout and/or the full backtest">LIQ</span>'

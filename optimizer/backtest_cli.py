@@ -818,6 +818,7 @@ def main():
             key = f"{os.path.basename(path)}|{entry.get('kind', 'full')}"
             flags[key] = dict(source=os.path.basename(path), kind=entry.get("kind"),
                               liq=bool(entry["stats"]["liq"]),
+                              maxdd=float(entry["stats"].get("maxdd_mtm") or 0) or None,
                               growth_pct=float(entry["stats"]["monthly_growth_pct"]),
                               total_mult=float(entry["stats"].get("total_mult", 0)) or None,
                               gap_mode=args.gap_mode, backtest=args.name,

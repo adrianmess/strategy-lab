@@ -2108,7 +2108,8 @@ def runs2():
         _r2c_load()
         _key = []
         for _f in (pool_p, best_p, os.path.join(runs_dir, d, "walkforward.json"),
-                   os.path.join(runs_dir, d, "launch.json")):
+                   os.path.join(runs_dir, d, "launch.json"),
+                   os.path.join(runs_dir, d, "backtest_flags.json")):
             try:
                 _key.append(os.path.getmtime(_f))
             except OSError:
