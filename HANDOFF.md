@@ -18,6 +18,12 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - HYPE STARTED EARLY (user request 2026-08-07 ~18:00 PDT): gamut_ghype worker now runs ALONGSIDE main on box A — tmux session 'hype', `--jobs 5` (243/2,592 already done at start). ec2_boot_workers.sh updated: hype session starts immediately (jobs=5 while the main gamut session exists, full width otherwise). MONITOR: once the MAIN campaign completes on A, kill the hype session and restart it at full width (`--jobs $(nproc/11)`) if it's still running at 5 (boot-race can leave it small). No hype worker on box B (main-reverse only).
 - TEARDOWN WHEN DONE (Adrian or with his OK): cancel the PERSISTENT spot request FIRST, then terminate instance, else it relaunches: `aws ec2 describe-spot-instance-requests` → cancel-spot-instance-requests → terminate-instances i-016786d5b788d3a12. EBS deletes on termination. Also release the Elastic IP and deregister the AMI + its snapshot when fully done.
 
+## ACTIVE: EC2 1m merge sweep (2026-08-10 ~12:30 PDT)
+- Campaign **m1sweep_0810**: 675 legs (45 families, all 5 pairs 1m lev × v7/scalpx2/macdx × vol3/trend3/volXtrend9, top-8 1m gamut sources) × 5 holdouts × 3 scorings @ 100k, sticky on.
+- Box: **i-02383d775cea91fe2** c7a.48xlarge spot (persistent, stop-on-interrupt), us-east-2c, IP **18.220.143.4** (ephemeral — changes if spot-stopped), SG gamut-ssh, key ~/Downloads/gamut-key.pem, Ubuntu 22.04 + venv (py3.10), worker tmux 'm1' jobs=17, caches rebuild on box (NOT uploaded — 38GB exclusion). NO EIP, NO monitor task this time.
+- Mac sync: `SYNC_SFX_START=2 offload_sync.sh ~/Downloads/gamut-key.pem m1sweep_0810 18.220.143.4` (log /tmp/ec2_m1_sync.log).
+- TEARDOWN when done: cancel the persistent spot REQUEST first, then terminate the instance (EBS deletes on termination). Nothing else was created.
+
 ## ACTIVE: two-Mac merge sweep (2026-08-10)
 - Campaign **msweep_0810**: 675 merge legs = 45 families (btc/eth/doge/xrp/sui 3m lev × v7/scalpx2/macdx × vol3/trend3/volXtrend9, top-8 gamut sources each) × 5 holdouts × 3 scorings @ 100k evals, sticky OOS on. Goal: green ✓ ALL 5 HOLDOUTS families per pair. HYPE families already done separately by Adrian.
 - **Mac mini (M4 Pro, 12c/24GB)** = box B: `admn@admns-Mac-mini.local` (ssh key auth), repo at ~/strategy-lab, venv ~/venv (py3.11, numpy 2.4.6/pandas 3.0.5/numba 0.66), runs the plan **--reverse**, jobs=1, caffeinate, log ~/worker.log. ~2.3 min/leg measured.
