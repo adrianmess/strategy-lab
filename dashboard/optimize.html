@@ -1040,7 +1040,17 @@ function launchInfo(r){
   let out = '';
   if(last.resume_from && last.resume_from.length){
     const srcs = last.resume_from.map(s=>s.replace(/^runs\//,''));
-    out += `<br><span style="color:var(--amber)" title="this launch imported the pool + reservoir of these source runs${last.merge_mode?` (${last.merge_mode} mode)`:''}">⇐ ${srcs.length>1?(last.merge_mode||'merge'):'resumed from'}: ${srcs.join(' + ')}</span>`;
+    if(srcs.length === 1){
+      out += `<br><span style="color:var(--amber)" title="this launch imported the pool + reservoir of this source run">⇐ resumed from: ${srcs[0]}</span>`;
+    } else {
+      // compact chip; expand lists one source per line with the shared
+      // prefix factored out (merge sources differ only in their tails)
+      let pre = srcs[0];
+      for(const x of srcs){ let i=0; while(i<pre.length && i<x.length && pre[i]===x[i]) i++; pre = pre.slice(0,i); }
+      pre = pre.slice(0, pre.lastIndexOf('_')+1);
+      const id = 'mg_' + r.name.replace(/[^a-zA-Z0-9]/g,'').slice(-24);
+      out += `<br><span style="color:var(--amber)" title="${escH(srcs.join('\n'))}">⇐ ${last.merge_mode||'merge'}: ${srcs.length} source runs</span> <a style="cursor:pointer;color:var(--blue)" onclick="event.stopPropagation();const e=document.getElementById('${id}');const on=e.style.display==='none';e.style.display=on?'':'none';this.textContent=on?'hide':'show'">show</a><div id="${id}" style="display:none;margin:2px 0 0 14px;line-height:1.5">${pre.length>8?`<span class="kv">all start with </span><span style="color:var(--amber)">${pre}</span><br>`:''}${srcs.map(x=>`<span class="kv">·</span> ${pre.length>8?(x.slice(pre.length)||'<i>(prefix only)</i>'):x}`).join('<br>')}</div>`;
+    }
   }
   const all = L.map(l=>`[${l.at}]  ${l.cmd}`).join('\n\n');
   const shown = last.cmd.length>130 ? last.cmd.slice(0,130)+'…' : last.cmd;
