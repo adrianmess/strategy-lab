@@ -360,7 +360,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   </div>
 
   <details id="jobsWrap" ontoggle="localStorage.setItem('jobsOpen', this.open?'1':'0')">
-    <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Jobs <span class="mini" id="jobsTitle"></span></h2></summary>
+    <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Jobs <span class="mini" id="jobsTitle"></span></h2>
+      <button class="small" style="margin-left:10px" title="remove every FINISHED job from this list (running and queued jobs stay)" onclick="event.preventDefault();event.stopPropagation();clearDoneJobs()">clear finished</button></summary>
     <div class="card" id="jobs">no jobs yet</div>
   </details>
   <script>if(localStorage.getItem('jobsOpen')==='0') document.getElementById('jobsWrap').open=false;</script>
@@ -1549,6 +1550,15 @@ function updateSearchProg(jobs){
     ? `${j.name} — ${Math.round(100*p.pct)}% of ${p.budget.toLocaleString()} ${p.budget_type} · ${p.evaluated_session.toLocaleString()} done · ETA ${fmtEta(p.eta_s)}`
     : j.name+' — starting…';
 }
+async function dismissJob(id){
+  await api('jobs/'+id+'/dismiss', {});
+  _jobsHash=''; refreshJobs();
+}
+async function clearDoneJobs(){
+  const r = await api('jobs/clear_done', {});
+  if(r.cleared!=null) $('jobsTitle').textContent = `— cleared ${r.cleared} finished job${r.cleared===1?'':'s'}`;
+  _jobsHash=''; refreshJobs();
+}
 async function refreshJobs(){
   const _jt = await fetch('/api/jobs').then(r=>r.text());
   const _jh = _djb(_jt);
@@ -1578,7 +1588,8 @@ async function refreshJobs(){
     <div class="row" style="justify-content:space-between">
       <span><b>${j.kind}</b> · ${j.name} · <span class="${j.status==='running'?'pos':'kv'}">${j.status}</span> <span class="kv">since ${j.started}</span></span>
       ${j.status==='running'?`<button class="small" onclick="stopJob('${j.id}')">${j.stopping?'force stop':'stop'}</button>${j.stopping?' <span class="kv">finishing generation, then computing holdout…</span>':''}`
-        :j.status.startsWith('queued')?`<button class="small" onclick="stopJob('${j.id}')">remove from queue</button>`:''}
+        :j.status.startsWith('queued')?`<button class="small" onclick="stopJob('${j.id}')">remove from queue</button>`
+        :`<button class="small" title="remove this finished job from the list" onclick="dismissJob('${j.id}')">✕ dismiss</button>`}
     </div>${bar}<pre>${(j.log||[]).join('\n')}</pre></div>`;
   }).join('') : 'no jobs yet';
 }

@@ -511,6 +511,36 @@ def job_data():
     cmd = [sys.executable, os.path.join(AT, "research", "update_data.py")]
     return jsonify(id=spawn("data", "update_data", cmd, AT))
 
+@app.route("/api/jobs/<jid>/dismiss", methods=["POST"])
+def job_dismiss(jid):
+    """Remove a FINISHED job from the list (its log file goes too)."""
+    j = jobs.get(jid)
+    if not j:
+        return jsonify(ok=True, note="already gone")
+    if j["proc"].poll() is None:
+        return jsonify(error="job is still running — stop it first"), 400
+    jobs.pop(jid, None)
+    try:
+        os.remove(j["log"])
+    except OSError:
+        pass
+    return jsonify(ok=True)
+
+
+@app.route("/api/jobs/clear_done", methods=["POST"])
+def jobs_clear_done():
+    """Sweep every finished job out of the list."""
+    n = 0
+    for jid in [k for k, j in jobs.items() if j["proc"].poll() is not None]:
+        j = jobs.pop(jid)
+        try:
+            os.remove(j["log"])
+        except OSError:
+            pass
+        n += 1
+    return jsonify(ok=True, cleared=n)
+
+
 @app.route("/api/jobs/<jid>/stop", methods=["POST"])
 def job_stop(jid):
     import signal as _sig
