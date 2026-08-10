@@ -1082,7 +1082,12 @@ def main():
                 if not os.path.exists(pp):
                     print(f"merge: {src}: no pool2.json — skipped", flush=True)
                     continue
-                sd = json.load(open(pp))
+                try:
+                    sd = json.load(open(pp))
+                except Exception as _e:
+                    print(f"merge: {src}: pool2.json unreadable ({_e}) — "
+                          "SKIPPED (the other sources still merge)", flush=True)
+                    continue
                 n0 = 0
                 for entry in list(sd.get("pool", [])) + list(sd.get("reservoir", [])):
                     c = dict(entry[1])
