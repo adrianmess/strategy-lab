@@ -875,7 +875,7 @@ function renderRuns(){
         <button class="small" title="Load this run's search settings into the launch card above" onclick="loadRunSettings('${r.name}')">Load setup</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
-        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button></td></tr>${top10Row(r)}`;
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delArm(this,'${r.name}')">✕</button></td></tr>${top10Row(r)}`;
     }
     let hcell = h ? (h.liq ? '<span class="badge b-red">LIQUIDATED</span>' :
       `<span class="${h.growth>=0?'pos':'neg'}">${fpm(h.growth)}</span>${fTotM(h)} <span class="kv">dd ${(100*h.maxdd).toFixed(0)}%</span>`)
@@ -925,7 +925,7 @@ function renderRuns(){
         <button class="small" title="reproduction command (exact component list included)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',0,'fcfsx')">Cmd</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
-        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delArm(this,'${r.name}')">✕</button>`
       :r.strategy==='pairx'?`
         <span class="kv" title="Multi-pair FCFS basket (pairx_cli): every pair's best spot configs compete for ONE slot, first-come-first-served; per-fold rosters picked causally from past-only data. Research only — no live adapter; the panel refuses adoption. Backtest/Adopt/AI/Load-setup don't apply: components are re-mined at build time, there is no candidate pool behind this run.">FCFS basket</span>
         ${r.walkforward
@@ -935,7 +935,7 @@ function renderRuns(){
         <button class="small" title="reproduction command (components are re-mined from the best spot runs on disk at execution time)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',0,'pairx')">Cmd</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
-        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delArm(this,'${r.name}')">✕</button>`
       :r.strategy==='metax2'?`
         <span class="kv" title="Cross-timeframe/multi-pair router (metax2_cli): components each simulate on their OWN pair+timeframe candles. Research only — no live adapter yet.">router ×tf</span>
         ${r.walkforward
@@ -946,7 +946,7 @@ function renderRuns(){
         <button class="small" title="reproduction command" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',${r.evaluated||8000},'metax2')">Cmd</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
-        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delArm(this,'${r.name}')">✕</button>`
       :r.strategy==='metax'?`
         <span class="kv" title="Router runs are built/validated by metax_cli (campaign card); their backtests are linked in the holdout column.">router</span>
         ${r.walkforward
@@ -960,7 +960,7 @@ function renderRuns(){
         <button class="small" title="Adopt this ROUTER into its own trader config (config_${r.name}.json — created if missing, own state/log, dry-run). Run test_parity_metax.py + a dry-run soak before LIVE." onclick="adoptRouter('${r.name}','${r.mode}')">Adopt router</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
-        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`
+        <button class="small" title="Delete this run" style="color:var(--red)" onclick="delArm(this,'${r.name}')">✕</button>`
       :`${r.best_config?`
         <button class="small" data-x="btn_backtest" title="Backtest over all history and preview the result here" onclick="bt('${r.best_config}','${r.name}')">Backtest</button>
         ${r.holdout_best_config?`<button class="small" title="Backtest the OOS-best candidate (the one that actually survived the holdout)" onclick="bt('${r.holdout_best_config}','${r.name}_oosbest')">Backtest OOS-best</button>
@@ -973,7 +973,7 @@ function renderRuns(){
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
         <button class="small" title="Rename this run (published backtests from it are renamed too)" onclick="renameRun('${r.name}')">✎</button>
-        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delRun('${r.name}')">✕</button>`}</td></tr>${jobRow(r)}${top10Row(r)}`;
+        <button class="small" title="Delete this run (its pool, configs and caches). Published backtests are kept." style="color:var(--red)" onclick="delArm(this,'${r.name}')">✕</button>`}</td></tr>${jobRow(r)}${top10Row(r)}`;
   }).join('');
 }
 const OPEN10 = new Set();
@@ -1394,8 +1394,18 @@ async function adopt(cfg, mode){
   const r = await api('adopt',{source: cfg, target: target});
   if(r.ok) alert('Adopted into '+target+'. On the Control panel, pick "'+target+'" and start the trader.');
 }
+function delArm(btn, name){
+  // no popup: the ✕ swaps to inline confirm/cancel (auto-reverts in 5s)
+  const w = document.createElement('span');
+  w.style.whiteSpace = 'nowrap';
+  const esc = name.replace(/'/g, "\\'");
+  w.innerHTML = `<button class="small" style="color:var(--red);font-weight:700" title="permanently delete this run's pool and configs (its published backtests stay on the Backtests page)" onclick="delRun('${esc}')">confirm ✕</button><button class="small" onclick="delCancel(this)">cancel</button>`;
+  w._orig = btn;
+  btn.replaceWith(w);
+  w._t = setTimeout(()=>{ if(w.parentNode) w.replaceWith(btn); }, 5000);
+}
+function delCancel(b){ const w=b.parentNode; clearTimeout(w._t); w.replaceWith(w._orig); }
 async function delRun(name){
-  if(!confirm(`Delete run "${name}"?\n\nThis removes its candidate pool and configs permanently (any backtests it published stay on the Backtests page).`)) return;
   const r = await api('runs2/delete', {name});
   if(r.ok) refreshRuns();
 }

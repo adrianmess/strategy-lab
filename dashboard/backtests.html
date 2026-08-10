@@ -437,10 +437,19 @@ function delBarUpd(){
   document.getElementById('delCount').textContent = DELSEL.size + ' selected for deletion';
 }
 function clearDelSel(){ DELSEL.clear(); delBarUpd(); render(); }
+let _delArmed = null;
 async function delSelected(){
   if(!DELSEL.size) return;
+  const btn = document.querySelector('#delBar button');
+  if(_delArmed !== DELSEL.size){          // first click arms, second executes
+    _delArmed = DELSEL.size;
+    btn.textContent = `✓ confirm: delete ${DELSEL.size} — click again`;
+    btn.style.fontWeight = '700';
+    setTimeout(()=>{ if(_delArmed){ _delArmed=null; btn.textContent='✕ delete selected'; btn.style.fontWeight=''; } }, 6000);
+    return;
+  }
+  _delArmed = null;
   const names=[...DELSEL];
-  if(!confirm(`Delete ${names.length} backtest entr${names.length>1?'ies':'y'}?\n\n${names.slice(0,12).join('\n')}${names.length>12?`\n…and ${names.length-12} more`:''}`)) return;
   try{
     const r = await fetch('/api/backtests/delete',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({names})});
@@ -743,14 +752,27 @@ function render(){
     const e = BT.find(x=>x.name===b.dataset.name);
     if(e) rtrClick(e);
   });
-  tb.querySelectorAll('button.del').forEach(b=>b.onclick=async ev=>{
+  tb.querySelectorAll('button.del').forEach(b=>b.onclick=ev=>{
     ev.stopPropagation();
-    if(!confirm(`Delete backtest entry "${b.dataset.name}"?`))return;
-    try{
-      const r = await fetch('/api/backtests/delete',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({name:b.dataset.name})});
-      if(r.ok) location.reload(); else alert('delete failed');
-    }catch(e){alert('Delete needs the control-panel server (open this page via http://127.0.0.1:8800)');}
+    const w = document.createElement('span');
+    w.style.whiteSpace = 'nowrap';
+    w._orig = b;
+    const cf = document.createElement('button');
+    cf.className='del'; cf.style.fontWeight='700'; cf.textContent='confirm ✕';
+    cf.title='permanently remove this entry (tombstoned — it will not come back)';
+    cf.onclick = async e2=>{ e2.stopPropagation();
+      try{
+        const r = await fetch('/api/backtests/delete',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({name:b.dataset.name})});
+        if(r.ok) location.reload(); else alert('delete failed');
+      }catch(e){alert('Delete needs the control-panel server (open this page via http://127.0.0.1:8800)');}
+    };
+    const cx = document.createElement('button');
+    cx.textContent='cancel';
+    cx.onclick = e2=>{ e2.stopPropagation(); clearTimeout(w._t); w.replaceWith(b); };
+    w.append(cf, cx);
+    b.replaceWith(w);
+    w._t = setTimeout(()=>{ if(w.parentNode) w.replaceWith(b); }, 5000);
   });
 }
 function optimizeThis(){
