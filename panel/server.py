@@ -1931,6 +1931,8 @@ def _opt2_cmd(d, name):
     if d.get("scoring"): cmd += ["--scoring", d["scoring"]]
     if d.get("stop_score") is not None and d.get("stop_score") != "":
         cmd += ["--stop-score", str(d["stop_score"])]
+    if d.get("sticky_oos"):
+        cmd += ["--sticky-oos"]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
     if d.get("merge_mode"): cmd += ["--merge-mode", d["merge_mode"]]
     if d.get("seed_cand"):

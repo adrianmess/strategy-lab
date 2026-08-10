@@ -170,7 +170,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <input id="hoDate2" placeholder="2026-02-01" style="width:100px;display:none" title="second date (between-dates holdout: the window between the two dates is held out; training uses everything outside it)">
         <input id="hoDays" value="30" style="width:55px;display:none"></span>
         <span style="font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap">
-          <input type="checkbox" id="hoMulti" onchange="$('hoMultiBox').style.display=this.checked?'':'none'" style="cursor:pointer"> <span class="optx" data-x="hosweep">sweep all holdout types</span></span></div>
+          <input type="checkbox" id="hoMulti" onchange="$('hoMultiBox').style.display=this.checked?'':'none'" style="cursor:pointer"> <span class="optx" data-x="hosweep">sweep all holdout types</span></span>
+        <span style="font-size:11px;color:var(--dim);white-space:nowrap">
+          <input type="checkbox" id="stickyOos" checked style="cursor:pointer"> <span class="optx" data-x="stickyoos">sticky OOS</span></span></div>
       <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px">
         <span style="font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap">
           <input type="checkbox" id="scMulti" onchange="$('scMultiBox').style.display=this.checked?'':'none'" style="cursor:pointer"> <span class="optx" data-x="scsweep">sweep scorings</span></span></div>
@@ -472,6 +474,7 @@ const X = {
   <dt>trend3</dt><dd>Down / flat / up-trend, from price vs its 1-day EMA.</dd>
   <dt>volXtrend9</dt><dd>3×3 volatility×trend grid = 9 buckets. Overfit badly in testing — huge train numbers, liquidated on holdout.</dd>
  <dt>cvol7</dt><dd>7 fine grades of the same causal 30-day vol percentile behind vol3. Made for <b>Continuous adapt</b>: parameters interpolate smoothly from a calm endpoint to a volatile endpoint instead of jumping at tercile boundaries.</dd></dl>`],
+ stickyoos: ["Sticky OOS", `Fixes non-monotone holdout results (10k evals passing while 200k fails). Every 5 generations the CURRENT train-top-10 is shown to the holdout; any passer (>+2%/mo, no liq, ≥12 trades, hold-limit respected) is <b>banked</b>. The search keeps running at full budget, and only a BETTER passer (dd-penalized holdout score) overwrites the banked one. At the end, the banked passer competes with the normal final-pool scan and usually wins when late-run overfits have buried the generalizers.<dl><dt>Why it's still honest</dt><dd>Only candidates that first earned a train-top-10 seat are ever shown the holdout, each config gets exactly ONE holdout verdict (no re-rolling), and passing needs margin — the holdout referees among the train-elite, it doesn't drive the search.</dd><dt>Effect</dt><dd>The OOS-best (and gauntlet pass-counts) can only improve with more budget, never regress. Walk-forward remains the final gate.</dd></dl>`],
  hosweep: ["Sweep all holdout types", `One full search per ticked holdout type — after date, before date, between, outside, alternating — each saved as its OWN run (suffix _hA/_hB/_hBtw/_hOut/_hAltN; nothing overwritten), queued sequentially in the launch queue.<dl><dt>Why</dt><dd>A strategy family that survives EVERY split regime earns the green ✓ ALL 5 HOLDOUTS badge — the strongest robustness signal the lab produces. Families in progress show an amber tally.</dd><dt>Combine</dt><dd>An armed merge rides along on every leg, so one click re-searches the same merged pool under all regimes.</dd><dt>Caveat</dt><dd>Queued legs live in the panel process — a panel restart drops not-yet-started legs (relaunch the sweep with only the missing types ticked to finish a family).</dd></dl>`],
  scsweep: ["Sweep scorings", `One full search per ticked scoring — classic, worst 3-month window, underwater — each saved as its own run (suffix _cls/_wor/_und). Tick together with the holdout sweep for the full cross-product (up to 15 runs, queued sequentially). A family that only passes under one scoring is telling you something.`],
  cadapt: ["Continuous adapt", `Instead of one discrete parameter set per regime bucket, the candidate becomes TWO endpoint sets — a calm-market endpoint and a volatile-market endpoint — and every parameter is interpolated between them from the current 30-day volatility percentile. No jumps at bucket boundaries.<dl><dt>Pairs with</dt><dd>regime <b>cvol7</b> (7 fine vol grades; checking the box selects it automatically).</dd><dt>Cost</dt><dd>~400× slower to evaluate than normal runs (measured in campaign c6) — budget accordingly.</dd><dt>Honest history</dt><dd>Campaign c6 verdict: continuous adaptation LOST to discrete vol3 in 9 of 10 cells. It stays available for research, but the burden of proof is on it.</dd></dl>`],
@@ -564,6 +567,7 @@ async function launch(){
     lockbox:($('algo').value==='crossfit' && $('lockbox').value.trim()) ? $('lockbox').value.trim() : undefined,
     single_set: $('perreg').value==='1',
     cadapt: $('cadapt').checked,
+    sticky_oos: $('stickyOos').checked || undefined,
     symbol: $('symbol').value,
     tf: $('tfsel').value};
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;

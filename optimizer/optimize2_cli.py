@@ -724,6 +724,16 @@ def main():
     ap.add_argument("--max-hold-days", type=float, default=None,
                     help="throw out any candidate whose simulation ever holds a "
                          "position longer than this many days (blank = unlimited)")
+    ap.add_argument("--sticky-oos", action="store_true",
+                    help="every few generations, show the CURRENT train-top-10 "
+                         "to the holdout; any passer (margin + min trades) is "
+                         "BANKED and only replaced by a better passer — the "
+                         "final OOS-best can never regress with more budget, "
+                         "even after overfits push generalizers out of the pool")
+    ap.add_argument("--sticky-margin", type=float, default=2.0,
+                    help="sticky-oos pass margin: min holdout growth in %%/mo")
+    ap.add_argument("--sticky-every", type=int, default=5,
+                    help="sticky-oos check cadence in generations")
     ap.add_argument("--stop-score", type=float, default=None,
                     help="stop the search early once the best TRAIN score reaches "
                          "this value (finalize normally: holdout scan, configs, "
@@ -1133,6 +1143,8 @@ def main():
 
     t_end = time.time() + (args.hours * 3600 if args.hours else 10**12)
     target = evaluated + (args.total or 10**12)
+    _sticky = [None]        # banked holdout passer (sticky OOS)
+    _sticky_seen = set()    # configs already shown to the holdout (one verdict each)
     gen = 0
     t_session = time.time()
     signal.signal(signal.SIGTERM, _request_stop)
@@ -1208,6 +1220,34 @@ def main():
             evaluated += args.batch * args.procs
             pool.sort(key=lambda x: -x[0])
             pool = pool[:300]
+            # ---- sticky OOS: bank holdout passers before pool truncation /
+            # later overfits can bury them. Only NEW train-top-10 entrants are
+            # ever shown the holdout (one verdict per config, no re-rolling);
+            # passing needs margin + trades; better passers overwrite. ----
+            if args.sticky_oos and gen % max(args.sticky_every, 1) == 0:
+                import math as _m
+                _min_g = _m.log(1.0 + args.sticky_margin / 100.0)
+                for _sc, _c, _mtr in pool[:10]:
+                    _k = json.dumps(_c, sort_keys=True, default=float)
+                    if _k in _sticky_seen:
+                        continue
+                    _sticky_seen.add(_k)
+                    try:
+                        _hm = eval_any(_c, *args._hwin(), part="holdout")
+                    except Exception:
+                        _hm = None
+                    if (_hm and not _hm["liq"] and _hm["growth"] >= _min_g
+                            and _hm.get("n", 0) >= 12
+                            and not (args.max_hold_days and
+                                     _hm.get("max_hold_days", 0) > args.max_hold_days)):
+                        _ss = _hm["growth"] - 0.25 * _hm["maxdd"]
+                        if _sticky[0] is None or _ss > _sticky[0]["sscore"]:
+                            _sticky[0] = dict(sscore=_ss, cand=_c, metrics=_mtr,
+                                              holdout=_hm, train_score=_sc,
+                                              at_eval=evaluated)
+                            print(f"  ⚑ sticky OOS: banked passer at eval "
+                                  f"{evaluated} ({(_m.exp(_hm['growth'])-1)*100:+.1f}%/mo "
+                                  f"holdout, dd {_hm['maxdd']:.0%})", flush=True)
             json.dump(dict(pool=pool, evaluated=evaluated, seed_base=seed_base,
                            reservoir=reservoir, res_seen=res_seen[0],
                            runtime_s=runtime_s + (time.time() - t_session)),
@@ -1349,6 +1389,30 @@ def main():
             json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
             out["holdout_best"] = dict(rank=best_h + 1, holdout=holdouts[best_h])
             print(f"\nOOS-BEST is pool rank #{best_h+1} -> saved to holdout_best_config.json")
+        # sticky OOS: the banked passer competes with the scan's OOS-best —
+        # it usually WINS when late-run overfits pushed generalizers out of
+        # the pool (the source of non-monotone gauntlet counts)
+        if args.sticky_oos and _sticky[0] is not None:
+            st = _sticky[0]
+            cur = (out.get("holdout_best") or {}).get("holdout")
+            cur_s = (cur["growth"] - 0.25 * cur["maxdd"])                 if (cur and not cur.get("liq")) else -1e9
+            if st["sscore"] > cur_s:
+                hb = dict(cand=st["cand"], metrics=st["metrics"],
+                          holdout=st["holdout"], strategy=args.strategy,
+                          mode=args.mode, method=args.method,
+                          note=f"sticky-OOS passer banked at eval {st['at_eval']} "
+                               "(train-top-10 at the time; later generations found "
+                               "nothing better OOS). Picked USING the holdout — "
+                               "re-verify with walk-forward before trusting.")
+                hb["pair"] = _pair_tag()
+                hb["market_data"] = _market_tag()
+                hb["timeframe"] = _tf_tag()
+                json.dump(hb, open("holdout_best_config.json", "w"), indent=1,
+                          default=float)
+                out["holdout_best"] = dict(rank=0, holdout=st["holdout"],
+                                           sticky=True, at_eval=st["at_eval"])
+                print(f"\nSTICKY OOS-BEST (banked at eval {st['at_eval']}) beats "
+                      "the final-scan pick -> saved to holdout_best_config.json")
         # seed comparison, if this run was seeded from a backtest
         if os.path.exists("seed_cand.used.json"):
             try:
