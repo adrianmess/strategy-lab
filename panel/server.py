@@ -518,6 +518,7 @@ def job_stop(jid):
         for it in list(OPTQ["items"]):
             if it[0] == jid:
                 OPTQ["items"].remove(it)
+                _optq_save()
                 return jsonify(ok=True, note="removed from the queue")
     j = jobs.get(jid)
     if not j:
@@ -1951,6 +1952,17 @@ def _opt2_cmd(d, name):
 OPTQ = dict(items=[], running=None)   # items: [jid, name, payload]
 _OPTQ_LOCK = threading.Lock()
 _OPTQ_WATCH = {"t": None}
+_OPTQ_STORE = os.path.join(JOBS_DIR, "optq_pending.json")
+
+
+def _optq_save():
+    """Queued searches survive panel restarts (they used to evaporate)."""
+    try:
+        tmp = _OPTQ_STORE + ".tmp"
+        json.dump(OPTQ["items"], open(tmp, "w"))
+        os.replace(tmp, _OPTQ_STORE)
+    except Exception:
+        pass
 
 
 def _optq_watch():
@@ -1968,6 +1980,7 @@ def _optq_watch():
                 return
             jid, name, d = OPTQ["items"].pop(0)
             OPTQ["running"] = jid
+            _optq_save()
         spawn("optimize-v2", name, _opt2_cmd(d, name), OPT, jid=jid)
 
 
@@ -1980,6 +1993,7 @@ def _optq_launch(name, d):
         jid = f"optimize-v2_{time.strftime('%H%M%S')}_{uuid.uuid4().hex[:4]}"
         if busy:
             OPTQ["items"].append([jid, name, d])
+            _optq_save()
             pos = len(OPTQ["items"])
             if _OPTQ_WATCH["t"] is None or not _OPTQ_WATCH["t"].is_alive():
                 _OPTQ_WATCH["t"] = threading.Thread(target=_optq_watch, daemon=True)
@@ -1992,6 +2006,18 @@ def _optq_launch(name, d):
             _OPTQ_WATCH["t"] = threading.Thread(target=_optq_watch, daemon=True)
             _OPTQ_WATCH["t"].start()
     return jid, False, 0
+
+
+# restore queued searches dropped by a previous panel exit
+try:
+    _pending = json.load(open(_OPTQ_STORE))
+except Exception:
+    _pending = []
+if _pending:
+    OPTQ["items"] = [list(x) for x in _pending]
+    print(f"launch queue: restored {len(_pending)} pending search(es) from disk")
+    _OPTQ_WATCH["t"] = threading.Thread(target=_optq_watch, daemon=True)
+    _OPTQ_WATCH["t"].start()
 
 
 def job_optimize2():
