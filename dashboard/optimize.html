@@ -850,7 +850,7 @@ async function refreshRuns(){
     if(!r._gtKey) return;
     const g = _gt[r._gtKey], types = ['hA','hB','hBtw','hOut','hAlt'];
     const have = types.filter(t=>g[t]), passed = types.filter(t=>g[t]==='pass');
-    if(have.length < 2){ r._gauntlet = null; return; }
+    if(!have.length){ r._gauntlet = null; return; }
     r._gauntlet = {have:have.length, passed:passed.length,
       full: have.length===5 && !have.some(t=>g[t]==='pending'),
       detail: types.map(t=>`${t}: ${g[t]||'—'}`).join(' · ')};
