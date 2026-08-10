@@ -1931,8 +1931,6 @@ def param_spaces_list():
                       if re.fullmatch(r"[a-z]{2,6}_[135]m\.json", f))
     return jsonify(out)
 
-@app.route("/api/jobs/optimize", methods=["POST"])
-@app.route("/api/jobs/optimize2", methods=["POST"])
 def _opt2_cmd(d, name):
     """Payload -> optimize2_cli command (shared by single launch and sweep)."""
     cmd = [sys.executable, "optimize2_cli.py",
@@ -2067,6 +2065,8 @@ def _merge_name_guard(name, d):
     return name
 
 
+@app.route("/api/jobs/optimize", methods=["POST"])
+@app.route("/api/jobs/optimize2", methods=["POST"])
 def job_optimize2():
     """One optimizer for every strategy (v7 / prime / v6 / scalpx).
     Sequential by design: a second launch queues behind the running one."""
