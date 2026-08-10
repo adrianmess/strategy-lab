@@ -18,6 +18,14 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - HYPE STARTED EARLY (user request 2026-08-07 ~18:00 PDT): gamut_ghype worker now runs ALONGSIDE main on box A — tmux session 'hype', `--jobs 5` (243/2,592 already done at start). ec2_boot_workers.sh updated: hype session starts immediately (jobs=5 while the main gamut session exists, full width otherwise). MONITOR: once the MAIN campaign completes on A, kill the hype session and restart it at full width (`--jobs $(nproc/11)`) if it's still running at 5 (boot-race can leave it small). No hype worker on box B (main-reverse only).
 - TEARDOWN WHEN DONE (Adrian or with his OK): cancel the PERSISTENT spot request FIRST, then terminate instance, else it relaunches: `aws ec2 describe-spot-instance-requests` → cancel-spot-instance-requests → terminate-instances i-016786d5b788d3a12. EBS deletes on termination. Also release the Elastic IP and deregister the AMI + its snapshot when fully done.
 
+## ACTIVE: two-Mac merge sweep (2026-08-10)
+- Campaign **msweep_0810**: 675 merge legs = 45 families (btc/eth/doge/xrp/sui 3m lev × v7/scalpx2/macdx × vol3/trend3/volXtrend9, top-8 gamut sources each) × 5 holdouts × 3 scorings @ 100k evals, sticky OOS on. Goal: green ✓ ALL 5 HOLDOUTS families per pair. HYPE families already done separately by Adrian.
+- **Mac mini (M4 Pro, 12c/24GB)** = box B: `admn@admns-Mac-mini.local` (ssh key auth), repo at ~/strategy-lab, venv ~/venv (py3.11, numpy 2.4.6/pandas 3.0.5/numba 0.66), runs the plan **--reverse**, jobs=1, caffeinate, log ~/worker.log. ~2.3 min/leg measured.
+- **Main Mac** joins FORWARD via /tmp/msweep_forward.sh (auto-starts when the panel queue drains; caffeinate; log /tmp/msweep_forward.log).
+- **LAN sync**: `SYNC_SFX_START=1 offload_sync.sh ~/.ssh/id_ed25519 msweep_0810 admn@admns-Mac-mini.local` (log /tmp/mini_sync.log) — pulls mini runs+backtests every 5 min, pushes done-markers both ways (meet-in-the-middle), mini state lands as worker_state_b.json. offload_sync now supports user@host remotes + SYNC_SFX_START.
+- Tooling: scripts/build_merge_plan.py (spec → gamut-schema plan), scripts/mini_bootstrap.sh. Mini's dashboard/backtests.js seeded empty; its published entries merge into the main Mac's via the sync loop.
+- ETA: ~10-13h with both machines (mini alone would be ~26h).
+
 ## 1. Goal
 Personal platform (`/Users/adrian/Code/strategy-lab`) for optimizing, backtesting, and live-trading TradingView-ported strategies on MEXC (native API — Playwright era is over). Current focus: SPOT, multi-pair (SOL/BTC/ETH/DOGE/XRP/SUI vs USDT), one-position-at-a-time FCFS. Core doctrine: HONEST evaluation — holdout/walk-forward beats train-best; only walk-forward PASS runs may be adopted to live.
 

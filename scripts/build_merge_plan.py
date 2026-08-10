@@ -82,10 +82,15 @@ def main():
                     cmd += ["--tf", str(fam["tf"])]
                 if SC_ARG.get(sc):
                     cmd += ["--scoring", SC_ARG[sc]]
-                specs.append(dict(name=name, cmd=cmd))
+                specs.append(dict(name=name, coin=fam.get("symbol", "sol"),
+                                  tf=str(fam.get("tf", "3")), cmd=cmd,
+                                  status="pending", ai_space=None))
     out = os.path.join(OPT, "campaigns", camp)
     os.makedirs(out, exist_ok=True)
-    json.dump(specs, open(os.path.join(out, "plan.json"), "w"), indent=1)
+    plan = dict(config=dict(kind="merge-sweep", budget=budget,
+                            holdouts=holds, scorings=scores),
+                specs=specs, made=__import__("time").strftime("%F %T"))
+    json.dump(plan, open(os.path.join(out, "plan.json"), "w"), indent=1)
     print(f"{len(specs)} merge legs -> optimizer/campaigns/{camp}/plan.json")
     print("run:  python3 gamut_worker.py --plan "
           f"campaigns/{camp}/plan.json --jobs N [--reverse]")
