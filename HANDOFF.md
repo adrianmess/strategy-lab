@@ -27,6 +27,12 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
+## ACTIVE: SOL two-stage pipeline (2026-08-11 ~09:35) — SOL was never in the gamut
+- SOL is the reference pair (param space = variants/default.ai.json for both tfs). No gamut sources existed, so stage 1 builds them: **solg1m_0811** (216 fresh searches, EC2, chained in tmux 'sg' after hyp1a) + **solg3m_0811** (216, Macs, chained watchers after hyp1b). Grid: 3 strat x 3 meth x 3 scorings x m5/m7 x {hN,hA2508,hL7,hO2411} @100k.
+- Stage 2 AFTER stage 1 completes: run `python3 scripts/build_sol_merge_specs.py` (ranks top-8/family by holdout_best growth) then build_merge_plan.py on the emitted sol1w_0811/sol3w_0811 specs, ship + run like the other sweeps.
+- Box2 bounced again → now **3.17.12.141** (4th IP today); sync loop 3 repointed. Box IPs float — after any bounce: cron self-arms h1 (then sg), but re-ship any missing plan + repoint the sync loop.
+- BASKET pair removed: 10 pairx/metax2/fcfsx router entries deleted from backtests.js (runs still exist in optimizer/runs if ever needed).
+
 ## ARCHIVED: EC2 1m merge sweep m1sweep_0810 (2026-08-10; re-rigged ~18:00 after us-east-2c churn)
 - Campaign **m1sweep_0810**: 675 legs (45 families, all 5 pairs 1m lev × v7/scalpx2/macdx × vol3/trend3/volXtrend9, top-8 1m gamut sources) × 5 holdouts × 3 scorings @ 100k, sticky on.
 - History: first box (i-02383d775cea91fe2, c7a.48xlarge us-east-2c) got spot-interrupted twice in ~1h with 167 legs done (all durable+synced); 2a/2b had no 48xlarge capacity, so replaced with TWO half-size boxes in **us-east-2b** (meet-in-the-middle). Old request sir-efnqgsyn cancelled + instance terminated.
