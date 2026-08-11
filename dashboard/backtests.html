@@ -122,6 +122,10 @@ button.rtradd.on{opacity:1;filter:none}
       <select id="fPair" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
       </select></label>
+    <label class="hint" title="the chart timeframe the backtest was simulated on (the bar size shown in the blue/grey pills)">chart
+      <select id="fTf" onchange="saveBtFilters()" style="margin-left:4px">
+        <option value="all">all</option>
+      </select></label>
     <label class="hint" title="hide every backtest whose simulation hit a liquidation">
       <input type="checkbox" id="fNoLiq" onchange="saveBtFilters()"> no liquidations only</label>
     <label class="hint">position at end
@@ -528,6 +532,7 @@ function gapBadge(e){
 function saveBtFilters(){
   localStorage.setItem('btFilterMode', document.getElementById('fMode').value);
   localStorage.setItem('btFilterPair', document.getElementById('fPair').value);
+  localStorage.setItem('btFilterTf', document.getElementById('fTf').value);
   localStorage.setItem('btFilterStrat', document.getElementById('fStrat').value);
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
@@ -545,6 +550,10 @@ function pairPill(p, mkt, tf){
   const t = String(tf||'3m');
   return ` <span class="pill" style="background:rgba(88,166,255,.15);color:#58a6ff" title="trading pair (vs USDT) — simulated on ${spot?'SPOT':'perp/futures'} candles, ${t} chart bars${spot?'':' (legacy default; spot-mode entries before 2026-07-28 used perp data too)'}">${p}${spot?'·S':''}</span><span class="pill" style="background:rgba(139,148,158,.15);color:var(--dim)" title="chart timeframe this backtest was simulated on">${t}</span>`;
 }
+function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'multi'
+  const t = String(tf||'3m');
+  return /^\d+(\.\d+)?$/.test(t) ? t+'m' : t;
+}
 (function initBtFilters(){
   const sel_ = document.getElementById('fPair');
   [...new Set(BT.map(e=>(e.pair||'SOL_USDT')))].sort().forEach(p=>{
@@ -554,6 +563,12 @@ function pairPill(p, mkt, tf){
   [...new Set(BT.map(e=>e.strategy||'unknown'))].sort().forEach(st=>{
     const o=document.createElement('option'); o.value=st; o.textContent=stratName(st); ss_.appendChild(o);
   });
+  const tf_ = document.getElementById('fTf');
+  [...new Set(BT.map(e=>tfNorm(e.timeframe)))].sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999)).forEach(t=>{
+    const o=document.createElement('option'); o.value=t; o.textContent=t; tf_.appendChild(o);
+  });
+  const ftf = localStorage.getItem('btFilterTf') || 'all';
+  tf_.value = [...tf_.options].some(o=>o.value===ftf) ? ftf : 'all';
   ss_.dataset.opts = '(init)';
   const fst = localStorage.getItem('btFilterStrat') || 'all';
   ss_.value = [...ss_.options].some(o=>o.value===fst) ? fst : 'all';
@@ -632,6 +647,8 @@ function render(){
   const hasOpen = i => (BT[i].open_positions||[]).some(o=>o.at==='end of data');
   if(fModeV !== 'all') order = order.filter(i=>BT[i].mode === fModeV);
   if(fPairV !== 'all') order = order.filter(i=>(BT[i].pair||'SOL_USDT') === fPairV);
+  const fTfV = document.getElementById('fTf').value;
+  if(fTfV !== 'all') order = order.filter(i=>tfNorm(BT[i].timeframe) === fTfV);
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
@@ -674,7 +691,7 @@ function render(){
   const fStratV = ss_.value;
   if(fStratV !== 'all') order = order.filter(i=>(BT[i].strategy||'unknown') === fStratV);
   document.getElementById('fCount').textContent =
-    (fModeV!=='all'||fPairV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
+    (fModeV!=='all'||fPairV!=='all'||fTfV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
