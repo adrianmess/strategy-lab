@@ -1,0 +1,48 @@
+{
+ "campaign": "hyp1b_0811",
+ "budget": 100000,
+ "families": [
+  {
+   "base": "h1w_hype1m_v7_trend3",
+   "sources": [
+    "ghype_hype1m_v7_gen_l_trend3_un_d50_m5_hL7_t100k_ls",
+    "ghype_hype1m_v7_gen_l_trend3_wo_d50_m7_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_trend3_wo_d50_m7_hL7_t100k",
+    "ghype_hype1m_v7_gen_l_trend3_cl_d50_m7_hL7_t100k",
+    "ghype_hype1m_v7_gen_l_trend3_cl_d50_m7_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_trend3_un_d50_m7_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_trend3_un_d50_m7_hL7_t100k",
+    "ghype_hype1m_v7_gen_l_trend3_un_d50_m5_hL7_t60k_ls"
+   ],
+   "merge_mode": "breed",
+   "strategy": "v7",
+   "mode": "lev",
+   "method": "trend3",
+   "symbol": "hype",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "h1w_hype1m_v7_volXtrend9",
+   "sources": [
+    "ghype_hype1m_v7_gen_l_volXtrend9_un_d50_m7_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_cl_d50_m7_hL7_t100k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_wo_d50_m7_hL7_t100k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_cl_d50_m7_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_un_d50_m5_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_un_d50_m7_hL7_t100k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_wo_d50_m7_hL7_t60k",
+    "ghype_hype1m_v7_gen_l_volXtrend9_un_d50_m7_hL7_t60k_ls"
+   ],
+   "merge_mode": "breed",
+   "strategy": "v7",
+   "mode": "lev",
+   "method": "volXtrend9",
+   "symbol": "hype",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  }
+ ]
+}

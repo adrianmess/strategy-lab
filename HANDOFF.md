@@ -18,7 +18,16 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - HYPE STARTED EARLY (user request 2026-08-07 ~18:00 PDT): gamut_ghype worker now runs ALONGSIDE main on box A — tmux session 'hype', `--jobs 5` (243/2,592 already done at start). ec2_boot_workers.sh updated: hype session starts immediately (jobs=5 while the main gamut session exists, full width otherwise). MONITOR: once the MAIN campaign completes on A, kill the hype session and restart it at full width (`--jobs $(nproc/11)`) if it's still running at 5 (boot-race can leave it small). No hype worker on box B (main-reverse only).
 - TEARDOWN WHEN DONE (Adrian or with his OK): cancel the PERSISTENT spot request FIRST, then terminate instance, else it relaunches: `aws ec2 describe-spot-instance-requests` → cancel-spot-instance-requests → terminate-instances i-016786d5b788d3a12. EBS deletes on termination. Also release the Elastic IP and deregister the AMI + its snapshot when fully done.
 
-## ACTIVE: EC2 1m merge sweep (2026-08-10; re-rigged ~18:00 after us-east-2c churn)
+## DONE 2026-08-11: msweep_0810 675/675 + m1sweep_0810 675/675 (post-holdout-fix reruns, 0 failed)
+
+## ACTIVE: HYPE 1m sweep (2026-08-11 ~09:25) — the last missing grid piece
+- Only HYPE 3m families existed (panel merges, 3x 5/5 pass); HYPE 1m never swept. Two campaigns @100k, sticky, all 5 holdouts x 3 scorings, sources = top-8 ghype hype1m runs per family by runs2-cache honest growth (max of tb/ob holdout growth — the same ranking m1sweep used):
+- **hyp1a_0811** (7 fams = macdx x3, scalpx2 x3, v7_vol3; 105 legs): EC2 box1 fwd + box2 rev, tmux 'h1', boot ~/boot_h1.sh (cron @reboot updated from boot_m1), log ~/worker_h1.log.
+- **hyp1b_0811** (2 fams = v7_trend3, v7_volXtrend9; 30 legs): main Mac fwd (/tmp/hyp1b_forward.log) + mini rev (~/worker_h1.log).
+- Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
+- TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
+
+## ARCHIVED: EC2 1m merge sweep m1sweep_0810 (2026-08-10; re-rigged ~18:00 after us-east-2c churn)
 - Campaign **m1sweep_0810**: 675 legs (45 families, all 5 pairs 1m lev × v7/scalpx2/macdx × vol3/trend3/volXtrend9, top-8 1m gamut sources) × 5 holdouts × 3 scorings @ 100k, sticky on.
 - History: first box (i-02383d775cea91fe2, c7a.48xlarge us-east-2c) got spot-interrupted twice in ~1h with 167 legs done (all durable+synced); 2a/2b had no 48xlarge capacity, so replaced with TWO half-size boxes in **us-east-2b** (meet-in-the-middle). Old request sir-efnqgsyn cancelled + instance terminated.
 - **2026-08-10 ~21:25 CRITICAL RESTART**: build_merge_plan.py had defined hold_args() but never appended it — ALL sweep legs on every front ran with NO holdout flags (names lied; 138 families showed 5/5 done 0/5 passed; only panel-launched HYPE merges passed, correctly). Fixed (cmd += hold_args), both plans rebuilt, ~1,000 invalid msw_*/m1w_* runs quarantined (Mac: optimizer/runs_invalid_noholdout_0810/; mini+boxes: runs_invalid/), all 4 workers restarted from scratch on the fixed plans (verified live procs carry --train-end/--holdout-*).
