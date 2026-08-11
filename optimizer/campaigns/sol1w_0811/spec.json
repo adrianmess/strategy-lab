@@ -1,0 +1,195 @@
+{
+ "campaign": "sol1w_0811",
+ "budget": 100000,
+ "families": [
+  {
+   "base": "s1w_sol1m_macdx_trend3",
+   "sources": [
+    "solg_sol1m_macdx_gen_l_trend3_cl_d50_m5_hO2411_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_un_d50_m7_hA2508_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_cl_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_un_d50_m5_hN_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_cl_d50_m5_hN_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_cl_d50_m7_hN_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_wo_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_trend3_un_d50_m7_hN_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "macdx",
+   "mode": "lev",
+   "method": "trend3",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_macdx_vol3",
+   "sources": [
+    "solg_sol1m_macdx_gen_l_vol3_un_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_un_d50_m5_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_cl_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_un_d50_m5_hO2411_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_cl_d50_m5_hN_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_cl_d50_m7_hN_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_wo_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_vol3_un_d50_m7_hN_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "macdx",
+   "mode": "lev",
+   "method": "vol3",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_macdx_volXtrend9",
+   "sources": [
+    "solg_sol1m_macdx_gen_l_volXtrend9_cl_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_wo_d50_m7_hL7_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_un_d50_m7_hN_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_un_d50_m5_hN_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_cl_d50_m5_hN_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_cl_d50_m7_hN_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_wo_d50_m5_hN_t100k",
+    "solg_sol1m_macdx_gen_l_volXtrend9_wo_d50_m7_hA2508_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "macdx",
+   "mode": "lev",
+   "method": "volXtrend9",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_scalpx2_trend3",
+   "sources": [
+    "solg_sol1m_scalpx2_gen_l_trend3_cl_d50_m7_hO2411_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_cl_d50_m5_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_un_d50_m5_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_cl_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_un_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_cl_d50_m7_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_wo_d50_m5_hO2411_t100k",
+    "solg_sol1m_scalpx2_gen_l_trend3_wo_d50_m5_hL7_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "scalpx2",
+   "mode": "lev",
+   "method": "trend3",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_scalpx2_vol3",
+   "sources": [
+    "solg_sol1m_scalpx2_gen_l_vol3_cl_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_wo_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_cl_d50_m5_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_un_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_un_d50_m7_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_un_d50_m5_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_wo_d50_m7_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_vol3_wo_d50_m5_hA2508_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "scalpx2",
+   "mode": "lev",
+   "method": "vol3",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_scalpx2_volXtrend9",
+   "sources": [
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_un_d50_m5_hO2411_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_cl_d50_m7_hO2411_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_wo_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_cl_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_wo_d50_m5_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_un_d50_m7_hL7_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_cl_d50_m5_hN_t100k",
+    "solg_sol1m_scalpx2_gen_l_volXtrend9_wo_d50_m5_hN_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "scalpx2",
+   "mode": "lev",
+   "method": "volXtrend9",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_v7_trend3",
+   "sources": [
+    "solg_sol1m_v7_gen_l_trend3_cl_d50_m5_hL7_t100k",
+    "solg_sol1m_v7_gen_l_trend3_un_d50_m5_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_trend3_wo_d50_m7_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_trend3_cl_d50_m5_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_trend3_cl_d50_m7_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_trend3_un_d50_m7_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_trend3_un_d50_m7_hN_t100k",
+    "solg_sol1m_v7_gen_l_trend3_cl_d50_m7_hN_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "v7",
+   "mode": "lev",
+   "method": "trend3",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_v7_vol3",
+   "sources": [
+    "solg_sol1m_v7_gen_l_vol3_cl_d50_m5_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_vol3_cl_d50_m7_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_vol3_wo_d50_m7_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_vol3_wo_d50_m5_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_vol3_un_d50_m5_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_vol3_cl_d50_m5_hL7_t100k",
+    "solg_sol1m_v7_gen_l_vol3_cl_d50_m5_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_vol3_un_d50_m5_hN_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "v7",
+   "mode": "lev",
+   "method": "vol3",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  },
+  {
+   "base": "s1w_sol1m_v7_volXtrend9",
+   "sources": [
+    "solg_sol1m_v7_gen_l_volXtrend9_cl_d50_m5_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_wo_d50_m7_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_cl_d50_m7_hO2411_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_wo_d50_m7_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_wo_d50_m5_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_un_d50_m5_hA2508_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_un_d50_m7_hN_t100k",
+    "solg_sol1m_v7_gen_l_volXtrend9_cl_d50_m7_hN_t100k"
+   ],
+   "merge_mode": "breed",
+   "strategy": "v7",
+   "mode": "lev",
+   "method": "volXtrend9",
+   "symbol": "sol",
+   "tf": "1",
+   "max_dd": 0.5,
+   "max_hold_days": 7
+  }
+ ]
+}
