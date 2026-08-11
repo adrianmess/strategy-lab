@@ -182,6 +182,13 @@ button.rtradd.on{opacity:1;filter:none}
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button onclick="clearRtr()">clear</button>
+      <span style="margin-left:14px;padding-left:14px;border-left:1px solid var(--border)">
+        <input id="rtrSaveName" placeholder="selection name…" style="width:150px" title="name this component selection so you can load it back later and keep editing it">
+        <button onclick="rtrSave()" title="save the current component list under this name (same name = overwrite)">save</button>
+        <select id="rtrSavedSel" style="margin-left:8px" title="your saved component selections"></select>
+        <button onclick="rtrLoad()" title="load the chosen saved selection (replaces the current list; runs that no longer exist are skipped)">load</button>
+        <button onclick="rtrSavedDel()" title="delete the chosen saved selection">✕</button>
+      </span>
     </div>
   </div>
   <div class="tablewrap">
@@ -471,11 +478,56 @@ function rtrClick(e){
 }
 function rtrRemove(name){ const i=RTRSEL.indexOf(name); if(i>=0) RTRSEL.splice(i,1); rtrRender(); }
 function clearRtr(){ RTRSEL.length = 0; rtrRender(); }
+// ---- named saved selections (persist across sessions) ----
+function rtrSavedAll(){ try { return JSON.parse(localStorage.getItem('rtrSaved')||'{}'); } catch(e){ return {}; } }
+function rtrSavedRefresh(){
+  const all = rtrSavedAll(), sel = document.getElementById('rtrSavedSel');
+  const cur = sel.value;
+  const names = Object.keys(all).sort();
+  sel.innerHTML = names.length
+    ? names.map(n=>`<option value="${n}">${n} (${(all[n].runs||[]).length})</option>`).join('')
+    : '<option value="">— no saved selections —</option>';
+  if(names.includes(cur)) sel.value = cur;
+  return names.length;
+}
+function rtrSave(){
+  const name = (document.getElementById('rtrSaveName').value||'').trim();
+  if(!name){ alert('give the selection a name first'); return; }
+  if(!RTRSEL.length){ alert('no components selected'); return; }
+  const all = rtrSavedAll();
+  all[name] = { runs: [...RTRSEL], at: new Date().toISOString().slice(0,16).replace('T',' ') };
+  localStorage.setItem('rtrSaved', JSON.stringify(all));
+  rtrSavedRefresh();
+  document.getElementById('rtrSavedSel').value = name;
+  document.getElementById('rtrCount').textContent = `— ${RTRSEL.length} selected — saved as “${name}”`;
+}
+function rtrLoad(){
+  const name = document.getElementById('rtrSavedSel').value;
+  const all = rtrSavedAll();
+  if(!name || !all[name]){ alert('nothing to load'); return; }
+  const want = all[name].runs||[];
+  const have = want.filter(n=>BT.some(e=>e.name===n));
+  RTRSEL.length = 0; RTRSEL.push(...have);
+  document.getElementById('rtrSaveName').value = name;   // easy re-save under the same name
+  rtrRender(); render();                                  // refresh 🔀 button states too
+  if(have.length < want.length)
+    document.getElementById('rtrCount').textContent =
+      `— ${have.length} selected — loaded “${name}” (${want.length-have.length} run(s) no longer exist, skipped)`;
+}
+function rtrSavedDel(){
+  const name = document.getElementById('rtrSavedSel').value;
+  const all = rtrSavedAll();
+  if(!name || !all[name]) return;
+  delete all[name];
+  localStorage.setItem('rtrSaved', JSON.stringify(all));
+  rtrSavedRefresh();
+}
 function rtrRender(){
-  document.getElementById('rtrBar').style.display = RTRSEL.length ? '' : 'none';
+  const savedCount = rtrSavedRefresh();
+  document.getElementById('rtrBar').style.display = (RTRSEL.length || savedCount) ? '' : 'none';
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
-  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="7" class="hint">use the 🔀 button on any run to add it…</td></tr>'; return; }
+  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="7" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
     return `<tr><td>${e.name}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
@@ -585,6 +637,7 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   document.getElementById('fHold').value = localStorage.getItem('btFilterHold') || 'all';
   document.getElementById('fWinMin').value = localStorage.getItem('btFilterWinMin') || '';
   document.getElementById('fGaunt').checked = localStorage.getItem('btFilterGaunt')==='1';
+  rtrRender();   // shows the Router components bar at load when saved selections exist
 })();
 // ---- "no losing period" support: weekly returns derived from the curve ----
 const _WEEKOK = new Map();   // entry index -> bool (cached)
