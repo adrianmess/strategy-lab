@@ -853,6 +853,13 @@ def main():
         print(f"launch.json not written: {_e}", flush=True)
     # per-pair-per-timeframe space files are the default when they exist and
     # no explicit --space was given (campaigns pass their own)
+    # NOTE: _bootstrap chdir'd us into the run dir — resolve relative --space
+    # paths against the optimizer dir so plans stay machine-portable
+    if args.space and not os.path.isabs(args.space) \
+            and not os.path.exists(args.space):
+        _cand = os.path.join(B.OPT_DIR, args.space)
+        if os.path.exists(_cand):
+            args.space = _cand
     _default_space = os.path.join(B.OPT_DIR, "param_space.json")
     _pt_space = os.path.join(B.OPT_DIR, "param_spaces",
                              f"{args.symbol.lower()}_{args.tf}m.json")
