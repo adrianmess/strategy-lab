@@ -76,6 +76,7 @@ def main():
                        "--resume-from",
                        ",".join(f"runs/{s}" for s in fam["sources"]),
                        "--merge-mode", fam.get("merge_mode", "breed")]
+                cmd += hold_args(h, dates)   # the actual holdout flags!
                 if fam.get("symbol"):
                     cmd += ["--symbol", fam["symbol"]]
                 if fam.get("tf"):
