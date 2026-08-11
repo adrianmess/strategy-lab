@@ -68,13 +68,14 @@
   {
    "base": "s3w_sol3m_scalpx2_trend3",
    "sources": [
+    "solg_sol3m_scalpx2_gen_l_trend3_cl_d50_m5_hO2411_t100k",
     "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m5_hO2411_t100k",
+    "solg_sol3m_scalpx2_gen_l_trend3_un_d50_m5_hL7_t100k",
     "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m7_hL7_t100k",
+    "solg_sol3m_scalpx2_gen_l_trend3_un_d50_m5_hA2508_t100k",
     "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m5_hA2508_t100k",
-    "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m7_hN_t100k",
-    "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m7_hA2508_t100k",
-    "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m7_hO2411_t100k",
-    "solg_sol3m_scalpx2_gen_l_trend3_wo_d50_m5_hL7_t100k"
+    "solg_sol3m_scalpx2_gen_l_trend3_cl_d50_m7_hL7_t100k",
+    "solg_sol3m_scalpx2_gen_l_trend3_un_d50_m7_hL7_t100k"
    ],
    "merge_mode": "breed",
    "strategy": "scalpx2",
