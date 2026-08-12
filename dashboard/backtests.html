@@ -177,8 +177,8 @@ button.rtradd.on{opacity:1;filter:none}
   <div id="rtrBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(88,166,255,.06)">
     <div style="font-weight:600;margin-bottom:6px">Router components <span class="hint" id="rtrCount"></span></div>
     <table style="font-size:12px" id="rtrT"><thead><tr>
-      <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th></th></tr></thead>
-      <tbody id="rtrList"><tr><td colspan="7" class="hint">use the 🔀 button on any run to add it…</td></tr></tbody></table>
+      <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th title="out-of-sample verdict for this entry (same logic as the main table's OOS column)">OOS</th><th></th></tr></thead>
+      <tbody id="rtrList"><tr><td colspan="8" class="hint">use the 🔀 button on any run to add it…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button onclick="clearRtr()">clear</button>
@@ -401,7 +401,7 @@ function cmbCompatible(ref, e){
 }
 function clearCmbSel(){ CMBSEL.clear(); updateCmbBar(); render(); }
 let OOSMAP = {};
-fetch('/api/oos_map').then(r=>r.json()).then(m=>{ OOSMAP=m||{}; render(); }).catch(()=>{});
+fetch('/api/oos_map').then(r=>r.json()).then(m=>{ OOSMAP=m||{}; render(); if(RTRSEL.length) rtrRender(); }).catch(()=>{});
 function oosInfo(e){
   // entries whose WINDOW is out-of-sample judge themselves
   const kind = (e.kind||'');
@@ -527,12 +527,13 @@ function rtrRender(){
   document.getElementById('rtrBar').style.display = (RTRSEL.length || savedCount) ? '' : 'none';
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
-  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="7" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
+  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="8" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
     return `<tr><td>${e.name}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
       <td>${stratName(e.strategy)}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
       <td>${e.method||''}</td>
+      <td>${oosCell(e)}</td>
       <td><button onclick="rtrRemove('${e.name}')" title="remove">✕</button></td></tr>`;}).join('');
 }
 function sendToRouter(){
