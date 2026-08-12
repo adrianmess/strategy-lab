@@ -27,6 +27,11 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
+## NEW: DEDICATED PROXY POOL (2026-08-12 ~01:30) — all MEXC traffic on 10 Decodo ISP IPs
+- 10 dedicated static IPs (isp.decodo.com ports 10001-10010, creds in gitignored ip_proxies_APIs + adaptive_trader/proxy_pool.json). All 10 exit IPs verified + whitelisted on both MEXC accounts; read-only test: scripts/test_proxies.py (10/10 public + authenticated OK).
+- data_feed: per-(symbol,tf) stable exit IP (crc32 of key; explicit proxy_index override). fcfs hosts: round-robin 1 IP per host, full-cadence polling restored (3s/1m, 6s/3m), no more 510s. mexc_api: per-account stable IP (mexc1->10001, mexc2->10002), legacy proxy_config.json is the fallback. WebSocket ticks remain direct (public; kline fallback unaffected).
+- FCFS instance #4 restarted on the pool: 10/10 hosts ready in ~70s, 0 rate-limits.
+
 ## NEW: FCFS LIVE ADAPTER (2026-08-12 ~00:05) — fcfsx combos are now adoptable
 - Architecture: `adaptive_trader/fcfs_runner.py` (parent: one shared slot, first-signal-wins, same-bar ties by component order = the backtest rule, per-pair executors, protective loop, state) + `fcfs_host.py` (one child per pair×timeframe group; each runs its components' research engines virtually with the synthetic-bar technique — engine-exact, shared code with metax via strategy_metax.run_component_engine). trader.py delegates when candidate.strategy == fcfsx, so instances/dry/live/confirm-LIVE machinery is unchanged. Works with 2..N components, any pair/timeframe mix.
 - Panel Adopt (fcfsx rows on Optimize) writes config_fcfs_<name>.json: components embedded (holdout_best cands), per-pair contract sizes fetched from MEXC, ALWAYS starts dry_run. Live spot via API restricted to BTC/ETH (MEXC); lev unrestricted.
