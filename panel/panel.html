@@ -166,7 +166,7 @@ details.term > pre{margin-top:4px}
     <label>processes</label><input id="oProcs" value="4">
     <button onclick="runWF()">Walk-forward (v6)</button>
     <button onclick="runRefit()">Refit trader params now</button>
-    <button onclick="updateData()">Refresh CoinAPI data</button>
+    <button onclick="updateData()" title="Extends EVERY pair's candle history up to now — all 7 pairs (sol/btc/eth/doge/xrp/sui/hype), perp AND spot, 3m + 1m, then rebuilds the 5m files and clears derived caches so backtests/optimizers use the fresh data (first run per pair is slower while its cache rebuilds). Takes several minutes; watch the Jobs section.">Refresh market data (all pairs)</button>
     <button onclick="api('jobs/reassign',{force:true}).then(refresh)" title="Re-pick every live router's bucket assignment from trailing data NOW (walk-forward selector semantics: risk-averse, past-only). Automatic cadence: run 'python3 optimizer/metax_reassign.py --all --loop'. Skips any router that's in a trade; running traders hot-reload when flat.">Re-assign routers now</button>
   </div>
 </div>
