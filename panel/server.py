@@ -1870,6 +1870,38 @@ def job_router():
             cmd += ["--pairs", d.get("pairs", "sol")]
     elif kind == "pairx":
         cmd = [sys.executable, "pairx_cli.py", "--name", name]
+    elif kind == "fcfsx_rerun":
+        # re-simulate an existing FCFS combo (same components, same name —
+        # overwrites its _fcfs_full/_fcfs_wf backtests and verdict) with
+        # whatever candle data is on disk NOW
+        rn = d.get("run") or ""
+        if not re.fullmatch(r"[A-Za-z0-9_.\-]+", rn):
+            return jsonify(error=f"bad run name '{rn}'"), 400
+        try:
+            b = json.load(open(os.path.join(OPT, "runs", rn,
+                                            "best_config.json")))
+        except Exception as e:
+            return jsonify(error=f"can't load '{rn}': {e}"), 400
+        comps = [c.get("run") for c in
+                 ((b.get("cand") or {}).get("components") or [])]
+        comps = [c for c in comps if c]
+        if len(comps) < 2:
+            return jsonify(error=f"'{rn}' has no stored component list"), 400
+        missing = [c for c in comps
+                   if not os.path.exists(os.path.join(OPT, "runs", c,
+                                                      "best_config.json"))]
+        if missing:
+            return jsonify(error=f"component run(s) no longer exist: "
+                                 f"{missing[:3]}"), 400
+        name = rn
+        cmd = [sys.executable, "fcfsx_cli.py", "--name", rn,
+               "--runs", ",".join(comps)]
+        try:
+            _md = float(d.get("maxdd") or 0)
+        except (TypeError, ValueError):
+            _md = 0
+        if 0 < _md <= 1:
+            cmd += ["--max-dd", str(_md)]
     elif kind == "fcfsx":
         runs_sel = [r for r in (d.get("runs") or []) if r]
         if len(runs_sel) < 2:

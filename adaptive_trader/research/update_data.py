@@ -35,6 +35,27 @@ def clear_caches():
             if os.path.exists(p):
                 os.remove(p)
                 print("cleared cache", p, flush=True)
+    # CRITICAL (learned 2026-08-12): the optimizer engine pre-caches under
+    # optimizer/cache are keyed on INDICATOR settings only, NOT on the candle
+    # data — leaving them means every backtest/search silently keeps using
+    # the OLD data window. They must go; each rebuilds in a few minutes the
+    # first time its pair/tf/market is touched again.
+    opt_cache = os.path.join(HERE, "..", "..", "optimizer", "cache")
+    n = sz = 0
+    for root, _dirs, files in os.walk(opt_cache):
+        for f in files:
+            if f.endswith(".pkl"):
+                p = os.path.join(root, f)
+                try:
+                    sz += os.path.getsize(p)
+                    os.remove(p)
+                    n += 1
+                except OSError:
+                    pass
+    print(f"cleared {n} optimizer engine caches ({sz/1e9:.1f} GB) — they "
+          f"rebuild lazily on next use (first search/backtest per pair is "
+          f"slower). NOTE: any RUNNING campaign will rebuild mid-flight and "
+          f"its later legs will train on the refreshed window.", flush=True)
 
 
 if __name__ == "__main__":
