@@ -531,7 +531,7 @@ function rtrRender(){
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
     return `<tr><td>${e.name}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
-      <td>${e.strategy||''}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
+      <td>${stratName(e.strategy)}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
       <td>${e.method||''}</td>
       <td><button onclick="rtrRemove('${e.name}')" title="remove">✕</button></td></tr>`;}).join('');
 }
