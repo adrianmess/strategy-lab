@@ -380,6 +380,8 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <option value="merged">merged runs only</option>
       <option value="gauntlet">✓ passed all 5 holdouts</option>
       <option value="nocamp">manual runs only</option>
+      <option value="routers">🔀 routers only</option>
+      <option value="norouters">hide routers</option>
     </select>
     <label data-x="gapmode" style="cursor:pointer;margin-left:14px">Backtest gap handling</label>
     <select id="gapMode" style="font-size:12px;padding:3px 6px"><option value="skip_contaminated">skip_contaminated (default)</option><option value="skip_open">skip_open</option></select></span></h2>
@@ -877,6 +879,8 @@ function renderRuns(){
                                              || /(^|_)merge(_|d_|$)/.test(r.name))
              : lf==='gauntlet'? RUNS.filter(r=>r._gauntlet && r._gauntlet.full && r._gauntlet.passed===5)
              : lf==='trading'? RUNS.filter(r=>r.trading||r.running)
+             : lf==='routers'? RUNS.filter(r=>['metax','metax2','pairx','fcfsx'].includes(r.strategy))
+             : lf==='norouters'? RUNS.filter(r=>!['metax','metax2','pairx','fcfsx'].includes(r.strategy))
              : RUNS;
   if(q) base = base.filter(r=>r.name.toLowerCase().includes(q)
                              || (r.strategy||'').toLowerCase().includes(q)

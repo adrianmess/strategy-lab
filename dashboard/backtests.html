@@ -118,6 +118,12 @@ button.rtradd.on{opacity:1;filter:none}
       <select id="fStrat" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
       </select></label>
+    <label class="hint" title="routers/combos are the composed entries (MetaX, MetaX2, PairX, FCFS) — everything else is a single-strategy run">routers
+      <select id="fRouters" onchange="saveBtFilters()" style="margin-left:4px">
+        <option value="all">all</option>
+        <option value="only">routers only</option>
+        <option value="hide">hide routers</option>
+      </select></label>
     <label class="hint">pair
       <select id="fPair" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -586,6 +592,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterMode', document.getElementById('fMode').value);
   localStorage.setItem('btFilterPair', document.getElementById('fPair').value);
   localStorage.setItem('btFilterTf', document.getElementById('fTf').value);
+  localStorage.setItem('btFilterRouters', document.getElementById('fRouters').value);
   localStorage.setItem('btFilterStrat', document.getElementById('fStrat').value);
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
@@ -622,6 +629,8 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   });
   const ftf = localStorage.getItem('btFilterTf') || 'all';
   tf_.value = [...tf_.options].some(o=>o.value===ftf) ? ftf : 'all';
+  const frt = localStorage.getItem('btFilterRouters');
+  document.getElementById('fRouters').value = ['only','hide'].includes(frt) ? frt : 'all';
   ss_.dataset.opts = '(init)';
   const fst = localStorage.getItem('btFilterStrat') || 'all';
   ss_.value = [...ss_.options].some(o=>o.value===fst) ? fst : 'all';
@@ -703,6 +712,10 @@ function render(){
   if(fPairV !== 'all') order = order.filter(i=>(BT[i].pair||'SOL_USDT') === fPairV);
   const fTfV = document.getElementById('fTf').value;
   if(fTfV !== 'all') order = order.filter(i=>tfNorm(BT[i].timeframe) === fTfV);
+  const fRtV = document.getElementById('fRouters').value;
+  const _isRtr = i => ['metax','metax2','pairx','fcfsx'].includes(BT[i].strategy);
+  if(fRtV === 'only') order = order.filter(_isRtr);
+  else if(fRtV === 'hide') order = order.filter(i=>!_isRtr(i));
   if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
@@ -745,7 +758,7 @@ function render(){
   const fStratV = ss_.value;
   if(fStratV !== 'all') order = order.filter(i=>(BT[i].strategy||'unknown') === fStratV);
   document.getElementById('fCount').textContent =
-    (fModeV!=='all'||fPairV!=='all'||fTfV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
+    (fModeV!=='all'||fPairV!=='all'||fTfV!=='all'||fRtV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
