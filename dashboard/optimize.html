@@ -961,7 +961,7 @@ function renderRuns(){
           : `<span class="badge b-amber">no WF</span>`}
         <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_fcfs_full')}" title="full-history FCFS replay (parameter-free merge; component choice is the hindsight)">bt full ↗</a>
         <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_fcfs_wf')}" title="causal walk-forward sibling — the honest number">bt WF ↗</a>
-        <button class="small" title="RE-SIMULATE this combo with the candle data currently on disk — same components, same name; overwrites its _fcfs_full and _fcfs_wf backtests and re-issues the PASS/FAIL verdict. Use after 'Refresh market data' to extend the replay to today." onclick="routerRunJob('fcfsx_rerun','${r.name}')">Re-run</button>
+        <button class="small" title="FULL evidence-chain refresh on the candle data currently on disk: first re-runs EVERY component's own backtests (their _full and _oosbest_full entries — these go stale after a data refresh), then re-simulates the combo itself (same components, same name; overwrites _fcfs_full/_fcfs_wf and re-issues the verdict). One job in the Jobs section; with many components it takes a while." onclick="routerRunJob('fcfsx_rerun','${r.name}')">Re-run</button>
         <button class="small" title="reproduction command (exact component list included)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',0,'fcfsx')">Cmd</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}

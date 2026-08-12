@@ -1900,8 +1900,12 @@ def job_router():
             return jsonify(error=f"component run(s) no longer exist: "
                                  f"{missing[:3]}"), 400
         name = rn
-        cmd = [sys.executable, "fcfsx_cli.py", "--name", rn,
-               "--runs", ",".join(comps)]
+        # full evidence-chain refresh: every component's backtests first
+        # (their _full/_oosbest_full entries go stale when data refreshes),
+        # THEN the combo's own replay + verdict
+        cmd = [sys.executable,
+               os.path.join(os.path.dirname(AT.rstrip("/")), "scripts",
+                            "refresh_combo.py"), rn]
         try:
             _md = float(d.get("maxdd") or 0)
         except (TypeError, ValueError):
