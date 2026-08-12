@@ -27,3 +27,5 @@ adaptive_trader/mexc_api_keys.json
 adaptive_trader/notify_config.json
 dashboard/backtests.js
 dashboard/bt_detail/
+ip_proxies_APIs
+adaptive_trader/proxy_pool.json

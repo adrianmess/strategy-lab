@@ -4,6 +4,7 @@
 Fetches Min1 and Min3 klines for the configured symbol and maintains a
 rolling history long enough for all indicators/regime windows (>= 35 days).
 """
+import os
 import time
 import json
 import asyncio
@@ -16,6 +17,37 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://contract.mexc.com/api/v1/contract/kline"
 WS_URL = "wss://contract.mexc.com/edge"
+
+# ---- dedicated proxy pool (adaptive_trader/proxy_pool.json, optional) ----
+# Each port is a fixed exit IP. Feeds pick a stable port per (symbol, tf) so
+# every feed keeps its own IP identity and MEXC rate limits never interact.
+# The WebSocket tick stream stays direct (public, not rate-limited the same
+# way; kline close is the fallback there anyway).
+_POOL = None
+def _load_pool():
+    global _POOL
+    if _POOL is None:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "proxy_pool.json")
+        try:
+            pc = json.load(open(p))
+            _POOL = [f"http://{pc['username']}:{pc['password']}@"
+                     f"{pc['host']}:{port}" for port in pc["ports"]]
+        except Exception:
+            _POOL = []
+    return _POOL
+
+def pool_proxy(key=None, index=None):
+    """Proxy dict for requests: explicit index, or a DETERMINISTIC hash of
+    key (crc32 — python's hash() is per-process randomized)."""
+    pool = _load_pool()
+    if not pool:
+        return None
+    if index is None:
+        import zlib
+        index = zlib.crc32(str(key or "").encode()) % len(pool)
+    url = pool[index % len(pool)]
+    return {"http": url, "https": url}
 
 
 class LivePrice:
@@ -110,9 +142,10 @@ HISTORY_DAYS = 35          # rolling window kept in memory
 MAX_PER_REQ = 2000         # MEXC returns up to ~2000 points
 
 
-def _fetch(symbol: str, interval: str, start: int, end: int) -> pd.DataFrame:
+def _fetch(symbol: str, interval: str, start: int, end: int,
+           proxies=None) -> pd.DataFrame:
     url = f"{BASE}/{symbol}?interval={interval}&start={start}&end={end}"
-    r = requests.get(url, timeout=15)
+    r = requests.get(url, timeout=15, proxies=proxies)
     r.raise_for_status()
     j = r.json()
     if not j.get("success"):
@@ -128,18 +161,19 @@ def _fetch(symbol: str, interval: str, start: int, end: int) -> pd.DataFrame:
     return df
 
 
-def fetch_range(symbol: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
+def fetch_range(symbol: str, interval: str, start_ts: int, end_ts: int,
+                proxies=None) -> pd.DataFrame:
     """Paginate through [start_ts, end_ts] (unix seconds). MEXC has no Min3
     interval, so 3m bars are resampled from Min1."""
     if interval == "Min3":
-        df1 = fetch_range(symbol, "Min1", start_ts, end_ts)
+        df1 = fetch_range(symbol, "Min1", start_ts, end_ts, proxies=proxies)
         return resample_3m(df1)
     step = {"Min1": 60}[interval] * MAX_PER_REQ
     out = []
     cur = start_ts
     while cur < end_ts:
         chunk_end = min(cur + step, end_ts)
-        df = _fetch(symbol, interval, cur, chunk_end)
+        df = _fetch(symbol, interval, cur, chunk_end, proxies=proxies)
         if len(df):
             out.append(df)
         cur = chunk_end
@@ -175,20 +209,27 @@ def resample_3m(df1: pd.DataFrame) -> pd.DataFrame:
 
 class Feed:
     def __init__(self, symbol: str, live: bool = True, anchored: bool = False,
-                 tf_min: int = 3):
+                 tf_min: int = 3, proxy_index=None):
         self.symbol = symbol
         self.tf_min = int(tf_min)   # chart bar minutes (1/3/5)
         self.df3 = None             # NOTE: named df3 historically; holds
         self.df1 = None             # tf_min-bars whatever the timeframe
         self.anchored = anchored
         self.trim_ok = False    # trader sets True when flat (anchored mode)
+        # dedicated proxy: explicit index, else stable per (symbol, tf) —
+        # every feed keeps its own exit IP when a pool file is present
+        self.proxies = pool_proxy(key=f"{symbol}@{tf_min}", index=proxy_index)
+        if self.proxies:
+            logger.info("feed %s/%dm: dedicated proxy #%s", symbol, tf_min,
+                        proxy_index if proxy_index is not None else "auto")
         self.live = LivePrice(symbol) if live else None
 
     def backfill(self):
         end = int(time.time())
         start = end - HISTORY_DAYS * 86400
         logger.info("Backfilling %d days of klines...", HISTORY_DAYS)
-        self.df1 = fetch_range(self.symbol, "Min1", start, end)
+        self.df1 = fetch_range(self.symbol, "Min1", start, end,
+                               proxies=self.proxies)
         self.df3 = resample_tf(self.df1, self.tf_min)
         logger.info("Backfill done: %d %dm bars, %d 1m bars",
                     len(self.df3), self.tf_min, len(self.df1))
@@ -200,7 +241,7 @@ class Feed:
         chart bar (tf_min minutes) arrived since last call."""
         end = int(time.time())
         start = end - 3600  # last hour is plenty
-        new1 = _fetch(self.symbol, "Min1", start, end)
+        new1 = _fetch(self.symbol, "Min1", start, end, proxies=self.proxies)
         prev_last = self.df3["t"].iloc[-1] if len(self.df3) else None
         self.df1 = (pd.concat([self.df1, new1], ignore_index=True)
                     .drop_duplicates("t", keep="last").sort_values("t").reset_index(drop=True))

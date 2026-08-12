@@ -37,7 +37,27 @@ TYPE_MARKET = 5
 ISOLATED, CROSS = 1, 2
 
 
-def _load_proxies():
+def _load_proxies(account=None):
+    """Dedicated pool first (adaptive_trader/proxy_pool.json): each account
+    gets its own stable exit IP (mexc1 -> first port, mexc2 -> second, ...).
+    Falls back to the legacy single-proxy proxy_config.json."""
+    try:
+        pc = json.load(open(os.path.join(HERE, "proxy_pool.json")))
+        ports = pc["ports"]
+        idx = 0
+        if account:
+            import re as _re
+            m = _re.search(r"(\d+)$", account)     # mexc1 -> 0, mexc2 -> 1
+            if m:
+                idx = (int(m.group(1)) - 1) % len(ports)
+            else:
+                import zlib
+                idx = zlib.crc32(account.encode()) % len(ports)
+        url = (f"http://{pc['username']}:{pc['password']}@"
+               f"{pc['host']}:{ports[idx]}")
+        return {"http": url, "https": url}
+    except Exception:
+        pass
     try:
         pc = json.load(open(PROXY_FILE))
         server = (pc.get("server") or "").replace("http://", "")
@@ -80,7 +100,7 @@ class MexcFuturesAPI:
                 via_proxy = bool(acct.get("via_proxy", True))
         self.ak, self.sk = access_key, secret_key
         self.timeout = timeout
-        self.proxies = _load_proxies() if via_proxy else None
+        self.proxies = _load_proxies(self.account) if via_proxy else None
         if via_proxy and not self.proxies:
             raise RuntimeError("via_proxy=true but proxy_config.json is not "
                                "usable — the IP-linked API key would be "
@@ -197,7 +217,7 @@ class MexcSpotAPI:
                 via_proxy = bool(acct.get("via_proxy", True))
         self.ak, self.sk = access_key, secret_key
         self.timeout = timeout
-        self.proxies = _load_proxies() if via_proxy else None
+        self.proxies = _load_proxies(self.account) if via_proxy else None
         if via_proxy and not self.proxies:
             raise RuntimeError("via_proxy=true but proxy_config.json unusable")
 

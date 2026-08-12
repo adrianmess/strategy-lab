@@ -44,13 +44,17 @@ def main():
     tf_min = int(spec["tf_min"])
     mode = spec["mode"]
     comps = spec["components"]
-    # pace kline polling by timeframe: many hosts share one IP and MEXC
-    # rate-limits aggressively (code 510). 1m bars need ~5s latency; slower
-    # charts can poll far less often. The WebSocket tick price is unaffected.
-    poll = max(float(spec.get("poll_seconds", 3)),
-               5.0 if tf_min == 1 else 12.0)
+    proxy_index = spec.get("proxy_index")
+    if proxy_index is not None:
+        # own dedicated exit IP: no shared rate limit — poll at full cadence
+        poll = max(float(spec.get("poll_seconds", 3)),
+                   3.0 if tf_min == 1 else 6.0)
+    else:
+        # shared IP: pace by timeframe, MEXC 510-rate-limits aggressively
+        poll = max(float(spec.get("poll_seconds", 3)),
+                   5.0 if tf_min == 1 else 12.0)
     import random
-    time.sleep(random.uniform(0, poll))     # desynchronize the fleet
+    time.sleep(random.uniform(0, min(poll, 4)))   # desynchronize the fleet
     assert os.environ.get("LAB_TF") == str(tf_min), \
         f"LAB_TF={os.environ.get('LAB_TF')} != tf {tf_min}"
 
@@ -59,7 +63,8 @@ def main():
     from strategy_metax import (_extend, _ts16, compute_features,
                                 run_component_engine, WARMUP)
 
-    feed = Feed(symbol, anchored=True, tf_min=tf_min)
+    feed = Feed(symbol, anchored=True, tf_min=tf_min,
+                proxy_index=proxy_index)
     for attempt in range(12):
         try:
             feed.backfill()
