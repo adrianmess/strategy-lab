@@ -145,7 +145,8 @@ MAX_PER_REQ = 2000         # MEXC returns up to ~2000 points
 def _fetch(symbol: str, interval: str, start: int, end: int,
            proxies=None) -> pd.DataFrame:
     url = f"{BASE}/{symbol}?interval={interval}&start={start}&end={end}"
-    r = requests.get(url, timeout=15, proxies=proxies)
+    # 25s: residential ISP proxies add latency; 15s produced false timeouts
+    r = requests.get(url, timeout=25, proxies=proxies)
     r.raise_for_status()
     j = r.json()
     if not j.get("success"):
@@ -222,7 +223,35 @@ class Feed:
         if self.proxies:
             logger.info("feed %s/%dm: dedicated proxy #%s", symbol, tf_min,
                         proxy_index if proxy_index is not None else "auto")
+        self._perr = 0           # consecutive proxy failures
+        self._fb_until = 0.0     # direct-connection fallback window
         self.live = LivePrice(symbol) if live else None
+
+    def _kl(self, interval, start, end):
+        """Kline fetch with automatic DIRECT fallback: if the dedicated proxy
+        fails repeatedly (e.g. a provider outage like the 2026-08-12 502s),
+        data continuity wins — go direct for 5 minutes, then retry the proxy.
+        The identity concern is secondary to a live position going blind."""
+        px = self.proxies
+        if px and time.time() < self._fb_until:
+            px = None
+        try:
+            df = _fetch(self.symbol, interval, start, end, proxies=px)
+            if px is not None:
+                self._perr = 0
+            return df
+        except requests.exceptions.RequestException as e:
+            s = str(e).lower()
+            if px is not None and ("proxy" in s or "tunnel" in s
+                                   or "timed out" in s):
+                self._perr += 1
+                if self._perr >= 2:
+                    self._fb_until = time.time() + 300
+                    logger.warning("feed %s: proxy failing (%d in a row) — "
+                                   "DIRECT fallback for 5 min", self.symbol,
+                                   self._perr)
+                return _fetch(self.symbol, interval, start, end, proxies=None)
+            raise
 
     def backfill(self):
         end = int(time.time())
@@ -241,7 +270,7 @@ class Feed:
         chart bar (tf_min minutes) arrived since last call."""
         end = int(time.time())
         start = end - 3600  # last hour is plenty
-        new1 = _fetch(self.symbol, "Min1", start, end, proxies=self.proxies)
+        new1 = self._kl("Min1", start, end)
         prev_last = self.df3["t"].iloc[-1] if len(self.df3) else None
         self.df1 = (pd.concat([self.df1, new1], ignore_index=True)
                     .drop_duplicates("t", keep="last").sort_values("t").reset_index(drop=True))

@@ -124,7 +124,9 @@ def main():
             time.sleep(poll)
         except Exception as ex:
             msg = str(ex)
-            if "510" in msg or "frequent" in msg.lower():
+            # match the MEXC 510 code precisely — epoch timestamps in URLs
+            # can contain the substring "510" (caused false backoffs)
+            if "'code': 510" in msg or "frequent" in msg.lower():
                 import random
                 w = 20 + random.uniform(0, 15)
                 emit(dict(e="log", msg=f"rate-limited — backing off {w:.0f}s"))
