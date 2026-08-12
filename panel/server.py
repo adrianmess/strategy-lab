@@ -1995,6 +1995,50 @@ def gamut_workers_ctl():
     return jsonify(ok=("ERROR" not in txt), output=txt.strip())
 
 
+@app.route("/api/trades")
+def trades_history():
+    """Position events from adaptive_trader/notifications.log (every trader
+    writes there — dry AND live, marked). Newest first.
+    Params: config=<file.json> to filter, limit=N (default 50)."""
+    limit = min(int(request.args.get("limit", 50)), 500)
+    want_cfg = request.args.get("config")
+    p = os.path.join(AT, "notifications.log")
+    out = []
+    try:
+        with open(p, "rb") as f:            # tail-read: file grows forever
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 2_000_000))
+            lines = f.read().decode(errors="replace").splitlines()
+    except FileNotFoundError:
+        lines = []
+    for ln in reversed(lines):
+        if len(out) >= limit:
+            break
+        try:
+            e = json.loads(ln)
+        except Exception:
+            continue
+        if e.get("event") not in ("position_opened", "position_closed"):
+            continue
+        if want_cfg and e.get("config") != want_cfg:
+            continue
+        pos = e.get("position") or {}
+        out.append(dict(
+            at=e.get("at"), event=("OPEN" if e["event"] == "position_opened"
+                                   else "CLOSE"),
+            config=e.get("config"), account=e.get("account"),
+            symbol=e.get("symbol"),
+            side=e.get("side") or ({1: "LONG", -1: "SHORT"}
+                                   .get(pos.get("dir")) if pos else None),
+            qty=e.get("qty") or pos.get("qty"),
+            lev=e.get("lev") or pos.get("lev"),
+            price=e.get("price"),
+            entry_price=pos.get("entry_price"),
+            reason=e.get("reason"), comp=e.get("comp"),
+            live=bool(e.get("live")), result=e.get("result")))
+    return jsonify(trades=out)
+
+
 @app.route("/api/settings/proxies")
 def settings_proxies():
     """Proxy-pool summary for the Settings page — never returns credentials."""

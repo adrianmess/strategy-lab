@@ -97,6 +97,20 @@ details.term > pre{margin-top:4px}
 <div id="instWrap"></div>
 
 <h2 style="display:flex;justify-content:space-between;align-items:center">
+  <span>Recent trades <span class="note">— every position event from ALL instances (from notifications.log); DRY badges are paper trades, LIVE are real</span></span>
+  <span class="row" style="gap:6px;text-transform:none;letter-spacing:0">
+    <select id="trCfgSel" class="small" onchange="loadTrades()" style="font-size:12px"><option value="">all configs</option></select>
+    <button class="small" onclick="loadTrades()">↻ refresh</button>
+  </span>
+</h2>
+<div class="card" style="max-height:340px;overflow:auto">
+  <table id="tradesT" style="width:100%;font-size:12px">
+    <thead><tr><th>time</th><th>event</th><th>mode</th><th>config</th><th>symbol</th><th>side</th><th>qty</th><th>lev</th><th>price</th><th>component / reason</th></tr></thead>
+    <tbody><tr><td colspan="10" class="kv">loading…</td></tr></tbody>
+  </table>
+</div>
+
+<h2 style="display:flex;justify-content:space-between;align-items:center">
   <span>MEXC accounts <span class="note">— live balances &amp; open positions via API (read-only)</span></span>
   <span class="row" style="gap:6px;text-transform:none;letter-spacing:0">
     <span class="note" id="mexcStamp"></span>
@@ -122,13 +136,6 @@ details.term > pre{margin-top:4px}
   <table id="procT"><thead><tr><th>kind</th><th>instance</th><th>pid</th><th>started</th><th>flags</th><th>command</th><th></th></tr></thead><tbody><tr><td colspan="7" class="kv">scanning…</td></tr></tbody></table>
   <div class="row" style="margin-top:6px"><button class="small" onclick="refreshProcs()">↻ rescan</button>
     <span class="note">“hidden” = not started by this panel (terminal-started or orphaned). More than one trader, or an executor you don't recognize, is exactly what this table is for.</span></div>
-</div>
-
-<h2>Configs & optimizer runs <span class="note">— ★ / stars come from your marks on the Optimize page</span></h2>
-<div class="card">
-  <table id="cfgT"><thead><tr><th></th><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
-  <div class="note" style="margin-top:6px">“Backtest” publishes to the Backtests page. “Adopt” copies the parameters into the selected trader config (with automatic backup).
-  Adopt target: <select id="adoptTarget"></select></div>
 </div>
 
 <h2>Run a backtest</h2>
@@ -166,6 +173,17 @@ details.term > pre{margin-top:4px}
 
 <h2>Jobs</h2>
 <div class="card" id="jobs">no jobs yet</div>
+
+<details id="cfgDetails" style="margin-top:18px">
+  <summary style="cursor:pointer;outline:none">
+    <h2 style="display:inline-block;margin:0">Configs &amp; optimizer runs <span class="note">— ★ / stars come from your marks on the Optimize page · click to expand</span></h2>
+  </summary>
+  <div class="card" style="margin-top:8px">
+    <table id="cfgT"><thead><tr><th></th><th>config</th><th>strategy</th><th>mode</th><th>regime</th><th>fit eq ($1k start)</th><th>DD</th><th>trades</th><th>actions</th></tr></thead><tbody></tbody></table>
+    <div class="note" style="margin-top:6px">“Backtest” publishes to the Backtests page. “Adopt” copies the parameters into the selected trader config (with automatic backup).
+    Adopt target: <select id="adoptTarget"></select></div>
+  </div>
+</details>
 
 </main>
 <script>
@@ -822,6 +840,42 @@ setInterval(refresh, 4000);
 setInterval(refreshConfigs, 20000);
 setInterval(refreshProcs, 10000);
 setInterval(refreshMexc, 20000);
+
+// ---- recent trades (dry + live, from notifications.log) ----
+async function loadTrades(){
+  const cfg = document.getElementById('trCfgSel').value;
+  const r = await fetch('/api/trades?limit=80' + (cfg ? '&config=' + encodeURIComponent(cfg) : ''));
+  const d = await r.json();
+  const tb = document.querySelector('#tradesT tbody');
+  const rows = (d.trades || []).map(t => {
+    const mode = t.live
+      ? '<b style="color:var(--red,#f85149)">LIVE</b>'
+      : '<span style="color:var(--amber,#d29922)">DRY</span>';
+    const ev = t.event === 'OPEN'
+      ? '<b style="color:var(--green,#3fb950)">OPEN</b>'
+      : '<b style="color:#58a6ff">CLOSE</b>';
+    const detail = [t.comp, t.reason].filter(Boolean).join(' · ');
+    const px = t.price != null ? t.price : '';
+    const entry = (t.event === 'CLOSE' && t.entry_price != null)
+      ? ` <span class="kv">(entry ${t.entry_price})</span>` : '';
+    return `<tr><td class="kv">${t.at || ''}</td><td>${ev}</td><td>${mode}</td>
+      <td class="kv">${(t.config || '').replace(/^config_?|\.json$/g, '') || 'main'}</td>
+      <td>${t.symbol || ''}</td><td>${t.side || ''}</td>
+      <td>${t.qty ?? ''}</td><td>${t.lev ?? ''}</td>
+      <td>${px}${entry}</td><td class="kv">${detail}</td></tr>`;
+  });
+  tb.innerHTML = rows.length ? rows.join('')
+    : '<tr><td colspan="10" class="kv">no position events yet' + (cfg ? ' for this config' : '') + ' — dry-run trades will appear here the moment a virtual position opens</td></tr>';
+  // config filter options (from all events, once)
+  const sel = document.getElementById('trCfgSel');
+  if(sel.options.length <= 1 && !cfg){
+    [...new Set((d.trades || []).map(t => t.config).filter(Boolean))].sort()
+      .forEach(c => { const o = document.createElement('option'); o.value = c;
+        o.textContent = c.replace(/^config_?|\.json$/g, '') || 'main'; sel.appendChild(o); });
+  }
+}
+loadTrades();
+setInterval(loadTrades, 30000);
 </script>
 </body>
 </html>

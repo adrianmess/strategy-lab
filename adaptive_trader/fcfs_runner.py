@@ -195,6 +195,7 @@ def main_fcfs(cfg, live):
         notify("position_closed", account="fcfs",
                config=os.path.basename(cfg.get("_path", "?")),
                symbol=pos["symbol"], reason=reason, price=px,
+               comp=comp_label(pos["comp"]),
                live=(not cfg["dry_run"]), result=(res or {}).get("status"))
         if (res or {}).get("status") == "error":
             notify("order_failed", account="fcfs", action="close",
@@ -235,7 +236,8 @@ def main_fcfs(cfg, live):
             notify("position_opened", account="fcfs",
                    config=os.path.basename(cfg.get("_path", "?")),
                    symbol=c["pair"], side=("LONG" if d > 0 else "SHORT"),
-                   qty=qty, lev=lev, price=px, live=(not cfg["dry_run"]))
+                   qty=qty, lev=lev, price=px, comp=comp_label(i),
+                   live=(not cfg["dry_run"]))
             save(); tell_flat()
             return bar_t
 
