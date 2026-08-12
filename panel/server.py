@@ -1875,6 +1875,12 @@ def job_router():
         # overwrites its _fcfs_full/_fcfs_wf backtests and verdict) with
         # whatever candle data is on disk NOW
         rn = d.get("run") or ""
+        for j in jobs.values():   # one rerun per combo at a time
+            if j.get("kind") == "router" and j.get("name") == rn \
+                    and j["proc"].poll() is None:
+                return jsonify(error=f"a re-run of '{rn}' is already running "
+                                     f"— watch it in the Jobs section (cache "
+                                     f"rebuilds make the first one slow)"), 400
         if not re.fullmatch(r"[A-Za-z0-9_.\-]+", rn):
             return jsonify(error=f"bad run name '{rn}'"), 400
         try:

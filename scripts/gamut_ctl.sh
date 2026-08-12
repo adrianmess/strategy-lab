@@ -32,6 +32,22 @@ case "${1:-status}" in
   pause)
     [ -z "$ROOTS" ] && { echo "NOTHING"; exit 0; }
     for p in $(tree $ROOTS | sort -un); do kill -STOP "$p" 2>/dev/null; done
+    # deadlock guard: a frozen child caught mid-publish holds the
+    # backtests.js flock and would block every other publisher on the
+    # machine (fcfsx reruns, merges, the panel). Un-freeze lock holders —
+    # they finish their seconds-long write, exit, and release the lock.
+    if command -v lsof >/dev/null 2>&1; then
+      for L in "$HOME/strategy-lab/dashboard/backtests.js.lock" \
+               "$HOME/Code/strategy-lab/dashboard/backtests.js.lock"; do
+        [ -e "$L" ] || continue
+        for p in $(lsof -t "$L" 2>/dev/null); do
+          case "$(ps -o stat= -p "$p" 2>/dev/null)" in
+            *T*) kill -CONT "$p" 2>/dev/null
+                 echo "RELEASED lock-holder $p (finishes its publish)";;
+          esac
+        done
+      done
+    fi
     echo "PAUSED"
     ;;
   resume)
