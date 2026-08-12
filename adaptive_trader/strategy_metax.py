@@ -136,79 +136,11 @@ class StrategyMetax:
 
     # ---------------- component virtual runs (engine-exact) ----------------
     def _features(self, df3):
-        pre = dict(c=df3["close"].to_numpy(), h=df3["high"].to_numpy(),
-                   l=df3["low"].to_numpy(), vol=df3["volume"].to_numpy())
-        return regime_features(pre)
+        return compute_features(df3)
 
     def _run_component(self, comp, df3, df1, feats):
-        """Run one component's engine over the (synthetic-extended) window.
-        Returns (trades_df, open_pos_or_None)."""
-        strat, cand = comp["strategy"], comp["cand"]
-        method = comp.get("method", "vol3")
-        reg, R = make_regimes(feats, method)
-        warmup = min(WARMUP, max(0, len(df3) - 200))
-        comm = FUT_COMM if self.mode == "lev" else SPOT_COMM
-        if strat == "macdx":
-            from macdx_engine import precompute_macdx, run_macdx_P, MACDX_DEFAULTS
-            from wf2 import build_P_macdx
-            pre = precompute_macdx(df3, df1, MACDX_DEFAULTS)
-            P = build_P_macdx(cand, R)
-            tr, eq, liq, op = run_macdx_P(pre, P, regime=reg, warmup=warmup,
-                                          initial_capital=1000.0,
-                                          commission=comm, return_open=True)
-            return tr, op
-        if strat == "scalpx":
-            from scalp_engine import scalp_precompute, run_scalp
-            from wf2 import build_P_scalpx
-            pre = scalp_precompute(df3)
-            P = build_P_scalpx(cand, R)
-            tr, eq, liq, op = run_scalp(pre, P, regime=reg, warmup=warmup,
-                                        initial_capital=1000.0, commission=comm,
-                                        liq_threshold=(-1.0 if self.mode == "lev"
-                                                       else 1e9),
-                                        return_open=True)
-            return tr, op
-        if strat == "scalpx2":
-            from scalp_engine import scalp_precompute2, run_scalp2
-            from wf2 import build_P_scalpx2
-            pre = scalp_precompute2(df3)
-            P, vidx = build_P_scalpx2(cand, R)
-            tr, eq, liq, op = run_scalp2(pre, P, vidx, regime=reg, warmup=warmup,
-                                         initial_capital=1000.0, commission=comm,
-                                         liq_threshold=(-1.0 if self.mode == "lev"
-                                                        else 1e9),
-                                         return_open=True)
-            return tr, op
-        if strat in ("v7", "prime7"):
-            from engine3 import precompute3, run3
-            from optimizer2 import build_P3
-            pre = precompute3(df3, df1)
-            P = build_P3(cand)
-            if P.shape[0] != R:
-                P = np.vstack([P[min(i, P.shape[0] - 1)] for i in range(R)])
-            use_sl = (self.mode == "spot") or bool(cand.get("lev_stops"))
-            tr, eq, liq, op = run3(pre, P, regime=reg, warmup=warmup,
-                                   initial_capital=1000.0, commission=comm,
-                                   use_sl=use_sl, dyn_liq=(self.mode == "lev"),
-                                   return_open=True)
-            return tr, op
-        if strat in ("prime", "v6"):
-            from fast_engine import precompute, run_fast
-            from adaptive import make_adaptive_pre
-            from wf2 import build_P_prime, build_P_v6, TREND_VARIANTS
-            pre0 = precompute(df3, df1)
-            tv = int(cand.get("tv", 0) or 0)
-            q, _f = make_adaptive_pre(pre0, trend_block_z=TREND_VARIANTS[tv])
-            P = (build_P_prime if strat == "prime" else build_P_v6)(cand, R)
-            use_sl = (self.mode == "spot") or bool(cand.get("lev_stops"))
-            tr, eq, liq, op = run_fast(q, P, regime=reg, warmup=warmup,
-                                       initial_capital=1000.0, commission=comm,
-                                       use_sl=use_sl,
-                                       liq_threshold=(-1.0 if self.mode == "lev"
-                                                      else 1e9),
-                                       return_open=True)
-            return tr, op
-        raise SystemExit(f"unsupported component family {strat}")
+        return run_component_engine(comp, self.mode, df3, df1, feats)
+
 
     # ---------------- router ----------------
     def on_bar_close(self, df3, df1):
@@ -290,3 +222,82 @@ class StrategyMetax:
             self.state["mirror"] = None     # stop tracking the virtual trade
             return dict(do="close", reason="emergency_exit")
         return None
+
+
+# ---------------- shared with the FCFS live hosts ----------------
+def compute_features(df3):
+    pre = dict(c=df3["close"].to_numpy(), h=df3["high"].to_numpy(),
+               l=df3["low"].to_numpy(), vol=df3["volume"].to_numpy())
+    return regime_features(pre)
+
+
+def run_component_engine(comp, mode, df3, df1, feats):
+    """Run one component's engine over the (synthetic-extended) window.
+    Returns (trades_df, open_pos_or_None). Module-level so both StrategyMetax
+    and the FCFS live hosts use the exact same engine-exact evaluation."""
+    strat, cand = comp["strategy"], comp["cand"]
+    method = comp.get("method", "vol3")
+    reg, R = make_regimes(feats, method)
+    warmup = min(WARMUP, max(0, len(df3) - 200))
+    comm = FUT_COMM if mode == "lev" else SPOT_COMM
+    if strat == "macdx":
+        from macdx_engine import precompute_macdx, run_macdx_P, MACDX_DEFAULTS
+        from wf2 import build_P_macdx
+        pre = precompute_macdx(df3, df1, MACDX_DEFAULTS)
+        P = build_P_macdx(cand, R)
+        tr, eq, liq, op = run_macdx_P(pre, P, regime=reg, warmup=warmup,
+                                      initial_capital=1000.0,
+                                      commission=comm, return_open=True)
+        return tr, op
+    if strat == "scalpx":
+        from scalp_engine import scalp_precompute, run_scalp
+        from wf2 import build_P_scalpx
+        pre = scalp_precompute(df3)
+        P = build_P_scalpx(cand, R)
+        tr, eq, liq, op = run_scalp(pre, P, regime=reg, warmup=warmup,
+                                    initial_capital=1000.0, commission=comm,
+                                    liq_threshold=(-1.0 if mode == "lev"
+                                                   else 1e9),
+                                    return_open=True)
+        return tr, op
+    if strat == "scalpx2":
+        from scalp_engine import scalp_precompute2, run_scalp2
+        from wf2 import build_P_scalpx2
+        pre = scalp_precompute2(df3)
+        P, vidx = build_P_scalpx2(cand, R)
+        tr, eq, liq, op = run_scalp2(pre, P, vidx, regime=reg, warmup=warmup,
+                                     initial_capital=1000.0, commission=comm,
+                                     liq_threshold=(-1.0 if mode == "lev"
+                                                    else 1e9),
+                                     return_open=True)
+        return tr, op
+    if strat in ("v7", "prime7"):
+        from engine3 import precompute3, run3
+        from optimizer2 import build_P3
+        pre = precompute3(df3, df1)
+        P = build_P3(cand)
+        if P.shape[0] != R:
+            P = np.vstack([P[min(i, P.shape[0] - 1)] for i in range(R)])
+        use_sl = (mode == "spot") or bool(cand.get("lev_stops"))
+        tr, eq, liq, op = run3(pre, P, regime=reg, warmup=warmup,
+                               initial_capital=1000.0, commission=comm,
+                               use_sl=use_sl, dyn_liq=(mode == "lev"),
+                               return_open=True)
+        return tr, op
+    if strat in ("prime", "v6"):
+        from fast_engine import precompute, run_fast
+        from adaptive import make_adaptive_pre
+        from wf2 import build_P_prime, build_P_v6, TREND_VARIANTS
+        pre0 = precompute(df3, df1)
+        tv = int(cand.get("tv", 0) or 0)
+        q, _f = make_adaptive_pre(pre0, trend_block_z=TREND_VARIANTS[tv])
+        P = (build_P_prime if strat == "prime" else build_P_v6)(cand, R)
+        use_sl = (mode == "spot") or bool(cand.get("lev_stops"))
+        tr, eq, liq, op = run_fast(q, P, regime=reg, warmup=warmup,
+                                   initial_capital=1000.0, commission=comm,
+                                   use_sl=use_sl,
+                                   liq_threshold=(-1.0 if mode == "lev"
+                                                  else 1e9),
+                                   return_open=True)
+        return tr, op
+    raise SystemExit(f"unsupported component family {strat}")

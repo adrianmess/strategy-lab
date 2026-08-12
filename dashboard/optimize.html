@@ -953,7 +953,8 @@ function renderRuns(){
         :'<span class="kv" title="Run both the holdout evaluation and a full backtest to fill this in">—</span>'}</td>
       <td>${hcell}</td>
       <td>${r.strategy==='fcfsx'?`
-        <span class="kv" title="First-come-first-served combo (fcfsx_cli): your exact components all live simultaneously, one shared slot, first signal wins. Research only — no live adapter; the panel refuses adoption. Backtest/Adopt/AI/Load-setup don't apply: there is no candidate pool and no launch-card setup behind this run.">FCFS combo</span>
+        <span class="kv" title="First-come-first-served combo (fcfsx_cli): your exact components all live simultaneously, one shared slot, first signal wins. Adoptable: the FCFS live adapter runs every component engine-exact across its pairs/timeframes with one shared slot. Backtest/AI/Load-setup don't apply: there is no candidate pool behind this run.">FCFS combo</span>
+        <button class="small" title="Adopt this combo for the live trader: writes config_fcfs_<name>.json with every component embedded + per-pair contract sizes. Starts as DRY-RUN — add it as an instance, start the trader, watch it mirror signals, then flip live (with the LIVE confirm) when satisfied." onclick="adoptFcfs('${r.name}')">Adopt</button>
         ${r.walkforward
           ? `<span class="badge ${r.walkforward.verdict==='PASS'?'b-green':'b-red'}" title="causal walk-forward: per-fold roster from past-only trades — chained OOS ${r.walkforward.oos_pct_mo>=0?'+':''}${(r.walkforward.oos_pct_mo??0).toFixed(1)}%/mo, dd ${Math.round(100*(r.walkforward.maxdd||0))}%, ${r.walkforward.n} trades over ${r.walkforward.folds} folds (${r.walkforward.at})">WF ${r.walkforward.verdict}</span>`
           : `<span class="badge b-amber">no WF</span>`}
@@ -1424,6 +1425,11 @@ async function routerJob(kind){
   const r = await api('jobs/router', d);
   $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));
   if(typeof refreshJobs==='function') refreshJobs();
+}
+async function adoptFcfs(run){
+  if(!confirm(`Adopt FCFS combo "${run}" for the live trader?\n\nThis writes its own config file (config_fcfs_….json) with every component embedded, starting as DRY-RUN. Nothing trades until you add the instance, start it, and explicitly flip it live.`)) return;
+  const r = await api('adopt', {source:`runs/${run}/best_config.json`, run_name:run});
+  alert(r.ok ? `${r.note}` : ('error: '+(r.error||'')));
 }
 async function routerRunJob(kind, run){
   const r = await api('jobs/router', {kind, run});

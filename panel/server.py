@@ -1363,16 +1363,86 @@ def adopt():
         src = os.path.join(OPT, src)
     target = os.path.join(AT, d.get("target", "config.json"))
     best = json.load(open(src))
-    if str(best.get("timeframe") or "3m") not in ("1m", "3m", "5m"):
+    _strat = best.get("strategy") or (best.get("cand") or {}).get("strategy")
+    if _strat != "fcfsx" \
+            and str(best.get("timeframe") or "3m") not in ("1m", "3m", "5m"):
         return jsonify(error=f"unsupported timeframe "
                              f"{best.get('timeframe')!r} — the live trader "
                              f"supports 1m, 3m and 5m."), 400
-    _strat = best.get("strategy") or (best.get("cand") or {}).get("strategy")
-    if _strat in ("metax2", "pairx", "fcfsx"):
-        return jsonify(error=f"'{_strat}' runs (cross-timeframe/multi-pair "
-                             f"routers) have no live adapter yet — research "
-                             f"artifacts. The multi-pair live trader is the "
-                             f"next build."), 400
+    if _strat in ("metax2", "pairx"):
+        return jsonify(error=f"'{_strat}' runs have no live adapter yet — "
+                             f"research artifacts."), 400
+    if _strat == "fcfsx":
+        # FCFS combo adopt: embed every component's cand + pair/timeframe and
+        # the per-pair contract sizes, into its own config file (dry-run).
+        comps_in = (best.get("cand") or {}).get("components") or []
+        if len(comps_in) < 2:
+            return jsonify(error="fcfsx run has fewer than 2 components"), 400
+        comps, pairs = [], set()
+        for c in comps_in:
+            try:
+                cc = json.load(open(os.path.join(OPT, "runs", c["run"],
+                                                 c["file"])))
+            except Exception as e:
+                return jsonify(error=f"component '{c.get('run')}' can't be "
+                                     f"loaded: {e}"), 400
+            fam = c.get("strategy") or cc.get("strategy")
+            if fam not in ("macdx", "scalpx", "scalpx2", "v7", "prime7",
+                           "prime", "v6"):
+                return jsonify(error=f"component family '{fam}' has no live "
+                                     f"runner"), 400
+            comps.append(dict(strategy=fam,
+                              method=cc.get("method", "vol3"),
+                              run=c["run"], file=c["file"],
+                              pair=c.get("pair") or cc.get("pair"),
+                              timeframe=str(c.get("timeframe")
+                                            or cc.get("timeframe") or "3m"),
+                              cand=cc["cand"]))
+            pairs.add(comps[-1]["pair"])
+        csizes = {}
+        import requests
+        for p in sorted(pairs):
+            try:
+                r = requests.get("https://contract.mexc.com/api/v1/contract/"
+                                 f"detail?symbol={p}", timeout=10).json()
+                csizes[p] = float(r["data"]["contractSize"])
+            except Exception:
+                pass
+        missing_cs = sorted(pairs - set(csizes))
+        if best.get("mode") == "lev" and missing_cs:
+            return jsonify(error=f"couldn't fetch contract sizes for "
+                                 f"{missing_cs} from MEXC — retry"), 400
+        rname = d.get("run_name") or os.path.basename(os.path.dirname(src))
+        suffix = "fcfs_" + re.sub(r"[^A-Za-z0-9_]+", "", rname)[:40]
+        tname = f"config_{suffix}.json"
+        target = os.path.join(AT, tname)
+        created = not os.path.exists(target)
+        if created:
+            cfg = json.load(open(os.path.join(AT, "config.json")))
+            cfg.pop("candidate", None)
+            cfg.pop("adopted_from", None)
+        else:
+            cfg = json.load(open(target))
+            import shutil
+            shutil.copy(target, target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+        cfg.update(dry_run=True,
+                   state_file=f"trader_state_{suffix}.json",
+                   log_file=f"trader_{suffix}.log",
+                   mode=best.get("mode", "lev"),
+                   timeframe="3m",   # cosmetic; components carry their own
+                   contract_sizes=csizes,
+                   candidate=dict(strategy="fcfsx",
+                                  mode=best.get("mode", "lev"),
+                                  components=comps,
+                                  source_run=rname))
+        cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
+        json.dump(cfg, open(target, "w"), indent=1)
+        return jsonify(ok=True, target=tname, created=created,
+                       note=(f"FCFS combo adopted into {tname} "
+                             f"({len(comps)} components across "
+                             f"{len(pairs)} pairs; starts as DRY-RUN). "
+                             f"Add it as an instance, start the trader, soak "
+                             f"dry, then flip live with confirm."))
     if (best.get("cand") or {}).get("stack"):
         return jsonify(error="this is a method-STACKED router (research "
                              "artifact) — no live adapter yet. Adopt the "

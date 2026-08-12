@@ -238,6 +238,12 @@ def main():
     with open(cfg_path) as f:
         cfg = json.load(f)
     cfg["_path"] = cfg_path   # router strategies hot-reload re-assignments
+    # FCFS combos (multi-pair, multi-timeframe) run their own loop — delegate
+    # so the panel's instance machinery / --live / dry-run all work unchanged
+    if (cfg.get("candidate") or {}).get("strategy") == "fcfsx":
+        from fcfs_runner import main_fcfs
+        main_fcfs(cfg, args.live)
+        return
     if args.live:
         cfg["dry_run"] = False
     # chart timeframe: MUST be in the environment BEFORE any research module
