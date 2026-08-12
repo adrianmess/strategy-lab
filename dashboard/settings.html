@@ -64,7 +64,7 @@ async function loadPool(){
       + (d.legacy ? ` Legacy single proxy: <b>${d.legacy}</b>` : ' All traffic goes direct.');
     return;
   }
-  el.innerHTML = `<b>${d.pool.n} dedicated IPs</b> via ${d.pool.host} (ports ${d.pool.ports[0]}–${d.pool.ports[d.pool.ports.length-1]}, user ${d.pool.username}) — feeds pin one exit IP per pair/timeframe, FCFS hosts get one each, API accounts as below.${d.legacy ? ` <span class="hint">Legacy fallback: ${d.legacy}</span>` : ''}`;
+  el.innerHTML = `<b>${d.pool.n} dedicated IPs</b> via ${d.pool.host} (ports ${d.pool.ports[0]}–${d.pool.ports[d.pool.ports.length-1]}, user ${d.pool.username}) — used for PRIVATE API calls only (orders, balances; the IP-whitelisted ones), one exit IP per account as below. Public data (klines + WebSocket ticks) goes direct.${d.legacy ? ` <span class="hint">Legacy fallback: ${d.legacy}</span>` : ''}`;
   const t = document.getElementById('acctT');
   if(d.accounts.length){
     t.style.display = '';

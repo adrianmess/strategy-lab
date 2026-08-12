@@ -44,15 +44,11 @@ def main():
     tf_min = int(spec["tf_min"])
     mode = spec["mode"]
     comps = spec["components"]
-    proxy_index = spec.get("proxy_index")
-    if proxy_index is not None:
-        # own dedicated exit IP: no shared rate limit — poll at full cadence
-        poll = max(float(spec.get("poll_seconds", 3)),
-                   3.0 if tf_min == 1 else 6.0)
-    else:
-        # shared IP: pace by timeframe, MEXC 510-rate-limits aggressively
-        poll = max(float(spec.get("poll_seconds", 3)),
-                   5.0 if tf_min == 1 else 12.0)
+    # klines go DIRECT (public, unkeyed — Adrian's policy; proxies are only
+    # for private API calls). All hosts share one IP, so pace by timeframe:
+    # MEXC 510-rate-limits a single IP aggressively.
+    poll = max(float(spec.get("poll_seconds", 3)),
+               5.0 if tf_min == 1 else 12.0)
     import random
     time.sleep(random.uniform(0, min(poll, 4)))   # desynchronize the fleet
     assert os.environ.get("LAB_TF") == str(tf_min), \
@@ -63,8 +59,7 @@ def main():
     from strategy_metax import (_extend, _ts16, compute_features,
                                 run_component_engine, WARMUP)
 
-    feed = Feed(symbol, anchored=True, tf_min=tf_min,
-                proxy_index=proxy_index)
+    feed = Feed(symbol, anchored=True, tf_min=tf_min)
     for attempt in range(12):
         try:
             feed.backfill()

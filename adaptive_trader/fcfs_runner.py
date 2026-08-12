@@ -65,11 +65,9 @@ class PairExec:
 
 # ---------------- host management ----------------
 class Host:
-    def __init__(self, key, symbol, tf_min, mode, comps, poll, q,
-                 proxy_index=None):
+    def __init__(self, key, symbol, tf_min, mode, comps, poll, q):
         self.key, self.symbol, self.tf_min = key, symbol, tf_min
         self.mode, self.comps, self.poll, self.q = mode, comps, poll, q
-        self.proxy_index = proxy_index
         self.proc = None
         self.last_px = None
         self.last_seen = 0.0
@@ -83,7 +81,7 @@ class Host:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=errlog, cwd=HERE, env=env, text=True)
         spec = dict(symbol=self.symbol, tf_min=self.tf_min, mode=self.mode,
-                    poll_seconds=self.poll, proxy_index=self.proxy_index,
+                    poll_seconds=self.poll,
                     components=[dict(i=c["_i"], strategy=c["strategy"],
                                      method=c.get("method", "vol3"),
                                      cand=c["cand"], run=c.get("run", "?"))
@@ -164,20 +162,14 @@ def main_fcfs(cfg, live):
     for c in comps:
         key = f"{c['pair']}@{int(str(c['timeframe']).rstrip('m'))}m"
         groups.setdefault(key, []).append(c)
-    from data_feed import _load_pool
-    pool_n = len(_load_pool())
-    if pool_n:
-        log.info("dedicated proxy pool: %d IPs — one per host, round-robin",
-                 pool_n)
     hosts = {}
     for n, (key, cs) in enumerate(groups.items()):
         sym, tf = key.split("@")
         hosts[key] = Host(key, sym, int(tf.rstrip("m")), mode, cs,
-                          cfg.get("poll_seconds", 3), q,
-                          proxy_index=(n % pool_n if pool_n else None))
+                          cfg.get("poll_seconds", 3), q)
         hosts[key].start()
         if n < len(groups) - 1:
-            time.sleep(1 if pool_n else 8)   # own IPs = no shared rate limit
+            time.sleep(8)      # stagger backfills — one shared IP for klines
     execs = {}
     def ex_for(sym):
         if sym not in execs:
