@@ -1,0 +1,22 @@
+{
+ "spg_sol1m_macdx_gen_s_volXtrend9_wo_d50_m7_hO2411_t100k": {
+  "status": "running",
+  "at": "2026-08-11 19:53:24"
+ },
+ "spg_sol1m_macdx_gen_s_volXtrend9_wo_d50_m7_hL7_t100k": {
+  "status": "running",
+  "at": "2026-08-11 19:53:44"
+ },
+ "spg_sol1m_macdx_gen_s_volXtrend9_wo_d50_m7_hA2508_t100k": {
+  "status": "running",
+  "at": "2026-08-11 19:54:04"
+ },
+ "spg_sol1m_macdx_gen_s_volXtrend9_wo_d50_m7_hN_t100k": {
+  "status": "running",
+  "at": "2026-08-11 19:54:24"
+ },
+ "spg_sol1m_macdx_gen_s_volXtrend9_wo_d50_m5_hO2411_t100k": {
+  "status": "running",
+  "at": "2026-08-11 19:54:44"
+ }
+}

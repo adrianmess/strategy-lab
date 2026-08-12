@@ -61,6 +61,9 @@ def main():
     ap.add_argument("--reverse", action="store_true",
                     help="work from the END of the plan (for meet-in-middle "
                          "splits with a forward-running primary)")
+    ap.add_argument("--procs-cap", type=int, default=0,
+                    help="rewrite each spec's --procs to at most N "
+                         "(per-machine CPU limit; 0 = use the plan's value)")
     a = ap.parse_args()
     plan_p = os.path.abspath(a.plan)
     pdir = os.path.dirname(plan_p)
@@ -129,6 +132,10 @@ def main():
                 continue
             # cmd[0] is the python of the machine that BUILT the plan — use ours
             cmd = [sys.executable] + list(s["cmd"])[1:]
+            if a.procs_cap:
+                for _pi, _tok in enumerate(cmd):
+                    if _tok == "--procs" and _pi + 1 < len(cmd):
+                        cmd[_pi + 1] = str(min(int(cmd[_pi + 1]), a.procs_cap))
             if s.get("ai_space"):
                 sp = ensure_ai_space(s)
                 if sp:
