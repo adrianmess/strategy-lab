@@ -37,17 +37,28 @@ def _load_pool():
             _POOL = []
     return _POOL
 
-def pool_proxy(key=None, index=None):
-    """Proxy dict for requests: explicit index, or a DETERMINISTIC hash of
-    key (crc32 — python's hash() is per-process randomized)."""
+def pool_index(key=None, index=None):
+    """Deterministic pool slot: explicit index, or crc32 of key (python's
+    hash() is per-process randomized)."""
     pool = _load_pool()
     if not pool:
         return None
     if index is None:
         import zlib
         index = zlib.crc32(str(key or "").encode()) % len(pool)
+    return index % len(pool)
+
+
+def pool_proxy_at(index):
+    pool = _load_pool()
+    if not pool or index is None:
+        return None
     url = pool[index % len(pool)]
     return {"http": url, "https": url}
+
+
+def pool_proxy(key=None, index=None):
+    return pool_proxy_at(pool_index(key, index))
 
 
 class LivePrice:
@@ -219,46 +230,74 @@ class Feed:
         self.trim_ok = False    # trader sets True when flat (anchored mode)
         # dedicated proxy: explicit index, else stable per (symbol, tf) —
         # every feed keeps its own exit IP when a pool file is present
-        self.proxies = pool_proxy(key=f"{symbol}@{tf_min}", index=proxy_index)
+        self._home_idx = pool_index(key=f"{symbol}@{tf_min}",
+                                    index=proxy_index)
+        self.proxies = pool_proxy_at(self._home_idx)
         if self.proxies:
             logger.info("feed %s/%dm: dedicated proxy #%s", symbol, tf_min,
-                        proxy_index if proxy_index is not None else "auto")
+                        self._home_idx)
         self._perr = 0           # consecutive proxy failures
-        self._fb_until = 0.0     # direct-connection fallback window
+        self._alt_idx = None     # backup pool slot during failures
+        self._alt_until = 0.0
         self.live = LivePrice(symbol) if live else None
 
     def _kl(self, interval, start, end):
-        """Kline fetch with automatic DIRECT fallback: if the dedicated proxy
-        fails repeatedly (e.g. a provider outage like the 2026-08-12 502s),
-        data continuity wins — go direct for 5 minutes, then retry the proxy.
-        The identity concern is secondary to a live position going blind."""
-        px = self.proxies
-        if px and time.time() < self._fb_until:
-            px = None
+        """Kline fetch with POOL-INTERNAL failover: if this feed's dedicated
+        proxy fails repeatedly, hop to another IP from the pool for 5 minutes,
+        then return home. NEVER falls back to a direct connection — MEXC API
+        access is geo-restricted and only the whitelisted proxy IPs may be
+        used. If the whole pool is down (provider outage) we stay blind and
+        keep retrying; the WebSocket tick protection is a separate channel."""
+        if self.proxies is None:              # no pool configured at all
+            return _fetch(self.symbol, interval, start, end, proxies=None)
+        idx = self._home_idx
+        if self._alt_idx is not None and time.time() < self._alt_until:
+            idx = self._alt_idx
         try:
-            df = _fetch(self.symbol, interval, start, end, proxies=px)
-            if px is not None:
-                self._perr = 0
+            df = _fetch(self.symbol, interval, start, end,
+                        proxies=pool_proxy_at(idx))
+            self._perr = 0
+            if idx == self._home_idx:
+                self._alt_idx = None
             return df
         except requests.exceptions.RequestException as e:
             s = str(e).lower()
-            if px is not None and ("proxy" in s or "tunnel" in s
-                                   or "timed out" in s):
+            if "proxy" in s or "tunnel" in s or "timed out" in s:
                 self._perr += 1
                 if self._perr >= 2:
-                    self._fb_until = time.time() + 300
-                    logger.warning("feed %s: proxy failing (%d in a row) — "
-                                   "DIRECT fallback for 5 min", self.symbol,
-                                   self._perr)
-                return _fetch(self.symbol, interval, start, end, proxies=None)
+                    n = len(_load_pool())
+                    self._alt_idx = (self._home_idx + self._perr) % n
+                    self._alt_until = time.time() + 300
+                    logger.warning("feed %s: proxy #%d failing (%d in a row) "
+                                   "— switching to pool proxy #%d for 5 min",
+                                   self.symbol, idx, self._perr, self._alt_idx)
+                    return _fetch(self.symbol, interval, start, end,
+                                  proxies=pool_proxy_at(self._alt_idx))
             raise
 
     def backfill(self):
         end = int(time.time())
         start = end - HISTORY_DAYS * 86400
         logger.info("Backfilling %d days of klines...", HISTORY_DAYS)
-        self.df1 = fetch_range(self.symbol, "Min1", start, end,
-                               proxies=self.proxies)
+        idx = self._home_idx
+        if self._alt_idx is not None and time.time() < self._alt_until:
+            idx = self._alt_idx
+        try:
+            self.df1 = fetch_range(self.symbol, "Min1", start, end,
+                                   proxies=pool_proxy_at(idx)
+                                   if idx is not None else None)
+        except requests.exceptions.RequestException as e:
+            s = str(e).lower()
+            if idx is not None and ("proxy" in s or "tunnel" in s
+                                    or "timed out" in s):
+                # rotate before the host's retry — never go direct
+                self._perr += 1
+                self._alt_idx = (self._home_idx + self._perr) % len(_load_pool())
+                self._alt_until = time.time() + 300
+                logger.warning("backfill %s: proxy #%d failed — next retry "
+                               "uses pool proxy #%d", self.symbol, idx,
+                               self._alt_idx)
+            raise
         self.df3 = resample_tf(self.df1, self.tf_min)
         logger.info("Backfill done: %d %dm bars, %d 1m bars",
                     len(self.df3), self.tf_min, len(self.df1))
