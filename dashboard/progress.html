@@ -69,6 +69,15 @@ h2{font-size:15px;margin:0 0 10px}
   </div>
 
   <div class="panelbox">
+    <h2 style="display:flex;justify-content:space-between;align-items:center">Worker systems
+      <span class="mut" style="font-size:12px;font-weight:400" title="every machine currently wired into the lab (this Mac + everything the sync loops talk to). Pause freezes that machine's gamut worker mid-instruction (SIGSTOP, zero work lost); Resume continues exactly where it stopped. Each system pauses independently.">pause/resume per machine</span></h2>
+    <table id="workersT" style="width:100%;font-size:13px">
+      <thead><tr><th style="text-align:left">system</th><th style="text-align:left">status</th><th style="text-align:left">campaign(s)</th><th></th></tr></thead>
+      <tbody><tr><td colspan="4" class="mut">probing…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="panelbox">
     <h2>Per pair</h2>
     <div id="pairs"></div>
   </div>
@@ -152,6 +161,46 @@ async function refresh(){
 }
 refresh();
 setInterval(refresh, 20000);
+
+// ---- worker systems: per-machine status + pause/resume ----
+const STBADGE = {
+  running:    ['#3fb950', 'RUNNING'],
+  paused:     ['#d29922', 'PAUSED'],
+  idle:       ['#8b949e', 'idle'],
+  unreachable:['#f85149', 'unreachable'],
+};
+async function loadWorkers(fresh){
+  const r = await fetch('/api/gamut/workers' + (fresh ? '?fresh=1' : ''));
+  const d = await r.json();
+  const tb = document.querySelector('#workersT tbody');
+  if(!d.systems || !d.systems.length){
+    tb.innerHTML = '<tr><td colspan="4" class="mut">no systems found</td></tr>';
+    return;
+  }
+  tb.innerHTML = d.systems.map(s=>{
+    const [col, lbl] = STBADGE[s.state] || STBADGE.unreachable;
+    const canCtl = s.state === 'running' || s.state === 'paused';
+    const btn = !canCtl ? '' : (s.state === 'running'
+      ? `<button onclick="ctlWorker('${s.id}','pause',this)" title="freeze this machine's gamut worker + its searches in place (no work lost)">⏸ pause</button>`
+      : `<button onclick="ctlWorker('${s.id}','resume',this)" title="continue exactly where it was frozen">▶ resume</button>`);
+    return `<tr>
+      <td><b>${s.name}</b></td>
+      <td><span style="color:${col};font-weight:600">${lbl}</span>${s.pids?` <span class="mut">(${s.pids} procs)</span>`:''}</td>
+      <td class="mono">${(s.plans||[]).join(', ') || '<span class="mut">—</span>'}</td>
+      <td style="text-align:right">${btn}</td></tr>`;
+  }).join('');
+}
+async function ctlWorker(id, action, btn){
+  btn.disabled = true; btn.textContent = action + '…';
+  const r = await fetch('/api/gamut/workers/ctl', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, action})});
+  const d = await r.json();
+  if(!d.ok) alert('error: ' + (d.error || d.output || '?'));
+  loadWorkers(true);
+}
+loadWorkers();
+setInterval(loadWorkers, 30000);
 </script>
 </body>
 </html>

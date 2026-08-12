@@ -1891,6 +1891,110 @@ def job_router():
     return jsonify(id=spawn("router", name, cmd, OPT))
 
 
+# ---------------- gamut worker fleet (status + per-system pause/resume) ----
+_GCTL = os.path.join(os.path.dirname(AT.rstrip("/")), "scripts", "gamut_ctl.sh")
+_GW_CACHE = {"t": 0, "data": None}
+
+def _gamut_systems():
+    """This machine + every remote that an offload_sync loop is talking to.
+    Discovered from the running sync processes, so EC2 IP changes after spot
+    bounces are picked up automatically."""
+    systems = [dict(id="local", name="MacBook (this computer)", local=True)]
+    try:
+        ps = subprocess.run(["ps", "-Ao", "command"], capture_output=True,
+                            text=True, timeout=5).stdout
+    except Exception:
+        ps = ""
+    seen = set()
+    for ln in ps.splitlines():
+        if "offload_sync.sh" not in ln or "grep" in ln:
+            continue
+        parts = ln.split("offload_sync.sh", 1)[1].split()
+        if len(parts) < 3:
+            continue
+        key, host = parts[0], parts[2]
+        rh = host if "@" in host else f"ubuntu@{host}"
+        if rh in seen:
+            continue
+        seen.add(rh)
+        if "mini" in rh.lower() or rh.endswith(".local"):
+            name = "Mac mini"
+        elif rh.startswith("ubuntu@"):
+            name = f"AWS EC2 ({rh.split('@')[1]})"
+        else:
+            name = rh
+        # personal keys may be passphrase-protected (agent-only, unusable
+        # from this daemon) — the dedicated automation key wins when present
+        auto = os.path.expanduser("~/.ssh/lab_auto_ed25519")
+        if not rh.startswith("ubuntu@") and os.path.exists(auto):
+            key = auto
+        systems.append(dict(id=rh, name=name, ssh=rh, key=key))
+    return systems
+
+def _gctl(sys_d, action):
+    """Run gamut_ctl.sh locally or piped over ssh. Returns raw output."""
+    try:
+        if sys_d.get("local"):
+            r = subprocess.run(["bash", _GCTL, action], capture_output=True,
+                               text=True, timeout=15)
+            return r.stdout
+        cmd = ["ssh", "-i", os.path.expanduser(sys_d["key"]),
+               "-o", "IdentitiesOnly=yes",
+               "-o", "StrictHostKeyChecking=no",
+               "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+               "-o", "ConnectTimeout=8", sys_d["ssh"], "bash -s", action]
+        r = subprocess.run(cmd, stdin=open(_GCTL), capture_output=True,
+                           text=True, timeout=20)
+        return r.stdout
+    except Exception as e:
+        return f"ERROR {e}"
+
+def _parse_gctl(txt):
+    st, plans, npids = "unreachable", [], 0
+    for ln in (txt or "").splitlines():
+        if ln.startswith("STATE "):
+            st = ln[6:].strip()
+        elif ln.startswith("PLAN "):
+            plans.append(ln[5:].strip())
+        elif ln.startswith("PIDS "):
+            try:
+                npids = int(ln[5:])
+            except ValueError:
+                pass
+    return dict(state=st, plans=plans, pids=npids)
+
+@app.route("/api/gamut/workers")
+def gamut_workers():
+    if time.time() - _GW_CACHE["t"] < 10 and _GW_CACHE["data"] \
+            and not request.args.get("fresh"):
+        return jsonify(_GW_CACHE["data"])
+    systems = _gamut_systems()
+    out = []
+    def probe(s):
+        d = dict(s); d.pop("key", None)
+        d.update(_parse_gctl(_gctl(s, "status")))
+        out.append(d)
+    ts = [threading.Thread(target=probe, args=(s,)) for s in systems]
+    [t.start() for t in ts]; [t.join(timeout=25) for t in ts]
+    data = dict(systems=sorted(out, key=lambda x: x["name"]))
+    _GW_CACHE.update(t=time.time(), data=data)
+    return jsonify(data)
+
+@app.route("/api/gamut/workers/ctl", methods=["POST"])
+def gamut_workers_ctl():
+    d = request.get_json(force=True)
+    action = d.get("action")
+    if action not in ("pause", "resume"):
+        return jsonify(error="action must be pause|resume"), 400
+    target = next((s for s in _gamut_systems() if s["id"] == d.get("id")), None)
+    if not target:
+        return jsonify(error=f"unknown system '{d.get('id')}' (it may have "
+                             f"bounced to a new IP — refresh)"), 404
+    txt = _gctl(target, action)
+    _GW_CACHE["t"] = 0            # invalidate cache
+    return jsonify(ok=("ERROR" not in txt), output=txt.strip())
+
+
 @app.route("/api/settings/proxies")
 def settings_proxies():
     """Proxy-pool summary for the Settings page — never returns credentials."""
