@@ -27,7 +27,15 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
-## ACTIVE: SOL two-stage pipeline (2026-08-11 ~09:35) — SOL was never in the gamut
+## ACTIVE: SPOT pipeline, all 7 pairs (2026-08-11 ~19:53)
+- PERP grids are COMPLETE (msweep/m1sweep/hyp1a+b/sol1w/sol3w + solg gamuts all done). Now the whole two-stage process again for **spot mode**.
+- HYPE spot data fetched fresh via `fetch_pair.py --market spot hype` (history from 2025-03-25, through 2026-08-12; note spot data is ~10 days fresher than the perp parquets, which end 2026-08-02).
+- Stage 1 (running): **spotg1m_0811** (7 pairs x 216 = 1,512 fresh spot searches) on EC2 box1 fwd (18.190.26.70, bounced again mid-launch — 6th IP) + box2 rev (3.17.12.141), tmux 'spg', cron @reboot -> boot_spg.sh. **spotg3m_0811** (1,512) on main Mac fwd (`--procs-cap 12`, /tmp/spotg3m_forward.log) + mini rev (`--procs-cap 10`, ~/worker_spg.log) — Adrian's per-machine CPU limits, via the new gamut_worker `--procs-cap` flag.
+- Spaces: per-pair variants (<pair>_<tf>m.ai.json; sol = default.ai.json); macdx auto-uses @spot ranges; no --lev-stops in spot.
+- Stage 2 (pending): write build_spot_merge_specs.py mirroring build_sol_merge_specs (rank by holdout_best growth, top-8/family), campaigns like spot1w_/spot3w_; EC2 takes 1m, Macs 3m.
+- ETA: stage 1 ~1.5-2 days (EC2) / ~2 days (Macs); stage 2 ~1-1.5 days after.
+
+## DONE: SOL two-stage pipeline (2026-08-11) — SOL was never in the gamut
 - SOL is the reference pair (param space = variants/default.ai.json for both tfs). No gamut sources existed, so stage 1 builds them: **solg1m_0811** (216 fresh searches, EC2, chained in tmux 'sg' after hyp1a) + **solg3m_0811** (216, Macs, chained watchers after hyp1b). Grid: 3 strat x 3 meth x 3 scorings x m5/m7 x {hN,hA2508,hL7,hO2411} @100k.
 - Stage 2 AFTER stage 1 completes: run `python3 scripts/build_sol_merge_specs.py` (ranks top-8/family by holdout_best growth) then build_merge_plan.py on the emitted sol1w_0811/sol3w_0811 specs, ship + run like the other sweeps.
 - Box2 bounced again → now **3.17.12.141** (4th IP today); sync loop 3 repointed. Box IPs float — after any bounce: cron self-arms h1 (then sg), but re-ship any missing plan + repoint the sync loop.
