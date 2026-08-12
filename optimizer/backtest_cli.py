@@ -599,8 +599,14 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
         _prevm = os.environ.get("LAB_MARKET", "perp").lower()
         _prevt = os.environ.get("LAB_TF", "3")
         if (_coin, _mkt, _tf) != (_prev, _prevm, _prevt):
-            import wf2 as _W
-            if _W._G:
+            # CRITICAL: never IMPORT engine modules here — engine3 freezes
+            # its indicator-variant lists (incl. the tf1 extension) at import
+            # time, so importing before LAB_TF is set silently mis-simulates
+            # every 1m config (found 2026-08-12: 1m replays resolved variant
+            # indices against the unextended lists — wrong indicators).
+            import sys as _sys
+            _W = _sys.modules.get("wf2")
+            if _W is not None and getattr(_W, "_G", None):
                 raise SystemExit(
                     f"config is {_coin.upper()}_USDT/{_mkt}/{_tf}m but this "
                     f"process already loaded {_prev.upper()}/{_prevm}/"
