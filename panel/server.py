@@ -1891,6 +1891,64 @@ def job_router():
     return jsonify(id=spawn("router", name, cmd, OPT))
 
 
+@app.route("/api/settings/proxies")
+def settings_proxies():
+    """Proxy-pool summary for the Settings page — never returns credentials."""
+    out = dict(pool=None, accounts=[], legacy=None)
+    try:
+        pc = json.load(open(os.path.join(AT, "proxy_pool.json")))
+        out["pool"] = dict(host=pc.get("host"), ports=pc.get("ports") or [],
+                           n=len(pc.get("ports") or []),
+                           username=(pc.get("username") or "")[:4] + "…")
+    except Exception:
+        pass
+    try:
+        k = json.load(open(os.path.join(AT, "mexc_api_keys.json")))
+        accts = sorted((k.get("accounts") or {"mexc1": k}).keys())
+        ports = (out["pool"] or {}).get("ports") or []
+        for i, a in enumerate(accts):
+            m = re.search(r"(\d+)$", a)
+            idx = (int(m.group(1)) - 1) % len(ports) if (m and ports) else None
+            out["accounts"].append(dict(
+                name=a, proxy_port=(ports[idx] if idx is not None else None)))
+    except Exception:
+        pass
+    try:
+        lp = json.load(open(os.path.join(os.path.dirname(AT.rstrip("/")),
+                                         "proxy_config.json")))
+        out["legacy"] = (lp.get("server") or "").replace("http://", "")
+    except Exception:
+        pass
+    return jsonify(out)
+
+
+@app.route("/api/settings/proxy_test", methods=["POST"])
+def settings_proxy_test():
+    """Run the read-only proxy verification (scripts/test_proxies.py) as a
+    job; poll /api/settings/proxy_test/<id> for output. Places no orders."""
+    lab = os.path.dirname(AT.rstrip("/"))
+    script = os.path.join(lab, "scripts", "test_proxies.py")
+    if not os.path.exists(script):
+        return jsonify(error="scripts/test_proxies.py not found"), 400
+    jid = spawn("proxytest", "proxy pool verification",
+                [sys.executable, script], lab)
+    return jsonify(id=jid)
+
+
+@app.route("/api/settings/proxy_test/<jid>")
+def settings_proxy_test_out(jid):
+    j = jobs.get(jid)
+    if not j or j.get("kind") != "proxytest":
+        return jsonify(error="unknown test id"), 404
+    try:
+        txt = open(j["log"]).read()[-20000:]
+    except Exception:
+        txt = ""
+    running = j["proc"].poll() is None
+    return jsonify(running=running, output=txt,
+                   rc=(None if running else j["proc"].returncode))
+
+
 @app.route("/api/param_space", methods=["GET", "POST"])
 def param_space():
     """?space=<coin>_<tf>m (default: canonical param_space.json)

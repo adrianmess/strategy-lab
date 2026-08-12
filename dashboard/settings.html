@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings — Strategy Lab</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/ui.js"></script>
+</head>
+<body>
+<header style="display:flex;justify-content:space-between;align-items:center">
+  <h1>Settings <small id="meta"></small></h1>
+  <nav>
+    <a href="/" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Control panel</a>
+    <a href="optimize.html" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Optimize</a>
+    <a href="backtests.html" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Backtests</a>
+    <a href="index.html" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Research</a>
+    <a href="docs.html" style="color:#8b949e;text-decoration:none;margin-left:16px;font-weight:600">Docs</a>
+    <a href="settings.html" style="color:#e6edf3;text-decoration:none;margin-left:16px;font-weight:600">Settings</a>
+  </nav>
+</header>
+<main>
+
+<section>
+  <h2>Dedicated proxy pool</h2>
+  <div class="card">
+    <div id="poolInfo" class="hint">loading…</div>
+    <table id="acctT" style="font-size:12px;margin-top:8px;display:none">
+      <thead><tr><th>API account</th><th>dedicated exit (port)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div style="margin-top:12px">
+      <button id="runBtn" onclick="runTest()"
+        title="Runs scripts/test_proxies.py: verifies every proxy port's exit IP against the whitelist, then makes a public and an AUTHENTICATED (read-only) MEXC call through each. Never places orders.">
+        Run proxy verification</button>
+      <span class="hint" id="testStatus"></span>
+    </div>
+    <pre id="testOut" style="display:none;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;max-height:420px;overflow:auto;margin-top:10px"></pre>
+  </div>
+</section>
+
+<section>
+  <h2>Trader configs</h2>
+  <div class="card">
+    <div class="hint" style="margin-bottom:6px">Every config file the live trader can run (adopt targets). Managed from the Control panel's Instances section.</div>
+    <table id="cfgT" style="font-size:12px">
+      <thead><tr><th>file</th><th>strategy</th><th>mode</th><th>execution</th><th>dry run</th><th>adopted from</th></tr></thead>
+      <tbody><tr><td colspan="6" class="hint">loading…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+async function api(path, body){
+  const r = await fetch('/api/'+path, body===undefined?{}:{method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  return r.json();
+}
+async function loadPool(){
+  const d = await api('settings/proxies');
+  const el = document.getElementById('poolInfo');
+  if(!d.pool){
+    el.innerHTML = 'No proxy pool configured (adaptive_trader/proxy_pool.json missing).'
+      + (d.legacy ? ` Legacy single proxy: <b>${d.legacy}</b>` : ' All traffic goes direct.');
+    return;
+  }
+  el.innerHTML = `<b>${d.pool.n} dedicated IPs</b> via ${d.pool.host} (ports ${d.pool.ports[0]}–${d.pool.ports[d.pool.ports.length-1]}, user ${d.pool.username}) — feeds pin one exit IP per pair/timeframe, FCFS hosts get one each, API accounts as below.${d.legacy ? ` <span class="hint">Legacy fallback: ${d.legacy}</span>` : ''}`;
+  const t = document.getElementById('acctT');
+  if(d.accounts.length){
+    t.style.display = '';
+    t.querySelector('tbody').innerHTML = d.accounts.map(a =>
+      `<tr><td>${a.name}</td><td>${a.proxy_port ?? '<span class="hint">pool default</span>'}</td></tr>`).join('');
+  }
+}
+let TESTID = null, TESTTIMER = null;
+async function runTest(){
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  document.getElementById('testStatus').textContent = 'starting…';
+  const r = await api('settings/proxy_test', {});
+  if(!r.id){
+    document.getElementById('testStatus').textContent = 'error: ' + (r.error || '?');
+    btn.disabled = false; return;
+  }
+  TESTID = r.id;
+  document.getElementById('testOut').style.display = '';
+  TESTTIMER = setInterval(pollTest, 1500);
+}
+async function pollTest(){
+  const r = await api('settings/proxy_test/' + TESTID);
+  const out = document.getElementById('testOut');
+  out.textContent = (r.output || '').replace(/^.*Warning.*$\n?/gm, '');
+  out.scrollTop = out.scrollHeight;
+  if(!r.running){
+    clearInterval(TESTTIMER);
+    document.getElementById('runBtn').disabled = false;
+    const ok = r.rc === 0 && /10\/10 authenticated OK/.test(r.output || '');
+    document.getElementById('testStatus').innerHTML = ok
+      ? '<span style="color:var(--green,#3fb950)">✓ all proxies verified</span>'
+      : `<span style="color:var(--red,#f85149)">finished with issues (rc=${r.rc}) — read the output</span>`;
+  } else {
+    document.getElementById('testStatus').textContent = 'running… (each IP: exit check + public + authenticated call)';
+  }
+}
+async function loadCfgs(){
+  const d = await api('trader_configs');
+  const list = Array.isArray(d) ? d : (d.configs || []);
+  const rows = list.map(c =>
+    `<tr><td>${c.file || ''}</td><td>${c.strategy || ''}${c.components ? ` <span class="hint">(${c.components.length} comps)</span>` : ''}</td><td>${c.mode || ''}</td>
+     <td>${c.execution || ''}${c.api_account ? ' · ' + c.api_account : ''}</td>
+     <td>${c.dry_run === false ? '<b style="color:var(--red,#f85149)">LIVE</b>' : 'dry'}</td>
+     <td class="hint">${((c.adopted_from || '').split('/').slice(-2)[0] || '')}${c.adopted_at ? ' · ' + c.adopted_at : ''}</td></tr>`);
+  document.querySelector('#cfgT tbody').innerHTML =
+    rows.length ? rows.join('') : '<tr><td colspan="6" class="hint">no config files found</td></tr>';
+}
+loadPool(); loadCfgs();
+</script>
+</main>
+</body>
+</html>
