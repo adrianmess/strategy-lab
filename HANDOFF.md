@@ -27,6 +27,13 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
+## NEW: FCFS LIVE ADAPTER (2026-08-12 ~00:05) — fcfsx combos are now adoptable
+- Architecture: `adaptive_trader/fcfs_runner.py` (parent: one shared slot, first-signal-wins, same-bar ties by component order = the backtest rule, per-pair executors, protective loop, state) + `fcfs_host.py` (one child per pair×timeframe group; each runs its components' research engines virtually with the synthetic-bar technique — engine-exact, shared code with metax via strategy_metax.run_component_engine). trader.py delegates when candidate.strategy == fcfsx, so instances/dry/live/confirm-LIVE machinery is unchanged. Works with 2..N components, any pair/timeframe mix.
+- Panel Adopt (fcfsx rows on Optimize) writes config_fcfs_<name>.json: components embedded (holdout_best cands), per-pair contract sizes fetched from MEXC, ALWAYS starts dry_run. Live spot via API restricted to BTC/ETH (MEXC); lev unrestricted.
+- Hosts pace kline polls by tf (5s/1m, 12s/3m, jittered) + backfill retries — MEXC 510 rate limits with 10 hosts on one IP.
+- SOAKING NOW: instance #4 = config_fcfs_All_pairs_1m3m_multistrat_26_.json, DRY-RUN, 21 comps/7 pairs/10 hosts. Flip to live ONLY via Instances UI (confirm LIVE) — Adrian's call, never the agent's.
+- Known v1 limits: host restart mid-position re-anchors its window (virtual entry_t can shift → parent may close the real position for safety); same-bar cross-host ties collected in a 1.5s window; spot data source for hosts is contract klines (same as all existing live instances).
+
 ## ACTIVE: SPOT pipeline, all 7 pairs (2026-08-11 ~19:53)
 - PERP grids are COMPLETE (msweep/m1sweep/hyp1a+b/sol1w/sol3w + solg gamuts all done). Now the whole two-stage process again for **spot mode**.
 - HYPE spot data fetched fresh via `fetch_pair.py --market spot hype` (history from 2025-03-25, through 2026-08-12; note spot data is ~10 days fresher than the perp parquets, which end 2026-08-02).

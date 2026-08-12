@@ -44,7 +44,13 @@ def main():
     tf_min = int(spec["tf_min"])
     mode = spec["mode"]
     comps = spec["components"]
-    poll = float(spec.get("poll_seconds", 3))
+    # pace kline polling by timeframe: many hosts share one IP and MEXC
+    # rate-limits aggressively (code 510). 1m bars need ~5s latency; slower
+    # charts can poll far less often. The WebSocket tick price is unaffected.
+    poll = max(float(spec.get("poll_seconds", 3)),
+               5.0 if tf_min == 1 else 12.0)
+    import random
+    time.sleep(random.uniform(0, poll))     # desynchronize the fleet
     assert os.environ.get("LAB_TF") == str(tf_min), \
         f"LAB_TF={os.environ.get('LAB_TF')} != tf {tf_min}"
 
@@ -112,8 +118,15 @@ def main():
                               px=float(closed["close"].iloc[-1]), comps=out))
             time.sleep(poll)
         except Exception as ex:
-            emit(dict(e="log", msg=f"host error: {ex}"))
-            time.sleep(10)
+            msg = str(ex)
+            if "510" in msg or "frequent" in msg.lower():
+                import random
+                w = 20 + random.uniform(0, 15)
+                emit(dict(e="log", msg=f"rate-limited — backing off {w:.0f}s"))
+                time.sleep(w)
+            else:
+                emit(dict(e="log", msg=f"host error: {ex}"))
+                time.sleep(10)
 
 
 if __name__ == "__main__":
