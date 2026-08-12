@@ -1907,6 +1907,11 @@ def job_router():
                os.path.join(os.path.dirname(AT.rstrip("/")), "scripts",
                             "refresh_combo.py"), rn]
         try:
+            _j = int(d.get("jobs") or 1)
+        except (TypeError, ValueError):
+            _j = 1
+        cmd += ["--jobs", str(max(1, min(10, _j)))]
+        try:
             _md = float(d.get("maxdd") or 0)
         except (TypeError, ValueError):
             _md = 0

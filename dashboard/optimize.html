@@ -1434,8 +1434,17 @@ async function adoptFcfs(run){
   alert(r.ok ? `${r.note}` : ('error: '+(r.error||'')));
 }
 async function routerRunJob(kind, run){
-  const r = await api('jobs/router', {kind, run});
-  alert(r.id ? `${kind==='metax_wf'?'walk-forward':'refine'} started for ${run} — watch the Jobs section` : ('error: '+(r.error||'')));
+  const body = {kind, run};
+  if(kind === 'fcfsx_rerun'){
+    const prev = localStorage.getItem('rerunJobs') || '4';
+    const v = prompt('Processors for the component backtests (1-10)?\n\nEach backtest uses one core; N run in parallel. Higher = faster but competes with any searches/gamut running on this Mac.', prev);
+    if(v === null) return;                      // cancelled
+    const n = Math.max(1, Math.min(10, parseInt(v) || 4));
+    localStorage.setItem('rerunJobs', String(n));
+    body.jobs = n;
+  }
+  const r = await api('jobs/router', body);
+  alert(r.id ? `${kind==='fcfsx_rerun'?'evidence-chain refresh':kind==='metax_wf'?'walk-forward':'refine'} started for ${run} — watch the Jobs section` : ('error: '+(r.error||'')));
 }
 async function adoptRouter(name, mode){
   // routers get their OWN config file named after the run, so several routers
