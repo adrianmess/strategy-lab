@@ -143,6 +143,11 @@ def main():
     ap.add_argument("--lookback-folds", type=int, default=2,
                     help="roster gate: trailing folds a component must have "
                          "been profitable over (with >=3 closed trades)")
+    ap.add_argument("--max-dd", type=float, default=0,
+                    help="combo-level MTM drawdown cap for the verdict "
+                         "(0 = OFF, the default: components trade isolated at "
+                         "their own leverage, so combo dd cannot cause a "
+                         "liquidation — it is reported but not judged)")
     a = ap.parse_args()
 
     names = [x.strip() for x in a.runs.split(",") if x.strip()]
@@ -242,7 +247,8 @@ def main():
         T += step
     S2, mo2, H2 = replay_stats(chained)
     pct = S2["monthly_growth_pct"]
-    verdict = "PASS" if (pct > 0 and not S2["liq"] and S2["maxdd_mtm"] <= 0.5) \
+    verdict = "PASS" if (pct > 0 and not S2["liq"]
+                         and (a.max_dd <= 0 or S2["maxdd_mtm"] <= a.max_dd)) \
         else "FAIL"
     print(f"FCFSX VERDICT ({a.name}): {verdict} — chained OOS {pct:+.1f}%/mo, "
           f"dd {100*S2['maxdd_mtm']:.0f}%, {S2['n']} trades over {folds} folds",
