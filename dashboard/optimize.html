@@ -324,6 +324,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="rxfcfs">FCFS combo</label>
         <span style="display:flex;gap:4px">
         <input id="fcName" placeholder="name (auto)" style="width:110px">
+        <input id="fcMaxDD" type="number" step="5" min="0" max="100" placeholder="DD cap %" style="width:72px" title="OPTIONAL drawdown cap for the PASS/FAIL verdict. Empty = no cap (default): components trade isolated at their own leverage, so combo-level drawdown can't cause a liquidation — dd is still measured and reported either way. Set e.g. 50 to also require max MTM drawdown ≤ 50% for a PASS.">
         <button class="small" onclick="routerJob('fcfsx')">Build</button></span></div>
       <span class="kv" id="routerMsg"></span>
     </div>
@@ -1413,6 +1414,8 @@ async function routerJob(kind){
     if(recs.some(r=>['metax','metax2','pairx','fcfsx'].includes(r.strategy))){ alert('routers can\'t be components — pick strategy runs'); return; }
     d.runs=picks;
     d.name=$('fcName').value.trim()||'fcfs_'+new Date().toISOString().slice(5,10).replace('-','');
+    const md=+($('fcMaxDD').value||0);
+    if(md>0) d.maxdd=md/100;
   }
   const r = await api('jobs/router', d);
   $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));

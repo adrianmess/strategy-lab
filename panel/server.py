@@ -1810,6 +1810,12 @@ def job_router():
                 return jsonify(error=f"bad run name '{r}'"), 400
         cmd = [sys.executable, "fcfsx_cli.py", "--name", name,
                "--runs", ",".join(runs_sel)]
+        try:
+            _md = float(d.get("maxdd") or 0)
+        except (TypeError, ValueError):
+            _md = 0
+        if 0 < _md <= 1:
+            cmd += ["--max-dd", str(_md)]
     else:
         return jsonify(error=f"unknown router kind '{kind}'"), 400
     return jsonify(id=spawn("router", name, cmd, OPT))
