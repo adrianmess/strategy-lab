@@ -245,6 +245,14 @@ def main_fcfs(cfg, live):
 
     tell_flat()
     last_note = 0
+    # heartbeat: the loop is silent unless something happens, so a stalled
+    # feed looks exactly like a quiet market. Every HB_EVERY seconds log what
+    # each group last delivered, and flag any group whose bars stopped
+    # arriving (> 4 bar intervals) — that is the actionable failure.
+    HB_EVERY = 900
+    last_hb = time.time()
+    last_bar_at = {}      # group key -> (bar label, epoch received)
+    bars_seen = [0]
     while True:
         try:
             try:
@@ -272,6 +280,8 @@ def main_fcfs(cfg, live):
                     log.info("[%s] %s", key, msg.get("msg"))
                 elif e == "bar":
                     bt = msg.get("t")
+                    last_bar_at[key] = (bt, now)
+                    bars_seen[0] += 1
                     cbyi = {c["i"]: c for c in msg.get("comps", [])}
                     if pos is None:
                         for ci, c in sorted(cbyi.items()):
@@ -335,6 +345,26 @@ def main_fcfs(cfg, live):
                 if h and h.alive() and time.time() - h.last_seen > 300:
                     log.warning("host %s silent >5min while positioned",
                                 pos["group"])
+
+            # periodic heartbeat + stale-feed detection
+            if now - last_hb >= HB_EVERY:
+                last_hb = now
+                stale = []
+                for k, hst in hosts.items():
+                    tf = hst.tf_min
+                    lb = last_bar_at.get(k)
+                    age = (now - lb[1]) if lb else (now - hst.last_seen)
+                    if age > max(240, tf * 60 * 4):
+                        stale.append(f"{k} ({age/60:.0f}m)")
+                where = (f"{pos['symbol']} via {comp_label(pos['comp'])}"
+                         if pos else "empty")
+                log.info("heartbeat: slot=%s | %d/%d hosts alive | %d bars "
+                         "evaluated in the last %dm%s", where,
+                         sum(1 for h in hosts.values() if h.alive()),
+                         len(hosts), bars_seen[0], HB_EVERY // 60,
+                         (" | STALE FEEDS: " + ", ".join(stale)) if stale
+                         else "")
+                bars_seen[0] = 0
         except KeyboardInterrupt:
             log.info("stopped by user")
             for h in hosts.values():
