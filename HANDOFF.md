@@ -27,6 +27,14 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
+## EC2 BOXES NOW HAVE ELASTIC IPs (2026-08-12 ~22:00) — IP churn is over
+- us-east-2b was interrupting the spot boxes constantly; every stop/start gave a NEW public IP, so sync loops + ssh broke repeatedly (3 IP changes in one afternoon). Fixed with Elastic IPs — addresses now survive every bounce:
+  - box 1 **i-0654136d4694c7ef9 → 3.133.195.5** (eipalloc-0ad655fa24ae78fa5), sync SYNC_SFX_START=2, /tmp/ec2_m1_sync.log
+  - box 2 **i-0dcfada687ccff1dc → 3.15.93.224** (eipalloc-059bd88b1085ba9e2), sync SYNC_SFX_START=3, /tmp/ec2_m1b_sync.log
+- Cost: public IPv4 is $0.005/hr since Feb-2024 whether auto-assigned or Elastic, so this is cost-NEUTRAL while the boxes run; only the stopped windows add (~$0.12/day/box).
+- ⚠ TEARDOWN MUST RELEASE BOTH EIPs — unattached EIPs bill forever (~$3.60/mo each). Order: cancel spot request → terminate instance → RELEASE EIP.
+- The scheduled task "ec2-fleet-monitor" (every 45m) now knows the fixed IPs, re-arms idle workers, restarts missing sync loops, and reminds about EIP release when the campaign completes.
+
 ## NEW: DEDICATED PROXY POOL (2026-08-12 ~01:30) — all MEXC traffic on 10 Decodo ISP IPs
 - 10 dedicated static IPs (isp.decodo.com ports 10001-10010, creds in gitignored ip_proxies_APIs + adaptive_trader/proxy_pool.json). All 10 exit IPs verified + whitelisted on both MEXC accounts; read-only test: scripts/test_proxies.py (10/10 public + authenticated OK).
 - data_feed: per-(symbol,tf) stable exit IP (crc32 of key; explicit proxy_index override). fcfs hosts: round-robin 1 IP per host, full-cadence polling restored (3s/1m, 6s/3m), no more 510s. mexc_api: per-account stable IP (mexc1->10001, mexc2->10002), legacy proxy_config.json is the fallback. WebSocket ticks remain direct (public; kline fallback unaffected).

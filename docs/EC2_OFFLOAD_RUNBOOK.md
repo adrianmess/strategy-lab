@@ -142,7 +142,7 @@ touches trading). Recreate it only when a campaign is actually running.
 3. **Delete the fleet** (`delete-fleets --terminate-instances`) — else it
    replaces the instance you just killed. Then delete launch template gamut-A.
 4. Box B: **cancel the persistent spot request FIRST**, then terminate.
-5. Release both Elastic IPs (they bill when unattached!).
+5. Release both Elastic IPs — REQUIRED (since Feb-2024 they bill $0.005/hr even while attached, and forever once unattached). Current: 3.133.195.5, 3.15.93.224.
 6. Deregister the AMI, then delete its snapshot.
 7. Empty + delete the S3 bucket.
 8. Delete IAM instance profile + role gamut-box.
