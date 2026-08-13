@@ -142,8 +142,11 @@ def main():
             p_plan = min(p_plan, a.procs_cap)
         if c <= 0:                       # legacy: no budget
             return p_plan, a.jobs
+        # a budget is AUTHORITATIVE: --jobs was only the launch-time default,
+        # so raising the budget can genuinely add concurrency (capping by
+        # --jobs here made "give this machine more cores" a no-op)
         p = max(1, min(p_plan, c))
-        return p, max(1, min(a.jobs if a.jobs else 99, c // p))
+        return p, max(1, c // p)
 
     _p0, _j0 = shape()
     print(f"worker: {n_total} candidate specs, cores={budget() or 'unlimited'}"
