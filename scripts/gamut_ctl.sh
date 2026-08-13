@@ -2,8 +2,14 @@
 # Gamut worker control — runs on macOS and Linux, locally or piped over ssh
 # (ssh host 'bash -s' status < this file). Signals INDIVIDUAL PIDs of the
 # worker tree only (never process groups — nothing outside can be touched).
-# Usage: gamut_ctl.sh status|pause|resume
+# Usage: gamut_ctl.sh status|pause|resume|cores [N]
 PAT="gamut_worker.py --plan"
+# the repo lives in a different place on each machine
+OPTDIR=""
+for d in "$HOME/strategy-lab/optimizer" "$HOME/Code/strategy-lab/optimizer"; do
+  [ -d "$d" ] && OPTDIR="$d" && break
+done
+LIMITS="$OPTDIR/gamut_limits.json"
 tree(){ local p; for p in "$@"; do echo "$p"; tree $(pgrep -P "$p" 2>/dev/null); done; }
 # only real python workers — chained shell watchers ("while pgrep …") also
 # match the pattern but are not workers
@@ -16,7 +22,20 @@ done
 ROOTS=$(echo $ROOTS)
 
 case "${1:-status}" in
+  cores)
+    if [ -n "$2" ]; then
+      [ -n "$OPTDIR" ] || { echo "ERROR no optimizer dir"; exit 1; }
+      printf '{"cores": %d}\n' "$2" > "$LIMITS"
+      echo "CORES $2 (applies as running searches finish)"
+    else
+      echo "CORES $(sed -n 's/.*"cores"[^0-9]*\([0-9]*\).*/\1/p' "$LIMITS" 2>/dev/null)"
+    fi
+    exit 0
+    ;;
   status)
+    NPROC=$( (command -v nproc >/dev/null && nproc) || sysctl -n hw.ncpu 2>/dev/null || echo "?")
+    echo "NPROC $NPROC"
+    echo "CORES $(sed -n 's/.*"cores"[^0-9]*\([0-9]*\).*/\1/p' "$LIMITS" 2>/dev/null)"
     if [ -z "$ROOTS" ]; then echo "STATE idle"; exit 0; fi
     ST=running
     for r in $ROOTS; do

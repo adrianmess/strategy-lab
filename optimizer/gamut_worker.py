@@ -64,6 +64,15 @@ def main():
     ap.add_argument("--procs-cap", type=int, default=0,
                     help="rewrite each spec's --procs to at most N "
                          "(per-machine CPU limit; 0 = use the plan's value)")
+    ap.add_argument("--cores", type=int, default=0,
+                    help="TOTAL processors this machine may use for gamut "
+                         "work. Live-adjustable: write {\"cores\": N} to "
+                         "optimizer/gamut_limits.json (the panel's Progress "
+                         "page does this) and the worker re-reads it before "
+                         "every dispatch — running searches always finish "
+                         "untouched, the change takes effect as slots free "
+                         "or opens new ones if the budget grew. 0 = legacy "
+                         "(--jobs x plan procs, no budget).")
     a = ap.parse_args()
     plan_p = os.path.abspath(a.plan)
     pdir = os.path.dirname(plan_p)
@@ -97,7 +106,48 @@ def main():
         print(f"startup: marked {swept} stranded 'running' entries as "
               f"interrupted (will retry)", flush=True)
     n_total = len(specs)
-    print(f"worker: {n_total} candidate specs, jobs={a.jobs}", flush=True)
+
+    # ---- live core budget -------------------------------------------------
+    LIMITS = os.path.join(HERE, "gamut_limits.json")   # machine-local
+
+    def spec_procs(s):
+        c = list(s.get("cmd") or [])
+        for i, t in enumerate(c):
+            if t == "--procs" and i + 1 < len(c):
+                try:
+                    return int(c[i + 1])
+                except ValueError:
+                    break
+        return 14
+
+    plan_procs = spec_procs(specs[0]) if specs else 14
+
+    def budget():
+        """Current core budget: the limits file wins, else the CLI value."""
+        try:
+            v = int(json.load(open(LIMITS)).get("cores") or 0)
+            if v > 0:
+                return v
+        except Exception:
+            pass
+        return a.cores
+
+    def shape(procs_of_spec=None):
+        """(procs per search, max concurrent searches) for the live budget.
+        Never exceeds the budget; a single search may use fewer procs than
+        the plan asks when the budget is tighter than one full search."""
+        c = budget()
+        p_plan = procs_of_spec or plan_procs
+        if a.procs_cap:
+            p_plan = min(p_plan, a.procs_cap)
+        if c <= 0:                       # legacy: no budget
+            return p_plan, a.jobs
+        p = max(1, min(p_plan, c))
+        return p, max(1, min(a.jobs if a.jobs else 99, c // p))
+
+    _p0, _j0 = shape()
+    print(f"worker: {n_total} candidate specs, cores={budget() or 'unlimited'}"
+          f" -> up to {_j0} concurrent x {_p0} procs", flush=True)
 
     it = iter(specs)
     counters = dict(done=0, failed=0, skipped=0)
@@ -116,6 +166,17 @@ def main():
         while True:
             if os.path.exists(stop_p):
                 return
+            # budget gate: surplus threads IDLE (they never exit) so that a
+            # later budget increase can put them straight back to work, and
+            # a decrease simply stops them taking the NEXT spec — whatever is
+            # already running is never disturbed
+            while not os.path.exists(stop_p):
+                _, jmax = shape()
+                if tid < jmax:
+                    break
+                time.sleep(10)
+            if os.path.exists(stop_p):
+                return
             with _lock:
                 try:
                     s = next(it)
@@ -132,10 +193,10 @@ def main():
                 continue
             # cmd[0] is the python of the machine that BUILT the plan — use ours
             cmd = [sys.executable] + list(s["cmd"])[1:]
-            if a.procs_cap:
-                for _pi, _tok in enumerate(cmd):
-                    if _tok == "--procs" and _pi + 1 < len(cmd):
-                        cmd[_pi + 1] = str(min(int(cmd[_pi + 1]), a.procs_cap))
+            _p, _ = shape(spec_procs(s))
+            for _pi, _tok in enumerate(cmd):
+                if _tok == "--procs" and _pi + 1 < len(cmd):
+                    cmd[_pi + 1] = str(_p)
             if s.get("ai_space"):
                 sp = ensure_ai_space(s)
                 if sp:
@@ -171,11 +232,33 @@ def main():
                   f"{'done' if rc == 0 else 'FAILED'} "
                   f"({counters['done']}d/{counters['failed']}f)", flush=True)
 
-    threads = [threading.Thread(target=runner, args=(k,), daemon=True)
-               for k in range(a.jobs)]
-    for t in threads:
+    threads = []
+
+    def spawn(k, stagger=True):
+        t = threading.Thread(target=runner, args=(k,), daemon=True)
+        threads.append(t)
         t.start()
-        time.sleep(20)   # stagger: avoids 13 simultaneous cold cache builds
+        if stagger:
+            time.sleep(20)   # avoids simultaneous cold cache builds
+
+    for k in range(max(1, _j0)):
+        spawn(k)
+
+    # supervisor: grow the pool when the live budget allows more concurrency
+    # (shrinking needs nothing — surplus threads idle themselves)
+    last_shape = (_p0, _j0)
+    while any(t.is_alive() for t in threads):
+        time.sleep(10)
+        if os.path.exists(stop_p):
+            break
+        p, j = shape()
+        if (p, j) != last_shape:
+            print(f"[{time.strftime('%H:%M:%S')}] core budget now "
+                  f"{budget() or 'unlimited'} -> up to {j} concurrent x {p} "
+                  f"procs (running searches finish untouched)", flush=True)
+            last_shape = (p, j)
+        while len(threads) < j:
+            spawn(len(threads), stagger=False)
     for t in threads:
         t.join()
     print(f"worker finished: {counters}", flush=True)

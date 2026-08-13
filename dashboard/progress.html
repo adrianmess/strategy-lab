@@ -72,8 +72,8 @@ h2{font-size:15px;margin:0 0 10px}
     <h2 style="display:flex;justify-content:space-between;align-items:center">Worker systems
       <span class="mut" style="font-size:12px;font-weight:400" title="every machine currently wired into the lab (this Mac + everything the sync loops talk to). Pause freezes that machine's gamut worker mid-instruction (SIGSTOP, zero work lost); Resume continues exactly where it stopped. Each system pauses independently.">pause/resume per machine</span></h2>
     <table id="workersT" style="width:100%;font-size:13px">
-      <thead><tr><th style="text-align:left">system</th><th style="text-align:left">status</th><th style="text-align:left">campaign(s)</th><th></th></tr></thead>
-      <tbody><tr><td colspan="4" class="mut">probing…</td></tr></tbody>
+      <thead><tr><th style="text-align:left">system</th><th style="text-align:left">status</th><th style="text-align:left">campaign(s)</th><th style="text-align:left" title="TOTAL processors this machine may use for gamut searches. Change it any time: running searches always finish untouched, then the worker fills the new budget (or idles surplus slots). Blank = no limit.">cores</th><th></th></tr></thead>
+      <tbody><tr><td colspan="5" class="mut">probing…</td></tr></tbody>
     </table>
   </div>
 
@@ -174,7 +174,7 @@ async function loadWorkers(fresh){
   const d = await r.json();
   const tb = document.querySelector('#workersT tbody');
   if(!d.systems || !d.systems.length){
-    tb.innerHTML = '<tr><td colspan="4" class="mut">no systems found</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" class="mut">no systems found</td></tr>';
     return;
   }
   tb.innerHTML = d.systems.map(s=>{
@@ -183,12 +183,33 @@ async function loadWorkers(fresh){
     const btn = !canCtl ? '' : (s.state === 'running'
       ? `<button onclick="ctlWorker('${s.id}','pause',this)" title="freeze this machine's gamut worker + its searches in place (no work lost)">⏸ pause</button>`
       : `<button onclick="ctlWorker('${s.id}','resume',this)" title="continue exactly where it was frozen">▶ resume</button>`);
+    const cores = s.state === 'unreachable' ? '<span class="mut">—</span>'
+      : `<input type="number" min="1" max="512" value="${s.cores ?? ''}"
+           placeholder="${s.nproc ? 'all ' + s.nproc : 'all'}" style="width:62px"
+           title="${s.nproc ? 'this machine has ' + s.nproc + ' processors. ' : ''}Set the total gamut budget, then press Apply — running searches finish first."
+           id="cores_${btoa(s.id).replace(/=/g,'')}">
+         <button onclick="setCores('${s.id}',this)" title="apply the new processor budget">Apply</button>`;
     return `<tr>
       <td><b>${s.name}</b></td>
       <td><span style="color:${col};font-weight:600">${lbl}</span>${s.pids?` <span class="mut">(${s.pids} procs)</span>`:''}</td>
       <td class="mono">${(s.plans||[]).join(', ') || '<span class="mut">—</span>'}</td>
+      <td>${cores}</td>
       <td style="text-align:right">${btn}</td></tr>`;
   }).join('');
+}
+async function setCores(id, btn){
+  const el = document.getElementById('cores_' + btoa(id).replace(/=/g,''));
+  const n = parseInt(el && el.value);
+  if(!n || n < 1){ alert('enter a processor count (1 or more)'); return; }
+  btn.disabled = true; btn.textContent = 'applying…';
+  const r = await fetch('/api/gamut/workers/ctl', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, action:'cores', cores:n})});
+  const d = await r.json();
+  btn.disabled = false; btn.textContent = 'Apply';
+  if(!d.ok) alert('error: ' + (d.error || d.output || '?'));
+  else btn.textContent = '✓';
+  loadWorkers(true);
 }
 async function ctlWorker(id, action, btn){
   btn.disabled = true; btn.textContent = action + '…';

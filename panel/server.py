@@ -1978,18 +1978,20 @@ def _gamut_systems():
         systems.append(dict(id=rh, name=name, ssh=rh, key=key))
     return systems
 
-def _gctl(sys_d, action):
+def _gctl(sys_d, action, arg=None):
     """Run gamut_ctl.sh locally or piped over ssh. Returns raw output."""
+    extra = [str(arg)] if arg is not None else []
     try:
         if sys_d.get("local"):
-            r = subprocess.run(["bash", _GCTL, action], capture_output=True,
-                               text=True, timeout=15)
+            r = subprocess.run(["bash", _GCTL, action] + extra,
+                               capture_output=True, text=True, timeout=15)
             return r.stdout
         cmd = ["ssh", "-i", os.path.expanduser(sys_d["key"]),
                "-o", "IdentitiesOnly=yes",
                "-o", "StrictHostKeyChecking=no",
                "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
-               "-o", "ConnectTimeout=8", sys_d["ssh"], "bash -s", action]
+               "-o", "ConnectTimeout=8", sys_d["ssh"],
+               "bash -s", action] + extra
         r = subprocess.run(cmd, stdin=open(_GCTL), capture_output=True,
                            text=True, timeout=20)
         return r.stdout
@@ -1998,6 +2000,7 @@ def _gctl(sys_d, action):
 
 def _parse_gctl(txt):
     st, plans, npids = "unreachable", [], 0
+    cores = nproc = None
     for ln in (txt or "").splitlines():
         if ln.startswith("STATE "):
             st = ln[6:].strip()
@@ -2008,7 +2011,17 @@ def _parse_gctl(txt):
                 npids = int(ln[5:])
             except ValueError:
                 pass
-    return dict(state=st, plans=plans, pids=npids)
+        elif ln.startswith("CORES "):
+            try:
+                cores = int(ln[6:].strip())
+            except ValueError:
+                cores = None
+        elif ln.startswith("NPROC "):
+            try:
+                nproc = int(ln[6:].strip())
+            except ValueError:
+                nproc = None
+    return dict(state=st, plans=plans, pids=npids, cores=cores, nproc=nproc)
 
 @app.route("/api/gamut/workers")
 def gamut_workers():
@@ -2031,13 +2044,21 @@ def gamut_workers():
 def gamut_workers_ctl():
     d = request.get_json(force=True)
     action = d.get("action")
-    if action not in ("pause", "resume"):
-        return jsonify(error="action must be pause|resume"), 400
+    if action not in ("pause", "resume", "cores"):
+        return jsonify(error="action must be pause|resume|cores"), 400
+    arg = None
+    if action == "cores":
+        try:
+            arg = int(d.get("cores"))
+        except (TypeError, ValueError):
+            return jsonify(error="cores must be a number"), 400
+        if not 1 <= arg <= 512:
+            return jsonify(error="cores must be between 1 and 512"), 400
     target = next((s for s in _gamut_systems() if s["id"] == d.get("id")), None)
     if not target:
         return jsonify(error=f"unknown system '{d.get('id')}' (it may have "
                              f"bounced to a new IP — refresh)"), 404
-    txt = _gctl(target, action)
+    txt = _gctl(target, action, arg)
     _GW_CACHE["t"] = 0            # invalidate cache
     return jsonify(ok=("ERROR" not in txt), output=txt.strip())
 
