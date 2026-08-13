@@ -85,10 +85,35 @@ def main():
                 pass
     threading.Thread(target=read_stdin, daemon=True).start()
 
+    # error-noise control: a network outage makes EVERY poll fail, which
+    # used to emit one line per host per poll (~60/min for the fleet) and
+    # buried everything else. Log the first failure of a kind, then only
+    # milestones, then an explicit RECOVERED line with the outage duration.
+    err_kind = None
+    err_n = 0
+    err_t0 = 0.0
+
+    def classify(ex):
+        s = str(ex).lower()
+        if "nameresolution" in s or "not known" in s or "resolve" in s:
+            return "DNS failure (this Mac can't resolve contract.mexc.com)"
+        if "'code': 510" in str(ex) or "frequent" in s:
+            return "MEXC rate limit"
+        if "timed out" in s or "timeout" in s:
+            return "network timeout"
+        if "proxy" in s or "tunnel" in s:
+            return "proxy failure"
+        return "network error"
+
     while True:
         try:
             feed.trim_ok = flat_hint
             feed.update()
+            if err_kind:
+                emit(dict(e="log", msg=f"RECOVERED from {err_kind} after "
+                                       f"{err_n} failed polls "
+                                       f"({time.time()-err_t0:.0f}s)"))
+                err_kind, err_n = None, 0
             emit(dict(e="px", px=feed.last_price()))
             closed = feed.closed_bars()
             newest = closed["t"].iloc[-1] if len(closed) else None
@@ -118,16 +143,24 @@ def main():
                               px=float(closed["close"].iloc[-1]), comps=out))
             time.sleep(poll)
         except Exception as ex:
-            msg = str(ex)
-            # match the MEXC 510 code precisely — epoch timestamps in URLs
-            # can contain the substring "510" (caused false backoffs)
-            if "'code': 510" in msg or "frequent" in msg.lower():
-                import random
-                w = 20 + random.uniform(0, 15)
-                emit(dict(e="log", msg=f"rate-limited — backing off {w:.0f}s"))
-                time.sleep(w)
+            import random
+            kind = classify(ex)
+            if kind == err_kind:
+                err_n += 1
+                if err_n in (5, 20) or err_n % 60 == 0:   # milestones only
+                    emit(dict(e="log",
+                              msg=f"still failing: {kind} "
+                                  f"({err_n} polls, "
+                                  f"{time.time()-err_t0:.0f}s)"))
             else:
-                emit(dict(e="log", msg=f"host error: {ex}"))
+                err_kind, err_n, err_t0 = kind, 1, time.time()
+                emit(dict(e="log", msg=f"{kind}: {str(ex)[:160]}"))
+            # back off harder on things that hammering cannot fix
+            if kind.startswith("DNS"):
+                time.sleep(15 + random.uniform(0, 10))
+            elif kind == "MEXC rate limit":
+                time.sleep(20 + random.uniform(0, 15))
+            else:
                 time.sleep(10)
 
 
