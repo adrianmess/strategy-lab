@@ -227,6 +227,42 @@ class APISpotExecutor:
             return {"status": "error", "message": str(e)}
 
 
+_GUARD_FH = None      # module-level: the flock lives as long as the process
+
+
+def _single_instance_guard(cfg):
+    """Refuse to start if another trader already owns this config's STATE
+    FILE. Two traders sharing state corrupt each other's position tracking
+    (and on a live config would double orders). The panel checks this too,
+    but it forgets running processes across its own restarts — this lock is
+    held by the kernel, so it is authoritative. (Observed 2026-08-12: a
+    panel restart orphaned a trader; a second one then ran the same dry-run
+    config for 4 hours, double-polling MEXC and clobbering the state file.)"""
+    global _GUARD_FH
+    import fcntl
+    sf = os.path.basename(cfg.get("state_file", "trader_state.json"))
+    path = os.path.join(HERE, f".{sf}.lock")
+    # r+ (not w) — 'w' truncates before we know whether we own the lock,
+    # which would erase the holder's pid from the message
+    fh = open(path, "r+" if os.path.exists(path) else "w+")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        try:
+            other = open(path).read().strip() or "unknown"
+        except Exception:
+            other = "unknown"
+        raise SystemExit(
+            f"REFUSING TO START: another trader (pid {other}) is already "
+            f"running with state file '{sf}'. Stop it first "
+            f"(panel Instances, or `kill {other}`).")
+    fh.seek(0)
+    fh.truncate()
+    fh.write(str(os.getpid()))
+    fh.flush()
+    _GUARD_FH = fh        # keep the handle alive → keep the lock
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="disable dry_run")
@@ -238,6 +274,7 @@ def main():
     with open(cfg_path) as f:
         cfg = json.load(f)
     cfg["_path"] = cfg_path   # router strategies hot-reload re-assignments
+    _single_instance_guard(cfg)
     # FCFS combos (multi-pair, multi-timeframe) run their own loop — delegate
     # so the panel's instance machinery / --live / dry-run all work unchanged
     if (cfg.get("candidate") or {}).get("strategy") == "fcfsx":
