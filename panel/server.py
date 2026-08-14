@@ -1556,8 +1556,12 @@ def trader_configs():
 
 @app.route("/api/trader_config", methods=["GET", "POST"])
 def trader_config():
-    fname = request.args.get("file", "config.json")
-    path = os.path.join(AT, os.path.basename(fname))
+    fname = os.path.basename(request.args.get("file") or "config.json")
+    path = os.path.join(AT, fname)
+    # an empty/odd ?file= used to resolve to the adaptive_trader DIRECTORY and
+    # blow up with IsADirectoryError -> HTTP 500
+    if not fname.endswith(".json") or not os.path.isfile(path):
+        return jsonify(error=f"no such trader config: '{fname}'"), 404
     if request.method == "GET":
         return jsonify(json.load(open(path)))
     d = request.get_json(force=True)
