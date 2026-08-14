@@ -27,6 +27,13 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
+## ACTIVE: SPOT MERGE SWEEPS (stage 2, 2026-08-14 ~11:50) — the final grid piece
+- Both stage-1 spot gamuts COMPLETE (spotg1m 1512/1512, spotg3m 1512/1512).
+- **sp1w_0814** (spot 1m sweep, 63 families x 15 = 945 legs, top-8 sources per family by honest growth): EC2 box1 fwd + box2 rev, tmux 's1w', boot ~/boot_sp1w.sh (cron updated), log ~/worker_sp1w.log, cores 88 each.
+- **sp3w_0814** (spot 3m, 945 legs): MacBook fwd (detached worker, /tmp/sp3w_forward.log, cores 8) + mini rev (~/worker_sp3w.log, cores 10).
+- After completion: the all-5-holdouts gauntlet covers every pair x {1m,3m} x {lev,spot} — full shortlist matrix.
+- Audit fixes 2026-08-14: merge_backtests per-PID tmp + flock (was corrupting backtests.js under concurrent sync loops); EC2 reboot cron had been re-arming the FINISHED campaign after every bounce (boxes idled ~12h); killed a 12h-deadlocked search + 2 multi-day orphans; /api/trader_config 404 instead of 500.
+
 ## EC2 BOXES NOW HAVE ELASTIC IPs (2026-08-12 ~22:00) — IP churn is over
 - us-east-2b was interrupting the spot boxes constantly; every stop/start gave a NEW public IP, so sync loops + ssh broke repeatedly (3 IP changes in one afternoon). Fixed with Elastic IPs — addresses now survive every bounce:
   - box 1 **i-0654136d4694c7ef9 → 3.133.195.5** (eipalloc-0ad655fa24ae78fa5), sync SYNC_SFX_START=2, /tmp/ec2_m1_sync.log
