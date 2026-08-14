@@ -2941,4 +2941,8 @@ def backtests_delete():
 
 if __name__ == "__main__":
     print("Control panel: http://127.0.0.1:8800")
-    app.run(host="127.0.0.1", port=8800, debug=False, threaded=True)
+    # PANEL_HOST=0.0.0.0 exposes the panel on the LAN (needed when the hub
+    # runs on the mini and is browsed from other machines). No auth — keep it
+    # on trusted networks only.
+    app.run(host=os.environ.get("PANEL_HOST", "127.0.0.1"), port=8800,
+            debug=False, threaded=True)
