@@ -82,7 +82,7 @@ def backfill(coin, period, fname, market="perp"):
     else:
         df, start = pd.DataFrame(columns=COLS), DATA_START
         print(f"  {fname}: full backfill from {start}", flush=True)
-    end = pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    end = pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H:%M:%S")
     rows = fetch(symbol_id, period, start, end)
     if not rows:
         print(f"  {fname}: no new data", flush=True)

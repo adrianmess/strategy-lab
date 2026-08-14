@@ -267,7 +267,7 @@ class Feed:
         # trades (observed in the metax parity test). Re-anchor only when the
         # window has grown 14 extra days AND the trader says it's flat
         # (trim_ok) — so a re-anchor can never happen mid-trade.
-        now = pd.Timestamp.utcnow().tz_localize(None)
+        now = pd.Timestamp.now("UTC").tz_localize(None)
         if not self.anchored:
             cutoff = now - pd.Timedelta(days=HISTORY_DAYS)
             self.df1 = self.df1[self.df1["t"] >= cutoff].reset_index(drop=True)
@@ -282,7 +282,7 @@ class Feed:
 
     def closed_bars(self):
         """All chart bars that are certainly closed (drop the in-progress bar)."""
-        now = pd.Timestamp.utcnow().tz_localize(None)
+        now = pd.Timestamp.now("UTC").tz_localize(None)
         df = self.df3
         return df[df["t"] + pd.Timedelta(minutes=self.tf_min) <= now].reset_index(drop=True)
 
