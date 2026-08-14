@@ -59,10 +59,25 @@ def main():
             except Exception:
                 pass
     if added or dirty:
-        tmp = LOCAL + ".tmp"
-        with open(tmp, "w") as f:
-            f.write("window.BACKTESTS=" + json.dumps(local) + ";")
-        os.replace(tmp, LOCAL)
+        # CONCURRENCY (fixed 2026-08-14): several sync loops run this at the
+        # same time. A SHARED ".tmp" name let one process rename another's
+        # half-written file over backtests.js — the cause of the recurring
+        # "Extra data"/"Expecting ',' delimiter" JSONDecodeErrors in searches
+        # and of FileNotFoundError on the rename. Now: per-PID tmp + the same
+        # flock every other publisher uses.
+        import fcntl
+        tmp = f"{LOCAL}.tmp{os.getpid()}"
+        try:
+            with open(LOCAL + ".lock", "w") as lk:
+                fcntl.flock(lk, fcntl.LOCK_EX)
+                with open(tmp, "w") as f:
+                    f.write("window.BACKTESTS=" + json.dumps(local) + ";")
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, LOCAL)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
     print(f"merged {added} new backtest entries")
 
 
