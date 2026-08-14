@@ -27,6 +27,11 @@ Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide
 - Box IPs after the 3rd/4th spot bounce of the day: box1 **52.15.227.237** (c7a.24xlarge fwd), box2 **3.138.201.50** (c8a.24xlarge rev); sync loops repointed (logs /tmp/ec2_m1_sync.log, /tmp/ec2_m1b_sync.log). Launcher: scripts/launch_hyp1_0811.sh (HYP1_IPF/HYP1_IPR env override, ONLY_BOXES=1 to re-arm boxes only after a bounce).
 - TEARDOWN unchanged: per box cancel spot REQUEST first, then terminate.
 
+## HUB MOVED TO THE MAC MINI (2026-08-14 ~12:15)
+- The MacBook no longer runs the application. THE MINI now hosts: the panel (PANEL_HOST=0.0.0.0, browse at **http://admns-Mac-mini.local:8800**), the FCFS dry-run trader (instance 4, auto re-adopted), BOTH EC2 sync loops (/tmp/ec2_a_sync.log, /tmp/ec2_b_sync.log, key ~/.ssh/gamut-key.pem on the mini), its own sp3w_0814 reverse worker (cores 10), and the full 48 GB state (runs, dashboards incl. 305MB backtests.js, data, .git, gitignored secrets: mexc_api_keys/proxy_pool/proxy_config/notify_config).
+- MacBook: all workers/panel/loops/trader STOPPED. It can rejoin gamut work later (repo intact; caches still on disk). The ec2-fleet-monitor scheduled task still runs in the Claude app ON THE MACBOOK and now also watches the mini hub (panel/loops/trader heartbeat) — it only works while the Claude app is open here.
+- Canonical git remains this MacBook checkout + GitHub; the mini has .git too. After future code edits: git pull (or rsync) on the mini + restart the affected service.
+
 ## ACTIVE: SPOT MERGE SWEEPS (stage 2, 2026-08-14 ~11:50) — the final grid piece
 - Both stage-1 spot gamuts COMPLETE (spotg1m 1512/1512, spotg3m 1512/1512).
 - **sp1w_0814** (spot 1m sweep, 63 families x 15 = 945 legs, top-8 sources per family by honest growth): EC2 box1 fwd + box2 rev, tmux 's1w', boot ~/boot_sp1w.sh (cron updated), log ~/worker_sp1w.log, cores 88 each.
