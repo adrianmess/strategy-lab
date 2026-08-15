@@ -1950,7 +1950,13 @@ def _gamut_systems():
     """This machine + every remote that an offload_sync loop is talking to.
     Discovered from the running sync processes, so EC2 IP changes after spot
     bounces are picked up automatically."""
-    systems = [dict(id="local", name="MacBook (this computer)", local=True)]
+    import platform
+    _host = platform.node().replace(".local", "") or "this machine"
+    if "mini" in _host.lower():
+        _host = "Mac mini"
+    elif "macbook" in _host.lower():
+        _host = "MacBook"
+    systems = [dict(id="local", name=f"{_host} (this computer)", local=True)]
     try:
         ps = subprocess.run(["ps", "-Ao", "command"], capture_output=True,
                             text=True, timeout=5).stdout
