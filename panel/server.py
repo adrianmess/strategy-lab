@@ -1974,7 +1974,9 @@ def _gamut_systems():
         if rh in seen:
             continue
         seen.add(rh)
-        if "mini" in rh.lower() or rh.endswith(".local"):
+        if "macbook" in rh.lower():
+            name = "MacBook"
+        elif "mini" in rh.lower():
             name = "Mac mini"
         elif rh.startswith("ubuntu@"):
             name = f"AWS EC2 ({rh.split('@')[1]})"
