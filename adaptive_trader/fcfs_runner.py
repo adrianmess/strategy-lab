@@ -71,9 +71,11 @@ class Host:
         self.proc = None
         self.last_px = None
         self.last_seen = 0.0
+        self.started_at = 0.0
         self.restarts = 0
 
     def start(self):
+        self.started_at = time.time()
         env = {**os.environ, "LAB_TF": str(self.tf_min)}
         errlog = open(os.path.join(HERE, f".fcfs_host_{self.key}.err"), "a")
         self.proc = subprocess.Popen(
@@ -353,17 +355,22 @@ def main_fcfs(cfg, live):
                 for k, hst in hosts.items():
                     tf = hst.tf_min
                     lb = last_bar_at.get(k)
-                    age = (now - lb[1]) if lb else (now - hst.last_seen)
+                    # No bar yet? Age from host START — error chatter must not
+                    # reset the clock (a host stuck retrying its backfill sat
+                    # dark for hours on 08-12 without ever looking stale).
+                    age = (now - lb[1]) if lb else (now - hst.started_at)
                     if age > max(240, tf * 60 * 4):
-                        stale.append(f"{k} ({age/60:.0f}m)")
+                        stale.append(f"{k} ({age/60:.0f}m"
+                                     + ("" if lb else ", no bars yet") + ")")
                 where = (f"{pos['symbol']} via {comp_label(pos['comp'])}"
                          if pos else "empty")
-                log.info("heartbeat: slot=%s | %d/%d hosts alive | %d bars "
-                         "evaluated in the last %dm%s", where,
-                         sum(1 for h in hosts.values() if h.alive()),
-                         len(hosts), bars_seen[0], HB_EVERY // 60,
-                         (" | STALE FEEDS: " + ", ".join(stale)) if stale
-                         else "")
+                (log.warning if stale else log.info)(
+                    "heartbeat: slot=%s | %d/%d hosts alive | %d bars "
+                    "evaluated in the last %dm%s", where,
+                    sum(1 for h in hosts.values() if h.alive()),
+                    len(hosts), bars_seen[0], HB_EVERY // 60,
+                    (" | STALE FEEDS: " + ", ".join(stale)) if stale
+                    else "")
                 bars_seen[0] = 0
         except KeyboardInterrupt:
             log.info("stopped by user")
