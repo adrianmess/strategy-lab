@@ -738,6 +738,8 @@ function render(){
     order = order.filter(i=>{const g=gauntOf(BT[i].name); return g && g.full && g.passed===5;});
   const fHo = document.getElementById('fHold').value;
   if(fHo !== 'all') order = order.filter(i=>{
+    if(_isRtr(i)) return true;   // routers have no optimizer holdout of their
+                                 // own (their COMPONENTS were holdout-tested)
     const h = ((BT[i].opt||{}).holdout) || 'none';
     if(fHo === 'notnone') return h !== 'none';
     return h === 'none' ? fHo === 'none' : h.startsWith(fHo);});
