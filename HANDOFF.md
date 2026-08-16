@@ -1,6 +1,9 @@
 # Strategy Lab — Session Handoff
 Updated: 2026-08-02 (EC2 offload live). Paste into a new session to resume. Keep this file updated as work progresses.
 
+## CLOSED: EC2 fleet #2 (2026-08-10 → 2026-08-15)
+FULLY TORN DOWN 2026-08-15 ~18:45 PDT after sp3w_0814 completed 945/945 (whole lev+spot gauntlet matrix now done). Verified via console: both persistent spot requests cancelled (sir-qdh7gy4m, sir-t99qkafm) with instances terminated (i-0654136d4694c7ef9, i-0dcfada687ccff1dc), BOTH ELASTIC IPs RELEASED (3.133.195.5, 3.15.93.224), 0 volumes, 0 snapshots. NOTHING BILLABLE REMAINS. Mini sync loops SFX2/SFX3 stopped; ec2-fleet-monitor scheduled task deleted. All 945 sp3w run dirs verified on the mini hub before teardown.
+
 ## CLOSED: EC2 gamut offload (2026-08-02 → 2026-08-09)
 FULLY TORN DOWN 2026-08-09 (verified via CloudShell sweep: 0 fleets, 0 instances, 0 spot requests, 0 EIPs, 0 EBS volumes, 0 S3 buckets, IAM role gamut-box deleted, launch template gamut-A deleted, AMI ami-041e982838c990d16 + snap-0660b53012508ec22 deregistered/deleted, all monitor/launcher scheduled tasks deleted, Mac sync loops stopped). NOTHING BILLABLE REMAINS.
 Results: main 12,960/12,960 + hype 2,592/2,592 durable on the Mac. Rebuild guide: docs/EC2_OFFLOAD_RUNBOOK.md (+ docs/ec2/box_snapshot.txt).
