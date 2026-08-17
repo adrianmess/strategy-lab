@@ -188,6 +188,7 @@ button.rtradd.on{opacity:1;filter:none}
       <tbody id="rtrList"><tr><td colspan="8" class="hint">use the 🔀 button on any run to add it…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
+      <button id="rtrOnlyBtn" onclick="toggleRtrOnly()" title="show ONLY the selected components in the list below (all other filters still apply) — click again to show everything">⧉ show only these below</button>
       <button onclick="clearRtr()">clear</button>
       <span style="margin-left:14px;padding-left:14px;border-left:1px solid var(--border)">
         <input id="rtrSaveName" placeholder="selection name…" style="width:150px" title="name this component selection so you can load it back later and keep editing it">
@@ -484,7 +485,22 @@ function rtrClick(e){
     .forEach(b=>b.classList.toggle('on', RTRSEL.includes(e.name)));
 }
 function rtrRemove(name){ const i=RTRSEL.indexOf(name); if(i>=0) RTRSEL.splice(i,1); rtrRender(); }
-function clearRtr(){ RTRSEL.length = 0; rtrRender(); }
+let RTR_ONLY = false;
+function rtrOnlyBtnSync(){
+  const b = document.getElementById('rtrOnlyBtn'); if(!b) return;
+  const on = RTR_ONLY && RTRSEL.length;
+  b.textContent = on ? '⧉ showing only these — click to show all'
+                     : '⧉ show only these below';
+  b.style.fontWeight = on ? '700' : '';
+  b.style.color = on ? 'var(--blue)' : '';
+}
+function toggleRtrOnly(){
+  if(!RTRSEL.length){ alert('no components selected — add runs with 🔀, or load a saved selection'); return; }
+  RTR_ONLY = !RTR_ONLY;
+  rtrOnlyBtnSync();
+  sel = null; render();
+}
+function clearRtr(){ RTRSEL.length = 0; RTR_ONLY = false; rtrOnlyBtnSync(); rtrRender(); }
 // ---- named saved selections (persist across sessions) ----
 function rtrSavedAll(){ try { return JSON.parse(localStorage.getItem('rtrSaved')||'{}'); } catch(e){ return {}; } }
 function rtrSavedRefresh(){
@@ -516,7 +532,8 @@ function rtrLoad(){
   const have = want.filter(n=>BT.some(e=>e.name===n));
   RTRSEL.length = 0; RTRSEL.push(...have);
   document.getElementById('rtrSaveName').value = name;   // easy re-save under the same name
-  rtrRender(); render();                                  // refresh 🔀 button states too
+  if(!have.length) RTR_ONLY = false;   // never leave an empty "only" filter on
+  rtrRender(); sel = null; render();                      // refresh 🔀 button states too
   if(have.length < want.length)
     document.getElementById('rtrCount').textContent =
       `— ${have.length} selected — loaded “${name}” (${want.length-have.length} run(s) no longer exist, skipped)`;
@@ -531,6 +548,7 @@ function rtrSavedDel(){
 }
 function rtrRender(){
   const savedCount = rtrSavedRefresh();
+  rtrOnlyBtnSync();
   document.getElementById('rtrBar').style.display = (RTRSEL.length || savedCount) ? '' : 'none';
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
@@ -704,6 +722,8 @@ function render(){
   const holder = document.getElementById('detailHolder');
   holder.style.display='none'; document.querySelector('main').appendChild(holder);
   let order = BT.map((e,i)=>i);
+  // "show only these" — restrict the list to the router-component selection
+  if(RTR_ONLY && RTRSEL.length) order = order.filter(i=>RTRSEL.includes(BT[i].name));
   const fModeV = document.getElementById('fMode').value;
   const fPairV = document.getElementById('fPair').value;
   const fNoLiqV = document.getElementById('fNoLiq').checked;
