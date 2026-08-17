@@ -1496,6 +1496,9 @@ def adopt():
         cfg["mode"] = best["mode"]
         cfg["method"] = best.get("method", "vol3")
         cfg["timeframe"] = best.get("timeframe", "3m")
+        if best.get("pair"): cfg["symbol"] = best["pair"]   # same pair-carry
+        #   as plain adopt: a non-SOL router over the SOL template must not
+        #   inherit SOL_USDT
         cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
         json.dump(cfg, open(target, "w"), indent=1)
         return jsonify(ok=True, target=tname, created=created,
