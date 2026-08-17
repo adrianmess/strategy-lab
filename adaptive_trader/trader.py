@@ -624,12 +624,18 @@ def main():
     # the old single-check-per-poll behavior.
     protect_dt = cfg.get("protect_poll_seconds", 0.5)
 
+    net_err = {"kind": None, "n": 0, "t0": 0.0}
     while True:
         try:
             # anchored feed may only re-anchor its window while we're flat
             feed.trim_ok = (not state.get("position")
                             and not state.get("mirror"))
             feed.update()
+            if net_err["kind"]:
+                log.info("RECOVERED from %s after %d failed polls (%.0fs)",
+                         net_err["kind"], net_err["n"],
+                         time.time() - net_err["t0"])
+                net_err.update(kind=None, n=0)
             price = feed.last_price()
 
             # 1) intra-bar protective check (live price)
@@ -710,6 +716,32 @@ def main():
         except KeyboardInterrupt:
             log.info("stopped by user")
             break
+        except requests.exceptions.RequestException as e:
+            # transient network trouble (connection reset, timeout, DNS) on
+            # the kline path: single-line WARNs with repeat-collapse instead
+            # of a 50-line traceback per blip, NO notification unless it
+            # persists (20 polls) — and the protective check keeps running
+            # on the last known price instead of sleeping blind for 30s.
+            kind = type(e).__name__
+            if kind == net_err["kind"]:
+                net_err["n"] += 1
+                if net_err["n"] in (5, 20) or net_err["n"] % 60 == 0:
+                    log.warning("network still failing: %s (%d polls, %.0fs)",
+                                kind, net_err["n"],
+                                time.time() - net_err["t0"])
+                if net_err["n"] == 20:
+                    notify("trader_error", account=_acct_label(cfg),
+                           config=os.path.basename(cfg.get("_path", "?")),
+                           detail=f"network failing for 20 polls: {e}"[:300])
+            else:
+                net_err.update(kind=kind, n=1, t0=time.time())
+                log.warning("network error (%s): %s — retrying",
+                            kind, str(e)[:160])
+            try:
+                protective_check()
+            except Exception:
+                pass
+            time.sleep(5)
         except Exception as e:
             log.exception("loop error: %s", e)
             notify("trader_error", account=_acct_label(cfg),
