@@ -982,11 +982,81 @@ def bt_submit():
         ents = [ents]
     if not all(isinstance(e, dict) and e.get("name") for e in ents):
         return jsonify(error="entries need names"), 400
+    if len(ents) <= 3:
+        # small submissions (single re-runs) fold synchronously so the page
+        # sees the refreshed entry as soon as the job finishes
+        _bt_fold({e["name"]: e for e in ents})
+        return jsonify(ok=True, folded=len(ents))
     d = os.path.join(REPO, "dashboard", "bt_incoming")
     os.makedirs(d, exist_ok=True)
     fn = os.path.join(d, f"{int(time.time()*1000)}_{os.getpid()}.json")
     json.dump(ents, open(fn, "w"), default=float)
     return jsonify(ok=True, queued=len(ents))
+
+
+def _bt_fold(pend):
+    """Replace-by-name a batch of entries in backtests.js (shared lock)."""
+    import fcntl
+    p = os.path.join(REPO, "dashboard", "backtests.js")
+    with open(p + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        txt = open(p).read()
+        entries = json.JSONDecoder().raw_decode(
+            txt[txt.index("=") + 1:].lstrip())[0]
+        entries = [x for x in entries
+                   if x.get("name") not in pend] + list(pend.values())
+        tmp = p + f".tmp{os.getpid()}"
+        with open(tmp, "w") as f:
+            f.write("window.BACKTESTS = ")
+            json.dump(entries, f, default=float)
+            f.write(";")
+        os.replace(tmp, p)
+
+
+@app.route("/api/backtests/rerun", methods=["POST"])
+def bt_rerun():
+    """Re-run ONE published entry on the most recently downloaded market
+    data and replace it in the store (same machinery as the bulk refresh).
+    Runs as a panel job so it shows under Jobs and the page auto-reloads."""
+    name = (request.get_json(force=True) or {}).get("name") or ""
+    p = os.path.join(REPO, "dashboard", "backtests.js")
+    txt = open(p).read()
+    entries = json.JSONDecoder().raw_decode(txt[txt.index("=") + 1:].lstrip())[0]
+    e = next((x for x in entries if x.get("name") == name), None)
+    if not e:
+        return jsonify(error=f"no entry '{name}'"), 404
+    _SUF = ["_oosbest_full", "_best_full", "_full"]
+    _GEN = {"_oosbest_full": "holdout_best_config.json",
+            "_best_full": "best_config.json", "_full": "best_config.json"}
+    genome = e.get("config")
+    if not genome:
+        for s in _SUF:
+            if name.endswith(s):
+                r = name[:-len(s)]
+                gp = os.path.join(OPT, "runs", r, _GEN[s])
+                if not os.path.exists(gp):
+                    gp = os.path.join(OPT, "runs", r, "best_config.json")
+                if os.path.exists(gp):
+                    genome = json.load(open(gp))
+                break
+    if not genome:
+        return jsonify(error="no genome for this entry — router combos and "
+                             "quick backtests must be re-run from their own "
+                             "flows (fcfsx: Re-run on the Optimize page)"), 400
+    item = dict(name=name, pair=e.get("pair"),
+                timeframe=str(e.get("timeframe") or ""), mode=e.get("mode"),
+                method=e.get("method"), strategy=e.get("strategy"),
+                kind=e.get("kind"), opt=e.get("opt"), genome=genome)
+    sd = os.path.join(REPO, "dashboard", "bt_refresh")
+    os.makedirs(sd, exist_ok=True)
+    shard = os.path.join(sd, f"one_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
+    json.dump([item], open(shard, "w"))
+    jid = spawn("backtest", f"re-run {name} on current data",
+                [sys.executable,
+                 os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
+                 "--shard", shard, "--procs", "1",
+                 "--hub", "http://localhost:8800"], REPO)
+    return jsonify(ok=True, id=jid)
 
 
 def _bt_ingester():

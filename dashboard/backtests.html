@@ -865,6 +865,14 @@ function render(){
     w._t = setTimeout(()=>{ if(w.parentNode) w.replaceWith(b); }, 5000);
   });
 }
+async function rerunThis(){
+  if(sel===null) return;
+  const e = BT[sel];
+  if(!confirm(`Re-run "${e.name}" against the most recently downloaded market data?\n\nThe entry is REPLACED when the job finishes (1–5 min; watch the active-jobs banner). Tip: use "Refresh market data" on the Control panel first if you want data through right now.`)) return;
+  const r = await fetch('/api/backtests/rerun', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:e.name})}).then(x=>x.json());
+  alert(r.ok ? 'Re-run started — the list reloads automatically when it completes.' : ('error: '+(r.error||'')));
+}
 function optimizeThis(){
   if(sel===null) return;
   const e = BT[sel];
@@ -903,7 +911,10 @@ function select(i){
   document.getElementById('ct').innerHTML = `<b>${e.name}</b> · ${stratName(e.strategy)}${totalHtml}
     <button style="margin-left:12px;padding:3px 10px;font-size:12px;cursor:pointer;border-radius:6px"
       title="Open the Optimize page with this configuration loaded — continue improving it"
-      onclick="optimizeThis()">⚙ Optimize this →</button>`;
+      onclick="optimizeThis()">⚙ Optimize this →</button>
+    <button style="margin-left:6px;padding:3px 10px;font-size:12px;cursor:pointer;border-radius:6px"
+      title="Re-run this backtest against the most recently downloaded market data and replace this entry (runs as a job; the list reloads when it finishes)"
+      onclick="rerunThis()">↻ Re-run on current data</button>`;
   if(chart)chart.destroy();
   if(e.curve&&e.curve.length){
     chart = new Chart(document.getElementById('curve'),{type:'line',
