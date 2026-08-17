@@ -140,11 +140,17 @@ def main_fcfs(cfg, live):
         if not c.get("pair") or not c.get("timeframe"):
             raise SystemExit(f"component {i} missing pair/timeframe")
     if mode == "spot" and not cfg["dry_run"] and cfg.get("execution") == "api":
-        bad = {c["pair"] for c in comps} - {"BTC_USDT", "ETH_USDT"}
+        # ask MEXC which spot symbols THIS key may API-trade (the old
+        # hardcoded BTC/ETH-only rule is stale — keys now get a wide list)
+        from mexc_api import MexcFuturesAPI
+        allowed = set(MexcFuturesAPI(
+            account=cfg.get("account", "mexc1")).spot_api_symbols())
+        bad = {c["pair"] for c in comps
+               if c["pair"].replace("_", "") not in allowed}
         if bad:
-            raise SystemExit(f"LIVE spot via API is restricted to BTC/ETH on "
-                             f"MEXC — pairs {sorted(bad)} can't trade live "
-                             f"spot. Dry-run works; lev mode works.")
+            raise SystemExit(f"this key's MEXC spot-API allowlist does not "
+                             f"include {sorted(bad)} — enable them for the "
+                             f"key or use another account. Dry-run works.")
     log.info("FCFS live adapter starting: %d components, mode=%s, dry_run=%s",
              len(comps), mode, cfg["dry_run"])
 
