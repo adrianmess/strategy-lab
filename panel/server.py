@@ -1504,24 +1504,48 @@ def adopt():
                                 if created else " (backup kept).")
                              + " Run test_parity_metax.py, then a dry-run "
                                "soak before LIVE."))
-    cfg = json.load(open(target))
-    if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:
-        if not d.get("force"):
-            right = "config_spot.json" if best["mode"] == "spot" else "config.json"
-            return jsonify(error=(
-                f"This is a {best['mode']}-mode strategy, but "
-                f"{os.path.basename(target)} is the {cfg['mode']}-mode trader config. "
-                f"Choose '{right}' as the adopt target instead "
-                f"(spot strategies -> config_spot.json, leveraged -> config.json).")), 400
-    import shutil
-    shutil.copy(target, target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+    created = not os.path.exists(target)
+    if created:
+        # NEW config file: clone the mode's classic config as a template but
+        # give it its OWN state/log files (so it can run as its own instance)
+        # and start it DRY — same policy as router/fcfs adoption.
+        base_p = os.path.join(AT, "config_spot.json"
+                              if best.get("mode") == "spot" else "config.json")
+        if not os.path.exists(base_p):
+            base_p = os.path.join(AT, "config.json")
+        cfg = json.load(open(base_p))
+        cfg.pop("candidate", None)
+        cfg.pop("adopted_from", None)
+        nm = re.sub(r"^config_?", "", os.path.basename(target)[:-len(".json")])
+        suffix = re.sub(r"[^A-Za-z0-9_]+", "", nm)[:60] or "adopted"
+        cfg.update(dry_run=True,
+                   state_file=f"trader_state_{suffix}.json",
+                   log_file=f"trader_{suffix}.log")
+    else:
+        cfg = json.load(open(target))
+        if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:
+            if not d.get("force"):
+                right = ("config_spot.json" if best["mode"] == "spot"
+                         else "config.json")
+                return jsonify(error=(
+                    f"This is a {best['mode']}-mode strategy, but "
+                    f"{os.path.basename(target)} is the {cfg['mode']}-mode trader config. "
+                    f"Choose '{right}' as the adopt target instead "
+                    f"(spot strategies -> config_spot.json, leveraged -> config.json).")), 400
+        import shutil
+        shutil.copy(target, target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
     cfg["candidate"] = best["cand"]
     if best.get("mode"): cfg["mode"] = best["mode"]
     if best.get("method"): cfg["method"] = best["method"]
     cfg["timeframe"] = best.get("timeframe", "3m")
     cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(cfg, open(target, "w"), indent=1)
-    return jsonify(ok=True, target=os.path.basename(target))
+    return jsonify(ok=True, target=os.path.basename(target), created=created,
+                   note=(f"adopted into NEW config "
+                         f"{os.path.basename(target)} (own state/log, starts "
+                         f"as DRY-RUN)" if created else
+                         f"adopted into {os.path.basename(target)} (backup "
+                         f"kept)"))
 
 @app.route("/api/trader_configs")
 def trader_configs():

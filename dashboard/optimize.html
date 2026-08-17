@@ -1459,10 +1459,20 @@ async function adoptRouter(name, mode){
   if(r.ok) alert((r.note||'Adopted.')+`\n\nOn the Control panel, pick "${target}" on an instance and Start dry-run.`);
 }
 async function adopt(cfg, mode){
-  const target = (mode==='spot') ? 'config_spot.json' : 'config.json';
-  if(!confirm(`Copy these parameters into the live trader's ${target}?\n(${mode==='spot'?'spot long-only trading':'leveraged futures trading'} — backup kept; restart trader to apply)`))return;
-  const r = await api('adopt',{source: cfg, target: target});
-  if(r.ok) alert('Adopted into '+target+'. On the Control panel, pick "'+target+'" and start the trader.');
+  // name the config file — default: the run's own name, so each adoption can
+  // live as its own panel instance (a NEW file gets its own state/log and
+  // starts dry; naming an EXISTING file overwrites it, backup kept)
+  const m = String(cfg).match(/runs\/([^/]+)\//);
+  const def = m ? `config_${m[1]}.json`
+               : (mode==='spot' ? 'config_spot.json' : 'config.json');
+  let t = prompt(`Config file for this adoption (${mode==='spot'?'spot long-only':'leveraged futures'}):\n\n· new file = own instance, own state/log, starts DRY-RUN\n· existing file (e.g. ${mode==='spot'?'config_spot.json':'config.json'}) = overwritten, backup kept`, def);
+  if(t === null) return;
+  t = (t.trim() || def).replace(/[^A-Za-z0-9_.-]+/g, '');
+  if(!/^config/.test(t)) t = 'config_' + t;
+  if(!t.endsWith('.json')) t += '.json';
+  const r = await api('adopt',{source: cfg, target: t});
+  if(r.ok) alert((r.note||('Adopted into '+t))+`\n\nOn the Control panel, pick "${t}" on an instance and start the trader.`);
+  else alert('error: '+(r.error||''));
 }
 function delArm(btn, name){
   // no popup: the ✕ swaps to inline confirm/cancel (auto-reverts in 5s)
