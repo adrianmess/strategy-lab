@@ -88,9 +88,11 @@ def _webhook_log(i):
     return os.path.join(JOBS_DIR, "webhook_server.log" if i == "1"
                         else f"webhook_server_i{i}.log")
 
-# instance-1 aliases: any legacy code path keeps working
-trader = instances["1"]["trader"]
-webhook = instances["1"]["webhook"]
+# instance-1 aliases: any legacy code path keeps working (instance 1 may be
+# DELETED now — fall back to the lowest existing instance)
+_alias = instances.get("1") or instances[min(instances, key=int)]
+trader = _alias["trader"]
+webhook = _alias["webhook"]
 
 
 class _PidProc:
