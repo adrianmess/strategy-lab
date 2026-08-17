@@ -52,8 +52,8 @@ def _load_instances():
         d["_resume"] = m.get("trader") or {}   # saved run/live intent (reboot)
         d["err_cleared"] = m.get("err_cleared") or ""
         out[str(i)] = d
-    if "1" not in out:
-        out["1"] = _new_instance(1)
+    if not out:                       # empty file only — never re-seed a
+        out["1"] = _new_instance(1)   # DELETED instance 1 on restart
     return out
 
 instances = _load_instances()
