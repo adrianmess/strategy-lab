@@ -50,6 +50,7 @@ def _load_instances():
         d["headless"] = bool(m.get("headless"))
         d["name"] = m.get("name") or d["name"]
         d["_resume"] = m.get("trader") or {}   # saved run/live intent (reboot)
+        d["err_cleared"] = m.get("err_cleared") or ""
         out[str(i)] = d
     if "1" not in out:
         out["1"] = _new_instance(1)
@@ -63,6 +64,7 @@ def _save_instances():
     json.dump({i: dict(cfg=d.get("cfg"), port=d.get("port"),
                        headless=d.get("headless", False),
                        name=d.get("name"),
+                       err_cleared=d.get("err_cleared") or "",
                        trader=dict(
                            should_run=(d["trader"]["proc"] is not None
                                        and d["trader"]["proc"].poll() is None),
@@ -905,6 +907,41 @@ def instances_list():
             trader_live=t["live"],
             webhook_running=(w["proc"] is not None and w["proc"].poll() is None)))
     return jsonify(out)
+
+@app.route("/api/errors")
+def api_errors():
+    """Per-instance API/order errors (from notifications.log) since each
+    instance's last 'clear'. Feeds the panel's error banner + tab icon."""
+    nl = os.path.join(AT, "notifications.log")
+    events = []
+    try:
+        with open(nl) as f:
+            for ln in f.readlines()[-3000:]:
+                try:
+                    e = json.loads(ln)
+                except Exception:
+                    continue
+                ev = e.get("event") or ""
+                if "fail" in ev or "error" in ev:
+                    events.append(e)
+    except OSError:
+        pass
+    out = {}
+    for i, I in instances.items():
+        cfgn = I["trader"].get("config") or I.get("cfg") or ""
+        cleared = I.get("err_cleared") or ""
+        mine = [e for e in events
+                if e.get("config") == cfgn and (e.get("at") or "") > cleared]
+        if mine:
+            out[i] = dict(count=len(mine), last=mine[-1])
+    return jsonify(out)
+
+@app.route("/api/errors/clear", methods=["POST"])
+def api_errors_clear():
+    i, I = _inst()
+    I["err_cleared"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    _save_instances()
+    return jsonify(ok=True, instance=i)
 
 @app.route("/api/instances/rename", methods=["POST"])
 def instances_rename():

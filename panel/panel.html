@@ -274,6 +274,10 @@ function instCard(i){
     This config is <b>leveraged with NO stop loss</b>. A March-2024-style move liquidates the position.
     Dry-run first; size only what you can lose entirely.
   </div>
+  <div id="errbar_${i}" style="display:none;background:rgba(220,60,60,.12);border:1px solid var(--red);border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12.5px">
+    <b style="color:var(--red)">⚠ API errors</b> <span id="errtxt_${i}"></span>
+    <button class="small" style="margin-left:8px" onclick="clearErrors('${i}')">clear</button>
+  </div>
   <details class="term"><summary>trader log ▸</summary><pre id="tlog_${i}">–</pre></details>
   <div class="row" style="margin-top:8px">
     <span><span id="wdot_${i}" class="dot off"></span><b>MEXC executor</b> <span class="note" id="wportlbl_${i}"></span> <span class="note">(Playwright webhook server — browser profile instance_${i})</span></span>
@@ -347,7 +351,7 @@ function renderInstances(){
        ondragstart="_dragId='${x.id}'" ondragover="event.preventDefault()"
        ondrop="tabDrop('${x.id}')"
        title="click to switch · double-click to rename · drag to reorder (display only)">
-       <span class="dot off" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)} <span class="kv" style="font-weight:400">#${x.id}</span></span>`).join('') : '';
+       <span class="dot off" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)} <span class="kv" style="font-weight:400">#${x.id}</span><span id="taberr_${x.id}" style="display:none;margin-left:4px" title="this instance has API errors — see the banner above its trader log">⚠️</span></span>`).join('') : '';
   tabs.style.display = LAYOUT==='tabs' ? 'flex' : 'none';
   wrap.className = LAYOUT==='cols' ? 'cols' : '';
   $('main').className = LAYOUT==='cols' ? 'cols' : '';
@@ -379,6 +383,31 @@ async function addInstance(){
   const r = await api('instances/add',{});
   if(r.ok){ await api('instances'); CUR = r.id; localStorage.setItem('curInst', CUR); loadInstances(); }
 }
+async function pollErrors(){
+  // per-instance API-error indicator: banner above the trader log + ⚠ on the
+  // tab, fed by /api/errors (order_failed etc. from notifications.log since
+  // the instance's last "clear")
+  let errs = {};
+  try{ errs = await api('errors'); }catch(e){ return; }
+  INSTS.forEach(x=>{
+    const e = errs[x.id];
+    const bar = $('errbar_'+x.id), tab = $('taberr_'+x.id);
+    if(bar){
+      bar.style.display = e ? '' : 'none';
+      if(e) $('errtxt_'+x.id).innerHTML =
+        `${e.count} since last clear — latest: <b>${e.last.event}</b>` +
+        `${e.last.detail?` (${e.last.detail})`:''}` +
+        `${e.last.action?` [${e.last.action}]`:''} at ${e.last.at}`;
+    }
+    if(tab) tab.style.display = e ? '' : 'none';
+  });
+}
+async function clearErrors(i){
+  await api('errors/clear?instance='+i, {});
+  pollErrors();
+}
+setInterval(pollErrors, 15000);
+setTimeout(pollErrors, 3000);
 async function removeInstance(i){
   if(!(await modalConfirm(`Remove ${instName(i)} (#${i})? Its trader and executor must be stopped. Config, state and log files stay on disk — only the instance card goes away.`, {okLabel:'Remove', danger:true}))) return;
   const r = await api('instances/remove',{id:i});
