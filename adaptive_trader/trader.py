@@ -513,11 +513,12 @@ def main():
         d = _ov["d"]
         if not d or str(pos.get("opened_at")) != d.get("pos_key"):
             return False
-        if not ((price >= d["price"]) if d.get("above")
-                else (price <= d["price"])):
+        if not d.get("now") and not ((price >= d["price"]) if d.get("above")
+                                     else (price <= d["price"])):
             return False
-        log.warning("MANUAL OVERRIDE close: price %.6g crossed trigger %.6g",
-                    price, d["price"])
+        log.warning("MANUAL %s close at %.6g",
+                    "CLOSE-NOW" if d.get("now") else
+                    f"OVERRIDE (trigger {d['price']:.6g})", price)
         res = ex.close_position()
         notify("position_closed", account=_acct_label(cfg),
                config=os.path.basename(cfg.get("_path", "?")),

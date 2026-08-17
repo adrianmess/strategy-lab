@@ -399,6 +399,13 @@ async function clearOverride(i){
   await fetch('/api/override?instance='+i, {method:'DELETE'});
   refreshInst(i);
 }
+async function closeNow(i){
+  if(!(await modalConfirm(`Market-close ${instName(i)}'s open position NOW? The trader executes it within a second and the strategy stays flat until its next signal.`, {okLabel:'Close position', danger:true}))) return;
+  const r = await fetch('/api/override?instance='+i, {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({now:true})}).then(x=>x.json());
+  if(!r.ok) alert('error: '+(r.error||''));
+  setTimeout(()=>refreshInst(i), 1500);
+}
 async function pollErrors(){
   // per-instance API-error indicator: banner above the trader log + ⚠ on the
   // tab, fed by /api/errors (order_failed etc. from notifications.log since
@@ -607,7 +614,8 @@ async function refreshInst(i){
                  : `<span class="kv">manual close:</span>
                     <input id="ovval_${i}" placeholder="price or ±%" style="width:90px;font-size:12px">
                     <select id="ovunit_${i}" style="font-size:12px"><option value="price">price</option><option value="pct">% from entry (+=profit)</option></select>
-                    <button class="small" onclick="setOverride('${i}')">arm</button>`}
+                    <button class="small" onclick="setOverride('${i}')">arm</button>
+                    <button class="small" style="color:var(--red);font-weight:700;margin-left:10px" onclick="closeNow('${i}')">close position now</button>`}
              </div>`;
         }
         const pe = $('hpnl_'+i);

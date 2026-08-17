@@ -979,6 +979,11 @@ def override():
     cur = _pub_price(sym, cfgj.get("mode"))
     if cur is None:
         return jsonify(error="no current price available"), 400
+    if d.get("now"):
+        json.dump(dict(now=True, pos_key=str(pos.get("opened_at")),
+                       set_at=time.strftime("%Y-%m-%d %H:%M:%S")),
+                  open(path, "w"))
+        return jsonify(ok=True, now=True)
     if d.get("price") not in (None, ""):
         trig = float(d["price"])
     elif d.get("pct") not in (None, ""):

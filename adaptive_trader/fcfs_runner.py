@@ -411,10 +411,13 @@ def main_fcfs(cfg, live):
                             ov["d"] = None
                     d_ = ov["d"]
                     if (d_ and str(pos.get("opened_at")) == d_.get("pos_key")
-                            and ((px >= d_["price"]) if d_.get("above")
-                                 else (px <= d_["price"]))):
-                        log.warning("MANUAL OVERRIDE close: px %.6g crossed "
-                                    "trigger %.6g", px, d_["price"])
+                            and (d_.get("now")
+                                 or ((px >= d_["price"]) if d_.get("above")
+                                     else (px <= d_["price"])))):
+                        log.warning("MANUAL %s close at %.6g",
+                                    "CLOSE-NOW" if d_.get("now") else
+                                    f"OVERRIDE (trigger {d_['price']:.6g})",
+                                    px)
                         try:
                             os.remove(ov_path)
                         except OSError:
