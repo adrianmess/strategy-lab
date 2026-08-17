@@ -49,6 +49,7 @@ def _load_instances():
         d["port"] = m.get("port") or d["port"]
         d["headless"] = bool(m.get("headless"))
         d["name"] = m.get("name") or d["name"]
+        d["_resume"] = m.get("trader") or {}   # saved run/live intent (reboot)
         out[str(i)] = d
     if "1" not in out:
         out["1"] = _new_instance(1)
@@ -57,9 +58,16 @@ def _load_instances():
 instances = _load_instances()
 
 def _save_instances():
+    # trader run/live intent is persisted so a REBOOTED machine can resume
+    # each trader in the state it was in (dry stays dry, LIVE comes back LIVE)
     json.dump({i: dict(cfg=d.get("cfg"), port=d.get("port"),
                        headless=d.get("headless", False),
-                       name=d.get("name"))
+                       name=d.get("name"),
+                       trader=dict(
+                           should_run=(d["trader"]["proc"] is not None
+                                       and d["trader"]["proc"].poll() is None),
+                           live=bool(d["trader"].get("live")),
+                           config=d["trader"].get("config") or d.get("cfg")))
                for i, d in instances.items()},
               open(INSTANCES_FILE, "w"), indent=1)
 
@@ -180,6 +188,40 @@ def _readopt_orphans():
 
 
 _readopt_orphans()
+
+
+def _resume_traders():
+    """After a machine REBOOT the watchdog brings the panel back, but the
+    traders it used to run are gone. Restart every trader whose persisted
+    state says it should be running — in the SAME live/dry state it was in.
+    After a mere panel restart the orphan re-adopt above finds the processes
+    still alive and this is a no-op."""
+    for i, I in sorted(instances.items(), key=lambda kv: int(kv[0])):
+        want = I.pop("_resume", None) or {}
+        t = I["trader"]
+        if not want.get("should_run"):
+            continue
+        if t["proc"] is not None and t["proc"].poll() is None:
+            continue                      # re-adopted alive — nothing to do
+        cfg_name = want.get("config") or I.get("cfg") or "config.json"
+        live = bool(want.get("live"))
+        cmd = [sys.executable, "trader.py"] + (["--live"] if live else [])
+        log = os.path.join(JOBS_DIR, "trader_stdout.log" if i == "1"
+                           else f"trader_stdout_i{i}.log")
+        try:
+            with open(log, "a") as lf:
+                proc = subprocess.Popen(
+                    cmd, cwd=AT, stdout=lf, stderr=subprocess.STDOUT,
+                    env={**os.environ, "TRADER_CONFIG": cfg_name})
+            t.update(proc=proc, config=cfg_name, live=live,
+                     started=time.strftime("%Y-%m-%d %H:%M:%S"))
+            print(f"RESUMED trader for instance {i} ({cfg_name}, "
+                  f"{'LIVE' if live else 'dry'})", flush=True)
+        except Exception as e:
+            print(f"trader resume FAILED for instance {i}: {e}", flush=True)
+
+
+_resume_traders()
 
 
 def tail(path, lines=80):
@@ -319,6 +361,7 @@ def trader_stop():
         p.wait(10)
     except subprocess.TimeoutExpired:
         p.terminate()
+    _save_instances()   # deliberate stop — must NOT be resumed after reboot
     return jsonify(ok=True)
 
 
