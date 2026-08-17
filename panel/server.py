@@ -342,6 +342,9 @@ def status():
         symbol=_sym,
         price=(_pub_price(_sym, cfg.get("mode")) if _pos else None),
         override=_ov,
+        contract_size=((cfg.get("contract_sizes") or {}).get(_sym)
+                       or cfg.get("contract_size")
+                       or (1.0 if cfg.get("mode") == "spot" else None)),
         instance=i,
         running=running, live=t["live"] if running else False,
         config=cfg_name, started=t["started"] if running else None,
