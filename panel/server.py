@@ -956,6 +956,72 @@ def instances_list():
             webhook_running=(w["proc"] is not None and w["proc"].poll() is None)))
     return jsonify(out)
 
+@app.route("/api/backtests/submit", methods=["POST"])
+def bt_submit():
+    """Fast drop-off for refreshed backtest entries (list of entry dicts):
+    saved to an incoming dir; the background ingester folds them into
+    backtests.js in one parse per minute (the file is ~300MB — per-entry
+    rewrites would thrash)."""
+    ents = request.get_json(force=True)
+    if isinstance(ents, dict):
+        ents = [ents]
+    if not all(isinstance(e, dict) and e.get("name") for e in ents):
+        return jsonify(error="entries need names"), 400
+    d = os.path.join(REPO, "dashboard", "bt_incoming")
+    os.makedirs(d, exist_ok=True)
+    fn = os.path.join(d, f"{int(time.time()*1000)}_{os.getpid()}.json")
+    json.dump(ents, open(fn, "w"), default=float)
+    return jsonify(ok=True, queued=len(ents))
+
+
+def _bt_ingester():
+    """Every 60s: fold all pending bt_incoming files into backtests.js
+    (replace-by-name) under the shared lock, in a single parse+write."""
+    import fcntl
+    d = os.path.join(REPO, "dashboard", "bt_incoming")
+    p = os.path.join(REPO, "dashboard", "backtests.js")
+    while True:
+        time.sleep(60)
+        try:
+            files = sorted(os.listdir(d)) if os.path.isdir(d) else []
+            if not files:
+                continue
+            pend = {}
+            for fn in files:
+                try:
+                    for e in json.load(open(os.path.join(d, fn))):
+                        pend[e["name"]] = e
+                except Exception:
+                    pass
+            if not pend:
+                continue
+            with open(p + ".lock", "w") as lk:
+                fcntl.flock(lk, fcntl.LOCK_EX)
+                txt = open(p).read()
+                entries = json.JSONDecoder().raw_decode(
+                    txt[txt.index("=") + 1:].lstrip())[0]
+                entries = [x for x in entries
+                           if x.get("name") not in pend] + list(pend.values())
+                tmp = p + f".tmp{os.getpid()}"
+                with open(tmp, "w") as f:
+                    f.write("window.BACKTESTS = ")
+                    json.dump(entries, f, default=float)
+                    f.write(";")
+                os.replace(tmp, p)
+            for fn in files:
+                try:
+                    os.remove(os.path.join(d, fn))
+                except OSError:
+                    pass
+            print(f"bt_ingester: folded {len(pend)} refreshed entries",
+                  flush=True)
+        except Exception as e:
+            print(f"bt_ingester error: {e}", flush=True)
+
+
+threading.Thread(target=_bt_ingester, daemon=True).start()
+
+
 @app.route("/api/override", methods=["POST", "DELETE"])
 def override():
     """Manual close-override for the CURRENT open position: a trigger price
