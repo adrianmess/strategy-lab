@@ -133,12 +133,17 @@ def main():
                         tr, op = run_component_engine(c, mode, x3, x1, feats)
                         opens_now = (op is not None
                                      and int(op.get("entry_idx", -1)) == syn_i)
+                        ei = int(op.get("entry_idx", -1)) if op is not None else -1
                         out.append(dict(
                             i=c["i"],
                             opens_now=bool(opens_now),
                             dir=int(op.get("dir", 1)) if op is not None else 0,
                             lev=float(op.get("lev", 1.0)) if op is not None else 1.0,
-                            open=_ts16(op["entry_t"]) if op is not None else None))
+                            open=_ts16(op["entry_t"]) if op is not None else None,
+                            # virtual entry price: lets the parent late-join a
+                            # position opened while it was down — red only
+                            entry_px=(float(x3["close"].iloc[ei])
+                                      if 0 <= ei < len(x3) else None)))
                     emit(dict(e="bar", t=_ts16(newest),
                               px=float(closed["close"].iloc[-1]), comps=out))
             time.sleep(poll)

@@ -239,8 +239,8 @@ def main_fcfs(cfg, live):
                 entry_price=px, group=gkey,
                 mirror_entry_t=None,   # filled below from the bar msg
                 opened_at=time.strftime("%Y-%m-%d %H:%M:%S"))
-            log.info("OPEN %s dir=%+d lev=%.1f qty=%s px=%.6g (first signal)",
-                     comp_label(i), d, lev, qty, px)
+            log.info("OPEN %s dir=%+d lev=%.1f qty=%s px=%.6g (signal bar %s)",
+                     comp_label(i), d, lev, qty, px, bar_t)
             notify("position_opened", account="fcfs",
                    config=os.path.basename(cfg.get("_path", "?")),
                    symbol=c["pair"], side=("LONG" if d > 0 else "SHORT"),
@@ -292,6 +292,7 @@ def main_fcfs(cfg, live):
                     bars_seen[0] += 1
                     cbyi = {c["i"]: c for c in msg.get("comps", [])}
                     if pos is None:
+                        sk = state.setdefault("late_skips", {})
                         for ci, c in sorted(cbyi.items()):
                             if c.get("opens_now"):
                                 opened_bar[ci] = c.get("open")
@@ -299,6 +300,47 @@ def main_fcfs(cfg, live):
                                     (bt, ci, int(c.get("dir") or 1),
                                      float(c.get("lev") or 1.0),
                                      float(msg.get("px") or 0), key))
+                                continue
+                            # LATE-JOIN: the component's virtual position was
+                            # opened while we were down or otherwise flat.
+                            # Join ONLY in the red (entering at or below the
+                            # sim's price can only do better than the sim —
+                            # a GREEN lev entry anchors liquidation at OUR
+                            # worse price and can die on a drawdown the sim
+                            # survives). Each virtual trade is judged ONCE:
+                            # green -> sit it out, ignore its close, resume
+                            # on the component's next fresh signal.
+                            lbl = c.get("open")
+                            if lbl is None:
+                                if sk.pop(str(ci), None) is not None:
+                                    save()            # that virtual trade ended
+                                continue
+                            if sk.get(str(ci)) == lbl:
+                                continue              # judged green earlier
+                            ep = c.get("entry_px")
+                            px = float(msg.get("px") or 0)
+                            d = int(c.get("dir") or 1)
+                            if not ep or not px:
+                                continue
+                            if (px < ep) if d > 0 else (px > ep):
+                                sk.pop(str(ci), None)
+                                opened_bar[ci] = lbl
+                                # bar_t = the VIRTUAL entry label, so FCFS
+                                # time-priority lets older positions beat
+                                # fresh signals in the same arbitration window
+                                pending_opens.append(
+                                    (lbl, ci, d, float(c.get("lev") or 1.0),
+                                     px, key))
+                                log.info("LATE-JOIN candidate %s: virtual "
+                                         "entry %s @%.6g, now %.6g (red)",
+                                         comp_label(ci), lbl, ep, px)
+                            else:
+                                sk[str(ci)] = lbl
+                                save()
+                                log.info("LATE-JOIN skipped %s: virtual entry "
+                                         "%s @%.6g is GREEN at %.6g — waiting "
+                                         "for its next fresh signal",
+                                         comp_label(ci), lbl, ep, px)
                         if pending_opens and not pending_deadline:
                             pending_deadline = now + 1.5
                     else:
