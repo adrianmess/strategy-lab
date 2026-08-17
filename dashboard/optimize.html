@@ -893,7 +893,11 @@ function renderRuns(){
   });
   const CAP = 500;
   const rsShown = rs.length > CAP ? rs.slice(0, CAP) : rs;
-  const capNote = rs.length > CAP ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(rs.length-CAP).toLocaleString()} more runs match — refine the filter above${RUNS_ALL?'':' · <a style="cursor:pointer;color:var(--blue)" onclick="RUNS_ALL=true;_runsHash=\'\';refreshRuns()">load ALL runs from server (slow)</a>'}</td></tr>` : '';
+  let capNote = rs.length > CAP ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(rs.length-CAP).toLocaleString()} more runs match — refine the filter above${RUNS_ALL?'':' · <a style="cursor:pointer;color:var(--blue)" onclick="RUNS_ALL=true;_runsHash=\'\';refreshRuns()">load ALL runs from server (slow)</a>'}</td></tr>` : '';
+  // filter matched nothing in the quick newest-1500 window: the run may be
+  // older — offer the full list instead of a silent dead end
+  if(!capNote && q && rs.length < 3 && !RUNS_ALL)
+    capNote = `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">${rs.length ? 'few' : 'no'} matches in the quick list (newest 1,500 runs) — <a style="cursor:pointer;color:var(--blue)" onclick="RUNS_ALL=true;_runsHash='';refreshRuns()">load ALL runs from server (slow)</a> to search everything</td></tr>`;
   document.querySelector('#runsT tbody').innerHTML = capNote + rsShown.map(r=>{
     const h = r.holdout;
     if(r.no_survivors){
