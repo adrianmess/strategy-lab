@@ -74,12 +74,14 @@ def _save_instances():
               open(INSTANCES_FILE, "w"), indent=1)
 
 def _inst():
-    """Resolve the instance addressed by the current request (default '1')."""
+    """Resolve the instance addressed by the current request (default '1').
+    UNKNOWN ids are a 404 — they used to be auto-created, which meant any
+    stale browser tab polling a DELETED instance silently resurrected it."""
     i = str(request.args.get("instance")
             or (request.get_json(silent=True) or {}).get("instance") or "1")
     if i not in instances:
-        instances[i] = _new_instance(i)
-        _save_instances()
+        from flask import abort
+        abort(404, description=f"no instance {i}")
     return i, instances[i]
 
 def _webhook_log(i):
