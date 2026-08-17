@@ -1538,6 +1538,9 @@ def adopt():
     if best.get("mode"): cfg["mode"] = best["mode"]
     if best.get("method"): cfg["method"] = best["method"]
     cfg["timeframe"] = best.get("timeframe", "3m")
+    # carry the run's PAIR — without this, a HYPE run adopted over the classic
+    # (SOL) template silently trades the HYPE genome on SOL candles
+    if best.get("pair"): cfg["symbol"] = best["pair"]
     cfg["adopted_from"] = dict(source=src, at=time.strftime("%Y-%m-%d %H:%M"))
     json.dump(cfg, open(target, "w"), indent=1)
     return jsonify(ok=True, target=os.path.basename(target), created=created,
