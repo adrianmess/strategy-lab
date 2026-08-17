@@ -40,10 +40,19 @@ if asset:
     names = [a for a in names if a == asset] or [asset]
 if not names:
     raise SystemExit("nothing convertible right now")
+# MEXC signature quirk: multi-value params must have the comma PRE-ENCODED
+# as %2C so the signed string matches what the server verifies against
 try:
     res = api._signed("POST", "/api/v3/capital/convert",
-                      {"asset": ",".join(names)})
+                      {"asset": "%2C".join(names)})
 except Exception as e:
-    raise SystemExit(f"convert failed: {e}")
+    print(f"batched convert failed ({e}) — retrying one asset at a time")
+    res = []
+    for n in names:
+        try:
+            res.append(api._signed("POST", "/api/v3/capital/convert",
+                                   {"asset": n}))
+        except Exception as e2:
+            print(f"  {n}: {e2}")
 print("converted:", res)
 print("SOL balance now:", api.balance("SOL"))
