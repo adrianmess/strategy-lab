@@ -357,8 +357,8 @@ function renderInstances(){
     $('wHeadless_'+x.id).checked = !!x.headless;
     const nm = $('iname_'+x.id);
     if(nm) nm.innerHTML = `${x.name||('Instance '+x.id)} <span class="kv">#${x.id}</span>
-      <button class="small" style="padding:0 6px" title="rename this instance" onclick="renameInstance('${x.id}')">✎</button>` +
-      (x.id==='1' ? '' : `<button class="small" style="padding:0 6px;color:var(--red)" title="delete this instance — its trader/executor must be stopped first; config, state and log files are kept on disk" onclick="removeInstance('${x.id}')">✕</button>`);
+      <button class="small" style="padding:0 6px" title="rename this instance" onclick="renameInstance('${x.id}')">✎</button>
+      <button class="small" style="padding:0 6px;color:var(--red)" title="delete this instance — its trader/executor must be stopped first; config, state and log files are kept on disk" onclick="removeInstance('${x.id}')">✕</button>`;
   });
   fillCfgSelects();
   refresh();
@@ -382,7 +382,7 @@ async function addInstance(){
 async function removeInstance(i){
   if(!(await modalConfirm(`Remove ${instName(i)} (#${i})? Its trader and executor must be stopped. Config, state and log files stay on disk — only the instance card goes away.`, {okLabel:'Remove', danger:true}))) return;
   const r = await api('instances/remove',{id:i});
-  if(r.ok){ CUR='1'; loadInstances(); }
+  if(r.ok){ CUR=''; loadInstances(); }   // renderInstances falls back to the first remaining
   else alert('error: '+(r.error||''));
 }
 function cfgChanged(i){

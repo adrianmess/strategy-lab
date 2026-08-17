@@ -885,8 +885,8 @@ def instances_add():
 def instances_remove():
     d = request.get_json(force=True)
     i = str(d.get("id", ""))
-    if i == "1":
-        return jsonify(error="instance 1 can't be removed"), 400
+    if len(instances) <= 1:
+        return jsonify(error="can't remove the last instance"), 400
     I = instances.get(i)
     if not I:
         return jsonify(error=f"no instance {i}"), 404
