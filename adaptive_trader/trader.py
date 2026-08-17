@@ -489,6 +489,50 @@ def main():
             save_state(cfg, state)
         return False
 
+    # manual close-override sidecar (written by the panel, polled by mtime —
+    # applies to the CURRENT position, no trader restart needed once running)
+    _ov_path = os.path.join(HERE, ".override_" + os.path.basename(
+        cfg.get("state_file", "trader_state.json")))
+    _ov = {"m": 0.0, "d": None}
+
+    def _override_check(price):
+        pos = state.get("position")
+        if not pos or not price:
+            return False
+        try:
+            m = os.path.getmtime(_ov_path)
+        except OSError:
+            _ov["d"] = None
+            return False
+        if m != _ov["m"]:
+            _ov["m"] = m
+            try:
+                _ov["d"] = json.load(open(_ov_path))
+            except Exception:
+                _ov["d"] = None
+        d = _ov["d"]
+        if not d or str(pos.get("opened_at")) != d.get("pos_key"):
+            return False
+        if not ((price >= d["price"]) if d.get("above")
+                else (price <= d["price"])):
+            return False
+        log.warning("MANUAL OVERRIDE close: price %.6g crossed trigger %.6g",
+                    price, d["price"])
+        res = ex.close_position()
+        notify("position_closed", account=_acct_label(cfg),
+               config=os.path.basename(cfg.get("_path", "?")),
+               symbol=cfg["symbol"], reason="manual_override", price=price,
+               live=(not cfg["dry_run"]), position=pos,
+               result=(res or {}).get("status"))
+        state["position"] = None
+        save_state(cfg, state)
+        try:
+            os.remove(_ov_path)
+        except OSError:
+            pass
+        _ov["d"] = None
+        return True
+
     def protective_check():
         """Run the intra-bar protective/emergency stop against the LIVE price.
         Returns True if it closed the position. Single-threaded (called only
@@ -496,6 +540,8 @@ def main():
         if not state.get("position"):
             return False
         price = feed.last_price()
+        if _override_check(price):
+            return True
         act = check(price)
         if act:
             log.warning("INTRABAR STOP at %.3f (%s price): %s",

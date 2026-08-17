@@ -154,6 +154,11 @@ def main_fcfs(cfg, live):
     log.info("FCFS live adapter starting: %d components, mode=%s, dry_run=%s",
              len(comps), mode, cfg["dry_run"])
 
+    # manual close-override sidecar (written by the panel, polled by mtime)
+    ov_path = os.path.join(HERE, ".override_" +
+                           os.path.basename(cfg["state_file"]))
+    ov = {"m": 0.0, "d": None}
+
     # state
     sf = os.path.join(HERE, cfg["state_file"])
     state = json.load(open(sf)) if os.path.exists(sf) else {}
@@ -391,6 +396,31 @@ def main_fcfs(cfg, live):
                     em = cfg.get("emergency_exit_adverse")
                     if em and adverse <= -abs(em):
                         do_close("emergency_exit", px)
+                    # manual override: panel-set trigger price for THIS
+                    # position (sidecar file, mtime-polled — no restart)
+                    try:
+                        m = os.path.getmtime(ov_path)
+                    except OSError:
+                        m = 0
+                        ov["d"] = None
+                    if m and m != ov["m"]:
+                        ov["m"] = m
+                        try:
+                            ov["d"] = json.load(open(ov_path))
+                        except Exception:
+                            ov["d"] = None
+                    d_ = ov["d"]
+                    if (d_ and str(pos.get("opened_at")) == d_.get("pos_key")
+                            and ((px >= d_["price"]) if d_.get("above")
+                                 else (px <= d_["price"]))):
+                        log.warning("MANUAL OVERRIDE close: px %.6g crossed "
+                                    "trigger %.6g", px, d_["price"])
+                        try:
+                            os.remove(ov_path)
+                        except OSError:
+                            pass
+                        ov["d"] = None
+                        do_close("manual_override", px)
 
             # watchdog: a silent host while we hold ITS position is a hazard
             if pos:

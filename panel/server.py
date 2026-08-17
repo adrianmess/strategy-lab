@@ -326,9 +326,20 @@ def status():
     state = json.load(open(state_file)) if os.path.exists(state_file) else {}
     _pos = state.get("position") or {}
     _sym = _pos.get("symbol") or cfg.get("symbol")
+    _ovp = os.path.join(AT, ".override_" + os.path.basename(
+        cfg.get("state_file", "trader_state.json")))
+    _ov = None
+    if _pos and os.path.exists(_ovp):
+        try:
+            _o = json.load(open(_ovp))
+            if _o.get("pos_key") == str(_pos.get("opened_at")):
+                _ov = _o
+        except Exception:
+            pass
     return jsonify(dict(
         symbol=_sym,
         price=(_pub_price(_sym, cfg.get("mode")) if _pos else None),
+        override=_ov,
         instance=i,
         running=running, live=t["live"] if running else False,
         config=cfg_name, started=t["started"] if running else None,
@@ -939,6 +950,47 @@ def instances_list():
             trader_live=t["live"],
             webhook_running=(w["proc"] is not None and w["proc"].poll() is None)))
     return jsonify(out)
+
+@app.route("/api/override", methods=["POST", "DELETE"])
+def override():
+    """Manual close-override for the CURRENT open position: a trigger price
+    (given directly or as a signed % from entry, + = profit direction). The
+    trader polls the sidecar and force-closes when price crosses it."""
+    i, I = _inst()
+    cfg_name = I["trader"].get("config") or I.get("cfg") or "config.json"
+    sf = _state_file_of(cfg_name) or "trader_state.json"
+    path = os.path.join(AT, ".override_" + os.path.basename(sf))
+    if request.method == "DELETE":
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return jsonify(ok=True, cleared=True)
+    d = request.get_json(force=True)
+    sp = os.path.join(AT, sf)
+    st = json.load(open(sp)) if os.path.exists(sp) else {}
+    pos = st.get("position")
+    if not pos:
+        return jsonify(error="no open position on this instance"), 400
+    cfgj = json.load(open(os.path.join(AT, cfg_name)))
+    sym = pos.get("symbol") or cfgj.get("symbol")
+    cur = _pub_price(sym, cfgj.get("mode"))
+    if cur is None:
+        return jsonify(error="no current price available"), 400
+    if d.get("price") not in (None, ""):
+        trig = float(d["price"])
+    elif d.get("pct") not in (None, ""):
+        p = float(d["pct"]) / 100.0
+        dirn = 1 if int(pos.get("dir") or 1) > 0 else -1
+        trig = float(pos["entry_price"]) * (1 + p * dirn)
+    else:
+        return jsonify(error="give a price or a pct"), 400
+    above = trig > cur
+    json.dump(dict(price=trig, above=above,
+                   pos_key=str(pos.get("opened_at")),
+                   set_at=time.strftime("%Y-%m-%d %H:%M:%S")),
+              open(path, "w"))
+    return jsonify(ok=True, trigger=round(trig, 8), above=above, current=cur)
 
 @app.route("/api/errors")
 def api_errors():

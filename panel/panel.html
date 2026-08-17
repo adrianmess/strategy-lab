@@ -384,6 +384,21 @@ async function addInstance(){
   const r = await api('instances/add',{});
   if(r.ok){ await api('instances'); CUR = r.id; localStorage.setItem('curInst', CUR); loadInstances(); }
 }
+async function setOverride(i){
+  const v = ($('ovval_'+i).value||'').trim();
+  if(!v){ alert('enter a price, or a signed % from entry'); return; }
+  const unit = $('ovunit_'+i).value;
+  const body = unit==='pct' ? {pct:v} : {price:v};
+  const r = await fetch('/api/override?instance='+i, {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(x=>x.json());
+  if(r.ok) alert(`Manual close armed at ${r.trigger} (fires when price ${r.above?'rises':'falls'} to it; current ${r.current}). The trader must be running a build with override support.`);
+  else alert('error: '+(r.error||''));
+  refreshInst(i);
+}
+async function clearOverride(i){
+  await fetch('/api/override?instance='+i, {method:'DELETE'});
+  refreshInst(i);
+}
 async function pollErrors(){
   // per-instance API-error indicator: banner above the trader log + ⚠ on the
   // tab, fed by /api/errors (order_failed etc. from notifications.log since
@@ -565,6 +580,15 @@ async function refreshInst(i){
              ${p.tp_price?`<span class="kv">target <b>${(+p.tp_price).toPrecision(6)}</b>${p.tp_order_id?' <span title="resting on the exchange — fires even if the server is down">⚓</span>':''}</span>`:''}
              ${p.sl_price?`<span class="kv">stop <b>${(+p.sl_price).toPrecision(6)}</b></span>`:''}
              <span class="kv">qty <b>${p.qty}</b></span>
+           </div>
+           <div class="row" style="gap:8px;flex-wrap:wrap;font-size:12px;margin-top:6px;align-items:center">
+             ${s.override
+               ? `<span style="color:var(--amber,#d29922)">manual close armed @ <b>${(+s.override.price).toPrecision(6)}</b> (${s.override.above?'if price rises to it':'if price falls to it'})</span>
+                  <button class="small" onclick="clearOverride('${i}')">disarm</button>`
+               : `<span class="kv">manual close:</span>
+                  <input id="ovval_${i}" placeholder="price or ±%" style="width:90px;font-size:12px">
+                  <select id="ovunit_${i}" style="font-size:12px"><option value="price">price</option><option value="pct">% from entry (+=profit)</option></select>
+                  <button class="small" onclick="setOverride('${i}')">arm</button>`}
            </div>`;
         hero.style.display='block';
       }
