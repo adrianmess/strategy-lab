@@ -236,11 +236,51 @@ class APISpotExecutor:
         except Exception:
             return 0.0
 
+    def _tracked_tp(self):
+        try:
+            st = json.load(open(os.path.join(HERE, self.cfg["state_file"])))
+            return (st.get("position") or {}).get("tp_order_id")
+        except Exception:
+            return None
+
+    # ---- exchange-side take-profit net (resting GTC limit sell) ----
+    def place_tp(self, qty, price):
+        try:
+            res = self.api.place_limit_sell(self.cfg["symbol"], qty, price)
+            self.log.info("TP NET placed: sell %.6g @ %.6g (order %s)",
+                          qty, price, res.get("orderId"))
+            return res.get("orderId")
+        except Exception as e:
+            self.log.error("TP NET place FAILED: %s", e)
+            return None
+
+    def cancel_tp(self, order_id):
+        try:
+            self.api.cancel_order(self.cfg["symbol"], order_id)
+            self.log.info("TP NET cancelled (order %s)", order_id)
+            return True
+        except Exception as e:
+            self.log.warning("TP NET cancel failed (order %s): %s — may "
+                             "already be filled/gone", order_id, e)
+            return False
+
+    def tp_status(self, order_id):
+        try:
+            return self.api.query_order(self.cfg["symbol"], order_id)
+        except Exception as e:
+            self.log.warning("TP NET query failed: %s", e)
+            return None
+
     def close_position(self):
         if self.cfg["dry_run"]:
             self.log.info("[DRY RUN] would SPOT-SELL tracked %s position",
                           self.base_asset)
             return {"status": "dry_run"}
+        # cancel the resting TP net FIRST so it can't double-fire; if it
+        # already filled, the free balance is 0 and the sell below no-ops
+        tp = self._tracked_tp()
+        if tp:
+            self.cancel_tp(tp)
         try:
             qty = self._tracked_qty()
             free = self.api.balance(self.base_asset)
@@ -471,6 +511,66 @@ def main():
             return True
         return False
 
+    # ---------------- exchange-side TP net (SPOT ONLY) ----------------
+    # A resting GTC limit sell held ON THE EXCHANGE at the strategy's current
+    # scheduled profit target — if this server dies mid-position, the take-
+    # profit still executes. The trader re-syncs the order whenever the
+    # pt/apt1/apt2 schedule shifts the target. Lev is deliberately excluded
+    # (Adrian's call: futures protection stays software-side for now).
+    tp_on = (cfg.get("mode") == "spot" and cfg.get("execution") == "api"
+             and not cfg["dry_run"] and cfg.get("protective_orders", True)
+             and hasattr(strat, "target_price"))
+    if cfg.get("mode") == "spot" and not cfg["dry_run"]:
+        log.info("exchange-side TP net: %s",
+                 "ACTIVE" if tp_on else "off (needs api execution + "
+                 "protective_orders + a schedule-aware strategy)")
+
+    def tp_sync(now_ms):
+        """Keep the resting TP sell at the CURRENT scheduled target. Late-
+        joined (replay-mirrored) positions are skipped — their stored
+        regime/system fields are approximations, so a computed target could
+        be wrong; the replay remains their exit authority."""
+        if not tp_on:
+            return
+        pos = state.get("position")
+        if not pos or pos.get("late_mirror"):
+            return
+        try:
+            tgt = float(strat.target_price(pos, now_ms))
+        except Exception as e:
+            log.warning("tp_sync: target computation failed: %s", e)
+            return
+        cur = pos.get("tp_price")
+        if (cur is not None and pos.get("tp_order_id")
+                and abs(tgt - cur) / max(abs(tgt), 1e-9) < 5e-4):
+            return                          # unchanged (within 0.05%)
+        if pos.get("tp_order_id"):
+            ex.cancel_tp(pos["tp_order_id"])
+        oid = ex.place_tp(pos["qty"], tgt)
+        pos["tp_order_id"] = oid
+        pos["tp_price"] = tgt if oid else None
+        save_state(cfg, state)
+
+    # startup reconciliation: did the TP net FILL while we were down?
+    if tp_on and (state.get("position") or {}).get("tp_order_id"):
+        _pos = state["position"]
+        _o = ex.tp_status(_pos["tp_order_id"]) or {}
+        _st = str(_o.get("status") or "")
+        if _st == "FILLED":
+            _px = float(_o.get("price") or 0)
+            log.info("TP NET FILLED while down: sold @ %.6g — position was "
+                     "closed offline by the exchange", _px)
+            notify("position_closed", account=_acct_label(cfg),
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   symbol=cfg["symbol"], reason="tp_net_filled_offline",
+                   price=_px, live=True, position=_pos, result="success")
+            state["position"] = None
+            save_state(cfg, state)
+        elif _st in ("CANCELED", "EXPIRED", ""):
+            _pos.pop("tp_order_id", None)
+            _pos.pop("tp_price", None)
+            save_state(cfg, state)
+
     # How often to re-check the protective stop against live ticks, in seconds.
     # Defaults to 0.5s (near-live); heavy work (kline fetch + bar-close eval)
     # still runs once per poll_seconds. Set protect_poll_seconds <= 0 to restore
@@ -547,6 +647,7 @@ def main():
                                      "LONG" if a["dir"] > 0 else "SHORT", a["system"],
                                      a["lev"], qty, a["sl_price"], a["regime"])
                 save_state(cfg, state)
+                tp_sync(float(newest.value // 10**6))
 
             # 3) fast protective sub-loop: keep watching the LIVE price between
             # heavy polls so an adverse move is caught within ~protect_dt, not

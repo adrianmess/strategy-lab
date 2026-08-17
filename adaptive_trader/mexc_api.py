@@ -289,6 +289,44 @@ class MexcSpotAPI:
         q = math.floor(float(qty) * 10 ** sc) / 10 ** sc
         return q, sc
 
+    def price_scale(self, symbol):
+        """Allowed decimal places for PRICE on this symbol (exchangeInfo
+        quotePrecision)."""
+        s = self.spot_symbol(symbol)
+        key = s + ":px"
+        if key in MexcSpotAPI._scale_cache:
+            return MexcSpotAPI._scale_cache[key]
+        r = requests.get(f"{BASE}/api/v3/exchangeInfo", params={"symbol": s},
+                         proxies=self.proxies, timeout=self.timeout)
+        info = (r.json().get("symbols") or [{}])[0]
+        scale = int(info.get("quotePrecision")
+                    or info.get("quoteAssetPrecision") or 4)
+        MexcSpotAPI._scale_cache[key] = scale
+        return scale
+
+    def place_limit_sell(self, symbol, qty, price):
+        """Resting GTC LIMIT SELL — the exchange-side take-profit net. Sits on
+        MEXC's books, so it executes even if our server is down."""
+        import math
+        q, _ = self.floor_qty(symbol, qty)
+        psc = self.price_scale(symbol)
+        px = math.floor(float(price) * 10 ** psc) / 10 ** psc
+        return self._signed("POST", "/api/v3/order",
+                            {"symbol": self.spot_symbol(symbol),
+                             "side": "SELL", "type": "LIMIT",
+                             "quantity": f"{q:.{self.quantity_scale(symbol)}f}",
+                             "price": f"{px:.{psc}f}"})
+
+    def cancel_order(self, symbol, order_id):
+        return self._signed("DELETE", "/api/v3/order",
+                            {"symbol": self.spot_symbol(symbol),
+                             "orderId": str(order_id)})
+
+    def query_order(self, symbol, order_id):
+        return self._signed("GET", "/api/v3/order",
+                            {"symbol": self.spot_symbol(symbol),
+                             "orderId": str(order_id)})
+
     def my_trades(self, symbol, limit=20):
         """Recent fills on a spot symbol (newest last per API ordering)."""
         return self._signed("GET", "/api/v3/myTrades",

@@ -130,6 +130,31 @@ class StrategyV7:
                        ref_close=float(c))
         return [act] if act else []
 
+    def target_price(self, pos, tm):
+        """Current scheduled profit-target PRICE for an open position —
+        mirrors decide_at's pt/apt1/apt2 selection. Feeds the exchange-side
+        TP net (spot): the resting order is kept at exactly this price."""
+        P = self.P
+        r = min(int(pos.get("regime") or 0), P.shape[0] - 1)
+        d = int(pos.get("dir") or 1)
+        if int(pos.get("system") or 0) == 0:
+            side = "Long" if d > 0 else "Short"
+            pt, a1, a2 = P[r, C["pt" + side]], P[r, C["apt1" + side]], \
+                P[r, C["apt2" + side]]
+            d1, d2 = P[r, C["dur1" + side]], P[r, C["dur2" + side]]
+        else:
+            side = "Long" if d > 0 else "Short"
+            pt, a1, a2 = P[r, C["xTp" + side]], P[r, C["xApt1" + side]], \
+                P[r, C["xApt2" + side]]
+            d1, d2 = P[r, C["xDur1" + side]], P[r, C["xDur2" + side]]
+        e = float(pos["entry_sig_ms"])
+        if tm >= e + d2 * 60000:
+            pt = a2
+        elif tm >= e + d1 * 60000:
+            pt = a1
+        ep = float(pos["entry_price"])
+        return ep * (1 + pt) if d > 0 else ep * (1 - pt)
+
     def intrabar_check(self, price: float):
         pos = self.state["position"]
         if pos is None:
