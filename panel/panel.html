@@ -250,6 +250,7 @@ const _shotAuto = {};                 // instance -> interval id
 function instCard(i){
   return `<div class="card icard" id="icard_${i}">
   <div class="iname" id="iname_${i}">Instance ${i}</div>
+  <div id="poshero_${i}" style="display:none;border:1px solid var(--green,#2f9e63);border-left:4px solid var(--green,#2f9e63);padding:10px 14px;margin:6px 0 10px;background:rgba(60,180,110,.07)"></div>
   <div class="row" style="justify-content:space-between">
     <div>
       <span id="tdot_${i}" class="dot off"></span><b id="tstate_${i}">stopped</b>
@@ -351,7 +352,7 @@ function renderInstances(){
        ondragstart="_dragId='${x.id}'" ondragover="event.preventDefault()"
        ondrop="tabDrop('${x.id}')"
        title="click to switch · double-click to rename · drag to reorder (display only)">
-       <span class="dot off" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)} <span class="kv" style="font-weight:400">#${x.id}</span><span id="taberr_${x.id}" style="display:none;margin-left:4px" title="this instance has API errors — see the banner above its trader log">⚠️</span></span>`).join('') : '';
+       <span class="dot off" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)}<span id="taberr_${x.id}" style="display:none;margin-left:4px" title="this instance has API errors — see the banner above its trader log">⚠️</span></span>`).join('') : '';
   tabs.style.display = LAYOUT==='tabs' ? 'flex' : 'none';
   wrap.className = LAYOUT==='cols' ? 'cols' : '';
   $('main').className = LAYOUT==='cols' ? 'cols' : '';
@@ -360,7 +361,7 @@ function renderInstances(){
     $('icard_'+x.id).style.display = (LAYOUT==='cols' || x.id===CUR) ? '' : 'none';
     $('wHeadless_'+x.id).checked = !!x.headless;
     const nm = $('iname_'+x.id);
-    if(nm) nm.innerHTML = `${x.name||('Instance '+x.id)} <span class="kv">#${x.id}</span>
+    if(nm) nm.innerHTML = `${x.name||('Instance '+x.id)}
       <button class="small" style="padding:0 6px" title="rename this instance" onclick="renameInstance('${x.id}')">✎</button>
       <button class="small" style="padding:0 6px;color:var(--red)" title="delete this instance — its trader/executor must be stopped first; config, state and log files are kept on disk" onclick="removeInstance('${x.id}')">✕</button>`;
   });
@@ -409,7 +410,7 @@ async function clearErrors(i){
 setInterval(pollErrors, 15000);
 setTimeout(pollErrors, 3000);
 async function removeInstance(i){
-  if(!(await modalConfirm(`Remove ${instName(i)} (#${i})? Its trader and executor must be stopped. Config, state and log files stay on disk — only the instance card goes away.`, {okLabel:'Remove', danger:true}))) return;
+  if(!(await modalConfirm(`Remove ${instName(i)}? Its trader and executor must be stopped. Config, state and log files stay on disk — only the instance card goes away.`, {okLabel:'Remove', danger:true}))) return;
   const r = await api('instances/remove',{id:i});
   if(r.ok){ CUR=''; loadInstances(); }   // renderInstances falls back to the first remaining
   else alert('error: '+(r.error||''));
@@ -537,6 +538,37 @@ async function refreshInst(i){
       <span class="kv">qty <b>${p.qty}</b></span> <span class="kv">lev <b>${(+p.lev).toFixed(1)}×</b></span>
       <span class="kv">system <b>${p.system===0?'3m':'cross'}</b></span>
       <span class="kv">opened <b>${p.opened_at||''}</b></span>` : '<span class="kv">no open position</span>';
+    // ---- hero position banner (always visible at the top of the card) ----
+    const hero = $('poshero_'+i);
+    if(hero){
+      if(!p){ hero.style.display='none'; }
+      else{
+        const px = +s.price || null;
+        const mv = px ? (px/(+p.entry_price)-1)*(p.dir>0?1:-1) : null;
+        const pct = mv==null ? null : 100*mv*(s.mode==='lev'?(+p.lev||1):1);
+        const cls = pct==null ? '' : (pct>=0?'pos':'neg');
+        const held = p.opened_at ? Math.max(0,(Date.now()-new Date(p.opened_at.replace(' ','T')))/6e4) : null;
+        const hstr = held==null ? '' : (held>=60 ? `${Math.floor(held/60)}h ${Math.round(held%60)}m` : `${Math.round(held)}m`);
+        hero.style.borderColor = pct!=null && pct<0 ? 'var(--red)' : 'var(--green,#2f9e63)';
+        hero.style.borderLeftColor = hero.style.borderColor;
+        hero.style.background = pct!=null && pct<0 ? 'rgba(220,70,70,.08)' : 'rgba(60,180,110,.07)';
+        hero.innerHTML =
+          `<div class="row" style="align-items:baseline;gap:14px;flex-wrap:wrap">
+             <b style="font-size:19px">${p.symbol||s.symbol||''}</b>
+             <span class="badge ${p.dir>0?'b-green':'b-red'}">${p.dir>0?'LONG':'SHORT'} · ${s.mode==='lev'?((+p.lev).toFixed(0)+'×'):'spot'}</span>
+             <b class="${cls}" style="font-size:20px">${pct==null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%'}</b>
+             <span class="kv" style="margin-left:auto">${hstr?('open '+hstr):''}${p.late_mirror?' · late-join':''}</span>
+           </div>
+           <div class="row" style="gap:20px;flex-wrap:wrap;font-size:12.5px;margin-top:4px">
+             <span class="kv">entry <b>${(+p.entry_price).toPrecision(6)}</b></span>
+             <span class="kv">now <b>${px?px.toPrecision(6):'?'}</b></span>
+             ${p.tp_price?`<span class="kv">target <b>${(+p.tp_price).toPrecision(6)}</b>${p.tp_order_id?' <span title="resting on the exchange — fires even if the server is down">⚓</span>':''}</span>`:''}
+             ${p.sl_price?`<span class="kv">stop <b>${(+p.sl_price).toPrecision(6)}</b></span>`:''}
+             <span class="kv">qty <b>${p.qty}</b></span>
+           </div>`;
+        hero.style.display='block';
+      }
+    }
     $('tlog_'+i).textContent = (s.log||[]).join('\n') || '–';
   }catch(e){}
   try{

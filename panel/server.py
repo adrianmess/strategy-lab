@@ -285,6 +285,32 @@ def dash(p):
 
 
 # ---------------- trader ----------------
+_PX_CACHE = {}
+
+def _pub_price(symbol, mode):
+    """Public last price (10s cache) for the position hero banner."""
+    if not symbol:
+        return None
+    import requests as _rq
+    k = (symbol, mode)
+    v = _PX_CACHE.get(k)
+    if v and time.time() - v[1] < 10:
+        return v[0]
+    px = None
+    try:
+        if mode == "spot":
+            r = _rq.get("https://api.mexc.com/api/v3/ticker/price",
+                        params={"symbol": symbol.replace("_", "")}, timeout=5)
+            px = float(r.json()["price"])
+        else:
+            r = _rq.get("https://contract.mexc.com/api/v1/contract/ticker",
+                        params={"symbol": symbol}, timeout=5)
+            px = float(r.json()["data"]["lastPrice"])
+    except Exception:
+        pass
+    _PX_CACHE[k] = (px, time.time())
+    return px
+
 @app.route("/api/status")
 def status():
     i, I = _inst()
@@ -296,7 +322,11 @@ def status():
     cfg = json.load(open(cfg_path)) if os.path.exists(cfg_path) else {}
     state_file = os.path.join(AT, cfg.get("state_file", "trader_state.json"))
     state = json.load(open(state_file)) if os.path.exists(state_file) else {}
+    _pos = state.get("position") or {}
+    _sym = _pos.get("symbol") or cfg.get("symbol")
     return jsonify(dict(
+        symbol=_sym,
+        price=(_pub_price(_sym, cfg.get("mode")) if _pos else None),
         instance=i,
         running=running, live=t["live"] if running else False,
         config=cfg_name, started=t["started"] if running else None,
