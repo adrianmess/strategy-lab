@@ -434,21 +434,31 @@ function cfgChanged(i){
   const x = INSTS.find(v=>v.id===i); if(x) x.cfg = $('tcfg_'+i).value;
   updateCfgSummary(i);
 }
+function setOptions(sel, html, cur){
+  // rebuild a <select>'s options ONLY when they actually changed, and never
+  // while the user has it focused/open — the 4s refresh used to clobber
+  // dropdowns (and close them) mid-interaction
+  if(document.activeElement === sel) return false;
+  if(sel._sig !== html){
+    sel._sig = html;
+    sel.innerHTML = html;
+  }
+  if(cur != null && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+  return true;
+}
 function fillCfgSelects(){
   // shared dropdowns (Trader settings file + Adopt target) follow the actual
   // config*.json files on disk — run-named router configs included
   ['sFile','adoptTarget'].forEach(id=>{
     const sel = $(id); if(!sel) return;
     const cur = sel.value;
-    sel.innerHTML = TCONFIGS.map(c=>`<option value="${c.file}">${c.file}</option>`).join('');
-    if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
-    else if(id==='sFile' && sel.options.length && !cur) loadSettings();
+    if(!setOptions(sel, TCONFIGS.map(c=>`<option value="${c.file}">${c.file}</option>`).join(''), cur)) return;
+    if(id==='sFile' && sel.options.length && !cur) loadSettings();
   });
   INSTS.forEach(x=>{
     const sel = $('tcfg_'+x.id); if(!sel) return;
     const cur = sel.value || x.cfg;
-    sel.innerHTML = TCONFIGS.map(c=>`<option value="${c.file}">${c.file} — ${typeof stratName==='function'?stratName(c.strategy):c.strategy} · ${c.mode||'?'}</option>`).join('');
-    if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    setOptions(sel, TCONFIGS.map(c=>`<option value="${c.file}">${c.file} — ${typeof stratName==='function'?stratName(c.strategy):c.strategy} · ${c.mode||'?'}</option>`).join(''), cur);
     updateCfgSummary(x.id);
   });
 }
@@ -465,8 +475,8 @@ function fillAcctSelect(i){
   const sel = $('acct_'+i); if(!sel) return;
   const cfgSel = $('tcfg_'+i);
   const c = TCONFIGS.find(x=>x.file===cfgSel.value);
-  sel.innerHTML = MEXCACCTS.map(a=>`<option value="${a}">${a}</option>`).join('');
-  if(c && MEXCACCTS.includes(c.api_account)) sel.value = c.api_account;
+  setOptions(sel, MEXCACCTS.map(a=>`<option value="${a}">${a}</option>`).join(''),
+             (c && MEXCACCTS.includes(c.api_account)) ? c.api_account : null);
 }
 async function acctChanged(i){
   const file = $('tcfg_'+i).value;
@@ -524,6 +534,11 @@ function updateCfgSummary(i){
   fillAcctSelect(i);
   const c = TCONFIGS.find(x=>x.file===sel.value);
   renderManualButtons(i, c && c.mode);
+  // skip identical rewrites: rebuilding every 4s closed the open
+  // "router components" <details> under the user's cursor
+  const el = c && $('cfgSummary_'+i);
+  if(el && el._file === c.file && el._at === c.adopted_at) return;
+  if(el){ el._file = c.file; el._at = c.adopted_at; }
   if(c) $('cfgSummary_'+i).innerHTML = `Selected config: <b>${c.file}</b> runs <b>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</b> in <b>${c.mode}</b> mode`+
     `${c.method?` (regime: ${c.method})`:''}, equity $${c.equity}, executes via `+
     venueBadge(c.api_account, c.execution, c.mode)+
@@ -556,7 +571,7 @@ async function refreshInst(i){
     // ---- hero position banner (always visible at the top of the card) ----
     const hero = $('poshero_'+i);
     if(hero){
-      if(!p){ hero.style.display='none'; }
+      if(!p){ hero.style.display='none'; hero._key=''; }
       else{
         const px = +s.price || null;
         const mv = px ? (px/(+p.entry_price)-1)*(p.dir>0?1:-1) : null;
@@ -564,32 +579,44 @@ async function refreshInst(i){
         const cls = pct==null ? '' : (pct>=0?'pos':'neg');
         const held = p.opened_at ? Math.max(0,(Date.now()-new Date(p.opened_at.replace(' ','T')))/6e4) : null;
         const hstr = held==null ? '' : (held>=60 ? `${Math.floor(held/60)}h ${Math.round(held%60)}m` : `${Math.round(held)}m`);
+        // FULL re-render only when the banner's SHAPE changes (new position,
+        // override armed/disarmed, TP net state) — a rebuild on every poll
+        // wiped the manual-close input and dropdown mid-edit. The live
+        // numbers update through targeted writes below instead.
+        const key = `${p.opened_at}|${s.override?('ov'+s.override.price):'form'}|${p.tp_order_id||''}|${p.tp_price||''}`;
+        if(hero._key !== key){
+          hero._key = key;
+          hero.innerHTML =
+            `<div class="row" style="align-items:baseline;gap:14px;flex-wrap:wrap">
+               <b style="font-size:19px">${p.symbol||s.symbol||''}</b>
+               <span class="badge ${p.dir>0?'b-green':'b-red'}">${p.dir>0?'LONG':'SHORT'} · ${s.mode==='lev'?((+p.lev).toFixed(0)+'×'):'spot'}</span>
+               <b id="hpnl_${i}" style="font-size:20px">—</b>
+               <span class="kv" style="margin-left:auto"><span id="hheld_${i}"></span>${p.late_mirror?' · late-join':''}</span>
+             </div>
+             <div class="row" style="gap:20px;flex-wrap:wrap;font-size:12.5px;margin-top:4px">
+               <span class="kv">entry <b>${(+p.entry_price).toPrecision(6)}</b></span>
+               <span class="kv">now <b id="hnow_${i}">?</b></span>
+               ${p.tp_price?`<span class="kv">target <b>${(+p.tp_price).toPrecision(6)}</b>${p.tp_order_id?' <span title="resting on the exchange — fires even if the server is down">⚓</span>':''}</span>`:''}
+               ${p.sl_price?`<span class="kv">stop <b>${(+p.sl_price).toPrecision(6)}</b></span>`:''}
+               <span class="kv">qty <b>${p.qty}</b></span>
+             </div>
+             <div class="row" style="gap:8px;flex-wrap:wrap;font-size:12px;margin-top:6px;align-items:center">
+               ${s.override
+                 ? `<span style="color:var(--amber,#d29922)">manual close armed @ <b>${(+s.override.price).toPrecision(6)}</b> (${s.override.above?'if price rises to it':'if price falls to it'})</span>
+                    <button class="small" onclick="clearOverride('${i}')">disarm</button>`
+                 : `<span class="kv">manual close:</span>
+                    <input id="ovval_${i}" placeholder="price or ±%" style="width:90px;font-size:12px">
+                    <select id="ovunit_${i}" style="font-size:12px"><option value="price">price</option><option value="pct">% from entry (+=profit)</option></select>
+                    <button class="small" onclick="setOverride('${i}')">arm</button>`}
+             </div>`;
+        }
+        const pe = $('hpnl_'+i);
+        if(pe){ pe.className = cls; pe.textContent = pct==null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%'; }
+        const ne = $('hnow_'+i); if(ne) ne.textContent = px?px.toPrecision(6):'?';
+        const he = $('hheld_'+i); if(he) he.textContent = hstr?('open '+hstr):'';
         hero.style.borderColor = pct!=null && pct<0 ? 'var(--red)' : 'var(--green,#2f9e63)';
         hero.style.borderLeftColor = hero.style.borderColor;
         hero.style.background = pct!=null && pct<0 ? 'rgba(220,70,70,.08)' : 'rgba(60,180,110,.07)';
-        hero.innerHTML =
-          `<div class="row" style="align-items:baseline;gap:14px;flex-wrap:wrap">
-             <b style="font-size:19px">${p.symbol||s.symbol||''}</b>
-             <span class="badge ${p.dir>0?'b-green':'b-red'}">${p.dir>0?'LONG':'SHORT'} · ${s.mode==='lev'?((+p.lev).toFixed(0)+'×'):'spot'}</span>
-             <b class="${cls}" style="font-size:20px">${pct==null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%'}</b>
-             <span class="kv" style="margin-left:auto">${hstr?('open '+hstr):''}${p.late_mirror?' · late-join':''}</span>
-           </div>
-           <div class="row" style="gap:20px;flex-wrap:wrap;font-size:12.5px;margin-top:4px">
-             <span class="kv">entry <b>${(+p.entry_price).toPrecision(6)}</b></span>
-             <span class="kv">now <b>${px?px.toPrecision(6):'?'}</b></span>
-             ${p.tp_price?`<span class="kv">target <b>${(+p.tp_price).toPrecision(6)}</b>${p.tp_order_id?' <span title="resting on the exchange — fires even if the server is down">⚓</span>':''}</span>`:''}
-             ${p.sl_price?`<span class="kv">stop <b>${(+p.sl_price).toPrecision(6)}</b></span>`:''}
-             <span class="kv">qty <b>${p.qty}</b></span>
-           </div>
-           <div class="row" style="gap:8px;flex-wrap:wrap;font-size:12px;margin-top:6px;align-items:center">
-             ${s.override
-               ? `<span style="color:var(--amber,#d29922)">manual close armed @ <b>${(+s.override.price).toPrecision(6)}</b> (${s.override.above?'if price rises to it':'if price falls to it'})</span>
-                  <button class="small" onclick="clearOverride('${i}')">disarm</button>`
-               : `<span class="kv">manual close:</span>
-                  <input id="ovval_${i}" placeholder="price or ±%" style="width:90px;font-size:12px">
-                  <select id="ovunit_${i}" style="font-size:12px"><option value="price">price</option><option value="pct">% from entry (+=profit)</option></select>
-                  <button class="small" onclick="setOverride('${i}')">arm</button>`}
-           </div>`;
         hero.style.display='block';
       }
     }
@@ -858,7 +885,7 @@ function rateHtml(c){
 }
 async function refreshConfigs(){
   CONFIGS = await api('configs');
-  $('btPick').innerHTML = CONFIGS.map((c,i)=>`<option value="${i}">${c.best?'★ ':''}${c.rating?'★'.repeat(c.rating)+' ':''}${c.label}</option>`).join('');
+  setOptions($('btPick'), CONFIGS.map((c,i)=>`<option value="${i}">${c.best?'★ ':''}${c.rating?'★'.repeat(c.rating)+' ':''}${c.label}</option>`).join(''), $('btPick').value);
   document.querySelector('#cfgT tbody').innerHTML = CONFIGS.map((c,i)=>`<tr>
     <td style="white-space:nowrap">${rateHtml(c)}</td>
     <td>${c.label}</td><td>${typeof stratName==='function'?stratName(c.strategy):c.strategy}</td><td>${c.mode||''}</td><td>${c.method||''}</td>
