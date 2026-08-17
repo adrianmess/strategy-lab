@@ -192,7 +192,56 @@ class StrategyMetax:
         opens_now = (op is not None
                      and int(op.get("entry_idx", -1)) == syn_i)
         if not opens_now:
-            return []
+            # LATE-JOIN: on the first evaluation after a (re)start — or while
+            # a green skip is pending — check whether a component's virtual
+            # position is ALREADY open (entered while we were down). Join in
+            # the red only: a green lev entry anchors liquidation at OUR
+            # worse price. Judged once per virtual trade; green skips wait
+            # for the sim to go flat, then fresh signals resume.
+            if getattr(self, "_lj_checked", False) and not s.get("late_skip"):
+                return []
+            self._lj_checked = True
+            cands = []
+            for j in range(len(self.comps)):
+                opj = get_run(j)[1]
+                if opj is None:
+                    continue
+                ej = int(opj.get("entry_idx", -1))
+                if not (0 <= ej < len(x3) - 1):
+                    continue
+                bj = int(breg[ej]) if ej < len(breg) else -1
+                if bj < 0 or bj >= len(self.assign) or self.assign[bj] != j:
+                    continue            # entry bar's bucket wasn't theirs
+                cands.append((ej, j, opj))
+            if not cands:
+                if s.get("late_skip"):
+                    s["late_skip"] = None
+                    logger.info("metax late-join: skipped virtual trade "
+                                "closed — fresh signals resume")
+                return []
+            ej, j, opj = min(cands)     # earliest entry = sim's slot owner
+            lbl = _ts16(opj.get("entry_t", ""))
+            if s.get("late_skip") == lbl:
+                return []
+            ep = float(x3["close"].iloc[ej])
+            c = float(df3["close"].iloc[-1])
+            d = int(np.sign(opj.get("dir", 1))) or 1
+            if not ((c < ep) if d > 0 else (c > ep)):
+                s["late_skip"] = lbl
+                logger.info("metax LATE-JOIN skipped: component %d virtual "
+                            "entry %s @%.6g is GREEN at %.6g — waiting for "
+                            "the next fresh signal", j, lbl, ep, c)
+                return []
+            s["late_skip"] = None
+            lev = float(opj.get("lev", 1.0)) if self.mode == "lev" else 1.0
+            s["mirror"] = dict(comp=j, entry_t=lbl, dir=d, lev=lev)
+            logger.info("metax LATE-JOIN: component %d virtual entry %s "
+                        "@%.6g, now %.6g (red) — OPEN dir=%+d lev=%.0f",
+                        j, lbl, ep, c, d, lev)
+            return [dict(do="open", dir=d, system=0, regime=bucket_now,
+                         lev=lev, sl_price=0.0,
+                         sig_ms=float(x3["t"].iloc[-1].value // 10**6),
+                         ref_close=c)]
         d = int(np.sign(op.get("dir", 1))) or 1
         lev = float(op.get("lev", 1.0)) if self.mode == "lev" else 1.0
         c = float(df3["close"].iloc[-1])

@@ -312,6 +312,107 @@ def main():
 
     check = getattr(strat, "intrabar_check", None) or strat.intrabar_stop
 
+    # ---------------- late-join (single-strategy families) ----------------
+    # If the SIM would already be in a position (it opened while this trader
+    # was down or being restarted), join it late — but ONLY in the red: our
+    # entry at/better-than the sim's can only outperform the sim, while a
+    # GREEN lev entry anchors liquidation at OUR worse price and can die on
+    # a drawdown the sim survives. Each virtual trade is judged ONCE; green
+    # skips persist in the state file, the virtual close is ignored, and
+    # fresh signals resume afterward. Joined positions mirror the sim's exit
+    # (engine replay), with the emergency intrabar net still active.
+    # The metax router does this itself (strategy_metax); fcfsx likewise.
+    _cand = cfg.get("candidate") or {}
+    _fam = _cand.get("strategy") or ("v7" if "regs" in _cand else None)
+    lj = {"on": _fam not in (None, "metax", "metax2", "pairx", "fcfsx")}
+
+    def lj_replay(closed, d1):
+        import strategy_metax as mx
+        comp = dict(i=0, strategy=_fam, method=cfg.get("method", "vol3"),
+                    cand=_cand)
+        feats = mx.compute_features(closed)
+        tr, op = mx.run_component_engine(comp, cfg["mode"], closed, d1, feats)
+        lbl = mx._ts16(op["entry_t"]) if op is not None else None
+        return op, lbl
+
+    def lj_on_bar(closed, d1, price):
+        """Startup / skip-mode / mirror-mode replay step. Returns True when
+        the strategy's fresh OPEN actions must be suppressed this bar (a
+        green-skipped virtual position is still open in the sim)."""
+        if not lj["on"]:
+            return False
+        try:
+            op, lbl = lj_replay(closed, d1)
+        except Exception as e:
+            log.info("late-join disabled (replay unavailable for '%s': %s)",
+                     _fam, e)
+            lj["on"] = False
+            return False
+        pos = state.get("position")
+        # A) holding a late-joined position: the replay is the exit authority
+        if pos and pos.get("late_mirror"):
+            if lbl != pos["late_mirror"]:
+                log.info("LATE-JOIN CLOSE: virtual trade %s ended",
+                         pos["late_mirror"])
+                res = ex.close_position()
+                notify("position_closed", account=_acct_label(cfg),
+                       config=os.path.basename(cfg.get("_path", "?")),
+                       symbol=cfg["symbol"], reason="virtual_exit(late-join)",
+                       price=price, live=(not cfg["dry_run"]),
+                       position=pos, result=(res or {}).get("status"))
+                state["position"] = None
+                save_state(cfg, state)
+            return False
+        if pos:
+            return False
+        # B) flat
+        if op is None:
+            if state.get("late_skip"):
+                state["late_skip"] = None
+                save_state(cfg, state)
+                log.info("late-join: skipped virtual trade closed — fresh "
+                         "signals resume")
+            return False
+        ei = int(op.get("entry_idx", -1))
+        if not (0 <= ei < len(closed)) or ei == len(closed) - 1:
+            return False              # fresh open — normal path handles it
+        if state.get("late_skip") == lbl:
+            return True               # judged green earlier — keep waiting
+        ep = float(closed["close"].iloc[ei])
+        d = 1 if float(op.get("dir", 1)) >= 0 else -1
+        if not ((price < ep) if d > 0 else (price > ep)):
+            state["late_skip"] = lbl
+            save_state(cfg, state)
+            log.info("LATE-JOIN skipped: virtual pos %s @%.6g is GREEN at "
+                     "%.6g — waiting for the next fresh signal",
+                     lbl, ep, price)
+            return True
+        lev = float(op.get("lev", 1.0)) if cfg["mode"] == "lev" else 1.0
+        res, qty = ex.open_position(d, lev, price)
+        if (res or {}).get("status") == "error":
+            notify("order_failed", account=_acct_label(cfg),
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   action="open", detail=res.get("message"))
+            return False
+        if qty and qty > 0:
+            state["late_skip"] = None
+            state["position"] = dict(
+                dir=d, system=0, regime=0, entry_price=ep, qty=qty, lev=lev,
+                sl_price=0.0,
+                entry_sig_ms=float(closed["t"].iloc[ei].value // 10**6),
+                opened_at=str(closed["t"].iloc[-1]), fill_price=price,
+                late_mirror=lbl)
+            log.info("LATE-JOIN OPEN dir=%+d lev=%.1f qty=%s: virtual entry "
+                     "%s @%.6g, filled %.6g (red)", d, lev, qty, lbl, ep, price)
+            notify("position_opened", account=_acct_label(cfg),
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   symbol=cfg["symbol"],
+                   side=("LONG" if d > 0 else "SHORT"), qty=qty, lev=lev,
+                   price=price, live=(not cfg["dry_run"]),
+                   note=f"late-join in the red (virtual entry {ep:g})")
+            save_state(cfg, state)
+        return False
+
     def protective_check():
         """Run the intra-bar protective/emergency stop against the LIVE price.
         Returns True if it closed the position. Single-threaded (called only
@@ -355,10 +456,24 @@ def main():
             closed = feed.closed_bars()
             newest = closed["t"].iloc[-1] if len(closed) else None
             if newest is not None and newest != last_closed:
+                first_eval = last_closed is None
                 last_closed = newest
                 lo = closed["t"].iloc[0]
                 d1 = feed.df1[feed.df1["t"] >= lo].reset_index(drop=True)
+                # late-join replay runs only when it can matter: the first
+                # bar after start, while a green skip is pending, or while
+                # holding a late-joined (replay-mirrored) position
+                lj_suppress = False
+                if lj["on"] and (first_eval or state.get("late_skip")
+                                 or (state.get("position") or {})
+                                 .get("late_mirror")):
+                    lj_suppress = lj_on_bar(closed, d1, price)
                 actions = strat.on_bar_close(closed, d1)
+                if (state.get("position") or {}).get("late_mirror"):
+                    # replay is the exit authority for a late-joined position
+                    actions = [a for a in actions if a["do"] != "close"]
+                if lj_suppress:
+                    actions = [a for a in actions if a["do"] != "open"]
                 for a in actions:
                     if a["do"] == "close" and state.get("position"):
                         log.info("CLOSE (%s) pos=%s", a["reason"], state["position"])
