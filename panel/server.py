@@ -956,6 +956,21 @@ def instances_list():
             webhook_running=(w["proc"] is not None and w["proc"].poll() is None)))
     return jsonify(out)
 
+_BT_REFRESH = {}
+
+@app.route("/api/bt_refresh/heartbeat", methods=["POST"])
+def bt_refresh_hb():
+    d = request.get_json(force=True)
+    _BT_REFRESH[d.get("worker") or "?"] = dict(
+        done=int(d.get("done") or 0), total=int(d.get("total") or 0),
+        status=d.get("status") or "running",
+        at=time.strftime("%H:%M:%S"))
+    return jsonify(ok=True)
+
+@app.route("/api/bt_refresh/progress")
+def bt_refresh_progress():
+    return jsonify(_BT_REFRESH)
+
 @app.route("/api/backtests/submit", methods=["POST"])
 def bt_submit():
     """Fast drop-off for refreshed backtest entries (list of entry dicts):

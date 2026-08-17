@@ -126,10 +126,26 @@ def main():
                for t in range(a.procs)]
     for t in threads:
         t.start()
+    import socket
+    me = socket.gethostname().split(".")[0]
+
+    def beat(status="running"):
+        n = len(open(done_f).read().split()) if os.path.exists(done_f) else 0
+        print(f"progress: {n}/{len(items)}", flush=True)
+        try:
+            req = urllib.request.Request(
+                a.hub + "/api/bt_refresh/heartbeat",
+                data=json.dumps(dict(worker=me, done=n, total=len(items),
+                                     status=status)).encode(),
+                headers={"Content-Type": "application/json"}, method="POST")
+            urllib.request.urlopen(req, timeout=15).read()
+        except Exception:
+            pass
+
     while any(t.is_alive() for t in threads):
         time.sleep(30)
-        print(f"progress: {len(open(done_f).read().split()) if os.path.exists(done_f) else 0}"
-              f"/{len(items)}", flush=True)
+        beat()
+    beat("finished")
     print("worker finished", flush=True)
 
 

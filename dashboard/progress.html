@@ -77,6 +77,11 @@ h2{font-size:15px;margin:0 0 10px}
     </table>
   </div>
 
+  <div class="panelbox" id="btrBox" style="display:none">
+    <h2>Backtest refresh <span class="mut" style="font-size:12px;font-weight:400">— re-running stale published backtests on current data (top 20 per pair × tf × mode)</span></h2>
+    <div id="btrBody"></div>
+  </div>
+
   <div class="panelbox">
     <h2>Per pair</h2>
     <div id="pairs"></div>
@@ -222,6 +227,29 @@ async function ctlWorker(id, action, btn){
 }
 loadWorkers();
 setInterval(loadWorkers, 30000);
+async function loadBtRefresh(){
+  try{
+    const d = await fetch('/api/bt_refresh/progress').then(r=>r.json());
+    const ws = Object.entries(d);
+    const box = document.getElementById('btrBox');
+    if(!ws.length){ box.style.display='none'; return; }
+    box.style.display='';
+    let tot=0, done=0;
+    document.getElementById('btrBody').innerHTML = ws.map(([w,s])=>{
+      tot += s.total; done += s.done;
+      const pct = s.total ? Math.round(100*s.done/s.total) : 0;
+      return `<div style="margin:6px 0">
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span><b>${w}</b> <span class="mut">(${s.status}, last report ${s.at})</span></span>
+          <span>${s.done.toLocaleString()} / ${s.total.toLocaleString()} · ${pct}%</span></div>
+        <div style="height:8px;background:rgba(128,128,128,.2);border-radius:4px;margin-top:3px">
+          <div style="height:100%;width:${pct}%;border-radius:4px;background:${s.status==='finished'?'var(--green,#2f9e63)':'var(--blue,#4a8fd4)'};transition:width .5s"></div></div>
+      </div>`;
+    }).join('') + `<div class="mut" style="font-size:12px;margin-top:6px">combined: ${done.toLocaleString()} / ${tot.toLocaleString()} (${tot?Math.round(100*done/tot):0}%) — refreshed entries appear on the Backtests page as they land</div>`;
+  }catch(e){}
+}
+loadBtRefresh();
+setInterval(loadBtRefresh, 10000);
 </script>
 </body>
 </html>
