@@ -411,11 +411,15 @@ def main():
             return True               # judged green earlier — keep waiting
         ep = float(closed["close"].iloc[ei])
         d = 1 if float(op.get("dir", 1)) >= 0 else -1
-        if not ((price < ep) if d > 0 else (price > ep)):
+        red = (price < ep) if d > 0 else (price > ep)
+        # red-only is the LEVERAGED exception (a green lev entry anchors
+        # liquidation at our worse price); spot cannot liquidate, so a spot
+        # instance joins its virtual position regardless of color
+        if cfg["mode"] != "spot" and not red:
             state["late_skip"] = lbl
             save_state(cfg, state)
             log.info("LATE-JOIN skipped: virtual pos %s @%.6g is GREEN at "
-                     "%.6g — waiting for the next fresh signal",
+                     "%.6g (lev) — waiting for the next fresh signal",
                      lbl, ep, price)
             return True
         lev = float(op.get("lev", 1.0)) if cfg["mode"] == "lev" else 1.0
@@ -434,7 +438,8 @@ def main():
                 opened_at=str(closed["t"].iloc[-1]), fill_price=price,
                 late_mirror=lbl)
             log.info("LATE-JOIN OPEN dir=%+d lev=%.1f qty=%s: virtual entry "
-                     "%s @%.6g, filled %.6g (red)", d, lev, qty, lbl, ep, price)
+                     "%s @%.6g, filled %.6g (%s)", d, lev, qty, lbl, ep, price,
+                     "red" if red else "green/spot")
             notify("position_opened", account=_acct_label(cfg),
                    config=os.path.basename(cfg.get("_path", "?")),
                    symbol=cfg["symbol"],

@@ -322,7 +322,10 @@ def main_fcfs(cfg, live):
                             d = int(c.get("dir") or 1)
                             if not ep or not px:
                                 continue
-                            if (px < ep) if d > 0 else (px > ep):
+                            # red-only is the LEV exception; spot cannot
+                            # liquidate, so spot combos join in any color
+                            if (mode == "spot"
+                                    or ((px < ep) if d > 0 else (px > ep))):
                                 sk.pop(str(ci), None)
                                 opened_bar[ci] = lbl
                                 # bar_t = the VIRTUAL entry label, so FCFS

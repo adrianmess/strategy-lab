@@ -226,11 +226,12 @@ class StrategyMetax:
             ep = float(x3["close"].iloc[ej])
             c = float(df3["close"].iloc[-1])
             d = int(np.sign(opj.get("dir", 1))) or 1
-            if not ((c < ep) if d > 0 else (c > ep)):
+            # red-only is the LEV exception; spot routers join in any color
+            if self.mode != "spot" and not ((c < ep) if d > 0 else (c > ep)):
                 s["late_skip"] = lbl
                 logger.info("metax LATE-JOIN skipped: component %d virtual "
-                            "entry %s @%.6g is GREEN at %.6g — waiting for "
-                            "the next fresh signal", j, lbl, ep, c)
+                            "entry %s @%.6g is GREEN at %.6g (lev) — waiting "
+                            "for the next fresh signal", j, lbl, ep, c)
                 return []
             s["late_skip"] = None
             lev = float(opj.get("lev", 1.0)) if self.mode == "lev" else 1.0

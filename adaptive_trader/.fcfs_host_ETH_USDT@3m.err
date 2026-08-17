@@ -1,0 +1,183 @@
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 86, in main
+    threading.Thread(target=read_stdin, daemon=True).start()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 120, in <module>
+    except Exception as ex:
+^^^^^^
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 115, in main
+    lev=float(op.get("lev", 1.0)) if op is not None else 1.0,
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 97, in main
+    emit(dict(e="px", px=feed.last_price()))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 138, in <module>
+    
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 133, in main
+    time.sleep(w)
+    ^^^^^^^^^^^^^^
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+WARNING:data_feed:feed ETH_USDT: proxy failing (2 in a row) — DIRECT fallback for 5 min
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 97, in main
+    emit(dict(e="px", px=feed.last_price()))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 140, in <module>
+    main()
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 135, in main
+    emit(dict(e="log", msg=f"host error: {ex}"))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 97, in main
+    if len(closed) < WARMUP + 300:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 140, in <module>
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 135, in main
+    main()
+           
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 97, in main
+    if len(closed) < WARMUP + 300:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 138, in <module>
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 133, in main
+    
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 92, in main
+    emit(dict(e="px", px=feed.last_price()))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 135, in <module>
+    main()
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 130, in main
+    emit(dict(e="log", msg=f"host error: {ex}"))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 92, in main
+    emit(dict(e="px", px=feed.last_price()))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 135, in <module>
+    main()
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 130, in main
+    emit(dict(e="log", msg=f"host error: {ex}"))
+  File "/Users/adrian/Code/strategy-lab/adaptive_trader/fcfs_host.py", line 38, in emit
+    sys.stdout.flush()
+BrokenPipeError: [Errno 32] Broken pipe
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+WARNING:data_feed:LivePrice reconnecting after: no close frame received or sent
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: [Errno 8] nodename nor servname provided, or not known
+WARNING:data_feed:LivePrice reconnecting after: no close frame received or sent
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
