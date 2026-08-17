@@ -128,7 +128,26 @@ class APIExecutor:
 
     def open_position(self, direction, lev, price):
         cfg = self.cfg
-        notional = cfg["equity_usdt"] * lev
+        # LIVE sizing = 100% of what the account actually has (the backtests
+        # compound full equity every trade — a fixed equity_usdt either
+        # bounces orders when the account is smaller, e.g. code 2005
+        # "Balance insufficient", or undertrades when it has grown).
+        # equity_usdt remains the DRY-RUN paper size and the fallback.
+        margin = float(cfg["equity_usdt"])
+        if not cfg["dry_run"]:
+            try:
+                u = [a for a in self.api.assets()
+                     if a.get("currency") == "USDT"]
+                avail = float((u[0].get("availableOpen")
+                               or u[0].get("availableBalance") or 0)) if u else 0.0
+                if avail > 0:
+                    margin = avail * 0.98   # fee/rounding headroom
+                    self.log.info("sizing from live balance: %.2f USDT "
+                                  "available -> margin %.2f", avail, margin)
+            except Exception as e:
+                self.log.warning("balance query failed (%s) — falling back "
+                                 "to equity_usdt=%.2f", e, margin)
+        notional = margin * lev
         qty = int(notional / price / cfg["contract_size"])
         if qty < 1:
             self.log.warning("qty < 1 contract, skipping (equity too small)")
@@ -181,7 +200,19 @@ class APISpotExecutor:
         if direction < 0:
             self.log.error("spot cannot short — signal ignored")
             return {"status": "error", "message": "spot cannot short"}, 0
+        # LIVE sizing = 100% of free USDT on the account (see APIExecutor);
+        # equity_usdt is the dry-run paper size and the fallback
         quote = float(cfg["equity_usdt"])       # spot is always 1x
+        if not cfg["dry_run"]:
+            try:
+                free = float(self.api.balance("USDT") or 0)
+                if free > 0:
+                    quote = free * 0.999        # rounding headroom
+                    self.log.info("sizing from live balance: %.2f USDT free "
+                                  "-> spending %.2f", free, quote)
+            except Exception as e:
+                self.log.warning("balance query failed (%s) — falling back "
+                                 "to equity_usdt=%.2f", e, quote)
         qty_est = quote / price
         if cfg["dry_run"]:
             self.log.info("[DRY RUN] would SPOT-BUY %.2f USDT (~%.4f %s) at ~%.3f",
