@@ -1893,7 +1893,13 @@ def trader_configs():
         strat = cand.get("strategy") or ("v7" if "regs" in cand else
                                          ("v6" if cand else "legacy"))
         comps = None
-        if strat in ("metax", "metax2") and cand.get("components"):
+        if strat == "fcfsx" and cand.get("components"):
+            # FCFS combos: every component is a run in its own right, so the
+            # Backtests page can filter to "what this instance is trading"
+            comps = [dict(run=x.get("run"), strategy=x.get("strategy"),
+                          pair=x.get("pair"), timeframe=x.get("timeframe"),
+                          assigned=True) for x in cand["components"]]
+        elif strat in ("metax", "metax2") and cand.get("components"):
             assigned = {a for a in (cand.get("assign") or [])
                         if a is not None and a >= 0}
             comps = [dict(run=x.get("run"), strategy=x.get("strategy"),
@@ -1904,7 +1910,7 @@ def trader_configs():
                         method=c.get("method"), equity=c.get("equity_usdt"),
                         execution=c.get("execution", "browser"),
                         api_account=c.get("api_account", "mexc1"),
-                        components=comps,
+                        components=comps, source_run=cand.get("source_run"),
                         adopted_from=(c.get("adopted_from") or {}).get("source"),
                         adopted_at=(c.get("adopted_from") or {}).get("at")))
     return jsonify(out)

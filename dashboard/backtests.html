@@ -153,6 +153,11 @@ button.rtradd.on{opacity:1;filter:none}
       <input id="fMaxDD" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
     <label style="margin-left:10px" title="only show runs whose win rate (share of closed trades that were profitable) is at least this percent">win ≥
       <input id="fWinMin" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
+    <label style="margin-left:10px" title="show only the backtests behind what a trader instance is running right now — the adopted run AND, for routers/FCFS combos, every component run inside it">instance
+      <select id="fInst" onchange="saveBtFilters()" style="margin-left:4px">
+        <option value="all">all</option>
+        <option value="any">any running instance</option>
+      </select></label>
     <label style="margin-left:10px" title="the optimizer HOLDOUT mode the source run was searched with (from its recorded settings; 'none' = no holdout, full in-sample fit)">holdout
       <select id="fHold" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -376,6 +381,47 @@ fetch('/api/runs2').then(r=>r.json()).then(runs=>{
   TRADED = runs.filter(r=>r.trading).map(r=>({run:r.name, ...r.trading}));
   if(TRADED.length) render();
 }).catch(()=>{});
+// which RUNS each trader instance is currently trading (the adopted run plus
+// every component run inside a router/FCFS combo) -> the "instance" filter
+let INSTRUNS = [];
+async function loadInstanceRuns(){
+  try{
+    const [insts, cfgs] = await Promise.all([
+      fetch('/api/instances').then(r=>r.json()),
+      fetch('/api/trader_configs').then(r=>r.json())]);
+    const byFile = {};
+    (Array.isArray(cfgs)?cfgs:(cfgs.configs||[])).forEach(c=>byFile[c.file]=c);
+    INSTRUNS = insts.filter(i=>i.trader_running).map(i=>{
+      const c = byFile[i.cfg] || {};
+      const runs = new Set();
+      const src = (c.adopted_from||'').split('/runs/')[1];
+      if(src) runs.add(src.split('/')[0]);
+      if(c.source_run) runs.add(c.source_run);
+      (c.components||[]).forEach(x=>{ if(x.run) runs.add(x.run); });
+      return {id:i.id, name:i.name||('Instance '+i.id), live:!!i.trader_live,
+              runs:[...runs]};
+    });
+    const sel = document.getElementById('fInst');
+    const cur = sel.value;
+    const html = '<option value="all">all</option>' +
+      (INSTRUNS.length?'<option value="any">any running instance</option>':'') +
+      INSTRUNS.map(x=>`<option value="i:${x.id}">${x.name}${x.live?' (LIVE)':' (dry)'} — ${x.runs.length} run(s)</option>`).join('');
+    if(sel._sig !== html){ sel._sig = html; sel.innerHTML = html;
+      const want = cur !== 'all' ? cur : (sel._want || cur);
+      if([...sel.options].some(o=>o.value===want)) sel.value = want; }
+    render();
+  }catch(e){}
+}
+loadInstanceRuns(); setInterval(loadInstanceRuns, 30000);
+function instRunsFor(v){
+  if(v === 'any') return new Set(INSTRUNS.flatMap(x=>x.runs));
+  const one = INSTRUNS.find(x=>('i:'+x.id) === v);
+  return new Set(one ? one.runs : []);
+}
+function entryInRuns(name, runs){
+  for(const r of runs) if(name === r || name.startsWith(r + '_')) return true;
+  return false;
+}
 function tradedOf(name){
   // ONE badge per traded run: the entry matching the config actually adopted
   // (refined publish wins if it exists — that's what Adopt copied), never the
@@ -619,6 +665,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterMaxHold', document.getElementById('fMaxHold').value);
   localStorage.setItem('btFilterMaxDD', document.getElementById('fMaxDD').value);
   localStorage.setItem('btFilterHold', document.getElementById('fHold').value);
+  localStorage.setItem('btFilterInst', document.getElementById('fInst').value);
   localStorage.setItem('btFilterWinMin', document.getElementById('fWinMin').value);
   localStorage.setItem('btFilterGaunt', document.getElementById('fGaunt').checked?'1':'');
   sel = null; render();
@@ -664,6 +711,11 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   document.getElementById('fMaxHold').value = localStorage.getItem('btFilterMaxHold') || '';
   document.getElementById('fMaxDD').value = localStorage.getItem('btFilterMaxDD') || '';
   document.getElementById('fHold').value = localStorage.getItem('btFilterHold') || 'all';
+  {  // instance options arrive async; remember the choice until they do
+    const v = localStorage.getItem('btFilterInst') || 'all';
+    const el = document.getElementById('fInst');
+    if([...el.options].some(o=>o.value===v)) el.value = v; else el._want = v;
+  }
   document.getElementById('fWinMin').value = localStorage.getItem('btFilterWinMin') || '';
   document.getElementById('fGaunt').checked = localStorage.getItem('btFilterGaunt')==='1';
   rtrRender();   // shows the Router components bar at load when saved selections exist
@@ -756,6 +808,11 @@ function render(){
   if(fWin > 0) order = order.filter(i=>{const w=(BT[i].stats||{}).win; return w!=null && 100*w >= fWin;});
   if(document.getElementById('fGaunt').checked)
     order = order.filter(i=>{const g=gauntOf(BT[i].name); return g && g.full && g.passed===5;});
+  const fInstV = document.getElementById('fInst').value;
+  if(fInstV !== 'all'){
+    const runs = instRunsFor(fInstV);
+    order = order.filter(i=>entryInRuns(BT[i].name, runs));
+  }
   const fHo = document.getElementById('fHold').value;
   if(fHo !== 'all') order = order.filter(i=>{
     if(_isRtr(i)) return true;   // routers have no optimizer holdout of their
