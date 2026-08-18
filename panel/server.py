@@ -1909,6 +1909,34 @@ def trader_configs():
                         adopted_at=(c.get("adopted_from") or {}).get("at")))
     return jsonify(out)
 
+@app.route("/api/trader_configs/delete", methods=["POST"])
+def trader_config_delete():
+    """Delete a trader config file. Refuses if a RUNNING trader uses it or
+    an instance is pointed at it; the file is moved to a .deleted_<ts> copy
+    (recoverable) and its state/log files are left alone."""
+    name = os.path.basename((request.get_json(force=True) or {}).get("file")
+                            or "")
+    path = os.path.join(AT, name)
+    if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", name) \
+            or not os.path.isfile(path):
+        return jsonify(error=f"no such config '{name}'"), 404
+    for i, I in instances.items():
+        t = I["trader"]
+        running = t["proc"] is not None and t["proc"].poll() is None
+        if running and (t.get("config") or I.get("cfg")) == name:
+            return jsonify(error=(f"instance {I.get('name') or i} is RUNNING "
+                                  f"this config — stop it first")), 400
+    used_by = [I.get("name") or i for i, I in instances.items()
+               if (I.get("cfg") == name
+                   or (I["trader"].get("config") == name))]
+    if used_by and not (request.get_json(force=True) or {}).get("force"):
+        return jsonify(error=(f"selected on instance(s) {', '.join(map(str, used_by))} "
+                              f"— point them elsewhere first, or resend with "
+                              f"force"), used_by=used_by), 409
+    bak = path + ".deleted_" + time.strftime("%Y%m%d_%H%M%S")
+    os.replace(path, bak)
+    return jsonify(ok=True, file=name, backup=os.path.basename(bak))
+
 @app.route("/api/trader_config", methods=["GET", "POST"])
 def trader_config():
     fname = os.path.basename(request.args.get("file") or "config.json")
@@ -2023,20 +2051,29 @@ def gamut_progress():
     import datetime as _dt
     from collections import Counter, defaultdict
     name = _safe_name(request.args.get("name") or "")
+    # ANY campaign directory holding a plan.json qualifies — the old filter
+    # required a "gamut_" prefix, so campaigns not following that naming
+    # (or lacking the customary symlink) were invisible in the dropdown
     cs = [d for d in sorted(os.listdir(os.path.join(OPT, "campaigns")))
-          if d.startswith("gamut_") and
-          os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))]
+          if os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))]
     if not cs:
         return jsonify(error="no gamut campaigns"), 404
+
+    def _disp(d):
+        return d[len("gamut_"):] if d.startswith("gamut_") else d
+
     if not name:   # default: the campaign with the freshest WORKER ACTIVITY
         def _act(d):
             ws = os.path.join(OPT, "campaigns", d, "worker_state.json")
             return (os.path.getmtime(ws) if os.path.exists(ws) else
                     os.path.getmtime(os.path.join(OPT, "campaigns", d,
                                                   "plan.json")) - 1e9)
-        name = sorted(cs, key=_act)[-1][len("gamut_"):]
-    campaign_names = [d[len("gamut_"):] for d in cs]
+        name = _disp(sorted(cs, key=_act)[-1])
+    # de-dup: a gamut_X symlink beside a real X directory is the same campaign
+    campaign_names = sorted({_disp(d) for d in cs})
     pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
+    if not os.path.exists(os.path.join(pdir, "plan.json")):
+        pdir = os.path.join(OPT, "campaigns", name)
     plan_p = os.path.join(pdir, "plan.json")
     if not os.path.exists(plan_p):
         return jsonify(error="no plan"), 404
@@ -2144,7 +2181,7 @@ def gamut_progress():
         first_done=(done_times[0][0] if done_times else None),
         last_done=(done_times[-1][0] if done_times else None),
         worker_state_age_sec=(int(now - os.path.getmtime(st_p))
-                              if os.path.exists(st_p) else None))
+                              if st_p and os.path.exists(st_p) else None))
 
 
 @app.route("/api/story", methods=["GET", "POST"])
