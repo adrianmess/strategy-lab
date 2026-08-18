@@ -2362,6 +2362,10 @@ def _gamut_systems():
         if len(parts) < 3:
             continue
         key, host = parts[0], parts[2]
+        # a remote may carry its repo path ('user@host:Code/strategy-lab');
+        # the ssh TARGET is only the part before the colon
+        rpath = host.split(":", 1)[1] if ":" in host else "strategy-lab"
+        host = host.split(":", 1)[0]
         rh = host if "@" in host else f"ubuntu@{host}"
         if rh in seen:
             continue
@@ -2379,7 +2383,7 @@ def _gamut_systems():
         auto = os.path.expanduser("~/.ssh/lab_auto_ed25519")
         if not rh.startswith("ubuntu@") and os.path.exists(auto):
             key = auto
-        systems.append(dict(id=rh, name=name, ssh=rh, key=key))
+        systems.append(dict(id=rh, name=name, ssh=rh, key=key, rpath=rpath))
     return systems
 
 def _gctl(sys_d, action, arg=None):
