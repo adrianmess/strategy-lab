@@ -2153,8 +2153,18 @@ def gamut_progress():
     # ANY campaign directory holding a plan.json qualifies — the old filter
     # required a "gamut_" prefix, so campaigns not following that naming
     # (or lacking the customary symlink) were invisible in the dropdown
+    def _is_gamut_plan(d):
+        try:
+            pl = json.load(open(os.path.join(OPT, "campaigns", d,
+                                             "plan.json")))
+            sp = pl.get("specs") or []
+            return bool(sp) and isinstance(sp[0], dict) and "name" in sp[0]
+        except Exception:
+            return False
+
     cs = [d for d in sorted(os.listdir(os.path.join(OPT, "campaigns")))
-          if os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))]
+          if os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))
+          and _is_gamut_plan(d)]
     if not cs:
         return jsonify(error="no gamut campaigns"), 404
 
@@ -2196,11 +2206,15 @@ def gamut_progress():
     pairs = defaultdict(lambda: [0, 0])
     running, failed, done_times = [], [], []
     for s in plan["specs"]:
-        n = s["name"]
+        # legacy campaign plans (c1..c7) predate the name/status spec shape —
+        # skip those entries instead of 500-ing the whole Progress page
+        n = s.get("name")
+        if not n:
+            continue
         st = state.get(n, {})
         sst = st.get("status")
         rd = os.path.join(OPT, "runs", n)
-        if (s["status"] == "done" or sst in ("done", "skipped")
+        if (s.get("status") == "done" or sst in ("done", "skipped")
                 or os.path.exists(os.path.join(rd, "best_config.json"))
                 or os.path.exists(os.path.join(rd, "no_survivor.json"))):
             eff = "done"
