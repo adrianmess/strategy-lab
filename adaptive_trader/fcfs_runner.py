@@ -51,6 +51,11 @@ class PairExec:
               else (cfg.get("contract_sizes") or {}).get(symbol))
         if cs:
             self.cfg["contract_size"] = float(cs)
+        elif cfg.get("mode") != "spot":
+            # inheriting the template's 0.1 (SOL) would mis-size by 1000x on
+            # BTC — refuse rather than trade a wrong quantity
+            raise SystemExit(f"no contract_size for {symbol} in this config's "
+                             f"contract_sizes — re-adopt the combo")
         from trader import Executor, APIExecutor, APISpotExecutor
         if cfg.get("execution") == "api":
             self.ex = (APISpotExecutor(self.cfg) if cfg.get("mode") == "spot"
@@ -75,6 +80,7 @@ class Host:
         self.last_seen = 0.0
         self.started_at = 0.0
         self.restarts = 0
+        self.restart_at = 0.0      # scheduled (non-blocking) restart time
 
     def start(self):
         self.started_at = time.time()
@@ -145,14 +151,20 @@ def main_fcfs(cfg, live):
         # ask MEXC which spot symbols THIS key may API-trade (the old
         # hardcoded BTC/ETH-only rule is stale — keys now get a wide list)
         from mexc_api import MexcFuturesAPI
+        # configs store the account as api_account; "account" never existed,
+        # so this silently validated mexc1 while trading another account
         allowed = set(MexcFuturesAPI(
-            account=cfg.get("account", "mexc1")).spot_api_symbols())
+            account=cfg.get("api_account") or "mexc1").spot_api_symbols())
         bad = {c["pair"] for c in comps
                if c["pair"].replace("_", "") not in allowed}
         if bad:
             raise SystemExit(f"this key's MEXC spot-API allowlist does not "
                              f"include {sorted(bad)} — enable them for the "
                              f"key or use another account. Dry-run works.")
+    # PairExec reads cfg["mode"]; the authoritative value lives on the
+    # candidate. A stale top-level "mode" would route a spot combo through
+    # the futures executor.
+    cfg["mode"] = mode
     log.info("FCFS live adapter starting: %d components, mode=%s, dry_run=%s",
              len(comps), mode, cfg["dry_run"])
 
@@ -219,10 +231,15 @@ def main_fcfs(cfg, live):
                lev=pos.get("lev"),
                side=("LONG" if pos.get("dir", 1) > 0 else "SHORT"),
                live=(not cfg["dry_run"]), result=(res or {}).get("status"))
-        if (res or {}).get("status") == "error":
+        if (res or {}).get("status") not in ("success", "dry_run"):
             notify("order_failed", account="fcfs", action="close",
                    config=os.path.basename(cfg.get("_path", "?")),
-                   detail=res.get("message"))
+                   detail=(res or {}).get("message"))
+            # KEEP the position and the slot: clearing here would strand a
+            # live position AND free the slot for a second one on top of it
+            log.error("CLOSE FAILED (%s) — position kept, slot stays busy",
+                      (res or {}).get("message"))
+            return
         state["position"] = None
         save(); tell_flat()
 
@@ -295,8 +312,10 @@ def main_fcfs(cfg, live):
                         wait = min(60, 5 * h.restarts)
                         log.warning("host %s died — restart #%d in %ds",
                                     key, h.restarts, wait)
-                        time.sleep(wait)
-                        h.start(); tell_flat()
+                        # schedule it: sleeping here froze the emergency exit,
+                        # liq-proximity check and manual override for up to a
+                        # minute while a leveraged position was open
+                        h.restart_at = now + wait
                 elif e == "ready":
                     log.info("host %s ready (%s bars)", key, msg.get("bars"))
                 elif e == "log":
@@ -434,6 +453,14 @@ def main_fcfs(cfg, live):
                             pass
                         ov["d"] = None
                         do_close("manual_override", px)
+
+            # due host restarts (scheduled, never blocking — see "died")
+            for _k, _h in hosts.items():
+                if _h.restart_at and now >= _h.restart_at and not _h.alive():
+                    _h.restart_at = 0.0
+                    log.info("restarting host %s now", _k)
+                    _h.start()
+                    tell_flat()
 
             # watchdog: a silent host while we hold ITS position is a hazard
             if pos:

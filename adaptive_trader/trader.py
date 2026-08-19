@@ -67,6 +67,14 @@ def load_state(cfg):
     return {}
 
 
+def _close_ok(res):
+    """A close only counts if the venue CONFIRMED it. Clearing state on a
+    failed close (proxy timeout, API rejection) strands a real position that
+    no config tracks any more — and frees the slot to open a second one on
+    top of it. Anything that is not an explicit success keeps the position."""
+    return (res or {}).get("status") in ("success", "dry_run")
+
+
 def save_state(cfg, state):
     path = os.path.join(HERE, cfg["state_file"])
     tmp = path + ".tmp"
@@ -84,11 +92,20 @@ class Executor:
         if self.cfg["dry_run"]:
             self.log.info("[DRY RUN] would POST: %s", json.dumps(payload))
             return {"status": "dry_run"}
-        r = requests.post(self.cfg["webhook_url"], json=payload, timeout=120)
-        r.raise_for_status()
-        out = r.json()
+        # match APIExecutor's contract: never raise into the trading loop —
+        # a raise used to skip the order_failed notify AND the state save
+        try:
+            r = requests.post(self.cfg["webhook_url"], json=payload,
+                              timeout=120)
+            r.raise_for_status()
+            out = r.json()
+        except Exception as e:
+            self.log.error("webhook FAILED: %s", e)
+            return {"status": "error", "message": str(e)}
         self.log.info("webhook response: %s", out)
-        return out
+        if str(out.get("status", "")).lower() in ("error", "failed"):
+            return {"status": "error", "message": str(out)[:300]}
+        return out if out.get("status") else {"status": "success", "raw": out}
 
     def open_position(self, direction, lev, price):
         cfg = self.cfg
@@ -299,7 +316,16 @@ class APISpotExecutor:
         try:
             qty = self._tracked_qty()
             free = self.api.balance(self.base_asset)
-            sell = min(qty, free) if qty > 0 else free
+            if qty <= 0:
+                # NEVER fall back to "sell everything": the free balance can
+                # include holdings this bot never bought (and _tracked_qty
+                # returns 0 on ANY read error, e.g. a state file mid-replace)
+                self.log.error("close refused: no tracked quantity "
+                               "(free=%.6g %s). Sell manually if these coins "
+                               "are really the bot's.", free, self.base_asset)
+                return {"status": "error",
+                        "message": "no tracked quantity to close"}
+            sell = min(qty, free)
             if sell <= 0:
                 self.log.warning("nothing to sell (tracked=%.4f free=%.4f)",
                                  qty, free)
@@ -446,6 +472,11 @@ def main():
                        symbol=cfg["symbol"], reason="virtual_exit(late-join)",
                        price=price, live=(not cfg["dry_run"]),
                        position=pos, result=(res or {}).get("status"))
+                if not _close_ok(res):
+                    log.error("LATE-JOIN CLOSE FAILED (%s) — keeping the "
+                              "position; will retry next bar",
+                              (res or {}).get("message"))
+                    return False
                 state["position"] = None
                 save_state(cfg, state)
             return False
@@ -534,19 +565,30 @@ def main():
         log.warning("MANUAL %s close at %.6g",
                     "CLOSE-NOW" if d.get("now") else
                     f"OVERRIDE (trigger {d['price']:.6g})", price)
-        res = ex.close_position()
-        notify("position_closed", account=_acct_label(cfg),
-               config=os.path.basename(cfg.get("_path", "?")),
-               symbol=cfg["symbol"], reason="manual_override", price=price,
-               live=(not cfg["dry_run"]), position=pos,
-               result=(res or {}).get("status"))
-        state["position"] = None
-        save_state(cfg, state)
+        # CONSUME the trigger before acting: a raising executor (the browser
+        # path re-raises after a 120s timeout) used to re-enter this branch
+        # with the sidecar still armed and fire the close a second time.
         try:
             os.remove(_ov_path)
         except OSError:
             pass
         _ov["d"] = None
+        try:
+            res = ex.close_position()
+        except Exception as e:
+            log.error("manual close raised: %s — position kept", e)
+            return False
+        notify("position_closed", account=_acct_label(cfg),
+               config=os.path.basename(cfg.get("_path", "?")),
+               symbol=cfg["symbol"], reason="manual_override", price=price,
+               live=(not cfg["dry_run"]), position=pos,
+               result=(res or {}).get("status"))
+        if not _close_ok(res):
+            log.error("manual close FAILED (%s) — position kept",
+                      (res or {}).get("message"))
+            return False
+        state["position"] = None
+        save_state(cfg, state)
         return True
 
     def protective_check():
@@ -568,6 +610,10 @@ def main():
                    symbol=cfg["symbol"], reason=act.get("reason"),
                    price=price, live=(not cfg["dry_run"]),
                    result=(res or {}).get("status"))
+            if not _close_ok(res):
+                log.error("PROTECTIVE CLOSE FAILED (%s) — position kept, "
+                          "retrying next tick", (res or {}).get("message"))
+                return False
             state["position"] = None
             save_state(cfg, state)
             return True
@@ -608,7 +654,14 @@ def main():
             return                          # unchanged (within 0.05%)
         if pos.get("tp_order_id"):
             ex.cancel_tp(pos["tp_order_id"])
-        oid = ex.place_tp(pos["qty"], tgt)
+        # clamp to what we actually hold: state qty is gross of the base-fee
+        # deduction, and an oversized limit sell is rejected outright
+        try:
+            _free = float(ex.api.balance(ex.base_asset) or 0)
+        except Exception:
+            _free = 0.0
+        _q = min(float(pos["qty"]), _free) if _free > 0 else float(pos["qty"])
+        oid = ex.place_tp(_q, tgt)
         pos["tp_order_id"] = oid
         pos["tp_price"] = tgt if oid else None
         save_state(cfg, state)
@@ -628,10 +681,16 @@ def main():
                    price=_px, live=True, position=_pos, result="success")
             state["position"] = None
             save_state(cfg, state)
-        elif _st in ("CANCELED", "EXPIRED", ""):
+        elif _st in ("CANCELED", "EXPIRED"):
             _pos.pop("tp_order_id", None)
             _pos.pop("tp_price", None)
             save_state(cfg, state)
+        elif not _st:
+            # query FAILED (network/proxy) — do NOT assume the order is gone,
+            # or tp_sync would place a second resting sell for the same coins
+            log.warning("TP net status unknown for order %s — leaving it "
+                        "tracked; will re-check on the next sync",
+                        _pos.get("tp_order_id"))
 
     # How often to re-check the protective stop against live ticks, in seconds.
     # Defaults to 0.5s (near-live); heavy work (kline fetch + bar-close eval)
@@ -688,17 +747,23 @@ def main():
                                price=price, live=(not cfg["dry_run"]),
                                position=state.get("position"),
                                result=(res or {}).get("status"))
-                        if (res or {}).get("status") == "error":
+                        if not _close_ok(res):
                             notify("order_failed", account=_acct_label(cfg),
                                    config=os.path.basename(cfg.get("_path", "?")),
-                                   action="close", detail=res.get("message"))
+                                   action="close",
+                                   detail=(res or {}).get("message"))
+                            log.error("CLOSE FAILED — position kept, will "
+                                      "retry on the next bar")
+                            continue
                         state["position"] = None
+                        save_state(cfg, state)
                     elif a["do"] == "open" and not state.get("position"):
                         res, qty = ex.open_position(a["dir"], a["lev"], price)
                         if (res or {}).get("status") == "error":
                             notify("order_failed", account=_acct_label(cfg),
                                    config=os.path.basename(cfg.get("_path", "?")),
                                    action="open", detail=res.get("message"))
+                            continue          # never record a phantom entry
                         if qty > 0:
                             notify("position_opened", account=_acct_label(cfg),
                                    config=os.path.basename(cfg.get("_path", "?")),
@@ -734,6 +799,7 @@ def main():
                 time.sleep(cfg["poll_seconds"])
         except KeyboardInterrupt:
             log.info("stopped by user")
+            save_state(cfg, state)      # never exit with unsaved position data
             break
         except requests.exceptions.RequestException as e:
             # transient network trouble (connection reset, timeout, DNS) on

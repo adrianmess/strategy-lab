@@ -66,7 +66,8 @@ def _save_instances():
                        name=d.get("name"),
                        err_cleared=d.get("err_cleared") or "",
                        trader=dict(
-                           should_run=(d["trader"]["proc"] is not None
+                           should_run=(not d.get("stopped_by_user")
+                                       and d["trader"]["proc"] is not None
                                        and d["trader"]["proc"].poll() is None),
                            live=bool(d["trader"].get("live")),
                            config=d["trader"].get("config") or d.get("cfg")))
@@ -399,6 +400,7 @@ def trader_start():
                                 env={**os.environ, "TRADER_CONFIG": cfg_name})
     t.update(proc=proc, config=cfg_name, live=live,
              started=time.strftime("%Y-%m-%d %H:%M:%S"))
+    I.pop("stopped_by_user", None)
     I["cfg"] = cfg_name
     _save_instances()
     return jsonify(ok=True, instance=i)
@@ -414,7 +416,17 @@ def trader_stop():
         p.wait(10)
     except subprocess.TimeoutExpired:
         p.terminate()
-    _save_instances()   # deliberate stop — must NOT be resumed after reboot
+        try:
+            p.wait(5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    # a DELIBERATE stop: clear the live flag and record the intent explicitly.
+    # should_run used to be inferred from proc.poll(), which still read
+    # "running" right after terminate() — so a stopped LIVE trader came back
+    # LIVE on the next reboot, with no confirm.
+    I["trader"].update(live=False)
+    I["stopped_by_user"] = True
+    _save_instances()
     return jsonify(ok=True)
 
 
@@ -1348,6 +1360,13 @@ def processes_kill():
             p = I[kind]["proc"]
             if p is not None and p.pid == pid:
                 I[kind].update(proc=None, started=None)
+                if kind == "trader":
+                    # a killed trader is a deliberate stop — persist that, or
+                    # instances.json keeps saying "should_run, live" and the
+                    # next reboot resurrects it LIVE without confirmation
+                    I[kind]["live"] = False
+                    I["stopped_by_user"] = True
+    _save_instances()
     return jsonify(ok=True, killed=dict(pid=pid, kind=target["kind"]))
 
 
@@ -2069,13 +2088,20 @@ def clear_bot_position():
     if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", name) \
             or not os.path.isfile(path):
         return jsonify(error=f"no such config '{name}'"), 404
+    _mine = _state_file_of(name)
     for i, I in instances.items():
         t = I["trader"]
-        if t["proc"] is not None and t["proc"].poll() is None \
-                and (t.get("config") or I.get("cfg")) == name:
+        if t["proc"] is None or t["proc"].poll() is not None:
+            continue
+        _theirs = _state_file_of(t.get("config") or I.get("cfg") or "")
+        # compare STATE FILES, not config names: config.json and
+        # config_legacy_stopON.json share trader_state.json, so a name-only
+        # check would let this wipe a running live trader's position
+        if (t.get("config") or I.get("cfg")) == name or (
+                _mine and _theirs and _mine == _theirs):
             return jsonify(error=(f"instance {I.get('name') or i} is RUNNING "
-                                  f"this config — stop it first, or close "
-                                  f"the position from its card")), 400
+                                  f"a config with the same state file — stop "
+                                  f"it first, or close from its card")), 400
     c = json.load(open(path))
     sp = os.path.join(AT, c.get("state_file", "trader_state.json"))
     if not os.path.exists(sp):
