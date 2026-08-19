@@ -1683,6 +1683,53 @@ def configs():
 def adopt():
     """Splice a best_config candidate into a trader config (with backup)."""
     d = request.get_json(force=True)
+    # adopt straight from a BACKTEST ENTRY (Backtests page): resolve its
+    # genome the same way the re-run button does — the run directory when it
+    # still exists, otherwise the config embedded in the entry itself
+    if d.get("entry"):
+        p = os.path.join(REPO, "dashboard", "backtests.js")
+        txt = open(p).read()
+        _es = json.JSONDecoder().raw_decode(txt[txt.index("=") + 1:].lstrip())[0]
+        _e = next((x for x in _es if x.get("name") == d["entry"]), None)
+        if not _e:
+            return jsonify(error=f"no backtest entry '{d['entry']}'"), 404
+        _SUF = ["_oosbest_full", "_best_full", "_full"]
+        _GEN = {"_oosbest_full": "holdout_best_config.json",
+                "_best_full": "best_config.json",
+                "_full": "best_config.json"}
+        src = None
+        for s in _SUF:
+            if d["entry"].endswith(s):
+                r = d["entry"][:-len(s)]
+                for fn in (_GEN[s], "best_config.json"):
+                    cand_p = os.path.join(OPT, "runs", r, fn)
+                    if os.path.exists(cand_p):
+                        src = cand_p
+                        break
+                break
+        if src is None:                     # run dir gone: use the embedded
+            g = _e.get("config")            # genome, normalized to run shape
+            if not g:
+                return jsonify(error=(
+                    "this entry has no genome to adopt (router combos and "
+                    "quick backtests must be adopted from the Optimize "
+                    "page)")), 400
+            g = dict(g)
+            if "cand" not in g:
+                g = dict(cand=(g.get("candidate") or g))
+            for k, v in (("pair", _e.get("pair")),
+                         ("timeframe", str(_e.get("timeframe") or "")),
+                         ("mode", _e.get("mode")),
+                         ("method", _e.get("method")),
+                         ("strategy", _e.get("strategy")),
+                         ("market_data", _e.get("market_data"))):
+                if v and not g.get(k):
+                    g[k] = v
+            gdir = os.path.join(AT, ".adopted_genomes")
+            os.makedirs(gdir, exist_ok=True)
+            src = os.path.join(gdir, _safe_name(d["entry"]) + ".json")
+            json.dump(g, open(src, "w"), indent=1)
+        d = dict(d, source=src, run_name=d.get("run_name") or d["entry"])
     src = d["source"]
     if not os.path.isabs(src):
         src = os.path.join(OPT, src)

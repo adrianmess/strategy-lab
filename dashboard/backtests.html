@@ -942,6 +942,21 @@ function render(){
     w._t = setTimeout(()=>{ if(w.parentNode) w.replaceWith(b); }, 5000);
   });
 }
+async function adoptThis(){
+  if(sel===null) return;
+  const e = BT[sel];
+  const base = e.name.replace(/_(oosbest_full|best_full|full)$/, '');
+  let t = prompt(`Save "${e.name}" as a trader config?\n\n· new file = its own instance, own state/log, starts DRY-RUN\n· an existing config file name overwrites it (backup kept)\n\nGenome: ${e.name.endsWith('_oosbest_full') ? 'OOS-best (holdout-validated)' : 'train-best'} · ${e.pair||''} ${e.timeframe||''} ${e.mode||''}`, `config_${base}.json`);
+  if(t === null) return;
+  t = (t.trim() || `config_${base}.json`).replace(/[^A-Za-z0-9_.-]+/g, '');
+  if(!/^config/.test(t)) t = 'config_' + t;
+  if(!t.endsWith('.json')) t += '.json';
+  const r = await fetch('/api/adopt', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({entry:e.name, target:t})}).then(x=>x.json());
+  if(r.ok) alert((r.note||('Saved as '+t))+`\n\nOn the Control panel, pick "${r.target||t}" on an instance and start it (dry-run first).`);
+  else alert('error: '+(r.error||''));
+}
 async function rerunThis(){
   if(sel===null) return;
   const e = BT[sel];
@@ -991,7 +1006,10 @@ function select(i){
       onclick="optimizeThis()">⚙ Optimize this →</button>
     <button style="margin-left:6px;padding:3px 10px;font-size:12px;cursor:pointer;border-radius:6px"
       title="Re-run this backtest against the most recently downloaded market data and replace this entry (runs as a job; the list reloads when it finishes)"
-      onclick="rerunThis()">↻ Re-run on current data</button>`;
+      onclick="rerunThis()">↻ Re-run on current data</button>
+    <button style="margin-left:6px;padding:3px 10px;font-size:12px;cursor:pointer;border-radius:6px"
+      title="Save this backtest's configuration as a trader config file you can select on any Control panel instance (created as DRY-RUN with its own state/log files)"
+      onclick="adoptThis()">⇩ Save as trader config</button>`;
   if(chart)chart.destroy();
   if(e.curve&&e.curve.length){
     chart = new Chart(document.getElementById('curve'),{type:'line',
