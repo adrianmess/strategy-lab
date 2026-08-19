@@ -134,6 +134,22 @@ def main():
                         opens_now = (op is not None
                                      and int(op.get("entry_idx", -1)) == syn_i)
                         ei = int(op.get("entry_idx", -1)) if op is not None else -1
+                        # WHY the most recent virtual trade ended. The parent
+                        # must distinguish a real exit (target/stop) from a
+                        # LIQUIDATION of the simulated account — the latter is
+                        # not a market signal and must not close a real
+                        # position that is nowhere near its own liquidation.
+                        last_exit = last_reason = None
+                        try:
+                            if tr is not None and len(tr):
+                                _r = tr.iloc[-1]
+                                last_exit = _ts16(_r["exit_t"])
+                                last_reason = {0.0: "profit_target",
+                                               1.0: "stop_loss",
+                                               2.0: "liquidation"}.get(
+                                    float(_r["reason"]), str(_r["reason"]))
+                        except Exception:
+                            pass
                         out.append(dict(
                             i=c["i"],
                             opens_now=bool(opens_now),
@@ -143,7 +159,8 @@ def main():
                             # virtual entry price: lets the parent late-join a
                             # position opened while it was down — red only
                             entry_px=(float(x3["close"].iloc[ei])
-                                      if 0 <= ei < len(x3) else None)))
+                                      if 0 <= ei < len(x3) else None),
+                            last_exit=last_exit, last_reason=last_reason))
                     emit(dict(e="bar", t=_ts16(newest),
                               px=float(closed["close"].iloc[-1]), comps=out))
             time.sleep(poll)

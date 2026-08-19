@@ -423,7 +423,9 @@ def main_fcfs(cfg, live):
                         # position open: watch ONLY the owning component
                         if key == pos["group"] and pos["comp"] in cbyi:
                             me = cbyi[pos["comp"]]
-                            if pos.get("mirror_entry_t") is None:
+                            if pos.get("standalone"):
+                                pass          # detached: no mirror to follow
+                            elif pos.get("mirror_entry_t") is None:
                                 # first bar msg after open: bind the mirror
                                 bind = me.get("open") or opened_bar.get(pos["comp"])
                                 if bind is None:
@@ -434,7 +436,52 @@ def main_fcfs(cfg, live):
                                     state["position"]["mirror_entry_t"] = bind
                                     save()
                             elif me.get("open") != pos["mirror_entry_t"]:
-                                do_close("virtual_exit", msg.get("px"))
+                                # WHY did the virtual trade end? A LIQUIDATION
+                                # is the death of a SIMULATED account, not a
+                                # market signal — our real position was opened
+                                # at a different price and is typically
+                                # nowhere near its own liquidation. Mirroring
+                                # it out just realises someone else's loss
+                                # (2026-08-19: sim died at 2144 from a 1850
+                                # entry; our short was opened at 2124 with
+                                # liquidation ~2462 and was closed for -$413).
+                                _why = me.get("last_reason")
+                                _dead = (_why == "liquidation" and
+                                         me.get("last_exit") == pos["mirror_entry_t"]
+                                         or _why == "liquidation")
+                                if _dead and not cfg.get(
+                                        "mirror_sim_liquidation", False):
+                                    log.warning(
+                                        "%s: the SIM position liquidated — "
+                                        "NOT mirroring that exit. Keeping our "
+                                        "position (entry %.6g, our liq ~%.6g) "
+                                        "and managing it standalone.",
+                                        comp_label(pos["comp"]),
+                                        pos["entry_price"],
+                                        pos["entry_price"] * (
+                                            1 + (1.0 / max(pos["lev"], 1e-9)
+                                                 - 0.008) * -pos["dir"]))
+                                    notify("sim_liquidated_position_kept",
+                                           account="fcfs",
+                                           config=os.path.basename(
+                                               cfg.get("_path", "?")),
+                                           symbol=pos["symbol"],
+                                           comp=comp_label(pos["comp"]),
+                                           entry=pos["entry_price"],
+                                           price=msg.get("px"),
+                                           live=(not cfg["dry_run"]))
+                                    # detach from the dead mirror and give the
+                                    # position its own exit plan, anchored to
+                                    # OUR entry rather than the sim's
+                                    pos["orphaned_at"] = time.strftime(
+                                        "%Y-%m-%d %H:%M:%S")
+                                    pos["mirror_entry_t"] = None
+                                    pos["standalone"] = True
+                                    sk = state.setdefault("late_skips", {})
+                                    sk[str(pos["comp"])] = me.get("open") or ""
+                                    save()
+                                else:
+                                    do_close("virtual_exit", msg.get("px"))
 
             # arbitration window expired?
             if pending_deadline and now >= pending_deadline:
@@ -464,6 +511,25 @@ def main_fcfs(cfg, live):
                     em = cfg.get("emergency_exit_adverse")
                     if em and adverse <= -abs(em):
                         do_close("emergency_exit", px)
+                    # ---- STANDALONE position (its sim liquidated) ----
+                    # It has no mirror left to follow, so it gets an explicit
+                    # plan anchored to OUR entry: take the component's own
+                    # edge if it arrives, and cap the downside — never leave
+                    # a stopless leveraged position drifting.
+                    elif pos.get("standalone"):
+                        tp = float(cfg.get("standalone_take_profit", 0.005))
+                        liq_d = (1.0 / max(pos["lev"], 1e-9) - 0.008
+                                 if mode == "lev" else 1.0)
+                        sl_frac = float(cfg.get("standalone_stop_frac", 0.5))
+                        if adverse >= tp:
+                            log.info("STANDALONE take-profit hit (+%.2f%% "
+                                     "from our entry)", 100 * adverse)
+                            do_close("standalone_take_profit", px)
+                        elif adverse <= -abs(sl_frac * liq_d):
+                            log.warning("STANDALONE stop hit (%.2f%% adverse, "
+                                        "%.0f%% of our liquidation distance)",
+                                        100 * -adverse, 100 * sl_frac)
+                            do_close("standalone_stop", px)
                     # manual override: panel-set trigger price for THIS
                     # position (sidecar file, mtime-polled — no restart)
                     try:
