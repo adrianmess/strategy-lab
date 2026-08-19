@@ -178,10 +178,48 @@ class APIExecutor:
             fn = self.api.open_long if direction > 0 else self.api.open_short
             res = fn(cfg["symbol"], qty, lev_i, price)
             self.log.info("API order placed: %s", res)
+            held, fill = self._confirm_fill(direction)
+            if held > 0:
+                return {"status": "success", "order": res,
+                        "fill_price": fill}, held
             return {"status": "success", "order": res}, qty
         except Exception as e:
+            # A TIMEOUT IS NOT A REJECTION: the exchange may have accepted the
+            # order and the reply died on the proxy. Ask what we actually hold
+            # before declaring failure, or the next signal opens a SECOND
+            # position on top of an untracked one.
             self.log.error("API order FAILED: %s", e)
+            try:
+                held, fill = self._confirm_fill(direction)
+            except Exception as e2:
+                self.log.error("post-failure position check FAILED: %s — "
+                               "VERIFY THE ACCOUNT MANUALLY", e2)
+                return {"status": "error", "message": str(e)}, 0
+            if held > 0:
+                self.log.warning("order actually FILLED despite the error "
+                                 "(%s contracts @ %.6g) — adopting it",
+                                 held, fill or 0)
+                return {"status": "success", "adopted_after_error": True,
+                        "fill_price": fill}, held
             return {"status": "error", "message": str(e)}, 0
+
+    def _confirm_fill(self, direction, tries=3):
+        """What the exchange says we hold on this symbol, after an order.
+        Returns (holdVol, avg entry price) — (0, None) when flat."""
+        want = 1 if direction > 0 else 2          # positionType: 1 long 2 short
+        for i in range(tries):
+            time.sleep(0.6 * (i + 1))             # fills settle asynchronously
+            try:
+                for p in (self.api.open_positions(self.cfg["symbol"]) or []):
+                    if int(p.get("positionType") or 0) != want:
+                        continue
+                    hold = float(p.get("holdVol") or 0)
+                    if hold > 0:
+                        return hold, float(p.get("holdAvgPrice") or 0) or None
+            except Exception:
+                if i == tries - 1:
+                    raise
+        return 0.0, None
 
     def close_position(self):
         if self.cfg["dry_run"]:
@@ -535,6 +573,8 @@ def main():
             save_state(cfg, state)
         return False
 
+    _tp_poll = {"next": time.time() + 30}   # spot TP-net fill polling
+
     # manual close-override sidecar (written by the panel, polled by mtime —
     # applies to the CURRENT position, no trader restart needed once running)
     _ov_path = os.path.join(HERE, ".override_" + os.path.basename(
@@ -600,6 +640,10 @@ def main():
         price = feed.last_price()
         if _override_check(price):
             return True
+        if _tp_poll["next"] and time.time() >= _tp_poll["next"]:
+            _tp_poll["next"] = time.time() + 30      # cheap: 1 query / 30s
+            if tp_check_filled():
+                return True
         act = check(price)
         if act:
             log.warning("INTRABAR STOP at %.3f (%s price): %s",
@@ -633,12 +677,50 @@ def main():
                  "ACTIVE" if tp_on else "off (needs api execution + "
                  "protective_orders + a schedule-aware strategy)")
 
+    def tp_check_filled():
+        """Did the resting TP sell execute since the last look? It used to be
+        reconciled only at startup, so a mid-session fill left the trader
+        holding a position that no longer existed: no new entries (idle
+        capital) and a protective stop watching thin air."""
+        if not tp_on:
+            return False
+        pos = state.get("position")
+        oid = (pos or {}).get("tp_order_id")
+        if not oid:
+            return False
+        o = ex.tp_status(oid)
+        if not o:
+            return False                      # query failed — decide nothing
+        st = str(o.get("status") or "")
+        if st == "FILLED":
+            px = float(o.get("price") or 0)
+            log.info("TP NET FILLED: sold @ %.6g — the exchange closed the "
+                     "position for us", px)
+            notify("position_closed", account=_acct_label(cfg),
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   symbol=cfg["symbol"], reason="tp_net_filled",
+                   price=px, live=True, position=pos, result="success")
+            state["position"] = None
+            save_state(cfg, state)
+            return True
+        if st == "PARTIALLY_FILLED":
+            done = float(o.get("executedQty") or 0)
+            if done > 0 and pos.get("qty"):
+                left = max(0.0, float(pos["qty"]) - done)
+                log.warning("TP net PARTIALLY filled (%.6g of %.6g) — "
+                            "tracking the remainder", done, float(pos["qty"]))
+                pos["qty"] = left
+                save_state(cfg, state)
+        return False
+
     def tp_sync(now_ms):
         """Keep the resting TP sell at the CURRENT scheduled target. Late-
         joined (replay-mirrored) positions are skipped — their stored
         regime/system fields are approximations, so a computed target could
         be wrong; the replay remains their exit authority."""
         if not tp_on:
+            return
+        if tp_check_filled():
             return
         pos = state.get("position")
         if not pos or pos.get("late_mirror"):
@@ -773,7 +855,11 @@ def main():
                                    live=(not cfg["dry_run"]))
                             state["position"] = dict(
                                 dir=a["dir"], system=a["system"], regime=a["regime"],
-                                entry_price=price, qty=qty, lev=a["lev"],
+                                # the venue's own fill price when it gave us
+                                # one — the signal price is only a fallback
+                                entry_price=((res or {}).get("fill_price")
+                                             or price),
+                                qty=qty, lev=a["lev"],
                                 sl_price=a["sl_price"], entry_sig_ms=a["sig_ms"],
                                 opened_at=str(newest),
                                 # UNAMBIGUOUS wall-clock of the fill: opened_at

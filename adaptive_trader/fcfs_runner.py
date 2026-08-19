@@ -258,13 +258,21 @@ def main_fcfs(cfg, live):
         c = comps[i]
         if mode != "lev":
             lev = 1.0
-        res, qty = ex_for(c["pair"]).open(d, lev, px)
+        # `px` is the last CLOSED bar's close, and we fire up to 1.5s later
+        # (arbitration window) plus poll latency. Size and anchor on the LIVE
+        # tick instead: entry_price is the denominator of the emergency-exit
+        # net, the liq-proximity warning and the reported P&L.
+        h = hosts.get(gkey)
+        px_live = float(getattr(h, "last_px", None) or px)
+        res, qty = ex_for(c["pair"]).open(d, lev, px_live)
         if (res or {}).get("status") == "error":
             notify("order_failed", account="fcfs", action="open",
                    config=os.path.basename(cfg.get("_path", "?")),
                    detail=res.get("message"))
             return
         if qty and qty > 0:
+            # prefer the venue's own fill price when the executor confirmed it
+            px = float((res or {}).get("fill_price") or px_live)
             state["position"] = dict(
                 symbol=c["pair"], comp=i, dir=d, lev=lev, qty=qty,
                 entry_price=px, group=gkey,
