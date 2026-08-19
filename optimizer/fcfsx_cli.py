@@ -107,6 +107,10 @@ def publish(name, kind, taken, comps, mode, S, mo, note, open_pos=None):
                  monthly=[dict(month=m, ret_pct=100 * (v - 1))
                           for m, v in sorted(mo.items())],
                  open_positions=(open_pos or []),
+                 # the page's "longest hold" filter reads the TOP-LEVEL field;
+                 # routers only had it inside stats, so any value in that box
+                 # silently excluded every router entry
+                 max_hold_days=S.get("max_hold_days"),
                  gap_mode="skip_contaminated",
                  gap_handling=dict(threshold_min=1000, n_segments=0,
                                    skipped_gaps=[], note=note),

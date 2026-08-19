@@ -341,7 +341,9 @@ def main():
                  curve=curve[-400:], trades=trades[-400:],
                  monthly=[dict(month=m, ret_pct=100 * (v - 1))
                           for m, v in sorted(mo_map.items())],
-                 open_positions=[], gap_mode="skip_contaminated",
+                 open_positions=[],
+                 max_hold_days=(S or {}).get("max_hold_days"),
+                 gap_mode="skip_contaminated",
                  gap_handling=dict(threshold_min=1000, n_segments=0,
                                    skipped_gaps=[],
                                    note="cross-timeframe router: components "

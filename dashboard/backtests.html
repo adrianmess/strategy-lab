@@ -801,7 +801,11 @@ function render(){
   if(fNegV === 'month') order = order.filter(_noNegMonth);
   else if(fNegV === 'week') order = order.filter(_noNegWeek);
   const fMH = +document.getElementById('fMaxHold').value;
-  if(fMH > 0) order = order.filter(i=>BT[i].max_hold_days != null && BT[i].max_hold_days <= fMH);
+  // routers published max_hold_days only inside stats, so a top-level-only
+  // check silently dropped every router entry whenever this box had a value
+  const _mh = e => (e.max_hold_days != null ? e.max_hold_days
+                    : ((e.stats || {}).max_hold_days));
+  if(fMH > 0) order = order.filter(i=>_mh(BT[i]) != null && _mh(BT[i]) <= fMH);
   const fDD = +document.getElementById('fMaxDD').value;
   if(fDD > 0) order = order.filter(i=>{const st=BT[i].stats||{}; const v = st.maxdd_mtm!=null? st.maxdd_mtm : st.maxdd_closed; return v!=null && 100*v <= fDD;});
   const fWin = +document.getElementById('fWinMin').value;
