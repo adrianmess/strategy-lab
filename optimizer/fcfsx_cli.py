@@ -81,6 +81,9 @@ def replay_stats(taken):
     S = dict(final_eq=eq, total_mult=eq / 1000.0, months=months,
              monthly_growth_pct=100 * ((max(eq, 1e-9) / 1000.0) ** (1 / months) - 1),
              liq=liq, maxdd_mtm=mdd, n=len(taken),
+             # longest single trade — the page filters on this; it used to
+             # live only in the holdout dict, so the stats copy was empty
+             max_hold_days=max_hold,
              tpm=len(taken) / months, sl_hits=0,
              win=wins / max(len(taken), 1))
     H = dict(eq=eq, maxdd=mdd, n=len(taken), months=m2, growth=gm,
