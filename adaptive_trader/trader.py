@@ -213,6 +213,21 @@ class APISpotExecutor:
             except Exception as e:
                 self.log.warning("balance query failed (%s) — falling back "
                                  "to equity_usdt=%.2f", e, quote)
+            # PRE-FLIGHT: MEXC rejects spot orders under 1 USDT (code 30002).
+            # Firing one anyway on every signal spams the error banner and
+            # the Hermes alerts, so skip quietly (one warning per dry spell).
+            min_notional = float(cfg.get("min_notional_usdt", 1.0))
+            if quote < min_notional:
+                if not getattr(self, "_warned_low", False):
+                    self._warned_low = True
+                    self.log.warning(
+                        "SKIPPING entries: only %.2f USDT free (minimum "
+                        "order is %.2f). The account's value is probably "
+                        "sitting in %s from a previous position — sell it "
+                        "or fund the account to resume trading.",
+                        quote, min_notional, self.base_asset)
+                return {"status": "skipped", "message": "below min notional"}, 0
+            self._warned_low = False
         qty_est = quote / price
         if cfg["dry_run"]:
             self.log.info("[DRY RUN] would SPOT-BUY %.2f USDT (~%.4f %s) at ~%.3f",
