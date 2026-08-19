@@ -46,7 +46,9 @@ class PairExec:
     def __init__(self, cfg, symbol):
         self.cfg = dict(cfg)
         self.cfg["symbol"] = symbol
-        cs = (cfg.get("contract_sizes") or {}).get(symbol)
+        # spot trades in base units — only futures needs a contract size
+        cs = (None if cfg.get("mode") == "spot"
+              else (cfg.get("contract_sizes") or {}).get(symbol))
         if cs:
             self.cfg["contract_size"] = float(cs)
         from trader import Executor, APIExecutor, APISpotExecutor

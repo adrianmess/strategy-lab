@@ -342,9 +342,12 @@ def status():
         symbol=_sym,
         price=(_pub_price(_sym, cfg.get("mode")) if _pos else None),
         override=_ov,
-        contract_size=((cfg.get("contract_sizes") or {}).get(_sym)
-                       or cfg.get("contract_size")
-                       or (1.0 if cfg.get("mode") == "spot" else None)),
+        # SPOT quantities are already BASE UNITS (8548 DOGE), so the size
+        # multiplier is 1. contract_sizes holds FUTURES sizes (DOGE=100) and
+        # applying it to a spot position inflated P&L 100x.
+        contract_size=(1.0 if cfg.get("mode") == "spot" else
+                       ((cfg.get("contract_sizes") or {}).get(_sym)
+                        or cfg.get("contract_size"))),
         instance=i,
         running=running, live=t["live"] if running else False,
         config=cfg_name, started=t["started"] if running else None,
@@ -1852,7 +1855,10 @@ def adopt():
             pairs.add(comps[-1]["pair"])
         csizes = {}
         import requests
-        for p in sorted(pairs):
+        # futures contract sizes are meaningless for SPOT (quantities there
+        # are base units); embedding them made every consumer that multiplies
+        # by contract size report 100x P&L on DOGE etc.
+        for p in (sorted(pairs) if best.get("mode") != "spot" else []):
             try:
                 r = requests.get("https://contract.mexc.com/api/v1/contract/"
                                  f"detail?symbol={p}", timeout=10).json()
@@ -2722,8 +2728,8 @@ def trades_history():
         r["entry_price"] = ep
         r["pct"] = 100 * (px / ep - 1.0) * d * float(lev or 1)
         sizes, cmode, csingle = _cs.get(r.get("config"), ({}, None, None))
-        cs = sizes.get(r.get("symbol")) or csingle or (
-            1.0 if cmode == "spot" else None)
+        cs = (1.0 if cmode == "spot"          # base units, never scaled
+              else (sizes.get(r.get("symbol")) or csingle))
         if qty and cs:
             r["pnl"] = float(qty) * float(cs) * (px - ep) * d
         # --- upgrade to EXCHANGE TRUTH when the fills are known: actual fill
