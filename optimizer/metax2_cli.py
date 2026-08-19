@@ -111,7 +111,12 @@ def collect(cands_path, out_path):
             r = move * lev - comm * lev * (1.0 + t["exit"] / t["entry"])
             rows.append([et, xt, r,
                          float(t.get("mae") or 0.0) * lev])
-        tabs[d] = dict(strategy=strat, file=fn, trades=rows)
+        tabs[d] = dict(strategy=strat, file=fn, trades=rows,
+                       # carry the component's still-OPEN virtual trade: the
+                       # merge only consumes CLOSED trades, so without this a
+                       # component sitting in a weeks-old position is
+                       # completely invisible in the combo's backtest entry
+                       open_pos=(e.get("open_positions") or []))
         print(f"  {d} ({strat}, {mode}): {len(rows)} trades", flush=True)
     json.dump(tabs, open(out_path, "w"))
 

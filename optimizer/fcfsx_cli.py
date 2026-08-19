@@ -89,7 +89,7 @@ def replay_stats(taken):
     return S, mo, H
 
 
-def publish(name, kind, taken, comps, mode, S, mo, note):
+def publish(name, kind, taken, comps, mode, S, mo, note, open_pos=None):
     eq, curve, trades = 1000.0, [], []
     for et, xt, r, mae, ci in taken:
         r = max(r, -0.999)
@@ -106,7 +106,8 @@ def publish(name, kind, taken, comps, mode, S, mo, note):
                  curve=curve[-400:], trades=trades[-400:],
                  monthly=[dict(month=m, ret_pct=100 * (v - 1))
                           for m, v in sorted(mo.items())],
-                 open_positions=[], gap_mode="skip_contaminated",
+                 open_positions=(open_pos or []),
+                 gap_mode="skip_contaminated",
                  gap_handling=dict(threshold_min=1000, n_segments=0,
                                    skipped_gaps=[], note=note),
                  strategy="fcfsx", mode=mode, method="fcfs",
@@ -176,7 +177,7 @@ def main():
         groups.setdefault((coin, tf, mkt), []).append((0.0, rn, fn, strat))
     run_dir = os.path.join(RUNS, a.name)
     os.makedirs(run_dir, exist_ok=True)
-    comps, tabs = [], []
+    comps, tabs, open_positions = [], [], []
     for (coin, tf, mkt), cands in sorted(groups.items()):
         cf = os.path.join(run_dir, f"_g_{coin}_{tf}_{mkt}.json")
         of = os.path.join(run_dir, f"_t_{coin}_{tf}_{mkt}.json")
@@ -189,6 +190,10 @@ def main():
             print(f"  group {coin}/{tf}/{mkt} failed — skipped", flush=True)
             continue
         for d, tab in json.load(open(of)).items():
+            for _op in (tab.get("open_pos") or []):
+                open_positions.append(dict(_op, component=d,
+                                           pair=f"{coin.upper()}_USDT",
+                                           timeframe=tf))
             if not tab["trades"]:
                 continue
             comps.append(dict(run=d, file=tab["file"], strategy=tab["strategy"],
@@ -211,7 +216,7 @@ def main():
             "component CHOICE is hindsight; believe the _fcfs_wf sibling)",
             taken, comps, mode, S, mo,
             "FCFS combo: components simulated on their own datasets, one "
-            "slot, first signal wins")
+            "slot, first signal wins", open_pos=open_positions)
 
     # ---------- causal walk-forward sibling ----------
     step = a.step_days * _DAY_NS
