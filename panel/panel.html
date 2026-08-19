@@ -105,8 +105,8 @@ details.term > pre{margin-top:4px}
 </h2>
 <div class="card" style="max-height:340px;overflow:auto">
   <table id="tradesT" style="width:100%;font-size:12px">
-    <thead><tr><th>time</th><th>event</th><th>mode</th><th>config</th><th>symbol</th><th>side</th><th>qty</th><th>lev</th><th>price</th><th>component / reason</th></tr></thead>
-    <tbody><tr><td colspan="10" class="kv">loading…</td></tr></tbody>
+    <thead><tr><th>time</th><th>event</th><th>mode</th><th>config</th><th>symbol</th><th>side</th><th>qty</th><th>lev</th><th>price</th><th title="realised change on the closed position: percent move (leverage applied) and the USDT amount">P&amp;L</th><th>component / reason</th></tr></thead>
+    <tbody><tr><td colspan="11" class="kv">loading…</td></tr></tbody>
   </table>
 </div>
 
@@ -999,14 +999,23 @@ async function loadTrades(){
     const px = t.price != null ? t.price : '';
     const entry = (t.event === 'CLOSE' && t.entry_price != null)
       ? ` <span class="kv">(entry ${t.entry_price})</span>` : '';
+    // realised change, closes only: % (leverage applied) + USDT amount
+    let pnl = '';
+    if (t.event === 'CLOSE' && t.pct != null) {
+      const cls = t.pct >= 0 ? 'pos' : 'neg';
+      const money = t.pnl != null
+        ? ` <span class="kv">${t.pnl >= 0 ? '+' : '\u2212'}$${Math.abs(t.pnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`
+        : '';
+      pnl = `<b class="${cls}">${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(2)}%</b>${money}`;
+    }
     return `<tr><td class="kv">${t.at || ''}</td><td>${ev}</td><td>${mode}</td>
       <td class="kv">${(t.config || '').replace(/^config_?|\.json$/g, '') || 'main'}</td>
       <td>${t.symbol || ''}</td><td>${t.side || ''}</td>
       <td>${t.qty ?? ''}</td><td>${t.lev ?? ''}</td>
-      <td>${px}${entry}</td><td class="kv">${detail}</td></tr>`;
+      <td>${px}${entry}</td><td>${pnl}</td><td class="kv">${detail}</td></tr>`;
   });
   tb.innerHTML = rows.length ? rows.join('')
-    : '<tr><td colspan="10" class="kv">no position events yet' + (cfg ? ' for this config' : '') + ' — dry-run trades will appear here the moment a virtual position opens</td></tr>';
+    : '<tr><td colspan="11" class="kv">no position events yet' + (cfg ? ' for this config' : '') + ' — dry-run trades will appear here the moment a virtual position opens</td></tr>';
   // config filter options (from all events, once)
   const sel = document.getElementById('trCfgSel');
   if(sel.options.length <= 1 && !cfg){

@@ -2625,6 +2625,41 @@ def trades_history():
             entry_price=pos.get("entry_price"),
             reason=e.get("reason"), comp=e.get("comp"),
             live=bool(e.get("live")), result=e.get("result")))
+
+    # ---- P&L on every CLOSE: % move (leverage-applied) and USDT ----
+    # entry price comes from the event when the trader recorded it; older
+    # events (and some paths) omit it, so fall back to pairing each CLOSE
+    # with the most recent OPEN of the same config+symbol.
+    _cs = {}
+    for f in os.listdir(AT):
+        if f.startswith("config") and f.endswith(".json"):
+            try:
+                c = json.load(open(os.path.join(AT, f)))
+            except Exception:
+                continue
+            _cs[f] = (c.get("contract_sizes") or {}, c.get("mode"),
+                      c.get("contract_size"))
+    last_open = {}
+    for r in reversed(out):                       # oldest -> newest
+        key = (r.get("config"), r.get("symbol"))
+        if r["event"] == "OPEN":
+            last_open[key] = r
+            continue
+        ep = r.get("entry_price") or (last_open.get(key) or {}).get("price")
+        qty = r.get("qty") or (last_open.get(key) or {}).get("qty")
+        lev = r.get("lev") or (last_open.get(key) or {}).get("lev") or 1
+        side = r.get("side") or (last_open.get(key) or {}).get("side")
+        px = r.get("price")
+        if not (ep and px):
+            continue
+        d = -1 if (side or "LONG").upper() == "SHORT" else 1
+        r["entry_price"] = ep
+        r["pct"] = 100 * (px / ep - 1.0) * d * float(lev or 1)
+        sizes, cmode, csingle = _cs.get(r.get("config"), ({}, None, None))
+        cs = sizes.get(r.get("symbol")) or csingle or (
+            1.0 if cmode == "spot" else None)
+        if qty and cs:
+            r["pnl"] = float(qty) * float(cs) * (px - ep) * d
     return jsonify(trades=out)
 
 

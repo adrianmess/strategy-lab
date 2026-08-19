@@ -209,6 +209,13 @@ def main_fcfs(cfg, live):
                config=os.path.basename(cfg.get("_path", "?")),
                symbol=pos["symbol"], reason=reason, price=px,
                comp=comp_label(pos["comp"]),
+               # carry the position so the trades table can show P&L
+               position=dict(entry_price=pos.get("entry_price"),
+                             qty=pos.get("qty"), lev=pos.get("lev"),
+                             dir=pos.get("dir")),
+               entry_price=pos.get("entry_price"), qty=pos.get("qty"),
+               lev=pos.get("lev"),
+               side=("LONG" if pos.get("dir", 1) > 0 else "SHORT"),
                live=(not cfg["dry_run"]), result=(res or {}).get("status"))
         if (res or {}).get("status") == "error":
             notify("order_failed", account="fcfs", action="close",
