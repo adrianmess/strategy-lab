@@ -1535,11 +1535,24 @@ def mexc_account():
                     continue
                 pos = st.get("position")
                 if pos:
+                    # live-ness comes from HOW THE TRADER WAS STARTED (--live),
+                    # not the config's dry_run field — reading the file made
+                    # every live position display as "dry-run". And a config
+                    # with no running trader is a STALE record: the state file
+                    # outlives the process that wrote it.
+                    _run, _live = False, False
+                    for _i, _I in instances.items():
+                        _t = _I["trader"]
+                        if (_t["proc"] is not None and _t["proc"].poll() is None
+                                and (_t.get("config") or _I.get("cfg")) == f):
+                            _run, _live = True, bool(_t.get("live"))
+                            break
                     bot.append(dict(config=f, symbol=c.get("symbol"),
                                     qty=pos.get("qty"),
                                     entry=pos.get("entry_price"),
                                     opened=pos.get("opened_at"),
-                                    dry_run=bool(c.get("dry_run", True))))
+                                    running=_run, live=_live,
+                                    dry_run=(not _live)))
             e["bot_spot_positions"] = bot
         except Exception as ex:
             e["error"] = str(ex)
@@ -1961,6 +1974,39 @@ def trader_configs():
                         adopted_from=(c.get("adopted_from") or {}).get("source"),
                         adopted_at=(c.get("adopted_from") or {}).get("at")))
     return jsonify(out)
+
+@app.route("/api/trader_configs/clear_position", methods=["POST"])
+def clear_bot_position():
+    """Drop a STALE tracked position from a stopped config's state file
+    (bookkeeping only — places no orders). Refused while its trader runs:
+    a live trader owns its state, and clearing under it would orphan real
+    coins."""
+    name = os.path.basename((request.get_json(force=True) or {}).get("config")
+                            or "")
+    path = os.path.join(AT, name)
+    if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", name) \
+            or not os.path.isfile(path):
+        return jsonify(error=f"no such config '{name}'"), 404
+    for i, I in instances.items():
+        t = I["trader"]
+        if t["proc"] is not None and t["proc"].poll() is None \
+                and (t.get("config") or I.get("cfg")) == name:
+            return jsonify(error=(f"instance {I.get('name') or i} is RUNNING "
+                                  f"this config — stop it first, or close "
+                                  f"the position from its card")), 400
+    c = json.load(open(path))
+    sp = os.path.join(AT, c.get("state_file", "trader_state.json"))
+    if not os.path.exists(sp):
+        return jsonify(error="no state file"), 404
+    st = json.load(open(sp))
+    old = st.get("position")
+    if not old:
+        return jsonify(ok=True, note="already flat")
+    import shutil
+    shutil.copy(sp, sp + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+    st["position"] = None
+    json.dump(st, open(sp, "w"), indent=1)
+    return jsonify(ok=True, cleared=old)
 
 @app.route("/api/trader_configs/delete", methods=["POST"])
 def trader_config_delete():

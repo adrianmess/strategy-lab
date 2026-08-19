@@ -384,6 +384,13 @@ async function addInstance(){
   const r = await api('instances/add',{});
   if(r.ok){ await api('instances'); CUR = r.id; localStorage.setItem('curInst', CUR); loadInstances(); }
 }
+async function clearBotPos(cfgFile){
+  if(!(await modalConfirm(`Clear the tracked position recorded in ${cfgFile}?\n\nThis only edits that config's state file (a backup is kept) — no order is placed. Do this when the coins were already sold, so restarting that config doesn't try to sell what isn't there.`, {okLabel:'Clear record', danger:true}))) return;
+  const r = await fetch('/api/trader_configs/clear_position', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({config:cfgFile})}).then(x=>x.json());
+  if(!r.ok) alert('error: '+(r.error||''));
+  if(typeof loadMexc==='function') loadMexc(); else refresh();
+}
 async function setOverride(i){
   const v = ($('ovval_'+i).value||'').trim();
   if(!v){ alert('enter a price, or a signed % from entry'); return; }
@@ -838,7 +845,10 @@ async function refreshMexc(force){
              <td class="kv">${p.config}</td><td>${p.symbol}</td>
              <td>${fnum(p.qty,4)}</td><td>${fnum(p.entry,3)}</td>
              <td class="kv">${p.opened||''}</td>
-             <td>${p.dry_run?'<span class="badge b-amber" title="dry-run position — tracked by the trader, no real coins behind it">dry-run</span>':'<span class="badge b-green">LIVE</span>'}</td></tr>`).join('')}
+             <td>${!p.running
+                 ? `<span class="badge b-amber" title="STALE: this config's trader is not running. The record is left over in its state file — if the coins were already sold, clear it so a future start doesn't try to sell what isn't there.">stale — trader stopped</span> <button class="small" style="color:var(--red)" onclick="clearBotPos('${p.config}')">clear</button>`
+                 : (p.live ? '<span class="badge b-green">LIVE</span>'
+                           : '<span class="badge b-amber" title="dry-run position — tracked by the trader, no real coins behind it">dry-run</span>')}</td></tr>`).join('')}
            </tbody></table>` : '';
       const pos = (a.positions||[]).length
         ? `<table style="margin-top:6px"><thead><tr><th>symbol</th><th>side</th><th>vol</th><th>entry</th><th>lev</th><th>liq price</th><th>margin</th><th>realised</th></tr></thead><tbody>
