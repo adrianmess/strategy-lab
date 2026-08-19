@@ -2250,6 +2250,8 @@ def gamut_status():
     return jsonify(total=len(plan["specs"]), counts=dict(c), running=cur)
 
 
+_PLAN_KIND = {}      # campaign -> (plan.json mtime, is a gamut plan)
+
 @app.route("/api/gamut/progress")
 def gamut_progress():
     """Rich progress for the Progress page: merges plan.json with the
@@ -2262,13 +2264,25 @@ def gamut_progress():
     # required a "gamut_" prefix, so campaigns not following that naming
     # (or lacking the customary symlink) were invisible in the dropdown
     def _is_gamut_plan(d):
+        # cached by plan.json mtime: parsing every campaign's plan on every
+        # poll pinned a CPU (the biggest plan holds 12,960 specs and the
+        # Progress page refreshes every 20s)
+        pth = os.path.join(OPT, "campaigns", d, "plan.json")
         try:
-            pl = json.load(open(os.path.join(OPT, "campaigns", d,
-                                             "plan.json")))
-            sp = pl.get("specs") or []
-            return bool(sp) and isinstance(sp[0], dict) and "name" in sp[0]
-        except Exception:
+            mt = os.path.getmtime(pth)
+        except OSError:
             return False
+        hit = _PLAN_KIND.get(d)
+        if hit and hit[0] == mt:
+            return hit[1]
+        try:
+            pl = json.load(open(pth))
+            sp = pl.get("specs") or []
+            ok = bool(sp) and isinstance(sp[0], dict) and "name" in sp[0]
+        except Exception:
+            ok = False
+        _PLAN_KIND[d] = (mt, ok)
+        return ok
 
     cs = [d for d in sorted(os.listdir(os.path.join(OPT, "campaigns")))
           if os.path.exists(os.path.join(OPT, "campaigns", d, "plan.json"))
@@ -3224,8 +3238,18 @@ def _r2c_load():
         _R2C["loaded"] = True
 
 
+_RUNS2_TTL = {}      # lim -> (built_at, payload)
+
 @app.route("/api/runs2")
 def runs2():
+    # ~27k run directories x 5 stat() each is ~135k syscalls per call; the
+    # Optimize page polls this while jobs run, so concurrent rescans were
+    # stacking up and saturating a core. A 20s snapshot is plenty fresh for
+    # a list of finished runs.
+    _lim_key = request.args.get("lim", "")
+    _hit = _RUNS2_TTL.get(_lim_key)
+    if _hit and time.time() - _hit[0] < 20 and not request.args.get("fresh"):
+        return jsonify(_hit[1])
     out = []
     runs_dir = os.path.join(OPT, "runs")
     running_names = {j.get("name") for j in jobs.values()
@@ -3432,7 +3456,9 @@ def runs2():
             os.replace(_tmp, _R2C_PATH)
         except Exception:
             pass
-    return jsonify(_scrub(out))
+    _payload = _scrub(out)
+    _RUNS2_TTL[_lim_key] = (time.time(), _payload)
+    return jsonify(_payload)
 
 @app.route("/api/runs2/rename", methods=["POST"])
 def runs2_rename():
