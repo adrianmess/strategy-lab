@@ -654,6 +654,10 @@ def main():
             log.error("manual close FAILED (%s) — position kept",
                       (res or {}).get("message"))
             return False
+        # make the manual close STICK: if this was a mirrored (late-joined)
+        # position, remember the virtual trade so late-join cannot re-enter
+        if pos.get("late_mirror"):
+            state["late_skip"] = pos["late_mirror"]
         state["position"] = None
         save_state(cfg, state)
         return True

@@ -240,6 +240,17 @@ def main_fcfs(cfg, live):
             log.error("CLOSE FAILED (%s) — position kept, slot stays busy",
                       (res or {}).get("message"))
             return
+        # A MANUAL/EMERGENCY close must STICK. Without this the late-join
+        # sees the component's virtual trade still open, still "red", and
+        # re-enters within a bar or two — exactly what happened on
+        # 2026-08-17 (closed 124 @08:07:32, re-opened 119 @08:09:14).
+        if reason in ("manual_override", "emergency_exit", "close_now"):
+            lbl = pos.get("mirror_entry_t")
+            if lbl:
+                state.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+                log.info("marking %s's virtual trade %s as skipped so the "
+                         "late-join will not re-enter it",
+                         comp_label(pos["comp"]), lbl)
         state["position"] = None
         save(); tell_flat()
 
