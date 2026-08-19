@@ -111,7 +111,7 @@ details.term > pre{margin-top:4px}
 </div>
 
 <h2 style="display:flex;justify-content:space-between;align-items:center">
-  <span>MEXC accounts <span class="note">— live balances &amp; open positions via API (read-only)</span></span>
+  <span>MEXC accounts <span class="note">— live balances &amp; open positions via API (read-only)</span> <span class="note" id="mexcScope" style="text-transform:none;letter-spacing:0"></span></span>
   <span class="row" style="gap:6px;text-transform:none;letter-spacing:0">
     <span class="note" id="mexcStamp"></span>
     <button class="small" id="mexcRefreshBtn" onclick="refreshMexc(true)">↻ refresh now</button>
@@ -368,7 +368,9 @@ function renderInstances(){
   fillCfgSelects();
   refresh();
 }
-function switchTab(i){ CUR = i; localStorage.setItem('curInst', i); renderInstances(); }
+function switchTab(i){ CUR = i; localStorage.setItem('curInst', i); renderInstances();
+  if(typeof refreshMexc==='function') refreshMexc();   // scope the account card to this instance
+}
 function toggleLayout(){
   LAYOUT = LAYOUT==='tabs' ? 'cols' : 'tabs';
   localStorage.setItem('instLayout', LAYOUT);
@@ -447,6 +449,7 @@ async function removeInstance(i){
 function cfgChanged(i){
   const x = INSTS.find(v=>v.id===i); if(x) x.cfg = $('tcfg_'+i).value;
   updateCfgSummary(i);
+  if(typeof refreshMexc==='function') refreshMexc();   // account card follows the config's api_account
 }
 function setOptions(sel, html, cur){
   // rebuild a <select>'s options ONLY when they actually changed, and never
@@ -774,7 +777,19 @@ async function refreshMexc(force){
     INSTS.forEach(x=>fillAcctSelect(x.id));
     const el = $('mexcCard');
     if(!accs.length){ el.innerHTML = '<span class="kv">no API keys configured (adaptive_trader/mexc_api_keys.json)</span>'; return; }
-    el.innerHTML = accs.map(a=>{
+    // show ONLY the account(s) the visible instance(s) actually trade on —
+    // in tab layout that is the selected instance, in column layout it is
+    // every instance on screen. Falls back to showing everything.
+    const shown = new Set();
+    (LAYOUT === 'cols' ? INSTS : INSTS.filter(x => x.id === CUR)).forEach(x => {
+      const c = TCONFIGS.find(t => t.file === (($('tcfg_'+x.id)||{}).value || x.cfg));
+      if (c && c.api_account) shown.add(c.api_account);
+    });
+    const visible = shown.size ? accs.filter(a => shown.has(a.account)) : accs;
+    $('mexcScope').textContent = shown.size
+      ? `— ${[...shown].join(', ')} (used by ${LAYOUT === 'cols' ? 'these instances' : instName(CUR)})`
+      : '';
+    el.innerHTML = visible.map(a=>{
       const head = `<div class="row" style="justify-content:space-between">
         <span><b>${a.account}</b> <span class="kv">${a.email||''}</span></span>
         ${a.configured?'':'<span class="badge b-amber">keys not set</span>'}

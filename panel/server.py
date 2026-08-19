@@ -1409,8 +1409,11 @@ def mexc_account():
     Read-only endpoints only; cached 10s to respect rate limits.
     ?force=1 bypasses the cache (the panel's refresh-now button)."""
     force = request.args.get("force") == "1"
+    # the background refresher keeps this warm, so a page load never waits on
+    # MEXC round-trips; serve anything up to 5 min old (it is re-fetched
+    # every 60s anyway) and only block when explicitly forced
     if not force and _MEXC_CACHE["data"] is not None \
-            and time.time() - _MEXC_CACHE["t"] < 10:
+            and time.time() - _MEXC_CACHE["t"] < 300:
         return jsonify(_MEXC_CACHE["data"])
     keys_p = os.path.join(AT, "mexc_api_keys.json")
     if not os.path.exists(keys_p):
@@ -1559,6 +1562,23 @@ def mexc_account():
         out.append(e)
     _MEXC_CACHE.update(t=time.time(), data=out)
     return jsonify(out)
+
+
+def _mexc_warmer():
+    """Refresh the account snapshot every 60s in the background so the panel
+    always renders instantly from cache — no waiting on MEXC when the page
+    opens, and the numbers stay current while nobody is looking."""
+    time.sleep(10)                       # let the panel finish booting
+    while True:
+        try:
+            with app.test_request_context("/api/mexc/account?force=1"):
+                mexc_account()
+        except Exception as e:
+            print(f"mexc warmer: {e}", flush=True)
+        time.sleep(60)
+
+
+threading.Thread(target=_mexc_warmer, daemon=True).start()
 
 
 # ---------------- manual test orders ----------------
