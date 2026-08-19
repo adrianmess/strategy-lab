@@ -1564,6 +1564,48 @@ def mexc_account():
     return jsonify(out)
 
 
+_DEALS = {"t": 0.0, "fut": {}, "spot": {}}
+
+
+def _refresh_deals():
+    """Cache recent EXECUTED fills per account so the trades table can report
+    what MEXC reports: actual fill prices and fees, not our signal prices.
+    (Signal-vs-fill slippage plus round-trip fees made a +6.27% trade read
+    +5.47% on the exchange.)"""
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    syms = {}
+    for f in os.listdir(AT):
+        if not (f.startswith("config") and f.endswith(".json")):
+            continue
+        try:
+            c = json.load(open(os.path.join(AT, f)))
+        except Exception:
+            continue
+        acct = c.get("api_account", "mexc1")
+        s = syms.setdefault((acct, c.get("mode")), set())
+        s.update((c.get("contract_sizes") or {}).keys())
+        if c.get("symbol"):
+            s.add(c["symbol"])
+    fut, spot = {}, {}
+    for (acct, mode), symbols in syms.items():
+        for sym in symbols:
+            try:
+                if mode == "spot":
+                    from mexc_api import MexcSpotAPI
+                    r = MexcSpotAPI(account=acct).my_trades(sym, limit=50)
+                    spot[(acct, sym)] = r if isinstance(r, list) else []
+                else:
+                    from mexc_api import MexcFuturesAPI
+                    r = MexcFuturesAPI(account=acct).order_deals(sym,
+                                                                 page_size=50)
+                    fut[(acct, sym)] = r if isinstance(r, list) else (
+                        r.get("data") or [])
+            except Exception:
+                pass
+    _DEALS.update(t=time.time(), fut=fut, spot=spot)
+
+
 def _mexc_warmer():
     """Refresh the account snapshot every 60s in the background so the panel
     always renders instantly from cache — no waiting on MEXC when the page
@@ -1575,6 +1617,10 @@ def _mexc_warmer():
                 mexc_account()
         except Exception as e:
             print(f"mexc warmer: {e}", flush=True)
+        try:
+            _refresh_deals()
+        except Exception as e:
+            print(f"deals warmer: {e}", flush=True)
         time.sleep(60)
 
 
@@ -2680,6 +2726,50 @@ def trades_history():
             1.0 if cmode == "spot" else None)
         if qty and cs:
             r["pnl"] = float(qty) * float(cs) * (px - ep) * d
+        # --- upgrade to EXCHANGE TRUTH when the fills are known: actual fill
+        # prices and fees, i.e. the number MEXC itself displays ---
+        if r.get("live") and cmode != "spot":
+            acct = (r.get("account") or "").split("/")[0] or "mexc1"
+            if acct == "fcfs":
+                acct = _cs.get(r.get("config"), ({}, None, None)) and None
+                try:
+                    acct = json.load(open(os.path.join(
+                        AT, r["config"]))).get("api_account", "mexc1")
+                except Exception:
+                    acct = "mexc1"
+            deals = _DEALS["fut"].get((acct, r.get("symbol"))) or []
+
+            def _near(ts_str, closing):
+                try:
+                    tgt = time.mktime(time.strptime(ts_str,
+                                                    "%Y-%m-%d %H:%M:%S"))
+                except Exception:
+                    return None
+                best, bd = None, 1e9
+                for x in deals:
+                    sd = int(x.get("side") or 0)
+                    is_close = sd in (2, 4)
+                    if is_close != closing:
+                        continue
+                    dt = abs(int(x.get("timestamp", 0)) / 1000 - tgt)
+                    if dt < bd and dt < 180:
+                        best, bd = x, dt
+                return best
+            dc = _near(r.get("at") or "", True)
+            op_row = last_open.get(key) or {}
+            do = _near(op_row.get("at") or "", False)
+            if dc and do:
+                fee = float(dc.get("fee") or 0) + float(do.get("fee") or 0)
+                gross = float(dc.get("profit") or 0)
+                epx, xpx = float(do["price"]), float(dc["price"])
+                margin = (float(dc.get("vol") or qty or 0) * float(cs or 0)
+                          * epx / float(lev or 1))
+                if margin > 0:
+                    r["pnl"] = gross - fee
+                    r["pct"] = 100 * (gross - fee) / margin
+                    r["entry_price"] = epx
+                    r["price"] = xpx
+                    r["exact"] = True       # fills + fees, as MEXC reports
     return jsonify(trades=out)
 
 

@@ -1032,7 +1032,10 @@ async function loadTrades(){
       const money = t.pnl != null
         ? ` <span class="kv">${t.pnl >= 0 ? '+' : '\u2212'}$${Math.abs(t.pnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`
         : '';
-      pnl = `<b class="${cls}">${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(2)}%</b>${money}`;
+      const tip = t.exact
+        ? 'net of fees, from the ACTUAL fill prices — matches the exchange'
+        : 'estimated from the signal prices in the log (excludes fees and fill slippage)';
+      pnl = `<b class="${cls}" title="${tip}">${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(2)}%${t.exact ? '' : '*'}</b>${money}`;
     }
     return `<tr><td class="kv">${t.at || ''}</td><td>${ev}</td><td>${mode}</td>
       <td class="kv">${(t.config || '').replace(/^config_?|\.json$/g, '') || 'main'}</td>
