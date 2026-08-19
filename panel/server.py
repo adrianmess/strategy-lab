@@ -1659,7 +1659,11 @@ def manual_order():
             if icfg.get("mode") == "spot":
                 sapi = MexcSpotAPI(account=acct)
                 px = sapi.ticker_price(symbol)
-                base_qty = qty * float(icfg.get("contract_size", 0.1))
+                # SPOT: the quantity field is BASE UNITS (8548 DOGE, 0.5
+                # HYPE). It used to be multiplied by contract_size — a
+                # SOL-era "1 contract = 0.1 SOL" assumption that silently
+                # mis-sized every other pair.
+                base_qty = qty
                 if action == "open_long":
                     r = sapi.market_buy_quote(symbol, base_qty * px)
                 elif action in ("close_long", "close_position"):
@@ -1887,6 +1891,9 @@ def adopt():
                    log_file=f"trader_{suffix}.log",
                    mode=best.get("mode", "lev"),
                    timeframe="3m",   # cosmetic; components carry their own
+                   # spot sizes in BASE UNITS (csizes is empty for spot)
+                   contract_size=(1.0 if best.get("mode") == "spot"
+                                  else cfg.get("contract_size", 0.1)),
                    contract_sizes=csizes,
                    candidate=dict(strategy="fcfsx",
                                   mode=best.get("mode", "lev"),
@@ -1981,6 +1988,9 @@ def adopt():
         cfg.update(dry_run=True,
                    state_file=f"trader_state_{suffix}.json",
                    log_file=f"trader_{suffix}.log")
+        if best.get("mode") == "spot":     # base units, not futures contracts
+            cfg["contract_size"] = 1.0
+            cfg.pop("contract_sizes", None)
     else:
         cfg = json.load(open(target))
         if best.get("mode") and cfg.get("mode") and best["mode"] != cfg["mode"]:

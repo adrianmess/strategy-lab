@@ -299,12 +299,12 @@ function instCard(i){
   <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
     <div class="row">
       <b>Manual test orders</b>
-      <span class="note">REAL orders through this instance's venue (see badge above: API instances order via the MEXC API on their account; browser instances via the executor). Start small (1 contract = 0.1 SOL). Close manual positions before starting the trader.</span>
+      <span class="note">REAL orders through this instance's venue (see badge above: API instances order via the MEXC API on their account; browser instances via the executor). SPOT quantities are BASE UNITS (e.g. 10 DOGE); futures quantities are contracts. Start small. Close manual positions before starting the trader.</span>
     </div>
     <div class="row" style="margin-top:8px">
       <label>symbol</label><input id="mSym_${i}" value="SOL_USDT" style="width:110px">
       <span id="mLevWrap_${i}"><label>leverage</label><input id="mLev_${i}" value="1" style="width:55px"></span>
-      <label>quantity (contracts)</label><input id="mQty_${i}" value="1" style="width:70px">
+      <label id="mQtyLbl_${i}">quantity (contracts)</label><input id="mQty_${i}" value="1" style="width:70px">
       <span id="mBtns_${i}" style="display:contents"></span>
     </div>
     <details class="term" id="mResultd_${i}" style="display:none;margin-top:8px"><summary>order result ▸</summary><pre id="mResult_${i}"></pre></details>
@@ -513,6 +513,8 @@ async function acctChanged(i){
 function renderManualButtons(i, mode){
   const box = $('mBtns_'+i); if(!box) return;
   const spot = mode === 'spot';
+  const lbl = $('mQtyLbl_'+i);
+  if(lbl) lbl.textContent = spot ? 'quantity (base units)' : 'quantity (contracts)';
   $('mLevWrap_'+i).style.display = spot ? 'none' : '';
   box.innerHTML = spot ? `
       <button class="small" onclick="manual('${i}','open_long')" style="color:var(--green)">Buy</button>
@@ -765,7 +767,7 @@ async function manual(i, action){
   const spot = cfgm && cfgm.mode === 'spot';
   const spotNames = {open_long:'BUY', close_long:'SELL', close_position:'SELL ALL'};
   const desc = spot
-    ? `${spotNames[action]||action} ${action==='close_position'?'entire balance':qty+' contract(s) (='+(qty*0.1).toFixed(1)+' SOL)'} of ${sym} — spot, no leverage`
+    ? `${spotNames[action]||action} ${action==='close_position'?'entire balance':qty+' '+sym.split('_')[0]} of ${sym} — spot, no leverage`
     : action.replace('_',' ').toUpperCase() + (action.startsWith('open') ? ` ${qty} contract(s) of ${sym} at ${lev}x` : ` on ${sym}`);
   const c = await modalWord(`${instName(i)} (#${i}) — REAL order via this instance's venue:\n\n  ${desc}`, 'SEND', 'Send order');
   if(c===null) return;
@@ -822,7 +824,6 @@ async function refreshMexc(force){
           <span class="kv">open spot positions:</span>
           ${a.spot_positions.map(p=>`
             <div style="margin-top:3px"><b>${p.asset}</b> ${fnum(p.qty,4)}
-              <span class="kv" title="1 contract = 0.1 ${p.asset} — the unit the manual-order quantity field uses">(≈${fnum(p.qty/0.1,2)} contracts)</span>
               <span class="kv">(≈${fnum(p.usdt_value)} USDT @ ${fnum(p.price,3)})</span>
               ${p.avg_cost!=null?`<span class="kv" title="volume-weighted average of the most recent BUY fills covering this holding — an estimate">avg cost ${fnum(p.avg_cost,3)}</span>
                 <b class="${(p.pnl_pct||0)>=0?'pos':'neg'}">${(p.pnl_pct||0)>=0?'+':''}${fnum(p.pnl_pct,2)}%</b>`
