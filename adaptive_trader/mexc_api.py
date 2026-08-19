@@ -263,23 +263,46 @@ class MexcSpotAPI:
     _scale_cache = {}
 
     def quantity_scale(self, symbol):
-        """Allowed decimal places for BASE quantity on this symbol (from
-        exchangeInfo baseSizePrecision, e.g. '0.01' -> 2). Orders with more
-        decimals are rejected with 'quantity scale is invalid'."""
+        """Allowed decimal places for BASE quantity on this symbol.
+
+        CAREFUL — two different fields, and confusing them costs money:
+          * baseAssetPrecision  = DECIMAL PLACES allowed (HYPE: 2)
+          * baseSizePrecision   = MINIMUM ORDER QUANTITY (HYPE: '0' = none)
+        This used to read baseSizePrecision as decimals, so HYPE ('0') was
+        treated as whole-units-only: sells floored 9.4496 -> 9 and 0.59 -> 0,
+        stranding ~1 HYPE (~$60) per round trip and making dust unsellable.
+        Use baseAssetPrecision for the scale; a fractional baseSizePrecision
+        (e.g. SOL '0.01') also implies a step, so take the tighter of the two.
+        """
         s = self.spot_symbol(symbol)
         if s in MexcSpotAPI._scale_cache:
             return MexcSpotAPI._scale_cache[s]
         r = requests.get(f"{BASE}/api/v3/exchangeInfo", params={"symbol": s},
                          proxies=self.proxies, timeout=self.timeout)
         info = (r.json().get("symbols") or [{}])[0]
-        scale = 2
+        scale = int(info.get("baseAssetPrecision") or 2)
         bsp = str(info.get("baseSizePrecision") or "")
-        if bsp:
-            scale = len(bsp.split(".")[1].rstrip("0")) if "." in bsp else 0
-        elif info.get("baseAssetPrecision") is not None:
-            scale = int(info["baseAssetPrecision"])
+        if "." in bsp:                     # a real step like '0.01' -> 2 dp
+            step_dp = len(bsp.split(".")[1].rstrip("0"))
+            scale = min(scale, step_dp)
         MexcSpotAPI._scale_cache[s] = scale
         return scale
+
+    def min_qty(self, symbol):
+        """Exchange minimum order quantity (baseSizePrecision), 0 if none."""
+        s = self.spot_symbol(symbol)
+        k = s + ":minq"
+        if k in MexcSpotAPI._scale_cache:
+            return MexcSpotAPI._scale_cache[k]
+        r = requests.get(f"{BASE}/api/v3/exchangeInfo", params={"symbol": s},
+                         proxies=self.proxies, timeout=self.timeout)
+        info = (r.json().get("symbols") or [{}])[0]
+        try:
+            v = float(info.get("baseSizePrecision") or 0)
+        except (TypeError, ValueError):
+            v = 0.0
+        MexcSpotAPI._scale_cache[k] = v
+        return v
 
     def floor_qty(self, symbol, qty):
         """FLOOR a base quantity to the symbol's allowed scale (never round up:
