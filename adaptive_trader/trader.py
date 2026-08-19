@@ -491,7 +491,7 @@ def main():
                 sl_price=0.0,
                 entry_sig_ms=float(closed["t"].iloc[ei].value // 10**6),
                 opened_at=str(closed["t"].iloc[-1]), fill_price=price,
-                late_mirror=lbl)
+                opened_ms=int(time.time() * 1000), late_mirror=lbl)
             log.info("LATE-JOIN OPEN dir=%+d lev=%.1f qty=%s: virtual entry "
                      "%s @%.6g, filled %.6g (%s)", d, lev, qty, lbl, ep, price,
                      "red" if red else "green/spot")
@@ -710,7 +710,11 @@ def main():
                                 dir=a["dir"], system=a["system"], regime=a["regime"],
                                 entry_price=price, qty=qty, lev=a["lev"],
                                 sl_price=a["sl_price"], entry_sig_ms=a["sig_ms"],
-                                opened_at=str(newest))
+                                opened_at=str(newest),
+                                # UNAMBIGUOUS wall-clock of the fill: opened_at
+                                # is a BAR timestamp (UTC) and was being read as
+                                # local time, showing "open 0m" forever
+                                opened_ms=int(time.time() * 1000))
                             log.info("OPEN %s %s lev=%.2f qty=%d sl=%.3f regime=%d",
                                      "LONG" if a["dir"] > 0 else "SHORT", a["system"],
                                      a["lev"], qty, a["sl_price"], a["regime"])

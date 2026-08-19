@@ -250,7 +250,8 @@ def main_fcfs(cfg, live):
                 symbol=c["pair"], comp=i, dir=d, lev=lev, qty=qty,
                 entry_price=px, group=gkey,
                 mirror_entry_t=None,   # filled below from the bar msg
-                opened_at=time.strftime("%Y-%m-%d %H:%M:%S"))
+                opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+                opened_ms=int(time.time() * 1000))
             log.info("OPEN %s dir=%+d lev=%.1f qty=%s px=%.6g (signal bar %s)",
                      comp_label(i), d, lev, qty, px, bar_t)
             notify("position_opened", account="fcfs",

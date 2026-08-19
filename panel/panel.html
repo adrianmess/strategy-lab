@@ -594,7 +594,18 @@ async function refreshInst(i){
         const mv = px ? (px/(+p.entry_price)-1)*(p.dir>0?1:-1) : null;
         const pct = mv==null ? null : 100*mv*(s.mode==='lev'?(+p.lev||1):1);
         const cls = pct==null ? '' : (pct>=0?'pos':'neg');
-        const held = p.opened_at ? Math.max(0,(Date.now()-new Date(p.opened_at.replace(' ','T')))/6e4) : null;
+        // opened_ms is the unambiguous fill time. Legacy positions only have
+        // opened_at, which is a BAR timestamp (UTC) for the single-strategy
+        // trader but LOCAL time for FCFS — so parse local first and fall back
+        // to UTC when that lands in the future ("open 0m" forever).
+        let held = null;
+        if (p.opened_ms) held = Math.max(0, (Date.now() - p.opened_ms)/6e4);
+        else if (p.opened_at) {
+          const iso = p.opened_at.replace(' ', 'T');
+          let ms = new Date(iso).getTime();
+          if (isNaN(ms) || ms > Date.now()) ms = new Date(iso + 'Z').getTime();
+          held = isNaN(ms) ? null : Math.max(0, (Date.now() - ms)/6e4);
+        }
         const hstr = held==null ? '' : (held>=60 ? `${Math.floor(held/60)}h ${Math.round(held%60)}m` : `${Math.round(held)}m`);
         // FULL re-render only when the banner's SHAPE changes (new position,
         // override armed/disarmed, TP net state) — a rebuild on every poll
