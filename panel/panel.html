@@ -97,9 +97,9 @@ details.term > pre{margin-top:4px}
 <div id="instWrap"></div>
 
 <h2 style="display:flex;justify-content:space-between;align-items:center">
-  <span>Recent trades <span class="note">— every position event from ALL instances (from notifications.log); DRY badges are paper trades, LIVE are real</span></span>
+  <span>Recent trades <span class="note">— position events for the selected instance (from notifications.log); DRY badges are paper trades, LIVE are real</span> <span class="note" id="trScope" style="text-transform:none;letter-spacing:0"></span></span>
   <span class="row" style="gap:6px;text-transform:none;letter-spacing:0">
-    <select id="trCfgSel" class="small" onchange="loadTrades()" style="font-size:12px"><option value="">all configs</option></select>
+    <select id="trCfgSel" class="small" onchange="trCfgManual=true;loadTrades()" style="font-size:12px" title="defaults to the config the selected instance is running; switch to 'all configs' to see everything"><option value="">all configs</option></select>
     <button class="small" onclick="loadTrades()">↻ refresh</button>
   </span>
 </h2>
@@ -370,6 +370,7 @@ function renderInstances(){
 }
 function switchTab(i){ CUR = i; localStorage.setItem('curInst', i); renderInstances();
   if(typeof refreshMexc==='function') refreshMexc();   // scope the account card to this instance
+  if(typeof loadTrades==='function') loadTrades();     // and the trades table
 }
 function toggleLayout(){
   LAYOUT = LAYOUT==='tabs' ? 'cols' : 'tabs';
@@ -450,6 +451,7 @@ function cfgChanged(i){
   const x = INSTS.find(v=>v.id===i); if(x) x.cfg = $('tcfg_'+i).value;
   updateCfgSummary(i);
   if(typeof refreshMexc==='function') refreshMexc();   // account card follows the config's api_account
+  if(typeof loadTrades==='function') loadTrades();
 }
 function setOptions(sel, html, cur){
   // rebuild a <select>'s options ONLY when they actually changed, and never
@@ -1009,8 +1011,34 @@ setInterval(refreshProcs, 10000);
 setInterval(refreshMexc, 20000);
 
 // ---- recent trades (dry + live, from notifications.log) ----
+let trCfgManual = false;      // set once the user picks from the dropdown
+function trInstCfg(){          // config file of the instance on screen
+  const x = INSTS.find(v => v.id === CUR);
+  return x ? ((document.getElementById('tcfg_'+x.id)||{}).value || x.cfg) : '';
+}
 async function loadTrades(){
-  const cfg = document.getElementById('trCfgSel').value;
+  const trSel = document.getElementById('trCfgSel');
+  // options must exist before we can select one — build them from an
+  // UNFILTERED fetch the first time (the old code only did this when
+  // viewing "all configs", which a per-instance default never triggers)
+  if(trSel.options.length <= 1){
+    try{
+      const all = await (await fetch('/api/trades?limit=200')).json();
+      [...new Set((all.trades || []).map(t => t.config).filter(Boolean))].sort()
+        .forEach(c => { const o = document.createElement('option'); o.value = c;
+          o.textContent = c.replace(/^config_?|\.json$/g, '') || 'main';
+          trSel.appendChild(o); });
+    }catch(e){}
+  }
+  if(!trCfgManual){            // follow the selected instance by default
+    const want = trInstCfg();
+    if(want && [...trSel.options].some(o=>o.value===want)) trSel.value = want;
+  }
+  const cfg = trSel.value;
+  const scope = document.getElementById('trScope');
+  if(scope) scope.textContent = cfg
+    ? `— ${instName(CUR)}` + (trCfgManual ? ' (manual filter)' : '')
+    : '— all instances';
   const r = await fetch('/api/trades?limit=80' + (cfg ? '&config=' + encodeURIComponent(cfg) : ''));
   const d = await r.json();
   const tb = document.querySelector('#tradesT tbody');
@@ -1045,13 +1073,6 @@ async function loadTrades(){
   });
   tb.innerHTML = rows.length ? rows.join('')
     : '<tr><td colspan="11" class="kv">no position events yet' + (cfg ? ' for this config' : '') + ' — dry-run trades will appear here the moment a virtual position opens</td></tr>';
-  // config filter options (from all events, once)
-  const sel = document.getElementById('trCfgSel');
-  if(sel.options.length <= 1 && !cfg){
-    [...new Set((d.trades || []).map(t => t.config).filter(Boolean))].sort()
-      .forEach(c => { const o = document.createElement('option'); o.value = c;
-        o.textContent = c.replace(/^config_?|\.json$/g, '') || 'main'; sel.appendChild(o); });
-  }
 }
 loadTrades();
 setInterval(loadTrades, 30000);
