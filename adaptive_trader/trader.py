@@ -536,6 +536,33 @@ def main():
         ep = float(closed["close"].iloc[ei])
         d = 1 if float(op.get("dir", 1)) >= 0 else -1
         red = (price < ep) if d > 0 else (price > ep)
+        # DO NOT JOIN A DYING TRADE. The red-only rule protects our entry
+        # price, but "deeply red" also means the SIM is close to its own
+        # liquidation — and when the sim liquidates we mirror the exit and
+        # eat the loss. (2026-08-19: joined an ETH short whose sim had used
+        # 93% of its liquidation distance; the sim liquidated 11 minutes
+        # later and the mirrored exit cost ~$426.)
+        adverse = (price / ep - 1.0) * d * -1.0        # >0 = sim underwater
+        lev_v = float(op.get("lev", 1.0)) if cfg["mode"] == "lev" else 1.0
+        cap = float(cfg.get("late_join_max_drawdown", 0.5))
+        if lev_v > 1:
+            liq_dist = 1.0 / lev_v - 0.008             # fraction of price
+            used = adverse / max(liq_dist, 1e-9)
+            if used > cap:
+                state["late_skip"] = lbl
+                save_state(cfg, state)
+                log.warning("LATE-JOIN REFUSED: the sim position %s is %.0f%% "
+                            "of the way to ITS liquidation (%.1f%% underwater "
+                            "at %gx) — joining would inherit a forced exit",
+                            lbl, 100 * used, 100 * adverse, lev_v)
+                return True
+        elif adverse > cap * 0.2:        # spot: no liquidation, cap the bleed
+            state["late_skip"] = lbl
+            save_state(cfg, state)
+            log.warning("LATE-JOIN REFUSED: the sim position %s is %.1f%% "
+                        "underwater — beyond the join limit", lbl,
+                        100 * adverse)
+            return True
         # red-only is the LEVERAGED exception (a green lev entry anchors
         # liquidation at our worse price); spot cannot liquidate, so a spot
         # instance joins its virtual position regardless of color

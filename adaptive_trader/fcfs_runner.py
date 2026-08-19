@@ -364,6 +364,26 @@ def main_fcfs(cfg, live):
                             d = int(c.get("dir") or 1)
                             if not ep or not px:
                                 continue
+                            # never join a trade the SIM is about to lose:
+                            # we would inherit its forced exit (see the
+                            # 2026-08-19 ETH short, sim 93% of the way to
+                            # liquidation, mirrored exit cost ~$426)
+                            adv = (px / ep - 1.0) * d * -1.0
+                            lv = float(c.get("lev") or 1.0) if mode == "lev" \
+                                else 1.0
+                            cap = float(cfg.get("late_join_max_drawdown", 0.5))
+                            too_deep = ((adv / max(1.0 / lv - 0.008, 1e-9)) > cap
+                                        if lv > 1 else adv > cap * 0.2)
+                            if too_deep:
+                                sk[str(ci)] = lbl
+                                save()
+                                log.warning("LATE-JOIN REFUSED %s: sim entry "
+                                            "%s @%.6g is %.1f%% underwater at "
+                                            "%gx — too close to ITS "
+                                            "liquidation",
+                                            comp_label(ci), lbl, ep,
+                                            100 * adv, lv)
+                                continue
                             # red-only is the LEV exception; spot cannot
                             # liquidate, so spot combos join in any color
                             if (mode == "spot"
