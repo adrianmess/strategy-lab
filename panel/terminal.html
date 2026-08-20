@@ -79,6 +79,7 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .bar.g i{background:var(--up)}.bar.r i{background:var(--down)}
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .scroll{max-height:420px;overflow:auto}
+@keyframes slidein{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
 .rowsb{display:flex;justify-content:space-between;align-items:center;gap:10px}
 @media(max-width:900px){.shell{grid-template-columns:1fr}
  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:54px;width:100%;flex-direction:row;
@@ -111,6 +112,8 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
     </div>
     <div style="display:flex;gap:7px;align-items:center">
       <span class="mini" id="stamp"></span>
+      <button class="btn" id="soundBtn" onclick="toggleSound()"
+        title="beep and show a banner in this tab when a trade opens or closes">&#128266; alerts off</button>
       <button class="btn" onclick="loadAll()">Refresh</button>
       <button class="btn kill" onclick="openKill()">KILL ALL</button>
     </div>
@@ -311,6 +314,102 @@ function renderInsts(){
        '<td class="n">'+(w&&w['30d'].trades ? Math.round(100*w['30d'].wins/w['30d'].trades)+'%' : '—')+'</td>'+
        '<td class="mini">'+(x.cfg||'')+'</td></tr>';
    }).join('') + '</tbody></table>';
+}
+
+// ---------------- trade alerts: sound + banner ----------------
+// The panel is plain HTTP on a .local host, which Chrome treats as an
+// insecure context — Notification.permission is "denied" before you can even
+// ask. So: WebAudio for the sound (works on HTTP once you have clicked
+// something) and an in-page banner. For REAL macOS banners that work with no
+// tab open, run scripts/trade_notifier.py on the laptop.
+var SOUND = localStorage.getItem('slSound') === '1';
+var SEEN = null;              // null until baselined, so a reload is silent
+var AC = null;
+
+function toggleSound(){
+  SOUND = !SOUND;
+  localStorage.setItem('slSound', SOUND ? '1' : '');
+  syncSoundBtn();
+  if(SOUND){ beep(880, 0.10); toast('Trade alerts on', 'You will hear a tone and see a banner here when a position opens or closes.', 'g'); }
+}
+function syncSoundBtn(){
+  var b = document.getElementById('soundBtn');
+  if(!b) return;
+  b.innerHTML = SOUND ? '&#128266; alerts on' : '&#128263; alerts off';
+  b.style.borderColor = SOUND ? 'var(--up)' : '';
+  b.style.color = SOUND ? 'var(--up)' : '';
+}
+function beep(freq, dur){
+  try{
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if(AC.state === 'suspended') AC.resume();
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, AC.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur + 0.02);
+  }catch(e){}
+}
+function chime(good){
+  // two tones: rising for an open/win, falling for a loss
+  beep(good ? 660 : 520, 0.12);
+  setTimeout(function(){ beep(good ? 990 : 390, 0.16); }, 130);
+}
+function toast(title, body, kind){
+  var host = document.getElementById('toasts');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'toasts';
+    host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:80;display:grid;gap:9px;max-width:380px';
+    document.body.appendChild(host);
+  }
+  var col = kind === 'r' ? 'var(--down)' : (kind === 'g' ? 'var(--up)' : 'var(--blue)');
+  var el = document.createElement('div');
+  el.style.cssText = 'background:var(--panel);border:1px solid '+col+';border-left-width:4px;'+
+    'border-radius:10px;padding:11px 14px;box-shadow:0 12px 34px rgba(0,0,0,.55);'+
+    'animation:slidein .18s ease-out';
+  el.innerHTML = '<div style="font-weight:600;font-size:13.5px">'+title+'</div>'+
+    '<div class="mini" style="margin-top:3px">'+body+'</div>';
+  el.onclick = function(){ el.remove(); };
+  host.appendChild(el);
+  setTimeout(function(){ el.style.opacity='0'; el.style.transition='opacity .4s';
+                         setTimeout(function(){ el.remove(); }, 420); }, 12000);
+  // title flash, so a background tab still tells you
+  var old = document.title, n = 0;
+  var iv = setInterval(function(){
+    document.title = (n++ % 2) ? old : '● ' + title.slice(0, 40);
+    if(n > 10){ clearInterval(iv); document.title = old; }
+  }, 700);
+}
+
+function pollTrades(){
+  API('trades?limit=25').then(function(d){
+    var ts = (d && d.trades) || [];
+    var ids = ts.map(function(t){
+      return [t.at, t.event, t.symbol, t.comp].join('|'); });
+    if(SEEN === null){ SEEN = {}; ids.forEach(function(i){ SEEN[i] = 1; }); return; }
+    var fresh = [];
+    ts.forEach(function(t, ix){
+      if(!SEEN[ids[ix]]){ SEEN[ids[ix]] = 1; fresh.push(t); } });
+    fresh.sort(function(a,b){ return (a.at||'') < (b.at||'') ? -1 : 1; });
+    fresh.forEach(function(t){
+      var open = (t.event||'').toUpperCase() === 'OPEN';
+      var pct = t.pct;
+      var good = open ? true : (pct == null ? true : pct >= 0);
+      var inst = (t.config||'').replace('config_fcfs_','').replace('.json','');
+      var title = open
+        ? ('▶ ' + t.symbol + ' opened' + (t.lev > 1 ? ' ' + t.lev + 'x' : '') +
+           (t.price ? ' @ ' + t.price : ''))
+        : ((good ? '▲ ' : '▼ ') + t.symbol + ' closed ' +
+           (pct == null ? '' : (pct >= 0 ? '+' : '') + (+pct).toFixed(2) + '%') +
+           (t.net == null ? '' : '  ' + (t.net >= 0 ? '+' : '') + (+t.net).toFixed(2) + ' USDT'));
+      toast(title, inst + ' · ' + (t.live ? 'LIVE' : 'dry-run') +
+            (t.comp ? ' · ' + t.comp : ''), good ? 'g' : 'r');
+      if(SOUND) chime(good);
+    });
+  }).catch(function(){});
 }
 
 // ---------------- ticker ----------------
@@ -985,7 +1084,9 @@ for(var i=0;i<btns.length;i++){
     document.getElementById('crumb').textContent=this.title;
   };
 }
-loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress();
+syncSoundBtn();
+loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades();
+setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
 setInterval(loadTicker, 15000);
 setInterval(loadStatus, 20000);
