@@ -30,3 +30,4 @@ dashboard/bt_detail/
 ip_proxies_APIs
 adaptive_trader/proxy_pool.json
 optimizer/gamut_limits.json
+panel/panel_key.json

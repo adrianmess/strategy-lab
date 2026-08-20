@@ -19,7 +19,12 @@ ssh -i ~/.ssh/lab_auto_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=no
   `~/venv/bin/python3`). zsh quoting: write ssh options inline, never in a
   variable; avoid `$IP:` history-expansion pitfalls.
 - Control panel: `http://admns-Mac-mini.local:8800` (serves dashboard pages;
-  API under `/api/...`). Started by cron watchdog
+  API under `/api/...`). **Needs a key from off-box**: append `?k=<key>` once
+  (cookie is then remembered); key lives in `panel/panel_key.json` on the
+  mini. Requests from 127.0.0.1 are exempt, so SSH + `curl 127.0.0.1:8800`
+  keeps working unchanged. Cross-origin POSTs are refused outright.
+  The redesigned UI is at `/terminal`; the classic panel stays at `/`.
+  Started by cron watchdog
   (`scripts/panel_watchdog.sh`: `@reboot` + every minute; panel process
   pattern is `" server\.py$"` — the venv python shows as framework Python).
 - Panel restarts are SAFE (running traders survive and are re-adopted with

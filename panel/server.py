@@ -273,6 +273,74 @@ def spawn(kind, name, cmd, cwd, jid=None):
     return jid
 
 
+# ---------------- access control ----------------
+# The panel can start, stop and fund live traders, and now flatten every
+# position. The watchdog runs it with PANEL_HOST=0.0.0.0 so the MacBook can
+# reach it, which also means every device on the LAN could. Two guards:
+#   1. a shared secret, supplied once as ?k=... and then remembered in a cookie
+#   2. an Origin check on state-changing calls, so a malicious page you happen
+#      to visit cannot POST to the panel behind your back
+# Loopback is exempt: the watchdog, Hermes and local scripts all curl
+# 127.0.0.1, and anything already ON the mini can control it anyway.
+PANEL_KEY_P = os.path.join(HERE, "panel_key.json")
+
+
+def _panel_key():
+    try:
+        return json.load(open(PANEL_KEY_P))["key"]
+    except Exception:
+        k = uuid.uuid4().hex
+        try:
+            json.dump({"key": k}, open(PANEL_KEY_P, "w"))
+            os.chmod(PANEL_KEY_P, 0o600)
+        except Exception:
+            pass
+        return k
+
+
+PANEL_KEY = _panel_key()
+_LOCAL = ("127.0.0.1", "::1", "localhost")
+
+
+@app.before_request
+def _panel_guard():
+    if (request.remote_addr or "") in _LOCAL:
+        return None
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("Origin")
+        if origin:
+            try:
+                from urllib.parse import urlparse
+                if urlparse(origin).netloc != request.host:
+                    return jsonify(error="cross-site request refused"), 403
+            except Exception:
+                return jsonify(error="cross-site request refused"), 403
+    supplied = (request.args.get("k") or request.headers.get("X-Panel-Key")
+                or request.cookies.get("sl_token"))
+    if supplied == PANEL_KEY:
+        if request.args.get("k"):
+            request.environ["_set_key_cookie"] = True
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify(error="unauthorized — this panel requires a key"), 401
+    return ("<html><body style='font:15px/1.6 -apple-system;background:#0b0e11;"
+            "color:#eaecef;padding:48px'><h2>Strategy Lab</h2>"
+            "<p>This panel controls live trading and now requires a key.</p>"
+            "<p style='color:#848e9c'>Open it once as "
+            "<code>http://&lt;host&gt;:8800/?k=YOUR_KEY</code> and it will be "
+            "remembered on this browser. The key is in "
+            "<code>panel/panel_key.json</code> on the Mac mini.</p>"
+            "</body></html>", 401)
+
+
+@app.after_request
+def _panel_cookie(resp):
+    if request.environ.pop("_set_key_cookie", False):
+        resp.set_cookie("sl_token", PANEL_KEY, max_age=60 * 60 * 24 * 365,
+                        samesite="Lax", httponly=True)
+    return resp
+
+
 # ---------------- pages ----------------
 @app.route("/")
 def index():
