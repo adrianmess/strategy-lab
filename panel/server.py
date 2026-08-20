@@ -485,6 +485,40 @@ def oos_map():
     return jsonify(out)
 
 
+# config.json / config_spot.json are the TEMPLATES every adopt clones from.
+# They are not instance configs, and deleting them (the delete button happily
+# matched them) made every adopt 500 with FileNotFoundError. Never open them
+# bare — go through this, which falls back to any other config of the right
+# mode and finally to a built-in minimum.
+_BASE_FALLBACK = dict(mode="lev", execution="api", api_account="mexc1",
+                      symbol="SOL_USDT", equity_usdt=100.0, poll_seconds=3,
+                      dry_run=True, contract_size=0.1,
+                      state_file="trader_state.json", log_file="trader.log")
+
+
+def _template_cfg(mode="lev"):
+    names = (["config_spot.json", "config.json"] if mode == "spot"
+             else ["config.json", "config_spot.json"])
+    for n in names:
+        p = os.path.join(AT, n)
+        if os.path.isfile(p):
+            try:
+                return json.load(open(p))
+            except Exception:
+                pass
+    for n in sorted(os.listdir(AT)):          # any surviving trader config
+        if re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", n):
+            try:
+                c = json.load(open(os.path.join(AT, n)))
+                if c.get("mode") == mode:
+                    c.pop("candidate", None)
+                    return c
+            except Exception:
+                pass
+    return dict(_BASE_FALLBACK, mode=mode,
+                **({"contract_size": 1.0} if mode == "spot" else {}))
+
+
 @app.route("/api/router_components")
 def router_components():
     """The component RUNS behind one router/combo run, read from its
@@ -1943,9 +1977,15 @@ def adopt():
             src = os.path.join(gdir, _safe_name(d["entry"]) + ".json")
             json.dump(g, open(src, "w"), indent=1)
         d = dict(d, source=src, run_name=d.get("run_name") or d["entry"])
-    src = d["source"]
+    # a missing/!found source used to surface as an opaque 500 in the browser
+    src = d.get("source")
+    if not src:
+        return jsonify(error="adopt needs a 'source' (a run's best_config.json) "
+                             "or an 'entry' name"), 400
     if not os.path.isabs(src):
         src = os.path.join(OPT, src)
+    if not os.path.isfile(src):
+        return jsonify(error=f"source genome not found: {src}"), 404
     target = os.path.join(AT, d.get("target", "config.json"))
     best = json.load(open(src))
     _strat = best.get("strategy") or (best.get("cand") or {}).get("strategy")
@@ -2006,7 +2046,7 @@ def adopt():
         target = os.path.join(AT, tname)
         created = not os.path.exists(target)
         if created:
-            cfg = json.load(open(os.path.join(AT, "config.json")))
+            cfg = _template_cfg(best.get("mode", "lev"))
             cfg.pop("candidate", None)
             cfg.pop("adopted_from", None)
         else:
@@ -2067,7 +2107,7 @@ def adopt():
             # with its OWN state/log files, starting as a dry-run
             suffix = tname[len("config_"):-len(".json")] if \
                 tname.startswith("config_") else "router"
-            cfg = json.load(open(os.path.join(AT, "config.json")))
+            cfg = _template_cfg(best.get("mode", "lev"))
             cfg.pop("candidate", None)
             cfg.pop("adopted_from", None)
             cfg.update(dry_run=True,
@@ -2103,11 +2143,7 @@ def adopt():
         # NEW config file: clone the mode's classic config as a template but
         # give it its OWN state/log files (so it can run as its own instance)
         # and start it DRY — same policy as router/fcfs adoption.
-        base_p = os.path.join(AT, "config_spot.json"
-                              if best.get("mode") == "spot" else "config.json")
-        if not os.path.exists(base_p):
-            base_p = os.path.join(AT, "config.json")
-        cfg = json.load(open(base_p))
+        cfg = _template_cfg(best.get("mode", "lev"))
         cfg.pop("candidate", None)
         cfg.pop("adopted_from", None)
         nm = re.sub(r"^config_?", "", os.path.basename(target)[:-len(".json")])
@@ -2241,6 +2277,13 @@ def trader_config_delete():
     if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", name) \
             or not os.path.isfile(path):
         return jsonify(error=f"no such config '{name}'"), 404
+    # these two are the TEMPLATES every adopt clones from, not instance
+    # configs. Deleting config.json is what made adopt 500 on 2026-08-19.
+    if name in ("config.json", "config_spot.json"):
+        return jsonify(error=(f"{name} is the {'spot' if 'spot' in name else 'leverage'} "
+                              f"TEMPLATE that 'Adopt' clones every new config "
+                              f"from — deleting it breaks adoption. It is not "
+                              f"an instance config; leave it in place.")), 400
     for i, I in instances.items():
         t = I["trader"]
         running = t["proc"] is not None and t["proc"].poll() is None
