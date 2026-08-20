@@ -278,6 +278,15 @@ def spawn(kind, name, cmd, cwd, jid=None):
 def index():
     return send_from_directory(HERE, "panel.html")
 
+
+@app.route("/terminal")
+def terminal():
+    """The redesigned UI, served ALONGSIDE the classic panel at / so the panel
+    you control real money with never depends on work in progress."""
+    resp = send_from_directory(HERE, "terminal.html")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
 @app.route("/api/doctor")
 def doctor_route():
     import doctor
@@ -437,6 +446,438 @@ def trader_stop():
     I["stopped_by_user"] = True
     _save_instances()
     return jsonify(ok=True)
+
+
+def _kill_exclude():
+    """Spot assets KILL ALL must never sell. Editable at panel/killall.json."""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "killall.json")
+    try:
+        return {str(a).upper() for a in json.load(open(p)).get("exclude", [])}
+    except Exception:
+        return {"MX"}
+
+
+_KILL_EXCLUDE = _kill_exclude()
+
+
+def _stop_one_trader(i, I, report):
+    """Stop a running trader the same way /api/trader/stop does, recording the
+    deliberate-stop intent so a reboot cannot resume it live."""
+    p = I["trader"]["proc"]
+    if p is None or p.poll() is not None:
+        report.append(dict(step="stop", instance=_iname(i), result="not running"))
+        return False
+    p.send_signal(signal.SIGINT)
+    try:
+        p.wait(10)
+    except subprocess.TimeoutExpired:
+        p.terminate()
+        try:
+            p.wait(5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    I["trader"].update(live=False)
+    I["stopped_by_user"] = True
+    report.append(dict(step="stop", instance=_iname(i), result="stopped"))
+    return True
+
+
+def _flatten_account(acct, mode, report, dry):
+    """Cancel resting orders and market-close everything on ONE account."""
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcFuturesAPI, MexcSpotAPI
+    closed = 0
+    if mode == "lev":
+        fapi = MexcFuturesAPI(account=acct)
+        try:
+            pos = fapi.open_positions() or []
+        except Exception as e:
+            report.append(dict(step="read", account=acct, result=f"ERROR {e}"))
+            return 0
+        for p in pos:
+            sym, vol = p.get("symbol"), float(p.get("holdVol") or 0)
+            if vol <= 0:
+                continue
+            side = "LONG" if int(p.get("positionType") or 1) == 1 else "SHORT"
+            if dry:
+                report.append(dict(step="would_close", account=acct, symbol=sym,
+                                   side=side, vol=vol))
+                closed += 1
+                continue
+            try:
+                px = MexcSpotAPI(account=acct).ticker_price(sym)
+                r = fapi.close_position(sym, price=px)
+                ok = str((r or {}).get("code", "")) in ("0", "200", "") \
+                    or (r or {}).get("success") is True
+                report.append(dict(step="close", account=acct, symbol=sym,
+                                   side=side, vol=vol,
+                                   result="closed" if ok else f"FAILED {r}"))
+                closed += 1 if ok else 0
+            except Exception as e:
+                report.append(dict(step="close", account=acct, symbol=sym,
+                                   result=f"ERROR {e}"))
+        return closed
+    sapi = MexcSpotAPI(account=acct)
+    try:
+        bals = sapi.account_info().get("balances", [])
+    except Exception as e:
+        report.append(dict(step="read", account=acct, result=f"ERROR {e}"))
+        return 0
+    for b in bals:
+        a = b.get("asset")
+        if a in ("USDT", "USDC", "USD", "DAI"):
+            continue
+        # MX is MEXC's own fee-discount token — held deliberately, never a bot
+        # position. A panic button that dumps it would be a nasty surprise.
+        if a in _KILL_EXCLUDE:
+            report.append(dict(step="skip_excluded", account=acct, asset=a,
+                               qty=float(b.get("free") or 0),
+                               why="not a bot position"))
+            continue
+        qty = float(b.get("free") or 0)
+        if qty <= 0:
+            continue
+        sym = f"{a}_USDT"
+        try:
+            if qty <= float(sapi.min_qty(sym) or 0):
+                report.append(dict(step="skip_dust", account=acct, symbol=sym,
+                                   qty=qty))
+                continue
+        except Exception:
+            pass
+        if dry:
+            report.append(dict(step="would_sell", account=acct, symbol=sym,
+                               qty=qty))
+            closed += 1
+            continue
+        try:
+            for o in (sapi.open_orders(sym) or []):
+                sapi.cancel_order(sym, o.get("orderId"))
+                report.append(dict(step="cancel", account=acct, symbol=sym,
+                                   order=o.get("orderId")))
+        except Exception:
+            pass
+        try:
+            r = sapi.market_sell(sym, sapi.floor_qty(sym, qty))
+            report.append(dict(step="sell", account=acct, symbol=sym, qty=qty,
+                               result="sold" if r else f"FAILED {r}"))
+            closed += 1
+        except Exception as e:
+            report.append(dict(step="sell", account=acct, symbol=sym,
+                               result=f"ERROR {e}"))
+    return closed
+
+
+ALERTS_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "alerts.json")
+_ALERT_STATE = {}          # rule id -> last fired epoch (de-duplication)
+
+_DEFAULT_RULES = [
+    dict(id="stopped_holding", cond="trader_stopped_holding", scope="any",
+         threshold="", enabled=True,
+         label="Trader stopped while holding a position"),
+    dict(id="liq_near", cond="liquidation_within", scope="any", threshold="5",
+         enabled=True, label="Position within X% of liquidation"),
+    # NB: the parquet files feed BACKTESTS. Live traders backfill klines from
+    # the API and run their own feed, so parquet age says nothing about live
+    # trading — a tight threshold here would be a false alarm about real money.
+    dict(id="stale_data", cond="data_older_than", scope="any", threshold="24",
+         enabled=True,
+         label="Backtest market data older than X hours"),
+    # THIS is the live-trading liveness signal: a running trader writes a
+    # heartbeat every 15 minutes. Silence means it is wedged, not idle.
+    dict(id="no_heartbeat", cond="no_heartbeat", scope="any", threshold="45",
+         enabled=True,
+         label="Running trader silent for X minutes (no heartbeat)"),
+    dict(id="api_errors", cond="api_errors", scope="any", threshold="3",
+         enabled=True, label="API errors in the last 10 minutes"),
+    dict(id="no_trades", cond="no_trades_for", scope="any", threshold="24",
+         enabled=False, label="No trades for X hours"),
+    dict(id="day_loss", cond="realized_loss", scope="any", threshold="200",
+         enabled=False, label="Realized loss today exceeds $X"),
+]
+
+
+def _alerts_load():
+    try:
+        d = json.load(open(ALERTS_P))
+        return d.get("rules") or [], d.get("log") or []
+    except Exception:
+        return list(_DEFAULT_RULES), []
+
+
+def _alerts_save(rules, log):
+    tmp = ALERTS_P + ".tmp"
+    json.dump(dict(rules=rules, log=log[-200:]), open(tmp, "w"), indent=1)
+    os.replace(tmp, ALERTS_P)
+
+
+def _notify(msg):
+    """Hermes WhatsApp. Never let a delivery failure break the evaluator."""
+    try:
+        r = subprocess.run([os.path.expanduser("~/.hermes/hermes"), "send",
+                            "-t", "whatsapp", "-m", msg],
+                           timeout=25, capture_output=True, text=True)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _alert_fire(rule, detail, rules, log):
+    """One notification per rule per hour, so a persistent condition does not
+    turn into a pager storm."""
+    now = time.time()
+    if now - _ALERT_STATE.get(rule["id"], 0) < 3600:
+        return False
+    _ALERT_STATE[rule["id"]] = now
+    sent = _notify(f"[Strategy Lab] {rule['label']}: {detail}")
+    log.append(dict(t=time.strftime("%Y-%m-%d %H:%M:%S"), rule=rule["id"],
+                    label=rule["label"], detail=detail,
+                    action="notified" if sent else "notify FAILED"))
+    _alerts_save(rules, log)
+    return True
+
+
+def _alerts_eval():
+    """Background evaluator. Read-only: it notifies, it never trades."""
+    time.sleep(45)
+    while True:
+        try:
+            rules, log = _alerts_load()
+            active = [r for r in rules if r.get("enabled")]
+            if active:
+                _alerts_eval_once(active, rules, log)
+        except Exception as e:
+            print(f"alerts: {e}", flush=True)
+        time.sleep(120)
+
+
+def _alerts_eval_once(active, rules, log):
+    by = {r["cond"]: r for r in active}
+    # --- a stopped trader still holding real coins: the 2026-08-19 failure ---
+    r = by.get("trader_stopped_holding")
+    if r:
+        for i, I in sorted(instances.items()):
+            t = I["trader"]
+            running = t["proc"] is not None and t["proc"].poll() is None
+            if running:
+                continue
+            try:
+                cfg = json.load(open(os.path.join(AT, t.get("config")
+                                                  or I.get("cfg"))))
+                st = json.load(open(os.path.join(
+                    AT, cfg.get("state_file", "trader_state.json"))))
+            except Exception:
+                continue
+            pos = st.get("position")
+            if pos:
+                _alert_fire(r, f"{_iname(i)} is STOPPED but still tracking "
+                               f"{pos.get('qty')} {pos.get('symbol')} "
+                               f"@ {pos.get('entry_price')}", rules, log)
+    # --- leveraged position close to liquidation ---
+    r = by.get("liquidation_within")
+    if r:
+        try:
+            pct = float(r.get("threshold") or 5)
+        except Exception:
+            pct = 5.0
+        if AT not in sys.path:
+            sys.path.insert(0, AT)
+        from mexc_api import MexcFuturesAPI
+        for acct in {c for c in _api_accounts_lev()}:
+            try:
+                for p in (MexcFuturesAPI(account=acct).open_positions() or []):
+                    liq = float(p.get("liquidatePrice") or 0)
+                    ent = float(p.get("holdAvgPrice") or 0)
+                    if not liq or not ent:
+                        continue
+                    dist = abs(liq - ent) / ent * 100
+                    if dist <= pct:
+                        _alert_fire(r, f"{p.get('symbol')} on {acct} is "
+                                       f"{dist:.1f}% from liquidation "
+                                       f"({ent} -> {liq})", rules, log)
+            except Exception:
+                pass
+    # --- a RUNNING trader that has gone quiet (the real liveness signal) ---
+    r = by.get("no_heartbeat")
+    if r:
+        try:
+            mins = float(r.get("threshold") or 45)
+        except Exception:
+            mins = 45.0
+        for i, I in sorted(instances.items()):
+            t = I["trader"]
+            if t["proc"] is None or t["proc"].poll() is not None:
+                continue
+            lp = os.path.join(JOBS_DIR, f"trader_stdout_i{i}.log")
+            try:
+                quiet = (time.time() - os.path.getmtime(lp)) / 60.0
+            except Exception:
+                continue
+            if quiet > mins:
+                _alert_fire(r, f"{_iname(i)} is running but has written "
+                               f"nothing for {quiet:.0f} minutes — it may be "
+                               f"wedged while holding a position", rules, log)
+    # --- BACKTEST data going stale (not a live-trading signal) ---
+    r = by.get("data_older_than")
+    if r:
+        try:
+            hrs = float(r.get("threshold") or 24)
+        except Exception:
+            hrs = 24.0
+        age = _data_age_minutes()
+        if age is not None and age / 60.0 > hrs:
+            _alert_fire(r, f"backtest market data is {age/60:.1f} hours old — "
+                           f"new backtests would simulate a stale window "
+                           f"(live traders are unaffected)", rules, log)
+    # --- API errors piling up ---
+    r = by.get("api_errors")
+    if r:
+        try:
+            n = int(float(r.get("threshold") or 3))
+        except Exception:
+            n = 3
+        try:
+            with app.test_request_context("/api/errors"):
+                errs = json.loads(api_errors().get_data())
+            tot = sum(len(v) for v in errs.values()) if isinstance(errs, dict) else 0
+            if tot >= n:
+                _alert_fire(r, f"{tot} API errors outstanding across instances",
+                            rules, log)
+        except Exception:
+            pass
+
+
+def _api_accounts_lev():
+    out = set()
+    for f in sorted(os.listdir(AT)):
+        if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", f):
+            continue
+        try:
+            c = json.load(open(os.path.join(AT, f)))
+        except Exception:
+            continue
+        if c.get("execution") == "api" and c.get("mode") != "spot":
+            out.add(c.get("api_account", "mexc1"))
+    return out
+
+
+def _data_age_minutes():
+    """Age of the newest market-data bar on disk, in minutes."""
+    d = os.path.join(AT, "research", "data")
+    newest = None
+    try:
+        for f in os.listdir(d):
+            if f.endswith(".parquet"):
+                m = os.path.getmtime(os.path.join(d, f))
+                newest = m if newest is None else max(newest, m)
+    except Exception:
+        return None
+    return None if newest is None else (time.time() - newest) / 60.0
+
+
+@app.route("/api/alerts", methods=["GET", "POST"])
+def api_alerts():
+    rules, log = _alerts_load()
+    if request.method == "GET":
+        return jsonify(rules=rules, log=list(reversed(log))[:40],
+                       data_age_min=round(_data_age_minutes() or -1, 1))
+    d = request.get_json(force=True) or {}
+    if d.get("test"):
+        ok = _notify("[Strategy Lab] test alert — delivery is working")
+        return jsonify(ok=ok, note="sent" if ok else "hermes send failed")
+    rid = d.get("id")
+    for r in rules:
+        if r["id"] == rid:
+            for k in ("enabled", "threshold", "scope"):
+                if k in d:
+                    r[k] = d[k]
+            _alerts_save(rules, log)
+            return jsonify(ok=True, rule=r)
+    return jsonify(error=f"no rule '{rid}'"), 404
+
+
+threading.Thread(target=_alerts_eval, daemon=True).start()
+
+
+@app.route("/api/killall", methods=["POST"])
+def killall():
+    """THE PANIC BUTTON. Stops every trader AND flattens every position.
+
+    Stopping a trader on its own leaves real coins on the exchange with
+    nothing managing them — that is exactly what happened on 2026-08-19, and
+    this endpoint exists so it cannot happen again in a hurry.
+
+    POST {"plan": true}       -> report what it WOULD do, touch nothing
+    POST {"confirm": "KILL"}  -> actually do it
+    """
+    d = request.get_json(silent=True) or {}
+    dry = bool(d.get("plan"))
+    if not dry and d.get("confirm") != "KILL":
+        return jsonify(error="refusing: send {\"confirm\":\"KILL\"} to arm, "
+                             "or {\"plan\":true} for a dry run"), 400
+    report, stopped = [], 0
+    for i, I in sorted(instances.items()):
+        t = I["trader"]
+        running = t["proc"] is not None and t["proc"].poll() is None
+        if not running:
+            continue
+        if dry:
+            report.append(dict(step="would_stop", instance=_iname(i),
+                               live=bool(t.get("live"))))
+            stopped += 1
+        else:
+            stopped += 1 if _stop_one_trader(i, I, report) else 0
+    if not dry and stopped:
+        _save_instances()
+    # every account any config points at, not just the running ones
+    accts = {}
+    for f in sorted(os.listdir(AT)):
+        if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", f):
+            continue
+        try:
+            c = json.load(open(os.path.join(AT, f)))
+        except Exception:
+            continue
+        if c.get("execution") == "api":
+            accts.setdefault((c.get("api_account", "mexc1"),
+                              c.get("mode", "lev")), True)
+    flat = 0
+    for acct, mode in sorted(accts):
+        flat += _flatten_account(acct, mode, report, dry)
+    # the tracked positions must go too, or a restart late-joins straight back
+    if not dry:
+        for f in sorted(os.listdir(AT)):
+            if not re.fullmatch(r"config[A-Za-z0-9_.\-]*\.json", f):
+                continue
+            try:
+                c = json.load(open(os.path.join(AT, f)))
+                sp = os.path.join(AT, c.get("state_file", "trader_state.json"))
+                st = json.load(open(sp))
+            except Exception:
+                continue
+            pos = st.get("position")
+            if not pos:
+                continue
+            lbl = pos.get("mirror_entry_t")
+            if lbl and pos.get("comp") is not None:
+                st.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+            st["position"] = None
+            json.dump(st, open(sp, "w"), indent=1)
+            report.append(dict(step="clear_state", config=f,
+                               symbol=pos.get("symbol")))
+    summary = (f"{'WOULD stop' if dry else 'Stopped'} {stopped} trader(s), "
+               f"{'would close' if dry else 'closed'} {flat} position(s)")
+    if not dry:
+        try:
+            subprocess.run(["/Users/admn/.hermes/hermes", "send", "-t",
+                            "whatsapp", "-m", f"KILL ALL executed: {summary}"],
+                           timeout=20, capture_output=True)
+        except Exception:
+            pass
+    return jsonify(ok=True, plan=dry, stopped=stopped, closed=flat,
+                   summary=summary, report=report)
 
 
 # ---------------- jobs ----------------

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Strategy Lab — Terminal</title>
+<style>
+:root{--bg:#0b0e11;--panel:#151a21;--panel2:#1b212a;--line:#252c37;--fg:#eaecef;
+ --dim:#848e9c;--accent:#f0b90b;--blue:#4c8dff;--violet:#8b5cf6;--cyan:#22d3ee;
+ --up:#2ebd85;--down:#f6465d;--warn:#f5b544;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.up{color:var(--up)}.down{color:var(--down)}.dim{color:var(--dim)}.warn{color:var(--warn)}
+button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
+.shell{display:grid;grid-template-columns:56px 1fr;min-height:100vh}
+.rail{background:#0d1117;border-right:1px solid var(--line);display:flex;flex-direction:column;
+ align-items:center;padding:10px 0;gap:3px;position:sticky;top:0;height:100vh}
+.rail .logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#c99400);
+ color:#000;display:grid;place-items:center;font-weight:800;margin-bottom:8px;font-size:12px}
+.rail button{width:40px;height:36px;border:0;background:none;color:var(--dim);border-radius:8px;
+ display:grid;place-items:center;font-size:15px}
+.rail button:hover{background:var(--panel2);color:var(--fg)}
+.rail button.on{background:var(--panel2);color:var(--accent);box-shadow:inset 2px 0 0 var(--accent)}
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;
+ border-bottom:1px solid var(--line);gap:10px;flex-wrap:wrap}
+.crumb{font-size:15px;font-weight:600}
+.pill{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--dim);white-space:nowrap}
+.pill.live{border-color:rgba(246,70,93,.45);color:var(--down);background:rgba(246,70,93,.08)}
+.pill.ok{border-color:rgba(46,189,133,.4);color:var(--up);background:rgba(46,189,133,.08)}
+.pill.warn{border-color:rgba(245,181,68,.5);color:var(--warn);background:rgba(245,181,68,.08)}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:5px 11px}
+.btn:hover{border-color:#3a4553}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.btn.danger{background:transparent;border-color:rgba(246,70,93,.5);color:var(--down)}
+.btn.kill{background:var(--down);border-color:var(--down);color:#fff;font-weight:700;letter-spacing:.03em}
+.btn.sm{padding:3px 9px;font-size:12px}
+.wrap{padding:12px;display:grid;gap:12px}
+.g2{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.card>h3{margin:0;padding:9px 13px;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;
+ letter-spacing:.04em;text-transform:uppercase;color:var(--dim);display:flex;justify-content:space-between;
+ align-items:center;gap:8px}
+.card .body{padding:13px}
+.kpi .v{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-.5px}
+.kpi .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.kpi .s{font-size:11px;color:var(--dim);margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--dim);font-weight:500;padding:7px 13px;border-bottom:1px solid var(--line);
+ font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:7px 13px;border-bottom:1px solid rgba(37,44,55,.5)}
+tbody tr:hover{background:var(--panel2)}
+td.n,th.n{text-align:right}td.n{font-family:var(--mono)}
+.tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:10.5px;font-weight:600}
+.tag.lev{background:rgba(245,181,68,.14);color:var(--warn)}
+.tag.spot{background:rgba(55,211,154,.14);color:var(--up)}
+.tag.live{background:rgba(255,93,108,.14);color:var(--down)}
+.tag.g{background:rgba(46,189,133,.14);color:var(--up)}
+.tag.b{background:rgba(120,140,170,.16);color:#9fb0c9}
+.mini{font-size:11px;color:var(--dim)}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;
+ padding:5px 8px;font:inherit}
+.view{display:none}.view.on{display:block}
+.modal{position:fixed;inset:0;background:rgba(3,5,8,.8);display:none;place-items:center;z-index:60;padding:20px}
+.modal.on{display:grid}
+.mbox{width:min(560px,96vw);background:var(--panel);border:1px solid rgba(246,70,93,.5);border-radius:14px;
+ overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.7);max-height:90vh;display:flex;flex-direction:column}
+.mbox header{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;color:var(--down);font-size:15px}
+.mbox .mb{padding:16px 18px;overflow:auto}
+.plan{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px;
+ font-family:var(--mono);font-size:11.5px;line-height:1.7;max-height:210px;overflow:auto;margin:11px 0}
+.banner{background:rgba(76,141,255,.08);border-bottom:1px solid rgba(76,141,255,.3);padding:7px 14px;font-size:12px}
+.rowsb{display:flex;justify-content:space-between;align-items:center;gap:10px}
+@media(max-width:900px){.shell{grid-template-columns:1fr}
+ .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:54px;width:100%;flex-direction:row;
+  justify-content:space-around;border-right:0;border-top:1px solid var(--line);z-index:40;padding:0}
+ .rail .logo{display:none}.main{padding-bottom:58px}.g2,.g4{grid-template-columns:1fr}}
+</style></head><body>
+<div class="shell">
+<nav class="rail">
+  <div class="logo">SL</div>
+  <button class="on" data-go="overview" title="Overview">&#9635;</button>
+  <button data-go="alerts" title="Alerts">&#9873;</button>
+</nav>
+<div class="main">
+  <div class="banner">New UI — <b>read-only except the kill switch</b>. The classic panel is untouched at
+    <a href="/" style="color:var(--blue)">/</a> and remains the place to start, stop and configure traders.</div>
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+      <span class="crumb" id="crumb">Overview</span>
+      <span class="pill ok" id="pTraders">…</span>
+      <span class="pill live" id="pLive" style="display:none">LIVE MONEY</span>
+      <span class="pill" id="pData" title="age of the BACKTEST market data on disk — live traders use their own feed">…</span>
+    </div>
+    <div style="display:flex;gap:7px;align-items:center">
+      <span class="mini" id="stamp"></span>
+      <button class="btn" onclick="loadAll()">Refresh</button>
+      <button class="btn kill" onclick="openKill()">KILL ALL</button>
+    </div>
+  </div>
+
+  <section class="view on" id="v-overview"><div class="wrap">
+    <div class="g4" id="kpis"></div>
+    <div class="card"><h3>Instances <span class="mini">live from /api/instances + /api/performance</span></h3>
+      <div id="insts"></div></div>
+    <div class="card"><h3>Open positions <span class="mini">exchange truth via the kill-switch planner</span></h3>
+      <div class="body" id="pos"><span class="mini">loading…</span></div></div>
+  </div></section>
+
+  <section class="view" id="v-alerts"><div class="wrap">
+    <div class="card"><h3>Alert rules
+        <span><button class="btn sm" onclick="testAlert()">Send test</button></span></h3>
+      <div id="rules"></div></div>
+    <div class="card"><h3>Recent alerts</h3><div id="alog"></div></div>
+  </div></section>
+</div></div>
+
+<div class="modal" id="kill"><div class="mbox">
+  <header>KILL ALL — stop trading and flatten everything</header>
+  <div class="mb">
+    <div>This stops every running trader, cancels resting orders, market-closes every open
+      position on both accounts, and records the closes so a restart cannot re-enter them.</div>
+    <div class="mini" style="margin-top:8px">Below is a <b>live plan</b> read from the exchange just now —
+      not a guess. Nothing has been touched yet.</div>
+    <div class="plan" id="planbox">reading exchange…</div>
+    <div class="mini">Type <b class="down">KILL</b> to arm.</div>
+    <input id="killin" placeholder="type KILL" style="width:100%;margin:8px 0 11px">
+    <div style="display:flex;gap:9px">
+      <button class="btn kill" id="killgo" disabled style="flex:1;opacity:.5">Stop everything and flatten</button>
+      <button class="btn" onclick="closeKill()">Cancel</button>
+    </div>
+    <div id="killout" class="plan" style="display:none"></div>
+  </div>
+</div></div>
+
+<script>
+var API = function(p, opt){ return fetch('/api/'+p, opt).then(function(r){ return r.json(); }); };
+var INSTS = [], PERF = {};
+
+function money(v){ return (v>=0?'+':'') + v.toFixed(2); }
+function cls(v){ return v>0?'up':(v<0?'down':'dim'); }
+
+function loadAll(){
+  API('instances').then(function(list){
+    INSTS = list || [];
+    var up = INSTS.filter(function(x){return x.trader_running;}).length;
+    var live = INSTS.filter(function(x){return x.trader_live;}).length;
+    document.getElementById('pTraders').textContent = up + ' of ' + INSTS.length + ' traders up';
+    document.getElementById('pLive').style.display = live ? '' : 'none';
+    renderInsts();
+    INSTS.forEach(function(x){
+      API('performance?instance='+x.id).then(function(p){ PERF[x.id]=p; renderInsts(); renderKpis(); })
+        .catch(function(){});
+    });
+  });
+  API('alerts').then(function(a){
+    var h = (a.data_age_min||0)/60;
+    var el = document.getElementById('pData');
+    el.className = 'pill' + (h > 24 ? ' warn' : '');
+    el.textContent = 'backtest data ' + (h<1 ? Math.round(a.data_age_min)+'m' : h.toFixed(1)+'h') + ' old';
+    renderRules(a);
+  });
+  document.getElementById('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
+  planKill(document.getElementById('pos'));
+}
+
+function renderKpis(){
+  var d1=0,d7=0,d30=0,tr=0;
+  INSTS.forEach(function(x){ var p=PERF[x.id]; if(!p||!p.windows) return;
+    d1+=p.windows['24h'].realized; d7+=p.windows['7d'].realized;
+    d30+=p.windows['30d'].realized; tr+=p.windows['30d'].trades; });
+  document.getElementById('kpis').innerHTML =
+    kpi('Realized 24h', money(d1), '', d1) + kpi('Realized 7d', money(d7), '', d7) +
+    kpi('Realized 30d', money(d30), tr+' closed trades', d30) +
+    kpi('Instances', String(INSTS.length),
+        INSTS.filter(function(x){return x.trader_live;}).length + ' live', 0);
+}
+function kpi(l,v,s,sign){
+  return '<div class="card kpi"><div class="body"><div class="l">'+l+'</div>'+
+    '<div class="v '+(sign>0?'up':sign<0?'down':'')+'">'+v+'</div>'+
+    '<div class="s">'+(s||'&nbsp;')+'</div></div></div>';
+}
+
+function renderInsts(){
+  document.getElementById('insts').innerHTML =
+   '<table><thead><tr><th>Instance</th><th>Account</th><th>Mode</th><th>State</th>'+
+   '<th class="n">24h</th><th class="n">7d</th><th class="n">30d</th><th class="n">Win</th>'+
+   '<th>Config</th></tr></thead><tbody>' +
+   INSTS.map(function(x){
+     var p = PERF[x.id] || {}, w = p.windows;
+     function c(k){ return w ? '<td class="n '+cls(w[k].realized)+'">'+money(w[k].realized)+'</td>'
+                             : '<td class="n dim">…</td>'; }
+     var st = x.trader_running
+       ? (x.trader_live ? '<span class="tag live">RUNNING — LIVE</span>'
+                        : '<span class="tag g">running (dry)</span>')
+       : '<span class="tag b">stopped</span>';
+     return '<tr><td><b>'+(x.name||('Instance '+x.id))+'</b></td>'+
+       '<td>'+(p.account||'—')+'</td>'+
+       '<td><span class="tag '+(p.mode==='spot'?'spot':'lev')+'">'+(p.mode||'?')+'</span></td>'+
+       '<td>'+st+'</td>'+c('24h')+c('7d')+c('30d')+
+       '<td class="n">'+(w&&w['30d'].trades ? Math.round(100*w['30d'].wins/w['30d'].trades)+'%' : '—')+'</td>'+
+       '<td class="mini">'+(x.cfg||'')+'</td></tr>';
+   }).join('') + '</tbody></table>';
+}
+
+// the kill-switch planner doubles as an exchange-truth position reader
+function planKill(target){
+  return API('killall', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body: JSON.stringify({plan:true})})
+    .then(function(r){
+      if(!target) return r;
+      var rows = (r.report||[]).filter(function(x){
+        return x.step==='would_close' || x.step==='would_sell' || x.step==='skip_excluded' || x.step==='skip_dust'; });
+      target.innerHTML = rows.length ? '<table><thead><tr><th>Account</th><th>Symbol</th>'+
+        '<th class="n">Size</th><th>Status</th></tr></thead><tbody>' + rows.map(function(x){
+          var t = x.step==='would_close' ? '<span class="tag live">open '+(x.side||'')+'</span>'
+                : x.step==='would_sell' ? '<span class="tag lev">holding</span>'
+                : x.step==='skip_excluded' ? '<span class="tag b">excluded — '+x.why+'</span>'
+                : '<span class="tag b">dust</span>';
+          return '<tr><td>'+x.account+'</td><td><b>'+(x.symbol||x.asset)+'</b></td>'+
+                 '<td class="n">'+(x.vol||x.qty)+'</td><td>'+t+'</td></tr>'; }).join('') +
+        '</tbody></table>' : '<span class="mini">both accounts are flat</span>';
+      return r;
+    })
+    .catch(function(){ if(target) target.innerHTML='<span class="mini down">could not reach the panel</span>'; });
+}
+
+function openKill(){
+  document.getElementById('kill').classList.add('on');
+  document.getElementById('killin').value='';
+  document.getElementById('killout').style.display='none';
+  var g=document.getElementById('killgo'); g.disabled=true; g.style.opacity='.5';
+  g.textContent='Stop everything and flatten';
+  var box=document.getElementById('planbox'); box.textContent='reading exchange…';
+  planKill(null).then(function(r){
+    if(!r){ box.textContent='could not read the exchange — do not rely on this plan'; return; }
+    box.innerHTML = '<b>'+r.summary+'</b>\n' + (r.report||[]).map(function(x){
+      return '  ' + Object.keys(x).map(function(k){ return k+'='+x[k]; }).join(' ');
+    }).join('\n');
+  });
+}
+function closeKill(){ document.getElementById('kill').classList.remove('on'); }
+document.getElementById('killin').oninput = function(){
+  var g=document.getElementById('killgo');
+  g.disabled = this.value !== 'KILL';
+  g.style.opacity = g.disabled ? '.5' : '1';
+};
+document.getElementById('killgo').onclick = function(){
+  var g=this; g.disabled=true; g.textContent='Flattening…';
+  API('killall', {method:'POST', headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({confirm:'KILL'})}).then(function(r){
+    var out=document.getElementById('killout');
+    out.style.display='';
+    out.innerHTML = '<b>'+(r.summary||r.error||'no response')+'</b>\n' +
+      (r.report||[]).map(function(x){
+        return '  ' + Object.keys(x).map(function(k){ return k+'='+x[k]; }).join(' '); }).join('\n');
+    g.textContent='Done';
+    loadAll();
+  });
+};
+
+function renderRules(a){
+  document.getElementById('rules').innerHTML =
+   '<table><thead><tr><th>Rule</th><th class="n">Threshold</th><th>State</th><th></th></tr></thead><tbody>' +
+   (a.rules||[]).map(function(r){
+     return '<tr><td>'+r.label+'</td>'+
+       '<td class="n"><input value="'+(r.threshold||'')+'" style="width:70px" '+
+         'onchange="setRule(\''+r.id+'\',{threshold:this.value})"></td>'+
+       '<td><span class="tag '+(r.enabled?'g':'b')+'">'+(r.enabled?'armed':'paused')+'</span></td>'+
+       '<td class="n"><button class="btn sm" onclick="setRule(\''+r.id+'\',{enabled:'+(!r.enabled)+'})">'+
+         (r.enabled?'Pause':'Arm')+'</button></td></tr>';
+   }).join('') + '</tbody></table>';
+  document.getElementById('alog').innerHTML = (a.log||[]).length
+    ? '<table><thead><tr><th>When</th><th>Rule</th><th>Detail</th><th>Action</th></tr></thead><tbody>' +
+      a.log.map(function(e){ return '<tr><td class="dim">'+e.t+'</td><td>'+e.label+'</td>'+
+        '<td class="mini">'+e.detail+'</td><td><span class="tag b">'+e.action+'</span></td></tr>'; }).join('') +
+      '</tbody></table>'
+    : '<div class="body"><span class="mini">nothing has fired yet</span></div>';
+}
+function setRule(id, patch){
+  patch.id = id;
+  API('alerts', {method:'POST', headers:{'Content-Type':'application/json'},
+                 body: JSON.stringify(patch)}).then(function(){ loadAll(); });
+}
+function testAlert(){
+  API('alerts', {method:'POST', headers:{'Content-Type':'application/json'},
+                 body: JSON.stringify({test:true})}).then(function(r){
+    alert(r.ok ? 'Test alert sent to WhatsApp.' : ('Delivery failed: '+(r.note||'')));
+  });
+}
+
+var btns = document.querySelectorAll('.rail button');
+for(var i=0;i<btns.length;i++){
+  btns[i].onclick = function(){
+    for(var j=0;j<btns.length;j++){ btns[j].classList.toggle('on', btns[j]===this); }
+    var g=this.getAttribute('data-go');
+    var vs=document.querySelectorAll('.view');
+    for(var k=0;k<vs.length;k++){ vs[k].classList.toggle('on', vs[k].id==='v-'+g); }
+    document.getElementById('crumb').textContent=this.title;
+  };
+}
+loadAll();
+setInterval(loadAll, 60000);
+</script></body></html>
