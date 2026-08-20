@@ -528,6 +528,162 @@ def _template_cfg(mode="lev"):
                 **({"contract_size": 1.0} if mode == "spot" else {}))
 
 
+_PERF_CACHE = {}          # (account, mode) -> {"t": epoch, "data": {...}}
+
+
+def _spot_symbols_for(cfg, sapi):
+    """Which spot pairs this instance could have traded: the ones its config
+    names, plus anything actually sitting in the account."""
+    syms = set()
+    for p in (cfg.get("contract_sizes") or {}):
+        syms.add(p)
+    cand = cfg.get("candidate") or {}
+    for c in (cand.get("components") or []):
+        if c.get("pair"):
+            syms.add(c["pair"])
+    if cfg.get("symbol"):
+        syms.add(cfg["symbol"])
+    try:
+        for b in sapi.account_info().get("balances", []):
+            a = b.get("asset")
+            if a in ("USDT", "USDC", "USD", "DAI"):
+                continue
+            if float(b.get("free") or 0) + float(b.get("locked") or 0) > 0:
+                syms.add(f"{a}_USDT")
+    except Exception:
+        pass
+    return sorted(syms)
+
+
+def _spot_realized(sapi, symbols, since_ms):
+    """Realized spot P&L by FIFO-matching fills. Spot has no P&L field: a sell
+    only becomes a gain relative to the lots it closes, so buys are queued and
+    consumed in order. A realization is dated by its SELL."""
+    events = []
+    for sym in symbols:
+        try:
+            trades = sapi.my_trades(sym, 500) or []
+        except Exception:
+            continue
+        trades.sort(key=lambda t: float(t.get("time") or 0))
+        lots = []                      # [qty, price, fee_per_unit]
+        for t in trades:
+            qty = float(t.get("qty") or 0)
+            px = float(t.get("price") or 0)
+            fee = float(t.get("commission") or 0) \
+                if str(t.get("commissionAsset") or "") in ("USDT", "") else 0.0
+            ts = float(t.get("time") or 0)
+            if not qty:
+                continue
+            if t.get("isBuyer"):
+                lots.append([qty, px, fee / qty if qty else 0.0])
+                continue
+            need, pnl = qty, -fee            # the sell's own fee
+            while need > 1e-12 and lots:
+                take = min(need, lots[0][0])
+                pnl += take * (px - lots[0][1]) - take * lots[0][2]
+                lots[0][0] -= take
+                need -= take
+                if lots[0][0] <= 1e-12:
+                    lots.pop(0)
+            if need > 1e-12:
+                # sold more than we saw bought (history window cut off, or the
+                # coins predate it) — count only the part we can price
+                pass
+            if ts >= since_ms:
+                events.append(dict(t=ts, symbol=sym, realized=pnl))
+    return events
+
+
+def _futures_realized(fapi, since_ms):
+    """Closed futures positions carry MEXC's own realized P&L."""
+    events, page = [], 1
+    while page <= 5:
+        try:
+            rows = fapi._get("/api/v1/private/position/list/history_positions",
+                             {"page_num": page, "page_size": 100}) or []
+        except Exception:
+            break
+        if not rows:
+            break
+        oldest = None
+        for r in rows:
+            ts = float(r.get("updateTime") or r.get("createTime") or 0)
+            oldest = ts if oldest is None else min(oldest, ts)
+            if ts >= since_ms:
+                events.append(dict(t=ts, symbol=r.get("symbol"),
+                                   realized=float(r.get("realised") or 0)))
+        if oldest is not None and oldest < since_ms:
+            break
+        page += 1
+    return events
+
+
+@app.route("/api/performance")
+def api_performance():
+    """Realized P&L for ONE instance's exchange account over 24h / 7d / 30d,
+    plus a cumulative series for the sparkline.
+
+    Deliberately account-based, not config-based: it answers "how is this
+    account doing", so switching the config underneath does not reset it, and
+    trades placed by hand are included."""
+    i, I = _inst()
+    try:
+        cfg = json.load(open(os.path.join(AT, I["trader"].get("config")
+                                          or I.get("cfg"))))
+    except Exception as e:
+        return jsonify(error=f"cannot read this instance's config: {e}"), 404
+    acct = cfg.get("api_account", "mexc1")
+    mode = cfg.get("mode", "lev")
+    now = time.time() * 1000
+    key = (acct, mode)
+    if not request.args.get("force") and key in _PERF_CACHE \
+            and time.time() - _PERF_CACHE[key]["t"] < 60:
+        return jsonify(_PERF_CACHE[key]["data"])
+    since = now - 30 * 86400 * 1000
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcFuturesAPI, MexcSpotAPI
+    try:
+        if mode == "spot":
+            sapi = MexcSpotAPI(account=acct)
+            events = _spot_realized(sapi, _spot_symbols_for(cfg, sapi), since)
+            source = "spot fills, FIFO-matched (fees included)"
+        else:
+            events = _futures_realized(MexcFuturesAPI(account=acct), since)
+            source = "closed futures positions (MEXC realized P&L)"
+    except Exception as e:
+        return jsonify(error=f"{type(e).__name__}: {e}"), 502
+    events.sort(key=lambda e: e["t"])
+    win = {}
+    for label, days in (("24h", 1), ("7d", 7), ("30d", 30)):
+        lo = now - days * 86400 * 1000
+        sel = [e for e in events if e["t"] >= lo]
+        win[label] = dict(realized=round(sum(e["realized"] for e in sel), 4),
+                          trades=len(sel),
+                          wins=sum(1 for e in sel if e["realized"] > 0))
+    cum, series = 0.0, []
+    for e in events:
+        cum += e["realized"]
+        series.append(dict(t=int(e["t"]), cum=round(cum, 4),
+                           pnl=round(e["realized"], 4), symbol=e["symbol"]))
+    by_sym = {}
+    for e in events:
+        s = by_sym.setdefault(e["symbol"], dict(symbol=e["symbol"],
+                                                realized=0.0, trades=0))
+        s["realized"] += e["realized"]
+        s["trades"] += 1
+    for s in by_sym.values():
+        s["realized"] = round(s["realized"], 4)
+    data = dict(account=acct, mode=mode, instance=i,
+                instance_name=I.get("name"), windows=win, series=series,
+                by_symbol=sorted(by_sym.values(),
+                                 key=lambda s: -abs(s["realized"]))[:8],
+                source=source, as_of=time.strftime("%Y-%m-%d %H:%M:%S"))
+    _PERF_CACHE[key] = dict(t=time.time(), data=data)
+    return jsonify(data)
+
+
 @app.route("/api/router_components")
 def router_components():
     """The component RUNS behind one router/combo run, read from its

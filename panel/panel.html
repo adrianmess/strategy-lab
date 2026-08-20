@@ -289,6 +289,9 @@ function instCard(i){
   <div class="row" style="margin-top:6px"><span class="note" id="cfgSummary_${i}">…</span></div>
   <div class="row" style="margin-top:4px"><span class="note"><b>Dry-run</b> = full strategy on live prices, orders only LOGGED. <b>LIVE</b> sends real orders through this instance's executor.</span></div>
   <div id="posbox_${i}" class="row" style="margin-top:10px"></div>
+  <div id="perf_${i}" style="margin-top:10px;border:1px solid var(--border);border-radius:6px;padding:8px 12px">
+    <span class="kv">loading performance…</span>
+  </div>
   <div class="warnbox" id="levwarn_${i}" style="display:none">
     This config is <b>leveraged with NO stop loss</b>. A March-2024-style move liquidates the position.
     Dry-run first; size only what you can lose entirely.
@@ -378,6 +381,7 @@ function renderInstances(){
   INSTS.forEach(x=>{
     $('icard_'+x.id).style.display = (LAYOUT==='cols' || x.id===CUR) ? '' : 'none';
     $('wHeadless_'+x.id).checked = !!x.headless;
+    if(typeof perfRender==='function') perfRender(x.id);  // from cache, no flash
     const nm = $('iname_'+x.id);
     if(nm) nm.innerHTML = `${x.name||('Instance '+x.id)}
       <button class="small" style="padding:0 6px" title="rename this instance" onclick="renameInstance('${x.id}')">✎</button>
@@ -811,6 +815,63 @@ async function manual(i, action){
   box.textContent = JSON.stringify(r, null, 1);
 }
 
+// ---------------- per-instance performance ----------------
+// Realized P&L for the ACCOUNT this instance trades, so it survives a config
+// swap and includes anything placed by hand. Refreshed on its own slow timer:
+// it hits MEXC history endpoints, which are not worth the 4s card poll.
+const PERF = {};                       // id -> last payload (keeps the card up
+                                       // through a re-render, no empty flash)
+function perfSpark(series, w=200, h=34){
+  if(!series || series.length < 2) return '';
+  const xs = series.map(p=>p.t), ys = series.map(p=>p.cum);
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(0,...ys), y1=Math.max(0,...ys);
+  const sx = t => x1===x0 ? w : ((t-x0)/(x1-x0))*w;
+  const sy = v => y1===y0 ? h/2 : h - ((v-y0)/(y1-y0))*h;
+  const pts = series.map(p=>`${sx(p.t).toFixed(1)},${sy(p.cum).toFixed(1)}`).join(' ');
+  const last = ys[ys.length-1];
+  const col = last>=0 ? 'var(--green,#3fb950)' : 'var(--red,#f85149)';
+  const zero = (y0<0 && y1>0) ? `<line x1="0" y1="${sy(0).toFixed(1)}" x2="${w}" y2="${sy(0).toFixed(1)}" stroke="var(--border)" stroke-dasharray="2,3"/>` : '';
+  // pad by a pixel or two so the stroke and the end dot are not clipped by the
+  // viewBox, and keep the svg on the text baseline of the figures beside it
+  const P = 3;
+  return `<svg width="${w+2*P}" height="${h+2*P}" viewBox="${-P} ${-P} ${w+2*P} ${h+2*P}"
+       style="display:inline-block;vertical-align:middle">
+    ${zero}<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.6"
+       stroke-linejoin="round"/>
+    <circle cx="${sx(xs[xs.length-1]).toFixed(1)}" cy="${sy(last).toFixed(1)}" r="2.5" fill="${col}"/>
+  </svg>`;
+}
+function perfRender(i){
+  const box = $('perf_'+i); if(!box) return;
+  const d = PERF[i];
+  if(!d){ box.innerHTML = '<span class="kv">loading performance…</span>'; return; }
+  if(d.error){ box.innerHTML = `<span class="kv">performance unavailable: ${d.error}</span>`; return; }
+  const money = v => (v>=0?'+':'') + v.toFixed(2);
+  const cell = (label, w) => `<span style="margin-right:16px">
+      <span class="kv">${label}</span>
+      <b class="${w.realized>=0?'pos':'neg'}" style="font-size:15px">${money(w.realized)}</b>
+      <span class="kv">USDT · ${w.trades} trade${w.trades===1?'':'s'}${w.trades?` · ${Math.round(100*w.wins/w.trades)}% win`:''}</span>
+    </span>`;
+  box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div><b>Performance</b> <span class="kv">— realized on ${d.account} (this instance's account, whatever config is loaded)</span></div>
+      <button class="small" onclick="loadPerf('${i}',true)" title="re-read the exchange history now">↻</button>
+    </div>
+    <div class="row" style="margin-top:6px;align-items:center;flex-wrap:wrap">
+      ${cell('24h', d.windows['24h'])}${cell('7d', d.windows['7d'])}${cell('30d', d.windows['30d'])}
+      <span title="cumulative realized P&L over the last 30 days">${perfSpark(d.series)}</span>
+    </div>
+    <div class="row" style="margin-top:4px">
+      <span class="note">${d.source}${d.by_symbol.length?' · '+d.by_symbol.map(s=>`${s.symbol.split('_')[0]} ${money(s.realized)}`).join(' · '):''}</span>
+    </div>`;
+}
+async function loadPerf(i, force){
+  try{
+    PERF[i] = await api('performance?instance='+i+(force?'&force=1':''));
+  }catch(e){ PERF[i] = {error:'could not reach the panel'}; }
+  perfRender(i);
+}
+function loadPerfAll(){ INSTS.forEach(x=>loadPerf(x.id)); }
+
 // ---------------- MEXC account info ----------------
 const fnum = (x, d=2) => (x==null || isNaN(+x)) ? '—' : (+x).toLocaleString(undefined,{maximumFractionDigits:d});
 async function refreshMexc(force){
@@ -1075,8 +1136,9 @@ async function fixCaches(){
 }
 // the account card can only be scoped once instances AND their configs are
 // known, so chain it rather than firing it blind alongside them
-Promise.all([loadInstances(), refreshConfigs()]).then(()=>refreshMexc());
+Promise.all([loadInstances(), refreshConfigs()]).then(()=>{ refreshMexc(); loadPerfAll(); });
 loadSettings(); runDoctor(); refreshProcs();
+setInterval(loadPerfAll, 120000);   // exchange history: slow lane
 setInterval(refresh, 4000);
 setInterval(refreshConfigs, 20000);
 setInterval(refreshProcs, 10000);
