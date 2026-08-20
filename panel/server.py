@@ -82,8 +82,17 @@ def _inst():
             or (request.get_json(silent=True) or {}).get("instance") or "1")
     if i not in instances:
         from flask import abort
-        abort(404, description=f"no instance {i}")
+        abort(404, description=f"no instance with id {i}")
     return i, instances[i]
+
+def _iname(i):
+    """Human label for an instance. The panel only ever shows NAMES ("MEX Lev
+    1"), never the numeric id, so a message saying "instance 4" is unreadable
+    to the person reading it. Name first, id in brackets for the logs."""
+    I = instances.get(str(i)) or {}
+    nm = I.get("name")
+    return f"{nm} (#{i})" if nm else f"instance {i}"
+
 
 def _webhook_log(i):
     return os.path.join(JOBS_DIR, "webhook_server.log" if i == "1"
@@ -375,7 +384,7 @@ def trader_start():
     i, I = _inst()
     t = I["trader"]
     if t["proc"] is not None and t["proc"].poll() is None:
-        return jsonify(error=f"instance {i}: trader already running"), 400
+        return jsonify(error=f"{_iname(i)}: trader already running"), 400
     cfg_name = d.get("config", I["cfg"] or "config.json")
     live = bool(d.get("live"))
     if live and d.get("confirm") != "LIVE":
@@ -388,7 +397,7 @@ def trader_start():
             theirs = _state_file_of(tj["config"] or J["cfg"] or "config.json")
             if mine and theirs and mine == theirs:
                 return jsonify(error=(
-                    f"instance {j}'s running trader uses the same state file "
+                    f"{_iname(j)}'s running trader uses the same state file "
                     f"('{mine}') as {cfg_name}. Give this instance its own config "
                     f"with distinct state_file/log_file/webhook_url.")), 400
     cmd = [sys.executable, "trader.py"] + (["--live"] if live else [])
@@ -799,7 +808,7 @@ def webhook_start():
     i, I = _inst()
     wh = I["webhook"]
     if wh["proc"] is not None and wh["proc"].poll() is None:
-        return jsonify(error=f"instance {i}: executor already running"), 400
+        return jsonify(error=f"{_iname(i)}: executor already running"), 400
     d = request.get_json(force=True) or {}
     want = int(d.get("port", I["port"] or 5001))
     if want == 5000:
@@ -869,7 +878,7 @@ def webhook_force_stop():
                 p.wait(timeout=3)
             except Exception:
                 p.kill()
-            killed.append(f"panel-started executor, instance {j} (pid {p.pid})")
+            killed.append(f"panel-started executor, {_iname(j)} (pid {p.pid})")
     for port in range(5001, 5012):
         try:
             out = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
@@ -1288,11 +1297,11 @@ def instances_remove():
         return jsonify(error="can't remove the last instance"), 400
     I = instances.get(i)
     if not I:
-        return jsonify(error=f"no instance {i}"), 404
+        return jsonify(error=f"no instance with id {i}"), 404
     for kind in ("trader", "webhook"):
         p = I[kind]["proc"]
         if p is not None and p.poll() is None:
-            return jsonify(error=f"instance {i}'s {kind} is running — stop it first"), 400
+            return jsonify(error=f"{_iname(i)}'s {kind} is running — stop it first"), 400
     del instances[i]
     _save_instances()
     return jsonify(ok=True)
@@ -2261,7 +2270,7 @@ def clear_bot_position():
         # check would let this wipe a running live trader's position
         if (t.get("config") or I.get("cfg")) == name or (
                 _mine and _theirs and _mine == _theirs):
-            return jsonify(error=(f"instance {I.get('name') or i} is RUNNING "
+            return jsonify(error=(f"{_iname(i)} is RUNNING "
                                   f"a config with the same state file — stop "
                                   f"it first, or close from its card")), 400
     c = json.load(open(path))
@@ -2306,7 +2315,7 @@ def trader_config_delete():
         t = I["trader"]
         running = t["proc"] is not None and t["proc"].poll() is None
         if running and (t.get("config") or I.get("cfg")) == name:
-            return jsonify(error=(f"instance {I.get('name') or i} is RUNNING "
+            return jsonify(error=(f"{_iname(i)} is RUNNING "
                                   f"this config — stop it first")), 400
     used_by = [I.get("name") or i for i, I in instances.items()
                if (I.get("cfg") == name

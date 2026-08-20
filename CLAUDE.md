@@ -37,6 +37,10 @@ ssh -i ~/.ssh/lab_auto_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=no
   (`/api/instances` → `trader_live`); a plain restart silently downgrades
   live→dry (this bit us once).
 - Don't override pause states on workers — they may be deliberate.
+- ALWAYS call an instance by its panel NAME ("MEX Lev 1", "MEX2 Spot"), never
+  by its numeric id — the ids appear nowhere in the UI, so "instance 4" means
+  nothing to Adrian. Look names up in `/api/instances` (`name` field) before
+  writing about one. Same rule in code: user-facing strings use `_iname(i)`.
 - MEXC private API only via the Decodo proxy pool
   (`adaptive_trader/proxy_pool.json`, per-account ports); klines REST and
   WebSocket go DIRECT. Keys are IP-whitelisted to the proxy IPs.
