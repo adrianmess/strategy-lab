@@ -248,13 +248,30 @@ let LAYOUT = localStorage.getItem('instLayout') || 'tabs';
 let TCONFIGS = [];                    // trader config files (shared)
 const _shotAuto = {};                 // instance -> interval id
 
+// Last known trader state per instance. Rebuilding a card used to hardcode
+// "stopped" + a red dot and wait for /api/status to correct it — which is the
+// red blink and the "stopped" flash when switching tabs. Seed from what we
+// already know: the live status cache, else the flags /api/instances carried.
+const ISTATE = {};                       // id -> {running, live}
+function knownState(i){
+  if(ISTATE[i]) return ISTATE[i];
+  const x = INSTS.find(v=>v.id===i) || {};
+  return {running: !!x.trader_running, live: !!x.trader_live};
+}
+function stateLabel(s){
+  return s.running
+    ? (s.live ? '<span style="color:var(--red);font-weight:700">RUNNING — LIVE</span>'
+              : 'running (dry-run)')
+    : 'stopped';
+}
 function instCard(i){
+  const st = knownState(i);
   return `<div class="card icard" id="icard_${i}">
   <div class="iname" id="iname_${i}">Instance ${i}</div>
   <div id="poshero_${i}" style="display:none;border:1px solid var(--green,#2f9e63);border-left:4px solid var(--green,#2f9e63);padding:10px 14px;margin:6px 0 10px;background:rgba(60,180,110,.07)"></div>
   <div class="row" style="justify-content:space-between">
     <div>
-      <span id="tdot_${i}" class="dot off"></span><b id="tstate_${i}">stopped</b>
+      <span id="tdot_${i}" class="dot ${st.running?'on':'off'}"></span><b id="tstate_${i}">${stateLabel(st)}</b>
       <span id="tacct_${i}"></span>
       <span class="kv" id="tinfo_${i}"></span>
     </div>
@@ -353,7 +370,7 @@ function renderInstances(){
        ondragstart="_dragId='${x.id}'" ondragover="event.preventDefault()"
        ondrop="tabDrop('${x.id}')"
        title="click to switch · double-click to rename · drag to reorder (display only)">
-       <span class="dot off" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)}<span id="taberr_${x.id}" style="display:none;margin-left:4px" title="this instance has API errors — see the banner above its trader log">⚠️</span></span>`).join('') : '';
+       <span class="dot ${knownState(x.id).running?'on':'off'}" id="tabdot_${x.id}"></span>${x.name||('Instance '+x.id)}<span id="taberr_${x.id}" style="display:none;margin-left:4px" title="this instance has API errors — see the banner above its trader log">⚠️</span></span>`).join('') : '';
   tabs.style.display = LAYOUT==='tabs' ? 'flex' : 'none';
   wrap.className = LAYOUT==='cols' ? 'cols' : '';
   $('main').className = LAYOUT==='cols' ? 'cols' : '';
@@ -369,9 +386,24 @@ function renderInstances(){
   fillCfgSelects();
   refresh();
 }
-function switchTab(i){ CUR = i; localStorage.setItem('curInst', i); renderInstances();
+function switchTab(i){
+  CUR = i; localStorage.setItem('curInst', i);
+  // Switching tabs is a VISIBILITY change, not a reason to rebuild every card
+  // from scratch — that threw away live state (and every select's value) and
+  // repainted the defaults until the next poll answered. Just show/hide.
+  if($('icard_'+i)){
+    INSTS.forEach(x=>{
+      const c = $('icard_'+x.id);
+      if(c) c.style.display = (LAYOUT==='cols' || x.id===CUR) ? '' : 'none';
+      const t = $('tab_'+x.id);
+      if(t) t.classList.toggle('here', x.id===CUR);
+    });
+  } else {
+    renderInstances();          // first paint / instance list changed
+  }
   if(typeof refreshMexc==='function') refreshMexc();   // scope the account card to this instance
   if(typeof loadTrades==='function') loadTrades();     // and the trades table
+  refresh();
 }
 function toggleLayout(){
   LAYOUT = LAYOUT==='tabs' ? 'cols' : 'tabs';
@@ -573,14 +605,12 @@ function updateCfgSummary(i){
 async function refreshInst(i){
   try{
     const s = await api('status?instance='+i);
+    ISTATE[i] = {running: !!s.running, live: !!s.live};   // seeds the next re-render
     // dot = process health (green running / red stopped); LIVE vs dry shows in the label
     const dot = s.running ? 'on' : 'off';
     $('tdot_'+i).className = 'dot ' + dot;
     const td = $('tabdot_'+i); if(td) td.className = 'dot ' + dot;
-    $('tstate_'+i).innerHTML = s.running
-      ? (s.live ? '<span style="color:var(--red);font-weight:700">RUNNING — LIVE</span>'
-                : 'running (dry-run)')
-      : 'stopped';
+    $('tstate_'+i).innerHTML = stateLabel(s);
     $('tacct_'+i).innerHTML = venueBadge(s.api_account, s.execution, s.mode);
     $('tinfo_'+i).textContent = ` · ${s.config} · mode ${s.mode||'?'} · method ${s.method||'?'} · equity $${s.equity_usdt}` + (s.started?` · since ${s.started}`:'');
     $('levwarn_'+i).style.display = (s.mode==='lev')?'block':'none';
