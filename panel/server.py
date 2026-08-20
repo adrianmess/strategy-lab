@@ -1125,6 +1125,140 @@ def api_performance():
     return jsonify(data)
 
 
+_TICK = {"t": 0, "data": []}
+
+
+@app.route("/api/ticker")
+def api_ticker():
+    """Last price + 24h change for the pairs this lab trades. One public
+    request to the futures ticker endpoint (direct, unkeyed — the proxy pool
+    is only for private calls), cached 15s."""
+    if time.time() - _TICK["t"] < 15 and _TICK["data"]:
+        return jsonify(_TICK["data"])
+    want = ["BTC_USDT", "ETH_USDT", "SOL_USDT", "DOGE_USDT", "SUI_USDT",
+            "XRP_USDT", "HYPE_USDT"]
+    out = []
+    try:
+        import requests
+        rows = requests.get("https://contract.mexc.com/api/v1/contract/ticker",
+                            timeout=8).json().get("data") or []
+        by = {r.get("symbol"): r for r in rows}
+        for s in want:
+            r = by.get(s) or {}
+            if not r:
+                continue
+            out.append(dict(symbol=s.split("_")[0],
+                            price=r.get("lastPrice"),
+                            change=round(100 * float(r.get("riseFallRate") or 0), 2)))
+    except Exception as e:
+        return jsonify([]), 200 if not _TICK["data"] else 200
+    if out:
+        _TICK.update(t=time.time(), data=out)
+    return jsonify(out)
+
+
+_BTIDX = {"built": 0, "rows": [], "building": False}
+BT_INDEX_P = os.path.join(DASH, "bt_index.json")
+
+
+def _bt_verdict(name, kind):
+    if name.endswith("_fcfs_wf") or "walk-forward" in (kind or "").lower():
+        return "Honest"
+    if name.endswith(("_fcfs_full", "_router_full")):
+        return "Optimistic"
+    if name.endswith(("_oosbest_full", "_oosbest")):
+        return "Passed"
+    return "Train-best"
+
+
+def _bt_index_build():
+    """Lite index of dashboard/backtests.js.
+
+    That file is ~500MB, so the Backtests page shipping the whole thing to the
+    browser is why it takes so long to become interactive. Decode ONE entry at
+    a time (raw_decode over the buffer) so 30k parsed objects never coexist,
+    keep ~10 scalar fields each, and cache the result to disk so a restart is
+    instant."""
+    _BTIDX["building"] = True
+    try:
+        p = os.path.join(DASH, "backtests.js")
+        mt = os.path.getmtime(p)
+        if os.path.exists(BT_INDEX_P) \
+                and os.path.getmtime(BT_INDEX_P) >= mt:
+            _BTIDX["rows"] = json.load(open(BT_INDEX_P))
+            _BTIDX["built"] = mt
+            return
+        s = open(p).read()
+        dec = json.JSONDecoder()
+        i = s.index("[") + 1
+        n = len(s)
+        rows = []
+        while True:
+            while i < n and s[i] in " \t\r\n,":
+                i += 1
+            if i >= n or s[i] == "]":
+                break
+            obj, i = dec.raw_decode(s, i)
+            st = obj.get("stats") or {}
+            nm = obj.get("name") or ""
+            rows.append(dict(
+                name=nm, verdict=_bt_verdict(nm, obj.get("kind")),
+                kind=obj.get("kind"), pair=obj.get("pair"),
+                tf=obj.get("timeframe"), mode=obj.get("mode"),
+                strategy=obj.get("strategy"), created=obj.get("created"),
+                growth=st.get("monthly_growth_pct"), mult=st.get("total_mult"),
+                dd=st.get("maxdd_mtm"), n=st.get("n"), win=st.get("win"),
+                liq=st.get("liq")))
+        del s
+        rows.sort(key=lambda r: (r.get("created") or ""), reverse=True)
+        _BTIDX["rows"] = rows
+        _BTIDX["built"] = mt
+        try:
+            json.dump(rows, open(BT_INDEX_P, "w"))
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"bt index: {e}", flush=True)
+    finally:
+        _BTIDX["building"] = False
+
+
+@app.route("/api/backtests_lite")
+def backtests_lite():
+    """Paged, filtered backtest rows — scalars only, never the curves."""
+    p = os.path.join(DASH, "backtests.js")
+    try:
+        mt = os.path.getmtime(p)
+    except Exception:
+        return jsonify(rows=[], total=0, state="no file")
+    if _BTIDX["built"] < mt and not _BTIDX["building"]:
+        threading.Thread(target=_bt_index_build, daemon=True).start()
+    if not _BTIDX["rows"]:
+        return jsonify(rows=[], total=0,
+                       state="building" if _BTIDX["building"] else "queued")
+    rows = _BTIDX["rows"]
+    q = (request.args.get("q") or "").lower()
+    verdict = request.args.get("verdict") or ""
+    mode = request.args.get("mode") or ""
+    if q:
+        rows = [r for r in rows if q in (r["name"] or "").lower()]
+    if verdict:
+        rows = [r for r in rows if r["verdict"] == verdict]
+    if mode:
+        rows = [r for r in rows if r.get("mode") == mode]
+    total = len(rows)
+    sort = request.args.get("sort") or "growth"
+    if sort == "growth":
+        rows = sorted(rows, key=lambda r: (r.get("growth") is None,
+                                           -(r.get("growth") or 0)))
+    try:
+        lim = max(1, min(300, int(request.args.get("limit") or 60)))
+    except Exception:
+        lim = 60
+    return jsonify(rows=rows[:lim], total=total,
+                   indexed=len(_BTIDX["rows"]), state="ready")
+
+
 @app.route("/api/router_components")
 def router_components():
     """The component RUNS behind one router/combo run, read from its

@@ -69,6 +69,16 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .plan{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px;
  font-family:var(--mono);font-size:11.5px;line-height:1.7;max-height:210px;overflow:auto;margin:11px 0}
 .banner{background:rgba(76,141,255,.08);border-bottom:1px solid rgba(76,141,255,.3);padding:7px 14px;font-size:12px}
+.ticker{display:flex;border-bottom:1px solid var(--line);background:var(--panel);overflow-x:auto}
+.tk{padding:7px 14px;border-right:1px solid var(--line);white-space:nowrap;font-size:12px;transition:background .5s}
+.tk b{font-family:var(--mono);margin-left:6px}
+.rcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:17px}
+.rcard h4{margin:0 0 13px;font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.bar{height:5px;border-radius:99px;background:var(--panel2);overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--violet))}
+.bar.g i{background:var(--up)}.bar.r i{background:var(--down)}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.scroll{max-height:420px;overflow:auto}
 .rowsb{display:flex;justify-content:space-between;align-items:center;gap:10px}
 @media(max-width:900px){.shell{grid-template-columns:1fr}
  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:54px;width:100%;flex-direction:row;
@@ -80,12 +90,18 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
   <div class="logo">SL</div>
   <button class="on" data-go="overview" title="Overview">&#9635;</button>
   <button data-go="instances" title="Instances">&#9881;</button>
+  <button data-go="risk" title="Risk">&#9888;</button>
+  <button data-go="history" title="History">&#8801;</button>
+  <button data-go="backtests" title="Backtests">&#9636;</button>
+  <button data-go="optimize" title="Optimize">&#10022;</button>
+  <button data-go="progress" title="Progress">&#9719;</button>
   <button data-go="alerts" title="Alerts">&#9873;</button>
 </nav>
 <div class="main">
   <div class="banner">New UI — instance controls are <b>live and place real orders</b>. The classic panel is
     untouched at <a href="/" style="color:var(--blue)">/</a>; not yet ported here: executor (Playwright)
     controls, trader settings, quick backtest, jobs, processes, optimize and backtests pages.</div>
+  <div class="ticker" id="tick"></div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <span class="crumb" id="crumb">Overview</span>
@@ -102,10 +118,99 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 
   <section class="view on" id="v-overview"><div class="wrap">
     <div class="g4" id="kpis"></div>
+    <div class="g2">
+      <div class="card"><h3>Cumulative realized P&amp;L — 30d <span class="mini">both accounts</span></h3>
+        <div class="body" id="bigchart"><span class="mini">loading…</span></div></div>
+      <div class="card"><h3>Accounts</h3><div class="body" id="accts"><span class="mini">loading…</span></div></div>
+    </div>
     <div class="card"><h3>Instances <span class="mini">live from /api/instances + /api/performance</span></h3>
       <div id="insts"></div></div>
     <div class="card"><h3>Open positions <span class="mini">exchange truth via the kill-switch planner</span></h3>
       <div class="body" id="pos"><span class="mini">loading…</span></div></div>
+  </div></section>
+
+  <section class="view" id="v-risk"><div class="wrap">
+    <div class="g4" id="riskkpi"></div>
+    <div class="g2">
+      <div class="card"><h3>Open positions — distance to liquidation</h3><div id="risktbl"></div></div>
+      <div class="card"><h3>Standing risk rules</h3><div class="body" id="riskrules"></div></div>
+    </div>
+    <div class="card"><h3>Exposure by pair — realized, last 30 days</h3><div id="expo"></div></div>
+  </div></section>
+
+  <section class="view" id="v-history"><div class="wrap">
+    <div class="card"><h3>Filters</h3><div class="body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="hInst" onchange="renderHistory()"><option value="">All instances</option></select>
+      <select id="hSym" onchange="renderHistory()"><option value="">All pairs</option></select>
+      <select id="hOut" onchange="renderHistory()"><option value="">All outcomes</option>
+        <option value="win">Winners</option><option value="loss">Losers</option></select>
+      <span class="mini" id="hCount"></span></div></div>
+    <div class="card"><h3>Closed positions <span class="mini">realized P&amp;L from the exchange</span></h3>
+      <div class="scroll" id="hist"></div></div>
+  </div></section>
+
+  <section class="view" id="v-backtests"><div class="wrap">
+    <div class="card"><h3>Filters <span class="mini" id="btState"></span></h3>
+      <div class="body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="bMode" onchange="loadBT()"><option value="">all modes</option>
+          <option value="lev">lev</option><option value="spot">spot</option></select>
+        <select id="bVerdict" onchange="loadBT()"><option value="">any verdict</option>
+          <option>Honest</option><option>Optimistic</option><option>Passed</option>
+          <option>Train-best</option></select>
+        <input id="bQ" placeholder="search name" style="min-width:190px" onchange="loadBT()">
+        <button class="btn sm" onclick="loadBT()">Search</button></div></div>
+    <div class="card"><h3>Published backtests <span class="mini">sorted by growth/mo</span></h3>
+      <div class="scroll" id="bt"></div></div>
+  </div></section>
+
+  <section class="view" id="v-optimize"><div class="wrap" style="gap:16px">
+    <div class="g2" style="gap:16px">
+      <div class="rcard"><h4>New search</h4>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:11px">
+          <label class="mini">Strategy<br><select id="oStrat" style="width:100%;margin-top:4px">
+            <option value="v7">V7 full-param</option><option value="scalpx2">ScalpX2</option>
+            <option value="macdx">MACD Cross</option></select></label>
+          <label class="mini">Mode<br><select id="oMode" style="width:100%;margin-top:4px">
+            <option>lev</option><option>spot</option></select></label>
+          <label class="mini">Regime<br><select id="oReg" style="width:100%;margin-top:4px">
+            <option>vol3</option><option>trend3</option><option>volXtrend9</option><option>none</option></select></label>
+          <label class="mini">Holdout<br><select id="oHold" style="width:100%;margin-top:4px">
+            <option>after</option><option>before</option><option>alternating</option></select></label>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:13px">
+          <label class="mini">Evals<br><input id="oEvals" value="100000" style="width:100%;margin-top:4px"></label>
+          <label class="mini">Pairs<br><input id="oPairs" value="SOL" style="width:100%;margin-top:4px"></label>
+          <label class="mini">Timeframe<br><select id="oTf" style="width:100%;margin-top:4px">
+            <option>1m</option><option>3m</option><option>5m</option></select></label>
+        </div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap">
+          <button class="btn blue" onclick="startSearch()">Start search</button>
+          <button class="btn" onclick="location.href='/dashboard/optimize.html'">Queue campaign</button>
+          <button class="btn" onclick="location.href='/dashboard/optimize.html'">Gamut runner</button></div>
+        <div class="mini" style="margin-top:9px">Campaigns and the gamut runner still live on the classic
+          Optimize page — this starts a single search.</div></div>
+      <div class="rcard"><h4>Running</h4><div id="ojobs"><span class="mini">loading…</span></div></div>
+    </div>
+    <div class="g2" style="gap:16px">
+      <div class="rcard"><h4>Recent runs</h4><div class="scroll" id="oruns"></div></div>
+      <div class="rcard"><h4>Promote <span class="tag v" id="promoN">0 selected</span></h4>
+        <div class="mini" style="margin-bottom:10px">Tick components on the Backtests page, then build a
+          router from them.</div>
+        <div id="promo"><span class="mini">nothing selected</span></div>
+        <div style="display:flex;gap:8px;margin-top:13px">
+          <button class="btn blue" style="flex:1" onclick="location.href='/dashboard/optimize.html'">Build FCFS router</button>
+          <button class="btn" onclick="PROMO=[];renderPromo()">Clear</button></div></div>
+    </div>
+  </div></section>
+
+  <section class="view" id="v-progress"><div class="wrap" style="gap:16px">
+    <div class="g4" id="pkpi"></div>
+    <div class="g2" style="gap:16px">
+      <div class="rcard"><h4>Per pair</h4><div id="ppair"><span class="mini">loading…</span></div></div>
+      <div class="rcard"><h4>Worker systems</h4><div id="pwork"><span class="mini">loading…</span></div>
+        <h4 style="margin:20px 0 10px">Failures <span class="tag live" id="pfailN">0</span></h4>
+        <div id="pfail"></div></div>
+    </div>
   </div></section>
 
   <section class="view" id="v-instances"><div class="wrap" id="icards"></div></section>
@@ -153,7 +258,8 @@ function loadAll(){
     renderInsts();
     INSTS.forEach(function(x){
       API('performance?instance='+x.id).then(function(p){
-        PERF[x.id]=p; renderInsts(); renderKpis(); renderCards(); }).catch(function(){});
+        PERF[x.id]=p; renderInsts(); renderKpis(); renderCards();
+        renderChart(); renderAccounts(); renderRisk(); renderHistory(); }).catch(function(){});
     });
     loadStatus();
   });
@@ -207,6 +313,348 @@ function renderInsts(){
    }).join('') + '</tbody></table>';
 }
 
+// ---------------- ticker ----------------
+function loadTicker(){
+  API('ticker').then(function(rows){
+    if(!rows || !rows.length) return;
+    var el = document.getElementById('tick');
+    var sig = rows.map(function(r){return r.symbol+r.price;}).join();
+    if(el._sig === sig) return;
+    el._sig = sig;
+    el.innerHTML = rows.map(function(r){
+      var k = r.change>=0 ? 'up' : 'down';
+      return '<div class="tk"><span class="dim">'+r.symbol+'</span>'+
+        '<b class="'+k+'">'+r.price+'</b> <span class="'+k+'" style="font-size:11px">'+
+        (r.change>=0?'+':'')+r.change+'%</span></div>';
+    }).join('');
+  }).catch(function(){});
+}
+
+// ---------------- charts (Command-style gradient area) ----------------
+function area(vals, w, h, c1, c2){
+  if(!vals || vals.length < 2) return '<span class="mini">not enough closed trades yet</span>';
+  var all = vals.concat([0]);
+  var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+  var R = (mx - mn) || 1;
+  function X(i){ return i/(vals.length-1)*w; }
+  function Y(v){ return h - (v-mn)/R*h; }
+  var pts = vals.map(function(v,i){ return X(i).toFixed(1)+','+Y(v).toFixed(1); }).join(' ');
+  var id = 'q'+Math.random().toString(36).slice(2,7);
+  return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="'+h+'" preserveAspectRatio="none">'+
+    '<defs><linearGradient id="l'+id+'" x1="0" x2="1">'+
+      '<stop offset="0" stop-color="'+c1+'"/><stop offset="1" stop-color="'+c2+'"/></linearGradient>'+
+    '<linearGradient id="f'+id+'" x1="0" y1="0" x2="0" y2="1">'+
+      '<stop offset="0" stop-color="'+c1+'" stop-opacity=".32"/>'+
+      '<stop offset="1" stop-color="'+c1+'" stop-opacity="0"/></linearGradient></defs>'+
+    '<line x1="0" y1="'+Y(0).toFixed(1)+'" x2="'+w+'" y2="'+Y(0).toFixed(1)+
+      '" stroke="#252c37" stroke-dasharray="4,5"/>'+
+    '<polygon points="0,'+Y(0).toFixed(1)+' '+pts+' '+w+','+Y(0).toFixed(1)+'" fill="url(#f'+id+')"/>'+
+    '<polyline points="'+pts+'" fill="none" stroke="url(#l'+id+')" stroke-width="2.2" '+
+      'stroke-linejoin="round"/></svg>';
+}
+
+// every realized close across both accounts, merged in time order
+function allEvents(){
+  var ev = [];
+  Object.keys(PERF).forEach(function(id){
+    var p = PERF[id];
+    (p && p.series || []).forEach(function(s){
+      ev.push({t:s.t, pnl:s.pnl, symbol:s.symbol, inst:id,
+               name:(INSTS.find(function(x){return x.id===id;})||{}).name||id,
+               account:p.account, mode:p.mode});
+    });
+  });
+  ev.sort(function(a,b){ return a.t-b.t; });
+  return ev;
+}
+
+function renderChart(){
+  var ev = allEvents(), cum = 0;
+  var vals = ev.map(function(e){ cum += e.pnl; return cum; });
+  var last = vals.length ? vals[vals.length-1] : 0;
+  document.getElementById('bigchart').innerHTML =
+    area(vals, 900, 205, last>=0?'#2ebd85':'#8b5cf6', last>=0?'#22d3ee':'#22d3ee') +
+    '<div class="mini" style="margin-top:8px">one step per closed trade &middot; '+
+    ev.length+' closes across both accounts</div>';
+}
+
+// ---------------- accounts (live state next to the mode) ----------------
+function renderAccounts(){
+  var el = document.getElementById('accts');
+  API('mexc/account').then(function(accs){
+    if(!accs || !accs.length){ el.innerHTML = '<span class="mini">no API keys configured</span>'; return; }
+    el.innerHTML = accs.filter(function(a){ return !a.skipped; }).map(function(a, ix){
+      var inst = INSTS.filter(function(x){
+        var p = PERF[x.id]; return p && p.account === a.account; });
+      var live = inst.some(function(x){ return x.trader_live && x.trader_running; });
+      var mode = (PERF[(inst[0]||{}).id] || {}).mode;
+      var eq = 0, sub = '';
+      // pick the wallet this account actually TRADES. mexc2 carries a 0.43
+      // USDC futures dust balance next to ~$680 of spot — keying off "does a
+      // futures wallet exist" showed the dust and hid the real money.
+      if(mode !== 'spot' && (a.futures||[]).length){
+        var f = a.futures[0];
+        eq = +f.equity || 0;
+        sub = 'available '+(+f.available||0).toFixed(2)+' / margin '+(+f.position_margin||0).toFixed(2);
+      } else {
+        (a.spot||[]).forEach(function(s){
+          eq += (s.usdt_value != null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0); });
+        sub = (a.spot||[]).map(function(s){ return (+s.free).toFixed(s.asset==='USDT'?2:4)+' '+s.asset; })
+                .slice(0,4).join(' / ');
+      }
+      return '<div style="'+(ix?'border-top:1px solid var(--line);padding-top:13px;margin-top:13px':'')+'">'+
+        '<div class="rowsb"><b>'+a.account+'</b><span style="display:flex;gap:6px">'+
+        '<span class="tag '+(mode==='spot'?'spot':'lev')+'">'+
+          (mode==='spot'?'SPOT':'FUTURES')+'</span>'+
+        (inst.length ? '<span class="tag '+(live?'live':'b')+'">'+(live?'LIVE':'idle')+'</span>' : '')+
+        '</span></div>'+
+        '<div class="num" style="font-size:19px;margin:3px 0">$'+eq.toFixed(2)+'</div>'+
+        '<div class="mini">'+sub+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
+        '<div class="bar g" style="margin-top:6px"><i style="width:100%"></i></div></div>';
+    }).join('');
+  }).catch(function(){ el.innerHTML = '<span class="mini down">could not read accounts</span>'; });
+}
+
+// ---------------- risk ----------------
+function renderRisk(){
+  var gross = 0, margin = 0, nearest = null, rows = [];
+  INSTS.forEach(function(x){
+    var s = STATUS[x.id] || {}, p = s.position;
+    if(!p) return;
+    var cs = s.contract_size != null ? s.contract_size : 1;
+    var notional = (+p.qty) * cs * (+s.price || +p.entry_price);
+    gross += notional;
+    var lev = s.mode==='lev' ? (+p.lev||1) : 1;
+    if(s.mode==='lev'){
+      margin += notional/lev;
+      var dist = 100/lev;   // liquidation ~1/lev away, the engine's own model
+      if(nearest==null || dist<nearest) nearest = dist;
+    }
+    rows.push({inst:x.name||x.id, sym:p.symbol, dir:p.dir>0?'LONG':'SHORT',
+               qty:p.qty, lev:lev, entry:p.entry_price, now:s.price,
+               mode:s.mode, notional:notional, dist:s.mode==='lev'?100/lev:null});
+  });
+  var eq = 0;
+  Object.keys(PERF).forEach(function(){});
+  document.getElementById('riskkpi').innerHTML =
+    kpi('Gross exposure', '$'+gross.toFixed(0), rows.length+' open position(s)', 0) +
+    kpi('Margin committed', '$'+margin.toFixed(2), 'leveraged legs only', 0) +
+    kpi('Nearest liquidation', nearest==null?'n/a':nearest.toFixed(1)+'%',
+        nearest==null?'no leveraged position':'of price, at current leverage', nearest!=null&&nearest<10?-1:0) +
+    kpi('Stop loss', 'OFF', 'by design on leverage', -1);
+  document.getElementById('risktbl').innerHTML = rows.length
+    ? '<table><thead><tr><th>Instance</th><th>Symbol</th><th>Dir</th><th class="n">Size</th>'+
+      '<th class="n">Lev</th><th class="n">Entry</th><th class="n">Now</th><th class="n">Notional</th>'+
+      '<th class="n">Liq distance</th></tr></thead><tbody>'+
+      rows.map(function(r){
+        return '<tr><td>'+r.inst+'</td><td><b>'+r.sym+'</b></td>'+
+          '<td class="'+(r.dir==='LONG'?'up':'down')+'">'+r.dir+'</td>'+
+          '<td class="n">'+r.qty+'</td><td class="n">'+(r.mode==='lev'?r.lev+'x':'spot')+'</td>'+
+          '<td class="n">'+(+r.entry).toPrecision(6)+'</td>'+
+          '<td class="n">'+(r.now?(+r.now).toPrecision(6):'?')+'</td>'+
+          '<td class="n">$'+r.notional.toFixed(0)+'</td>'+
+          '<td class="n '+(r.dist==null?'dim':(r.dist<10?'down':'up'))+'">'+
+            (r.dist==null?'n/a':r.dist.toFixed(1)+'%')+'</td></tr>'; }).join('')+
+      '</tbody></table>'
+    : '<div class="body"><span class="mini">both accounts are flat</span></div>';
+  document.getElementById('riskrules').innerHTML =
+    '<div class="rowsb"><span class="dim">Leverage cap</span><b class="num">10x</b></div>'+
+    '<div class="rowsb"><span class="dim">Stop loss (leverage)</span><b class="down">OFF — by design</b></div>'+
+    '<div class="rowsb"><span class="dim">Position sizing</span><b class="num">100% of free</b></div>'+
+    '<div class="rowsb"><span class="dim">Late-join drawdown guard</span><b class="num up">50% of liq distance</b></div>'+
+    '<div class="mini" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">'+
+    'With no stop loss on leverage, liquidation distance IS the stop. The 19 Aug ETH close was a '+
+    'simulated liquidation mirrored onto a real position; the guard added since refuses a late join '+
+    'past half the liquidation distance.</div>';
+  // realized by pair
+  var by = {};
+  allEvents().forEach(function(e){ by[e.symbol] = (by[e.symbol]||0) + e.pnl; });
+  var keys = Object.keys(by).sort(function(a,b){ return Math.abs(by[b])-Math.abs(by[a]); });
+  var max = keys.length ? Math.abs(by[keys[0]]) : 1;
+  document.getElementById('expo').innerHTML = keys.length
+    ? '<table><thead><tr><th>Pair</th><th class="n">Realized 30d</th><th>Share</th></tr></thead><tbody>'+
+      keys.map(function(k){
+        return '<tr><td><b>'+k+'</b></td><td class="n '+cls(by[k])+'">'+money(by[k])+'</td>'+
+          '<td><div class="bar '+(by[k]>=0?'g':'r')+'"><i style="width:'+
+          Math.round(100*Math.abs(by[k])/max)+'%"></i></div></td></tr>'; }).join('')+'</tbody></table>'
+    : '<div class="body"><span class="mini">no closed trades in the window</span></div>';
+}
+
+// ---------------- history ----------------
+function renderHistory(){
+  var ev = allEvents().slice().reverse();
+  var fi = document.getElementById('hInst').value,
+      fs = document.getElementById('hSym').value,
+      fo = document.getElementById('hOut').value;
+  var syms = {}; ev.forEach(function(e){ syms[e.symbol]=1; });
+  var ss = document.getElementById('hSym');
+  if(ss._sig !== Object.keys(syms).join()){
+    ss._sig = Object.keys(syms).join();
+    ss.innerHTML = '<option value="">All pairs</option>' +
+      Object.keys(syms).sort().map(function(s){ return '<option>'+s+'</option>'; }).join('');
+    ss.value = fs;
+  }
+  var is = document.getElementById('hInst');
+  if(is._sig !== INSTS.map(function(x){return x.id;}).join()){
+    is._sig = INSTS.map(function(x){return x.id;}).join();
+    is.innerHTML = '<option value="">All instances</option>' +
+      INSTS.map(function(x){ return '<option value="'+x.id+'">'+(x.name||x.id)+'</option>'; }).join('');
+    is.value = fi;
+  }
+  var rows = ev.filter(function(e){
+    if(fi && e.inst !== fi) return false;
+    if(fs && e.symbol !== fs) return false;
+    if(fo === 'win' && !(e.pnl > 0)) return false;
+    if(fo === 'loss' && !(e.pnl < 0)) return false;
+    return true;
+  });
+  var net = rows.reduce(function(a,e){ return a+e.pnl; }, 0);
+  document.getElementById('hCount').innerHTML = rows.length + ' closes &middot; net ' +
+    '<b class="'+cls(net)+'">'+money(net)+'</b>';
+  document.getElementById('hist').innerHTML = rows.length
+    ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Account</th><th>Symbol</th>'+
+      '<th class="n">Realized</th></tr></thead><tbody>'+
+      rows.map(function(e){
+        return '<tr><td class="dim">'+new Date(e.t).toLocaleString()+'</td>'+
+          '<td>'+e.name+'</td><td class="dim">'+(e.account||'')+'</td>'+
+          '<td><b>'+e.symbol+'</b></td>'+
+          '<td class="n '+cls(e.pnl)+'">'+money(e.pnl)+'</td></tr>'; }).join('')+'</tbody></table>'
+    : '<div class="body"><span class="mini">nothing matches those filters</span></div>';
+}
+
+// ---------------- backtests ----------------
+var PROMO = [];
+function loadBT(){
+  var q = encodeURIComponent(document.getElementById('bQ').value||'');
+  var v = document.getElementById('bVerdict').value;
+  var m = document.getElementById('bMode').value;
+  API('backtests_lite?limit=80&q='+q+'&verdict='+v+'&mode='+m).then(function(d){
+    document.getElementById('btState').textContent =
+      d.state === 'ready' ? (d.total.toLocaleString()+' matching of '+d.indexed.toLocaleString()+' indexed')
+                          : ('index '+d.state+'…');
+    document.getElementById('bt').innerHTML = (d.rows||[]).length
+      ? '<table><thead><tr><th></th><th>Name</th><th>Verdict</th><th>Pair</th><th class="n">Growth/mo</th>'+
+        '<th class="n">Total x</th><th class="n">Max DD</th><th class="n">Trades</th><th class="n">Win</th>'+
+        '</tr></thead><tbody>'+
+        d.rows.map(function(r){
+          var vc = r.verdict==='Honest'?'g':(r.verdict==='Optimistic'?'lev':
+                   (r.verdict==='Passed'?'spot':'b'));
+          return '<tr><td><input type="checkbox" onchange="togglePromo(\''+r.name+'\',this.checked)"'+
+            (PROMO.indexOf(r.name)>=0?' checked':'')+'></td>'+
+            '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+              r.name+'</td>'+
+            '<td><span class="tag '+vc+'">'+r.verdict+'</span></td>'+
+            '<td><span class="tag b">'+((r.pair||'').split('_')[0]||'multi')+' '+(r.tf||'')+'</span></td>'+
+            '<td class="n up">'+(r.growth==null?'—':'+'+(+r.growth).toFixed(1)+'%')+'</td>'+
+            '<td class="n">'+(r.mult==null?'—':(+r.mult).toExponential(1))+'</td>'+
+            '<td class="n">'+(r.dd==null?'—':(100*r.dd).toFixed(1)+'%')+'</td>'+
+            '<td class="n">'+(r.n==null?'—':r.n)+'</td>'+
+            '<td class="n">'+(r.win==null?'—':Math.round(100*r.win)+'%')+'</td></tr>'; }).join('')+
+        '</tbody></table>'
+      : '<div class="body"><span class="mini">'+
+        (d.state==='ready'?'nothing matches':'building the index — first load only')+'</span></div>';
+  });
+}
+function togglePromo(n, on){
+  var i = PROMO.indexOf(n);
+  if(on && i<0) PROMO.push(n);
+  if(!on && i>=0) PROMO.splice(i,1);
+  renderPromo();
+}
+function renderPromo(){
+  document.getElementById('promoN').textContent = PROMO.length+' selected';
+  document.getElementById('promo').innerHTML = PROMO.length
+    ? PROMO.map(function(n){ return '<div class="rowsb" style="font-size:12.5px;padding:3px 0">'+
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%">'+n+'</span>'+
+        '<button class="btn sm" onclick="togglePromo(\''+n+'\',false)">x</button></div>'; }).join('')
+    : '<span class="mini">nothing selected</span>';
+}
+
+// ---------------- optimize ----------------
+function loadOptimize(){
+  API('jobs').then(function(js){
+    var run = (js||[]).filter(function(j){ return j.status==='running'; });
+    document.getElementById('ojobs').innerHTML = run.length
+      ? run.map(function(j){
+          var pct = j.progress ? Math.round(100*j.progress.pct) : null;
+          return '<div style="margin-bottom:14px"><div class="rowsb" style="margin-bottom:6px">'+
+            '<b>'+j.name+'</b><span class="mini">'+j.kind+
+            (pct!=null?(' · '+pct+'%'):'')+'</span></div>'+
+            '<div class="bar"><i style="width:'+(pct||3)+'%"></i></div>'+
+            '<div class="mini" style="margin-top:4px">since '+j.started+'</div></div>'; }).join('')
+      : '<span class="mini">nothing running</span>';
+  });
+  API('runs2').then(function(rs){
+    var rows = (rs||[]).slice(0, 40);
+    document.getElementById('oruns').innerHTML =
+      '<table><thead><tr><th>Run</th><th>Algo</th><th class="n">Evals</th>'+
+      '<th class="n">Best/mo</th><th>Holdout</th></tr></thead><tbody>'+
+      rows.map(function(r){
+        var g = (r.best||{}).growth;
+        return '<tr><td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+          (r.name||r.run||'')+'</td><td class="mini">'+(r.algo||'')+'</td>'+
+          '<td class="n">'+((r.evaluated||0).toLocaleString())+'</td>'+
+          '<td class="n '+(g>0?'up':'')+'">'+(g==null?'—':(g>0?'+':'')+(+g).toFixed(1)+'%')+'</td>'+
+          '<td class="mini">'+(r.holdout||'')+'</td></tr>'; }).join('')+'</tbody></table>';
+  }).catch(function(){});
+}
+function startSearch(){
+  var body = {strategy:document.getElementById('oStrat').value,
+              mode:document.getElementById('oMode').value,
+              method:document.getElementById('oReg').value,
+              evals:+document.getElementById('oEvals').value,
+              coin:document.getElementById('oPairs').value,
+              tf:document.getElementById('oTf').value};
+  if(!confirm('Start an optimizer search?\n\n'+JSON.stringify(body,null,1)+
+              '\n\nIt runs on the mini and competes for cores with the traders.')) return;
+  API('jobs/optimize2', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body:JSON.stringify(body)}).then(function(r){
+    alert(r.error ? ('Error: '+r.error) : ('Started: '+(r.name||'ok')));
+    loadOptimize();
+  });
+}
+
+// ---------------- progress ----------------
+function loadProgress(){
+  API('gamut/progress').then(function(p){
+    var c = p.counts || {};
+    document.getElementById('pkpi').innerHTML =
+      kpi('Done', (c.done||0).toLocaleString(), p.name||'', 0) +
+      kpi('Running', String(p.running||0), '', (p.running||0)>0?1:0) +
+      kpi('Pending', String(Math.max(0,(p.total||0)-(c.done||0))), 'of '+(p.total||0).toLocaleString(), 0) +
+      kpi('Failed', String((p.failed||[]).length), (p.eta_hours?('ETA '+p.eta_hours+'h'):''),
+          (p.failed||[]).length?-1:0);
+    var pairs = p.pairs || {};
+    var ks = Object.keys(pairs);
+    document.getElementById('ppair').innerHTML = ks.length
+      ? '<table><thead><tr><th>Pair</th><th class="n">Done</th><th class="n">Total</th>'+
+        '<th>Progress</th></tr></thead><tbody>'+
+        ks.map(function(k){
+          var v = pairs[k]||{}, done = v.done||0, tot = v.total||0;
+          return '<tr><td>'+k+'</td><td class="n">'+done+'</td><td class="n">'+tot+'</td>'+
+            '<td><div class="bar"><i style="width:'+(tot?Math.round(100*done/tot):0)+'%"></i></div></td></tr>';
+        }).join('')+'</tbody></table>'
+      : '<span class="mini">no active campaign</span>';
+    var f = p.failed || [];
+    document.getElementById('pfailN').textContent = f.length;
+    document.getElementById('pfail').innerHTML = f.length
+      ? '<table><tbody>'+f.slice(0,20).map(function(x){
+          return '<tr><td>'+(x.name||x)+'</td><td class="n dim">'+(x.at||'')+'</td></tr>'; }).join('')+
+        '</tbody></table>'
+      : '<span class="mini">none</span>';
+  }).catch(function(){});
+  API('gamut/workers').then(function(w){
+    document.getElementById('pwork').innerHTML = (w.systems||[]).map(function(s){
+      var load = s.load1 != null ? s.load1 : (s.load||0);
+      var pct = s.cores ? Math.min(100, Math.round(100*load/s.cores)) : 0;
+      return '<div style="margin-bottom:15px"><div class="rowsb" style="margin-bottom:6px">'+
+        '<b>'+(s.name||s.id)+'</b><span class="mini">'+(s.cores||'?')+' cores'+
+        (load?(' · load '+(+load).toFixed(1)):'')+(s.state?(' · '+s.state):'')+'</span></div>'+
+        '<div class="bar"><i style="width:'+pct+'%"></i></div></div>'; }).join('')
+      || '<span class="mini">no workers registered</span>';
+  }).catch(function(){});
+}
+
 // ---------------- instances (full control parity) ----------------
 var STATUS = {}, ERRS = {};
 
@@ -225,7 +673,8 @@ function held(p){
 
 function loadStatus(){
   INSTS.forEach(function(x){
-    API('status?instance='+x.id).then(function(s){ STATUS[x.id]=s; renderCards(); }).catch(function(){});
+    API('status?instance='+x.id).then(function(s){
+      STATUS[x.id]=s; renderCards(); renderRisk(); }).catch(function(){});
   });
   API('errors').then(function(e){ ERRS=e||{}; renderCards(); }).catch(function(){});
 }
@@ -460,6 +909,9 @@ for(var i=0;i<btns.length;i++){
     document.getElementById('crumb').textContent=this.title;
   };
 }
-loadAll();
+loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress();
 setInterval(loadAll, 60000);
+setInterval(loadTicker, 15000);
+setInterval(loadStatus, 20000);
+setInterval(function(){ loadOptimize(); loadProgress(); }, 90000);
 </script></body></html>
