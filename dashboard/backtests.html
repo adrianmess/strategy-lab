@@ -56,6 +56,25 @@ button.rtradd.on{opacity:1;filter:none}
 #rtrT{width:auto} #rtrT th,#rtrT td{text-align:left;padding:3px 14px 3px 0;white-space:nowrap}
 #rtrT th{cursor:default} #rtrT th:hover{color:var(--dim)} #rtrT tr:hover td{background:transparent}
 .tablewrap{overflow-x:auto}
+/* Two prose columns (kind, optimizer settings) were sizing themselves to their
+   longest string — the FCFS router blurbs run ~110 chars — which pushed the
+   table to ~3700px and shoved everything from "strategy" rightwards, the 🔀
+   add-to-router button included, off the right edge of the scroller. Clamp
+   them and keep the full text in the cell's tooltip. */
+#bt td:nth-child(1), #bt th:nth-child(1){width:380px;min-width:300px;max-width:420px}
+#bt td:nth-child(2), #bt th:nth-child(2){width:210px;min-width:170px;max-width:230px}
+#bt td:nth-child(6), #bt th:nth-child(6){width:270px;min-width:210px;max-width:300px}
+/* cells are white-space:nowrap by default; without this the clamp does not wrap,
+   it just spills over the neighbouring column. min-width matters as much as the
+   max: overflow-wrap:anywhere drops min-content to one character, and the auto
+   table layout will happily squeeze the column down to it. */
+#bt td:nth-child(1), #bt td:nth-child(2), #bt td:nth-child(6){
+  white-space:normal;overflow-wrap:anywhere}
+/* the 🔀 add-to-router button lives in the LAST column of a table that is still
+   wider than the window — pin that column to the right edge so it is always
+   reachable without scrolling the table sideways */
+#bt th:last-child, #bt td:last-child{position:sticky;right:0;z-index:2;
+  background:var(--bg,#0d1117);box-shadow:-8px 0 8px -8px rgba(0,0,0,.55)}
 </style>
 <link rel="stylesheet" href="assets/theme.css">
 <script src="assets/ui.js"></script>
@@ -242,7 +261,7 @@ button.rtradd.on{opacity:1;filter:none}
     </div>
   </div>
   <div class="tablewrap">
-  <table id="bt"><thead><tr>
+  <table id="bt"><thead><tr class="bthead">
     <th>name</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th>optimizer settings</th><th>growth/mo</th>
     <th>total %</th><th>total ×</th><th>liq?</th><th>max DD (MTM)</th><th>stops</th><th>trades</th><th>win</th><th title="out-of-sample verdict: bold 'OOS' = this entry IS a holdout/walk-forward simulation (judged on itself); plain glyph = this is a full-history entry, showing whether its config passed the run's holdout">OOS</th>
     <th>gaps</th><th>created</th><th title="your quality rating: ★ good, ★★ very good, ★★★ great — click to sort">rating</th><th></th>
@@ -750,8 +769,12 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   document.getElementById('fMaxDD').value = localStorage.getItem('btFilterMaxDD') || '';
   document.getElementById('fHold').value = localStorage.getItem('btFilterHold') || 'all';
   document.getElementById('fGenome').value = localStorage.getItem('btFilterGenome') || 'all';
-  // saved but never restored before — the routers filter reset on every reload
-  document.getElementById('fRouters').value = localStorage.getItem('btFilterRouters') || 'all';
+  // NOTE: btFilterRouters is saved but deliberately NOT restored. Restoring it
+  // silently re-applied a stale "hide routers" from an old session on load —
+  // every router entry, and every router-only button with it, just vanished.
+  // It resets to "all" on each reload; that is the safe default, not a bug.
+  document.getElementById('fRouters').value = 'all';
+  localStorage.removeItem('btFilterRouters');
   {  // instance options arrive async; remember the choice until they do
     const v = localStorage.getItem('btFilterInst') || 'all';
     const el = document.getElementById('fInst');
