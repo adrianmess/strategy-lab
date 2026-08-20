@@ -1231,16 +1231,25 @@ function renderTrades(e){
     <td class="${o.unreal>=0?'pos':'neg'}">${o.unreal.toFixed(2)} <span class="hint">unrealized</span></td>
     <td>—</td>
     <td class="neg">still open</td><td>${o.lev.toFixed(1)}×</td></tr>`).join('');
+  // Router/combo entries do not carry a per-trade exit reason: the merge puts
+  // the winning COMPONENT's label there ("DOG/1m·v7"). Colouring "anything that
+  // isn't profit_target" red therefore painted every single row of every router
+  // in failure red. Only flag the reasons that really are failures.
+  const _isFail = r => /stop_loss|liquidat|emergency|forced|error|fail/i.test(String(r||''));
+  // ...and their trade records carry net/mae rather than prices, so entry/exit
+  // arrive as 0.0 — which rendered as "0.000" prices and a "NaN%" gain.
+  const _px = v => (v ? v.toFixed(3) : '—');
   tt.innerHTML = openRows + shown.slice().reverse().map(t=>{
+    const hasPx = !!(t.entry && t.exit);
     const pct = 100*(t.exit/t.entry-1)*(t.dir==='long'?1:-1);
     const other = 100*(t.mae||0)*(basis==='equity'?1:(t.lev||1));
     return `<tr>
     <td>${(t.entry_t||'').slice(0,16)}</td><td>${(t.exit_t||'').slice(0,16)}</td><td>${t.dir}</td>
-    <td>${t.entry.toFixed(3)}</td><td>${t.exit.toFixed(3)}</td>
-    <td>${fpc(pct, t.lev)}</td>
+    <td>${_px(t.entry)}</td><td>${_px(t.exit)}</td>
+    <td${hasPx?'':' class="hint" title="this is a router/combo entry — its merged trade records carry net P&L and worst excursion, not entry/exit prices"'}>${hasPx?fpc(pct, t.lev):'—'}</td>
     <td class="${t.net>=0?'pos':'neg'}">${t.net.toFixed(2)}</td>
     <td title="${basis==='equity'?`price move ${(100*(t.mae||0)).toFixed(2)}%`:`equity impact ${other.toFixed(2)}% at ${(t.lev||1).toFixed(1)}×`}">${bm(t).toFixed(2)}%</td>
-    <td class="${t.reason==='profit_target'?'':'neg'}">${t.reason}</td><td>${(t.lev||1).toFixed(1)}×</td></tr>`}).join('');
+    <td class="${_isFail(t.reason)?'neg':''}"${_isFail(t.reason)?'':' title="which component won the slot for this trade (router entries record the component here, not an exit reason)"'}>${t.reason}</td><td>${(t.lev||1).toFixed(1)}×</td></tr>`}).join('');
 }
 document.getElementById('maeTh').oninput = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
 document.getElementById('maeBasis').onchange = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
