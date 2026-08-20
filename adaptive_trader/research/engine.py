@@ -215,6 +215,10 @@ def run_backtest(sig: pd.DataFrame, p: dict, warmup_bars: int = 3000):
     pend_entry = None  # (dir, system) to fill at next open
     pend_exit = None   # reason
     qty = 0.0; entry_price = np.nan; entry_time = None; slPrice = np.nan; system = None
+    fill_t = None      # bar timestamp of the ENTRY fill, read again on exit.
+                       # Only ever assigned in the entry branch below, so an
+                       # exit cannot reach it unbound — but it belongs with the
+                       # other trade-state initialisers, not implied by flow.
     runMin = np.inf; runMax = -np.inf
     trades = []
 
