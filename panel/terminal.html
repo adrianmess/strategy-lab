@@ -99,9 +99,9 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
   <button data-go="alerts" title="Alerts">&#9873;</button>
 </nav>
 <div class="main">
-  <div class="banner">New UI — instance controls are <b>live and place real orders</b>. The classic panel is
-    untouched at <a href="/" style="color:var(--blue)">/</a>; not yet ported here: executor (Playwright)
-    controls, trader settings, quick backtest, jobs, processes, optimize and backtests pages.</div>
+  <div class="banner">New UI — instance controls are <b>live and place real orders</b>. Not yet ported here:
+    executor (Playwright) controls, trader settings, quick backtest, jobs and processes — use
+    <b>Classic panel</b> in the top right for those.</div>
   <div class="ticker" id="tick"></div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
@@ -112,6 +112,8 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
     </div>
     <div style="display:flex;gap:7px;align-items:center">
       <span class="mini" id="stamp"></span>
+      <a class="btn" href="/" title="Back to the classic control panel — it is unchanged and has the executor controls, trader settings, jobs and processes"
+         style="border-color:var(--blue);color:var(--blue);font-weight:600">&larr; Classic panel</a>
       <button class="btn" id="soundBtn" onclick="toggleSound()"
         title="beep and show a banner in this tab when a trade opens or closes">&#128266; alerts off</button>
       <button class="btn" onclick="loadAll()">Refresh</button>
