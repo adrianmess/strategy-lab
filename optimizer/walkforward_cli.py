@@ -13,7 +13,6 @@ import _bootstrap as B
 import argparse, json, os, time
 import multiprocessing as mp
 import pandas as pd
-import numpy as np
 
 
 def worker(job):

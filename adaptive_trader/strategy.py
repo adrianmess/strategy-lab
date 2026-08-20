@@ -10,7 +10,7 @@ immediately after (backtest fills at next bar open). One improvement over the
 backtest: the protective stop is also checked intra-bar between closes, which
 can only exit earlier (smaller loss) than the backtest assumed.
 """
-import sys, os, json, logging
+import sys, os, logging
 import numpy as np
 import pandas as pd
 

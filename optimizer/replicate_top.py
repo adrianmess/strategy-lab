@@ -18,7 +18,7 @@ Usage:
                                            # for campaign c7 to finish first)
 Stop:  touch replicate_STOP   (finishes the current run, then stops)
 """
-import argparse, json, os, shlex, subprocess, sys, time
+import argparse, json, os, shlex, subprocess, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNS = os.path.join(HERE, "runs")

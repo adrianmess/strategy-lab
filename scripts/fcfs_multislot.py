@@ -21,7 +21,6 @@ import argparse
 import fcntl
 import glob
 import json
-import math
 import os
 import time
 

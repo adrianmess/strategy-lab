@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
 from playwright.async_api import async_playwright
-import os
-import time
 import logging
 
 # Configure logging

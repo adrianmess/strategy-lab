@@ -2,7 +2,6 @@
 """Parity: live StrategyV6 evaluator vs the numba engine on the last segment,
 using the production candidate config. Should print PARITY: PASS."""
 import os, sys, json
-import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))

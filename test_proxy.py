@@ -4,7 +4,7 @@ Run:  python3 test_proxy.py
 Prints the Playwright version, the launch args, and the browser's egress IP
 so we can see EXACTLY where the proxy is (or isn't) applied.
 """
-import asyncio, json, os, sys, urllib.request
+import asyncio, json, os, urllib.request
 
 def version():
     try:

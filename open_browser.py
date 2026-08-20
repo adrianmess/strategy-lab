@@ -1,6 +1,5 @@
 from playwright.sync_api import sync_playwright, TimeoutError
 import os
-import time
 
 def main():
     with sync_playwright() as p:

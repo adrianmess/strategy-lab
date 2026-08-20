@@ -17,7 +17,7 @@ import numpy as np
 _TFM = float(os.environ.get("LAB_TF", "3"))
 import pandas as pd
 
-from engine3 import get_pres3, run3, vec3, P3_NAMES, VARIANTS, C
+from engine3 import get_pres3, run3, vec3
 from regimes import make_regimes, DAY
 from wf2 import mtm_curve
 from adaptive import slice_pre
@@ -40,6 +40,9 @@ def load_g3():
     if os.environ.get("LAB_TF", "3") != "3":
         cache_dir = os.path.join(cache_dir, f'tf{os.environ.get("LAB_TF")}')
     os.makedirs(cache_dir, exist_ok=True)
+    # re-imported deliberately, not a leftover: engine3.VARIANTS can be
+    # rebuilt after this module was imported, and the module-level binding
+    # would still point at the old list
     from engine3 import variants_hash, VARIANTS, _DEFAULT_VARIANTS
     h = variants_hash()
     cache = os.path.join(cache_dir, f"engine3_pre_{h}.pkl")
@@ -49,8 +52,8 @@ def load_g3():
         try: os.rename(legacy, cache)   # default lists: reuse the old cache
         except OSError: pass
     if not os.path.exists(cache):
-        print(f"indicator-length libraries changed (or first build) — "
-              f"precomputing variants, this can take a few minutes...", flush=True)
+        print("indicator-length libraries changed (or first build) — "
+              "precomputing variants, this can take a few minutes...", flush=True)
     pres = get_pres3(cache=cache)
     _G3["pres"] = pres
     _G3["regimes"] = {}

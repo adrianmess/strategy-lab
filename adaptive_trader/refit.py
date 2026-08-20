@@ -38,7 +38,7 @@ def refit_once(cfg_path, procs, hours, dry):
     best = json.load(open(best_path))
 
     print("=== 3/4 guardrail comparison ===", flush=True)
-    from wf2 import load_globals, eval_config, feasible
+    from wf2 import load_globals, eval_config
     os.chdir(os.path.join(HERE, "..", "optimizer", "runs", name))
     load_globals((strategy,))
     m_new = best["metrics"]

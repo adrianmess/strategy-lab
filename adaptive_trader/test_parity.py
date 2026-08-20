@@ -6,7 +6,6 @@ decisions to the validated backtest.
 Usage: python3 test_parity.py
 """
 import os, sys, json
-import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))

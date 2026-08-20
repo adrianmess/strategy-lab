@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "research2"))
 
 from strategy_metax import StrategyMetax, resolve_candidate   # noqa: E402
 from regimes import regime_features, make_regimes             # noqa: E402
-from strategy_metax import BUCKET_METHOD, WARMUP, FUT_COMM, SPOT_COMM  # noqa
+from strategy_metax import BUCKET_METHOD, SPOT_COMM  # noqa
 
 RUNS = os.path.join(os.path.dirname(HERE), "optimizer", "runs")
 WINDOW_DAYS = 35

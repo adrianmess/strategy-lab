@@ -24,7 +24,7 @@ while time.time() < deadline:
     url = (f"https://rest.coinapi.io/v1/ohlcv/{SYMBOL}/history?"
            f"period_id={PERIOD}&time_start={state['time_start']}&time_end={DATA_END}&limit=100000&include_empty_items=false")
     req = urllib.request.Request(url, headers={"X-CoinAPI-Key": API_KEY, "Accept-Encoding": "gzip"})
-    import gzip, io
+    import gzip
     with urllib.request.urlopen(req, timeout=120) as r:
         raw = r.read()
         if r.headers.get("Content-Encoding") == "gzip":

@@ -2,10 +2,8 @@
 """Parallel walk-forward runner. Resumable: one JSON per (config, fold).
 Run in background:  nohup python3 run_wf2.py --stage A &
 """
-import argparse, json, os, sys, time
+import argparse, json, os, time
 import multiprocessing as mp
-import pandas as pd
-import numpy as np
 
 import wf2
 from wf2 import run_fold, REFIT_DATES, load_globals

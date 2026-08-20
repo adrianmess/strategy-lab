@@ -23,7 +23,7 @@ Usage:
   python3 metax_reassign.py --all --loop        # daemon: check daily, act on 42d cadence
 """
 import _bootstrap as B
-import argparse, glob, json, os, shutil, sys, time
+import argparse, glob, json, os, shutil, time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))

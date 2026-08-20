@@ -11,7 +11,7 @@ Usage:
   python3 fetch_pair.py --market spot btc eth  # SPOT candles -> <coin>_spot_*.parquet
 Env: COINAPI_KEY overrides the default key.
 """
-import gzip, json, os, sys, time, urllib.request
+import gzip, json, os, sys, urllib.request
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))

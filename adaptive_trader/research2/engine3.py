@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
-from engine import ema, rsi as rsi_tv, sma, stdev_pop, DEFAULT_PARAMS
+from engine import ema, rsi as rsi_tv, sma, stdev_pop
 from fast_engine import last_1m_metric
 from regimes import regime_features, DAY
 

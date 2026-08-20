@@ -4,11 +4,10 @@ Data files resolve to $COINDATA_DIR, then <this module's dir>/data, then the
 current directory (legacy). Caches are written to the CWD so each optimizer
 run directory keeps its own.
 """
-import numpy as np
 import pandas as pd
 import pickle, os
 from engine import DEFAULT_PARAMS
-from fast_engine import precompute, params_to_vec, run_fast
+from fast_engine import precompute, run_fast
 
 CACHE = "precomputed.pkl"
 

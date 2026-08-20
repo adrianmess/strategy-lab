@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import requests
-import json
 import sys
-import time
 
 # Server configuration
 SERVER_URL = "http://localhost:5001/webhook"

@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from engine import DEFAULT_PARAMS
 from fast_engine import params_to_vec, run_fast, PARAM_NAMES
-from regimes import regime_features, vol_terciles, DAY
+from regimes import regime_features, DAY
 
 IDX = {k: i for i, k in enumerate(PARAM_NAMES)}
 

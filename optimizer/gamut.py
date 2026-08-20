@@ -166,8 +166,8 @@ def execute(pdir):
             if os.path.exists(sp_path):
                 cmd += ["--space", sp_path]
             else:
-                print(f"  AI space unavailable — falling back to the active "
-                      f"space", flush=True)
+                print("  AI space unavailable — falling back to the active "
+                      "space", flush=True)
         print(f"[{time.strftime('%H:%M:%S')}] {i+1}/{n} {s['name']}",
               flush=True)
         s["status"] = "running"

@@ -181,8 +181,8 @@ def main():
                   f"{h_[4]:>+10.3f}%")
 
     # ---- the number that actually compares: a compounding ACCOUNT ----
-    print(f"\ncompanion ACCOUNT (stake = equity/depth per slice, so peak "
-          f"exposure = 1x):\n")
+    print("\ncompanion ACCOUNT (stake = equity/depth per slice, so peak "
+          "exposure = 1x):\n")
     print(f"{'mode':>5} {'k':>6} | {'TRAIN %/mo':>11} {'HOLDOUT %/mo':>13} "
           f"{'maxDD':>7} {'closed':>7} {'stranded':>9} | {'CONTROL hold %/mo':>18}")
     # control: same rule, same window lengths, anchored to the price at the

@@ -42,6 +42,8 @@ JSON_GLOBS = [
 ]
 SKIP_DIRS = {".git", "__pycache__", "node_modules", "runs", "campaigns",
              "data", "venv", ".venv"}
+# imported for what they DO, not for the name they bind
+SIDE_EFFECT_IMPORTS = {"_bootstrap"}
 
 findings = []          # (level, check, path, line, message)
 
@@ -115,6 +117,21 @@ def check_python(paths):
                     0, f"pyflakes failed to run: {ln.strip()}")
             continue
         path, line, msg = m.group(1), int(m.group(2)), m.group(3)
+        # Imports kept for their SIDE EFFECTS, not their names. _bootstrap
+        # rewrites sys.path for every optimizer CLI; "removing the unused
+        # import" would break all of them. Never report these.
+        if any(f"'{m}" in msg for m in SIDE_EFFECT_IMPORTS) \
+                and "imported but unused" in msg:
+            continue
+        # honour an explicit "# noqa" the way flake8 does — pyflakes itself
+        # ignores it, so a deliberately-kept import kept re-reporting
+        try:
+            src_line = open(os.path.join(REPO, path), encoding="utf-8",
+                            errors="replace").read().splitlines()[line - 1]
+            if re.search(r"#\s*noqa\b", src_line):
+                continue
+        except Exception:
+            pass
         # An undefined name always breaks at runtime. A shadowed import is
         # usually deliberate here (engine3.VARIANTS is re-imported on purpose
         # after it may have been rebuilt), so it is a warning, not a failure.

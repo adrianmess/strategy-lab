@@ -5,9 +5,7 @@ what's wrong and how to fix it. Used by /api/doctor and runnable directly:
 """
 import glob
 import importlib
-import json
 import os
-import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))

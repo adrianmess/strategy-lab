@@ -6,9 +6,8 @@ regime method, builds the same P-matrix the backtest used, and evaluates the
 exact engine conditions on the latest closed bar. Parity with the numba engine
 is covered by test_parity_v6.py.
 """
-import sys, os, json, logging
+import sys, os, logging
 import numpy as np
-import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "research"))

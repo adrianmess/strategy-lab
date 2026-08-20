@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Final full-data production search for a (strategy, mode, method) family.
 Resumable across invocations via a feasible-pool JSON."""
-import json, os, sys, time
+import json, os, sys
 import numpy as np
 import multiprocessing as mp
 from wf2 import (load_globals, sample_v6, sample_scalpx, eval_config,

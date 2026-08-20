@@ -22,7 +22,7 @@ host = creds[0].split(":")[0]
 user, pw = creds[0].split(":")[2], creds[0].split(":")[3]
 ports = list(range(10001, 10011))          # test the full range incl. 10009
 
-from mexc_api import load_account, MexcFuturesAPI  # noqa: E402
+from mexc_api import MexcFuturesAPI  # noqa: E402
 keys = json.load(open(os.path.join(LAB, "adaptive_trader",
                                    "mexc_api_keys.json")))
 accounts = sorted(keys.get("accounts", {"mexc1": None}))

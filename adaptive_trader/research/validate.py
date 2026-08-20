@@ -1,6 +1,5 @@
 """Validate engine against TradingView CSV export."""
 import pandas as pd
-import numpy as np
 from engine import DEFAULT_PARAMS, compute_signals, run_backtest
 
 CSV = "/sessions/festive-happy-gauss/mnt/uploads/V5.2_Multi-Timeframe_RSI_MACD_BB%B_Strategy_-_3min_+_MACD_Crossover_w_histogram_MEXC_SOLUSDT.P_2026-07-02.csv"

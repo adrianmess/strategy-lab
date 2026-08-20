@@ -1,7 +1,6 @@
 import sys, os
-import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'optimizer'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'optimizer'))
 import _bootstrap as B
-import numpy as np
 import pandas as pd
 import openpyxl
 

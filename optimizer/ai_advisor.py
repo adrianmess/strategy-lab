@@ -12,7 +12,6 @@ Usage:
 """
 import _bootstrap as B
 import argparse, json, os, re
-import numpy as np
 import requests
 
 MODELS = ["claude-sonnet-5", "claude-sonnet-4-5", "claude-3-7-sonnet-latest"]
