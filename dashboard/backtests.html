@@ -252,7 +252,9 @@ button.rtradd.on{color:#fff;background:var(--blue,#1f6feb);border-color:var(--bl
     <button onclick="clearDelSel()">clear</button>
   </div>
   <div id="rtrBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(88,166,255,.06)">
-    <div style="font-weight:600;margin-bottom:6px">Router components <span class="hint" id="rtrCount"></span></div>
+    <details id="rtrDet" ontoggle="localStorage.setItem('rtrOpen', this.open?'1':'')">
+    <summary style="font-weight:600;cursor:pointer;user-select:none">Router components <span class="hint" id="rtrCount"></span></summary>
+    <div style="margin-top:6px">
     <table style="font-size:12px" id="rtrT"><thead><tr>
       <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th title="out-of-sample verdict for this entry (same logic as the main table's OOS column)">OOS</th><th></th></tr></thead>
       <tbody id="rtrList"><tr><td colspan="8" class="hint">use the <b>+rtr</b> button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
@@ -268,6 +270,8 @@ button.rtradd.on{color:#fff;background:var(--blue,#1f6feb);border-color:var(--bl
         <button onclick="rtrSavedDel()" title="delete the chosen saved selection">✕</button>
       </span>
     </div>
+    </div>
+    </details>
   </div>
   <div class="tablewrap">
   <table id="bt"><thead><tr class="bthead">
@@ -846,6 +850,8 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   }
   document.getElementById('fWinMin').value = localStorage.getItem('btFilterWinMin') || '';
   document.getElementById('fGaunt').checked = localStorage.getItem('btFilterGaunt')==='1';
+  // the components panel is collapsed unless it was left open last time
+  document.getElementById('rtrDet').open = localStorage.getItem('rtrOpen')==='1';
   fillRtrOfSelect();
   {  // restore the chosen router (its component list is fetched on demand)
     const v = localStorage.getItem('btFilterRtrOf') || '';
