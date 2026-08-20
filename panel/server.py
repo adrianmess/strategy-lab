@@ -1650,6 +1650,63 @@ threading.Thread(target=_mexc_warmer, daemon=True).start()
 
 
 # ---------------- manual test orders ----------------
+def _trader_running(I):
+    p = (I.get("trader") or {}).get("proc")
+    return bool(p is not None and p.poll() is None)
+
+
+def _exchange_flat(icfg, acct, symbol):
+    """True when MEXC shows nothing left to close for this symbol."""
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcFuturesAPI, MexcSpotAPI
+    if icfg.get("mode") == "spot":
+        sapi = MexcSpotAPI(account=acct)
+        free = float(sapi.balance(symbol.split("_")[0]) or 0)
+        try:
+            mq = float(sapi.min_qty(symbol) or 0)
+        except Exception:
+            mq = 0.0
+        return free <= mq
+    fapi = MexcFuturesAPI(account=acct)
+    for p in (fapi.open_positions() or []):
+        if p.get("symbol") == symbol and float(p.get("holdVol") or 0) > 0:
+            return False
+    return True
+
+
+def _reconcile_after_manual_close(I, icfg, acct, symbol):
+    """A manual close goes straight to MEXC, so the trader's state file still
+    lists a position it no longer holds — that stale entry is what the panel
+    keeps rendering after a 'Close ALL'. Drop it (only once the exchange
+    confirms flat) and record a late-join skip, exactly as the trader's own
+    manual-close path does, so a restart cannot re-enter the same virtual
+    trade. Bookkeeping only — places no orders."""
+    import shutil
+    sf = _state_file_of((I.get("trader") or {}).get("config") or I.get("cfg")
+                        or "")
+    sp = os.path.join(AT, sf) if sf else ""
+    if not sp or not os.path.exists(sp):
+        return None
+    st = json.load(open(sp))
+    pos = st.get("position")
+    if not pos:
+        return None
+    if pos.get("symbol") and symbol and pos["symbol"] != symbol:
+        return None
+    if not _exchange_flat(icfg, acct, symbol):
+        return "MEXC still shows a position — state file left untouched"
+    shutil.copy(sp, sp + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+    lbl = pos.get("mirror_entry_t")
+    if lbl and pos.get("comp") is not None:
+        st.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+    st["position"] = None
+    json.dump(st, open(sp, "w"), indent=1)
+    return (f"cleared the tracked {pos.get('symbol')} position from {sf}"
+            + (f" and marked comp #{pos['comp']}'s virtual trade {lbl} "
+               f"as skipped" if lbl and pos.get("comp") is not None else ""))
+
+
 @app.route("/api/manual", methods=["POST"])
 def manual_order():
     """Relay a manual order to the MEXC executor webhook. Used to test the
@@ -1665,6 +1722,25 @@ def manual_order():
         icfg = json.load(open(os.path.join(AT, I["cfg"])))
     except Exception:
         icfg = {}
+    # A RUNNING trader owns its state file. Closing behind its back leaves it
+    # managing a position that no longer exists (and it may later try to close
+    # it again); its own "Close position now" does the close AND the
+    # bookkeeping, so send the user there instead.
+    if action.startswith("close") and _trader_running(I):
+        _sf = _state_file_of((I.get("trader") or {}).get("config")
+                             or I.get("cfg") or "")
+        _sp = os.path.join(AT, _sf) if _sf else ""
+        try:
+            _pos = (json.load(open(_sp)) or {}).get("position") \
+                if _sp and os.path.exists(_sp) else None
+        except Exception:
+            _pos = None
+        if _pos and _pos.get("symbol") == d.get("symbol"):
+            return jsonify(error=(
+                f"this instance's trader is RUNNING and is tracking "
+                f"{_pos.get('symbol')} — use 'Close position now' on its card "
+                f"so it closes AND stops tracking. Closing from here would "
+                f"leave it managing a position that no longer exists.")), 400
     if icfg.get("execution") == "api":
         if AT not in sys.path:
             sys.path.insert(0, AT)
@@ -1715,6 +1791,13 @@ def manual_order():
             out = dict(ok=False, via="MEXC API", account=acct,
                        sent=dict(action=action, symbol=symbol, quantity=qty),
                        error=f"{type(e).__name__}: {e}")
+        if out.get("ok") and action.startswith("close"):
+            try:
+                note = _reconcile_after_manual_close(I, icfg, acct, symbol)
+                if note:
+                    out["reconciled"] = note
+            except Exception as e:
+                out["reconcile_error"] = f"{type(e).__name__}: {e}"
         with open(log, "a") as lf:
             lf.write(json.dumps(dict(t=time.strftime("%Y-%m-%d %H:%M:%S"),
                                      **out), default=str) + "\n")
@@ -2112,9 +2195,15 @@ def clear_bot_position():
         return jsonify(ok=True, note="already flat")
     import shutil
     shutil.copy(sp, sp + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+    # mark the component's virtual trade as skipped, or the late-join will
+    # re-enter it on the next start — the position was closed on purpose
+    lbl = old.get("mirror_entry_t")
+    if lbl and old.get("comp") is not None:
+        st.setdefault("late_skips", {})[str(old["comp"])] = lbl
     st["position"] = None
     json.dump(st, open(sp, "w"), indent=1)
-    return jsonify(ok=True, cleared=old)
+    return jsonify(ok=True, cleared=old,
+                   late_skips=st.get("late_skips") or {})
 
 @app.route("/api/trader_configs/delete", methods=["POST"])
 def trader_config_delete():
