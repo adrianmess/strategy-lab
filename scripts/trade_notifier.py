@@ -77,21 +77,45 @@ def _save(patch):
         pass
 
 
+def play(sound="Glass"):
+    """Play the alert ourselves.
+
+    `display notification ... sound name` only makes noise if "Play sound for
+    notifications" is enabled for the app that posted it — and for osascript
+    that app is Script Editor, which is silent by default. The banner then
+    appears with no sound and looks broken. afplay honours the system alert
+    volume and ignores per-app notification settings, so it just works."""
+    p = f"/System/Library/Sounds/{sound}.aiff"
+    if not os.path.exists(p):
+        p = "/System/Library/Sounds/Glass.aiff"
+    try:
+        subprocess.Popen(["afplay", p],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
 def notify(title, message, subtitle="", sound="Glass"):
-    """Native banner. osascript is always present; no dependency to install."""
+    """Native banner + audible alert. osascript and afplay are both always
+    present; nothing to install."""
     def esc(s):
         return str(s).replace("\\", "\\\\").replace('"', '\\"')
+    # keep `sound name` too: harmless, and it does fire for anyone who has
+    # enabled notification sounds for Script Editor
     script = (f'display notification "{esc(message)}" '
               f'with title "{esc(title)}" '
               f'subtitle "{esc(subtitle)}" '
               f'sound name "{esc(sound)}"')
+    ok = True
     try:
         subprocess.run(["osascript", "-e", script], timeout=15,
                        capture_output=True)
-        return True
     except Exception as e:
         print(f"notify failed: {e}", file=sys.stderr)
-        return False
+        ok = False
+    play(sound)
+    return ok
 
 
 def fetch(host, key, limit=25):
@@ -190,17 +214,37 @@ def main():
     ap.add_argument("--interval", type=int, default=20)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--test", action="store_true")
+    ap.add_argument("--sound", default="Glass",
+                    help="Glass, Ping, Basso, Submarine, Hero, Sosumi, Funk…")
+    ap.add_argument("--sounds-only", action="store_true",
+                    help="play each alert tone so you can pick one")
     ap.add_argument("--install", action="store_true")
     a = ap.parse_args()
 
     if a.install:
         install()
         return 0
+    if a.sounds_only:
+        for s in ("Ping", "Glass", "Basso", "Submarine", "Hero", "Sosumi",
+                  "Funk", "Tink"):
+            print(f"  {s}")
+            play(s)
+            time.sleep(1.4)
+        return 0
     if a.test:
-        ok = notify("📈 SUI_USDT closed +2.86% · +55.02 USDT",
-                    "#2 DOGE_USDT/3m·macdx", "All_pairs_SPOT · LIVE", "Glass")
-        print("sent" if ok else "failed")
-        return 0 if ok else 1
+        print("open  ->", end=" ", flush=True)
+        notify("▶ SUI_USDT opened 5x @ 0.7286",
+               "#8 SUI_USDT/3m·v7", "All_pairs_LEV · LIVE", "Ping")
+        time.sleep(2)
+        print("win   ->", end=" ", flush=True)
+        notify("▲ SUI_USDT closed +2.86% · +55.02 USDT",
+               "#2 DOGE_USDT/3m·macdx", "All_pairs_SPOT · LIVE", a.sound)
+        time.sleep(2)
+        print("loss  ->", end=" ", flush=True)
+        notify("▼ ETH_USDT closed -32.13% · -425.75 USDT",
+               "#3 ETH_USDT/1m·v7", "All_pairs_LEV · LIVE", "Basso")
+        print("\nthree banners sent, each with its own tone")
+        return 0
 
     key = _key()
     if not key:
