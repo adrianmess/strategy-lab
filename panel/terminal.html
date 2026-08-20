@@ -271,7 +271,7 @@ function loadAll(){
     renderRules(a);
   });
   document.getElementById('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
-  planKill(document.getElementById('pos'));
+  planKill();
 }
 
 function renderKpis(){
@@ -674,7 +674,7 @@ function held(p){
 function loadStatus(){
   INSTS.forEach(function(x){
     API('status?instance='+x.id).then(function(s){
-      STATUS[x.id]=s; renderCards(); renderRisk(); }).catch(function(){});
+      STATUS[x.id]=s; renderCards(); renderRisk(); renderPositions(); }).catch(function(){});
   });
   API('errors').then(function(e){ ERRS=e||{}; renderCards(); }).catch(function(){});
 }
@@ -813,26 +813,102 @@ function clearErrs(i){
   API('errors/clear?instance='+i, {method:'POST'}).then(function(){ loadStatus(); });
 }
 
-// the kill-switch planner doubles as an exchange-truth position reader
+// The kill-switch planner reads the EXCHANGE, so it sees holdings the bot is
+// not tracking too. The traders' own status gives entry price and leverage,
+// which is what turns a size into a P&L — so merge the two: tracked positions
+// get full numbers, anything else on the exchange still gets listed.
+var LASTPLAN = null;
+
+function posRows(){
+  var rows = [], seen = {};
+  INSTS.forEach(function(x){
+    var s = STATUS[x.id] || {}, p = s.position;
+    if(!p) return;
+    var px = +s.price || null;
+    var lev = s.mode === 'lev' ? (+p.lev || 1) : 1;
+    var mv = px ? (px/(+p.entry_price) - 1) * (p.dir > 0 ? 1 : -1) : null;
+    var cs = s.contract_size != null ? s.contract_size : 1;
+    seen[(s.api_account||'') + '|' + (p.symbol||'')] = true;
+    rows.push({
+      tracked: true, inst: x.name || x.id, account: s.api_account,
+      symbol: p.symbol || s.symbol, dir: p.dir > 0 ? 'LONG' : 'SHORT',
+      mode: s.mode, lev: lev, qty: p.qty, entry: +p.entry_price, now: px,
+      pct: mv == null ? null : 100 * mv * lev,
+      usd: (px != null) ? (+p.qty) * cs * (px - (+p.entry_price)) * (p.dir > 0 ? 1 : -1) : null,
+      notional: px != null ? (+p.qty) * cs * px : null,
+      held: held(p), comp: p.group || ''
+    });
+  });
+  ((LASTPLAN && LASTPLAN.report) || []).forEach(function(x){
+    if(x.step !== 'would_close' && x.step !== 'would_sell') return;
+    if(seen[(x.account||'') + '|' + (x.symbol||'')]) return;
+    rows.push({tracked:false, account:x.account, symbol:x.symbol || x.asset,
+               qty:x.vol || x.qty, dir:x.side || null,
+               mode:x.step === 'would_close' ? 'lev' : 'spot'});
+  });
+  return rows;
+}
+
+function renderPositions(){
+  var el = document.getElementById('pos');
+  if(!el) return;
+  var rows = posRows();
+  var notes = ((LASTPLAN && LASTPLAN.report) || []).filter(function(x){
+    return x.step === 'skip_excluded' || x.step === 'skip_dust'; });
+  if(!rows.length){
+    el.innerHTML = '<span class="mini">both accounts are flat</span>' +
+      (notes.length ? '<div class="mini" style="margin-top:8px">' + notes.map(function(x){
+        return (x.symbol||x.asset) + ' — ' + (x.step === 'skip_dust' ? 'dust' : x.why);
+      }).join(' · ') + '</div>' : '');
+    return;
+  }
+  var net = rows.reduce(function(a, r){ return a + (r.usd || 0); }, 0);
+  el.innerHTML =
+    '<table><thead><tr><th>Instance</th><th>Symbol</th><th>Side</th><th>Type</th>'+
+    '<th class="n">Qty</th><th class="n">Entry</th><th class="n">Now</th>'+
+    '<th class="n">Notional</th><th class="n">P&amp;L %</th><th class="n">P&amp;L $</th>'+
+    '<th class="n">Held</th></tr></thead><tbody>' +
+    rows.map(function(r){
+      if(!r.tracked){
+        return '<tr style="opacity:.6"><td class="dim">' + (r.account||'') + '</td>'+
+          '<td><b>' + r.symbol + '</b></td>'+
+          '<td class="dim">' + (r.dir || '—') + '</td>'+
+          '<td><span class="tag b">untracked</span></td>'+
+          '<td class="n">' + r.qty + '</td>'+
+          '<td class="n dim" colspan="6">on the exchange, not tracked by a trader</td></tr>';
+      }
+      return '<tr><td>' + r.inst + ' <span class="mini">' + (r.account||'') + '</span></td>'+
+        '<td><b>' + r.symbol + '</b>' + (r.comp ? '<div class="mini">via ' + r.comp + '</div>' : '') + '</td>'+
+        '<td><span class="tag ' + (r.dir === 'LONG' ? 'g' : 'live') + '">' + r.dir + '</span></td>'+
+        '<td><span class="tag ' + (r.mode === 'spot' ? 'spot' : 'lev') + '">' +
+          (r.mode === 'spot' ? 'SPOT' : 'LEV ' + r.lev.toFixed(0) + 'x') + '</span></td>'+
+        '<td class="n">' + r.qty + '</td>'+
+        '<td class="n">' + r.entry.toPrecision(6) + '</td>'+
+        '<td class="n">' + (r.now ? r.now.toPrecision(6) : '?') + '</td>'+
+        '<td class="n">' + (r.notional == null ? '—' : '$' + r.notional.toFixed(0)) + '</td>'+
+        '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
+          (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') + '</td>'+
+        '<td class="n ' + (r.usd == null ? 'dim' : cls(r.usd)) + '" style="font-weight:600">' +
+          (r.usd == null ? '—' : (r.usd >= 0 ? '+$' : '-$') + Math.abs(r.usd).toFixed(2)) + '</td>'+
+        '<td class="n dim">' + (r.held || '') + '</td></tr>';
+    }).join('') +
+    '</tbody><tfoot><tr><td colspan="9" class="n dim">unrealized across open positions</td>'+
+    '<td class="n ' + cls(net) + '" style="font-weight:700">' +
+      (net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2) + '</td><td></td></tr></tfoot></table>' +
+    (notes.length ? '<div class="body mini" style="border-top:1px solid var(--line)">' +
+      notes.map(function(x){ return (x.symbol||x.asset) + ' — ' +
+        (x.step === 'skip_dust' ? 'dust, below the minimum sellable size' : x.why); }).join(' · ') +
+      '</div>' : '');
+}
+
 function planKill(target){
   return API('killall', {method:'POST', headers:{'Content-Type':'application/json'},
                          body: JSON.stringify({plan:true})})
-    .then(function(r){
-      if(!target) return r;
-      var rows = (r.report||[]).filter(function(x){
-        return x.step==='would_close' || x.step==='would_sell' || x.step==='skip_excluded' || x.step==='skip_dust'; });
-      target.innerHTML = rows.length ? '<table><thead><tr><th>Account</th><th>Symbol</th>'+
-        '<th class="n">Size</th><th>Status</th></tr></thead><tbody>' + rows.map(function(x){
-          var t = x.step==='would_close' ? '<span class="tag live">open '+(x.side||'')+'</span>'
-                : x.step==='would_sell' ? '<span class="tag lev">holding</span>'
-                : x.step==='skip_excluded' ? '<span class="tag b">excluded — '+x.why+'</span>'
-                : '<span class="tag b">dust</span>';
-          return '<tr><td>'+x.account+'</td><td><b>'+(x.symbol||x.asset)+'</b></td>'+
-                 '<td class="n">'+(x.vol||x.qty)+'</td><td>'+t+'</td></tr>'; }).join('') +
-        '</tbody></table>' : '<span class="mini">both accounts are flat</span>';
-      return r;
-    })
-    .catch(function(){ if(target) target.innerHTML='<span class="mini down">could not reach the panel</span>'; });
+    .then(function(r){ LASTPLAN = r; renderPositions(); return r; })
+    .catch(function(){
+      var el = document.getElementById('pos');
+      if(el && !posRows().length) el.innerHTML = '<span class="mini down">could not reach the panel</span>';
+    });
 }
 
 function openKill(){
