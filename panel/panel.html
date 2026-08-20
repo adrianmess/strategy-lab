@@ -111,7 +111,7 @@ details.term > pre{margin-top:4px}
 </div>
 
 <h2 style="display:flex;justify-content:space-between;align-items:center">
-  <span>MEXC accounts <span class="note">— live balances &amp; open positions via API (read-only)</span> <span class="note" id="mexcScope" style="text-transform:none;letter-spacing:0"></span></span>
+  <span>MEXC account <span class="note">— live balances &amp; open positions via API (read-only)</span> <span class="note" id="mexcScope" style="text-transform:none;letter-spacing:0"></span></span>
   <span class="row" style="gap:6px;text-transform:none;letter-spacing:0">
     <span class="note" id="mexcStamp"></span>
     <button class="small" id="mexcRefreshBtn" onclick="refreshMexc(true)">↻ refresh now</button>
@@ -786,22 +786,37 @@ const fnum = (x, d=2) => (x==null || isNaN(+x)) ? '—' : (+x).toLocaleString(un
 async function refreshMexc(force){
   const btn = $('mexcRefreshBtn');
   try{
-    if(force){ btn.disabled = true; btn.textContent = '…fetching'; }
-    const accs = await api('mexc/account' + (force ? '?force=1' : ''));
-    $('mexcStamp').textContent = 'updated ' + new Date().toLocaleTimeString();
-    MEXCACCTS = accs.map(a=>a.account);
-    INSTS.forEach(x=>fillAcctSelect(x.id));
-    const el = $('mexcCard');
-    if(!accs.length){ el.innerHTML = '<span class="kv">no API keys configured (adaptive_trader/mexc_api_keys.json)</span>'; return; }
-    // show ONLY the account(s) the visible instance(s) actually trade on —
-    // in tab layout that is the selected instance, in column layout it is
-    // every instance on screen. Falls back to showing everything.
+    // WHICH account(s) belong on screen — decided BEFORE the fetch, so the
+    // other account is never requested, never rendered, and cannot flash.
+    // In tab layout that is the selected instance, in column layout every
+    // instance on screen.
     const shown = new Set();
     (LAYOUT === 'cols' ? INSTS : INSTS.filter(x => x.id === CUR)).forEach(x => {
       const c = TCONFIGS.find(t => t.file === (($('tcfg_'+x.id)||{}).value || x.cfg));
       if (c && c.api_account) shown.add(c.api_account);
     });
-    const visible = shown.size ? accs.filter(a => shown.has(a.account)) : accs;
+    // Instances/configs arrive asynchronously (this function is kicked off in
+    // the same breath as loadInstances). Until they land the scope is unknown —
+    // it used to fall back to "show everything", which IS the second or two of
+    // both accounts. Render nothing rather than the wrong account.
+    if(!shown.size){
+      const ready = INSTS.length && TCONFIGS.length;
+      $('mexcCard').innerHTML = ready
+        ? '<span class="kv">this instance\'s config has no api_account set</span>'
+        : '<span class="kv">loading account info…</span>';
+      $('mexcScope').textContent = '';
+      return;
+    }
+    if(force){ btn.disabled = true; btn.textContent = '…fetching'; }
+    const q = [force ? 'force=1' : '', shown.size ? 'only='+[...shown].join(',') : '']
+                .filter(Boolean).join('&');
+    const accs = await api('mexc/account' + (q ? '?'+q : ''));
+    $('mexcStamp').textContent = 'updated ' + new Date().toLocaleTimeString();
+    MEXCACCTS = accs.map(a=>a.account);   // stubs included: the picker needs names
+    INSTS.forEach(x=>fillAcctSelect(x.id));
+    const el = $('mexcCard');
+    if(!accs.length){ el.innerHTML = '<span class="kv">no API keys configured (adaptive_trader/mexc_api_keys.json)</span>'; return; }
+    const visible = accs.filter(a => !a.skipped && (!shown.size || shown.has(a.account)));
     $('mexcScope').textContent = shown.size
       ? `— ${[...shown].join(', ')} (used by ${LAYOUT === 'cols' ? 'these instances' : instName(CUR)})`
       : '';
@@ -1028,7 +1043,10 @@ async function fixCaches(){
   alert('Removed:\n'+(r.removed.length?r.removed.join('\n'):'nothing needed removing'));
   runDoctor();
 }
-loadInstances(); refreshConfigs(); loadSettings(); runDoctor(); refreshProcs(); refreshMexc();
+// the account card can only be scoped once instances AND their configs are
+// known, so chain it rather than firing it blind alongside them
+Promise.all([loadInstances(), refreshConfigs()]).then(()=>refreshMexc());
+loadSettings(); runDoctor(); refreshProcs();
 setInterval(refresh, 4000);
 setInterval(refreshConfigs, 20000);
 setInterval(refreshProcs, 10000);

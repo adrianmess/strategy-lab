@@ -1488,8 +1488,21 @@ def _avg_cost(trades, holding):
 def mexc_account():
     """Balances + open positions for every configured API account.
     Read-only endpoints only; cached 10s to respect rate limits.
-    ?force=1 bypasses the cache (the panel's refresh-now button)."""
+    ?force=1 bypasses the cache (the panel's refresh-now button).
+    ?only=mexc2[,mexc1] fetches ONLY those accounts and returns the rest as
+    name-only stubs — the card shows one instance's account, so there is no
+    reason to hit the other account's API (or to flash its balances while the
+    page decides what to hide)."""
     force = request.args.get("force") == "1"
+    only = {s for s in (request.args.get("only") or "").split(",") if s}
+    if only and not force and _MEXC_CACHE["data"] is not None \
+            and time.time() - _MEXC_CACHE["t"] < 300:
+        return jsonify([a if a.get("account") in only
+                        else dict(account=a.get("account"),
+                                  email=a.get("email"),
+                                  configured=a.get("configured", True),
+                                  skipped=True)
+                        for a in _MEXC_CACHE["data"]])
     # the background refresher keeps this warm, so a page load never waits on
     # MEXC round-trips; serve anything up to 5 min old (it is re-fetched
     # every 60s anyway) and only block when explicitly forced
@@ -1509,6 +1522,10 @@ def mexc_account():
     out = []
     for name, acct in sorted(accounts.items()):
         e = dict(account=name, email=acct.get("email"), configured=True)
+        if only and name not in only:
+            e["skipped"] = True        # name only: never touch its API
+            out.append(e)
+            continue
         if "PASTE" in str(acct.get("access_key", "")):
             e["configured"] = False
             out.append(e)
@@ -1641,7 +1658,8 @@ def mexc_account():
         except Exception as ex:
             e["error"] = str(ex)
         out.append(e)
-    _MEXC_CACHE.update(t=time.time(), data=out)
+    if not only:            # only a FULL sweep may replace the shared cache
+        _MEXC_CACHE.update(t=time.time(), data=out)
     return jsonify(out)
 
 
