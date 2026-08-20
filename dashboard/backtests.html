@@ -50,14 +50,13 @@ pre{font-size:11px;overflow:auto;background:#1c2129;padding:10px;border-radius:6
 .mcell{background:var(--hover);border-radius:6px;padding:6px 8px;font-size:11px;text-align:center}
 .hint{color:var(--dim);font-size:12px}
 th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
-/* was a bare 🔀 emoji at 40% opacity with grayscale(1) — it read as a faint
-   grey smudge, and fell back to a tofu box wherever the emoji font did not
-   load, so it looked like there was no button at all. Plain legible text. */
-button.rtradd{background:none;border:1px solid var(--border);border-radius:4px;
-  cursor:pointer;font-size:11px;line-height:1;padding:3px 5px;color:var(--dim);
-  font-weight:600}
-button.rtradd:hover{color:var(--blue);border-color:var(--blue)}
-button.rtradd.on{color:#fff;background:var(--blue,#1f6feb);border-color:var(--blue,#1f6feb)}
+/* the 🔀 icon, but not invisible: it used to sit at opacity .4 + grayscale(1),
+   which at 13px read as a faint grey smudge. Bigger, mostly opaque, only
+   lightly desaturated when off — full colour once the run is selected. */
+button.rtradd{background:none;border:none;cursor:pointer;font-size:15px;
+  line-height:1;padding:1px 3px;opacity:.85;filter:grayscale(.55)}
+button.rtradd:hover{opacity:1;filter:none}
+button.rtradd.on{opacity:1;filter:none}
 #rtrT{width:auto} #rtrT th,#rtrT td{text-align:left;padding:3px 14px 3px 0;white-space:nowrap}
 #rtrT th{cursor:default} #rtrT th:hover{color:var(--dim)} #rtrT tr:hover td{background:transparent}
 .tablewrap{overflow-x:auto}
@@ -257,7 +256,7 @@ button.rtradd.on{color:#fff;background:var(--blue,#1f6feb);border-color:var(--bl
     <div style="margin-top:6px">
     <table style="font-size:12px" id="rtrT"><thead><tr>
       <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th title="out-of-sample verdict for this entry (same logic as the main table's OOS column)">OOS</th><th></th></tr></thead>
-      <tbody id="rtrList"><tr><td colspan="8" class="hint">use the <b>+rtr</b> button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
+      <tbody id="rtrList"><tr><td colspan="8" class="hint">use the 🔀 button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button id="rtrOnlyBtn" onclick="toggleRtrOnly()" title="show ONLY the selected components in the list below (all other filters still apply) — click again to show everything">⧉ show only these below</button>
@@ -665,7 +664,7 @@ function rtrOnlyBtnSync(){
   b.style.color = on ? 'var(--blue)' : '';
 }
 function toggleRtrOnly(){
-  if(!RTRSEL.length){ alert('no components selected — add runs with +rtr, or load a saved selection'); return; }
+  if(!RTRSEL.length){ alert('no components selected — add runs with 🔀, or load a saved selection'); return; }
   RTR_ONLY = !RTR_ONLY;
   rtrOnlyBtnSync();
   sel = null; render();
@@ -1031,7 +1030,7 @@ function render(){
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
-      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">${RTRSEL.includes(e.name)?'✓rtr':'+rtr'}</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
