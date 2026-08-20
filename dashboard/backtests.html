@@ -119,6 +119,12 @@ button.rtradd.on{opacity:1;filter:none}
       <select id="fStrat" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
       </select></label>
+    <label class="hint" title="which GENOME of the source run this entry replayed: the train-best config (_full) or the holdout-validated OOS-best config (_oosbest_full). Click the ⓘ for what that means.">genome
+      <select id="fGenome" onchange="saveBtFilters()" style="margin-left:4px">
+        <option value="all">all</option>
+        <option value="oos">OOS-best only (_oosbest_full)</option>
+        <option value="train">train-best only (_full)</option>
+      </select></label><a href="#" onclick="document.getElementById('genomeInfo').style.display=document.getElementById('genomeInfo').style.display==='none'?'block':'none';return false" title="what _full and _oosbest_full mean" style="text-decoration:none;font-weight:700">ⓘ</a>
     <label class="hint" title="routers/combos are the composed entries (MetaX, MetaX2, PairX, FCFS) — everything else is a single-strategy run">routers
       <select id="fRouters" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -174,6 +180,37 @@ button.rtradd.on{opacity:1;filter:none}
     <label class="hint">search
       <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
     <span class="hint" id="fCount"></span>
+  </div>
+  <div id="genomeInfo" style="display:none;margin:4px 0 10px;padding:10px 14px;border:1px solid var(--border);border-left:4px solid #58a6ff;border-radius:6px;line-height:1.5;font-size:13px">
+    <b>Every optimizer run publishes up to two entries.</b> Same run, same full
+    continuous price history, same simulator — what differs is <i>which set of
+    parameters</i> was replayed.
+    <ul style="margin:6px 0 6px 18px;padding:0">
+      <li><code>&lt;run&gt;_full</code> — the <b>train-best</b> genome
+        (<code>best_config.json</code>): whatever scored highest on the data the
+        optimizer was allowed to see. It has looked at that data, so its full-history
+        total is <b>in-sample and flattering</b>.</li>
+      <li><code>&lt;run&gt;_oosbest_full</code> — the <b>OOS-best</b> genome
+        (<code>holdout_best_config.json</code>): the candidate that scored best on the
+        <b>held-out</b> segment the optimizer never trained on. Only published when
+        that holdout came back clean (no liquidation, positive growth), which is why
+        there are fewer of them.</li>
+    </ul>
+    Both are then replayed over the <b>whole</b> history — so an
+    <code>_oosbest_full</code> headline number still contains the in-sample era. The
+    honest figure for it is its <b>holdout</b> stat, not its total %. Treat the total as
+    "how this genome would have done overall", and the holdout as "what it did on data
+    it had never seen".
+    <br><b>Which one runs live:</b> "Adopt OOS-best" on the Optimize page builds the
+    config from <code>holdout_best_config.json</code> — the
+    <code>_oosbest_full</code> genome. Adopting reads the <b>run</b>, not the entry you
+    clicked, so picking a <code>_full</code> row does not get you the train-best genome.
+    <br><span style="color:var(--dim)">Router/combo entries
+    (<code>_fcfs_full</code>, <code>_fcfs_wf</code>, <code>_router_full</code>) are
+    neither: they have no genome of their own — their components do. For those,
+    <code>_fcfs_full</code> = every component always eligible (matches live behaviour)
+    and <code>_fcfs_wf</code> = causal walk-forward with the roster gate (the honest
+    estimate).</span>
   </div>
   <div id="activeJobs" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(63,185,80,.06)"></div>
   <div id="cmbBar" style="display:none;margin:4px 0 8px">
@@ -658,6 +695,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterPair', document.getElementById('fPair').value);
   localStorage.setItem('btFilterTf', document.getElementById('fTf').value);
   localStorage.setItem('btFilterRouters', document.getElementById('fRouters').value);
+  localStorage.setItem('btFilterGenome', document.getElementById('fGenome').value);
   localStorage.setItem('btFilterStrat', document.getElementById('fStrat').value);
   localStorage.setItem('btFilterNoLiq', document.getElementById('fNoLiq').checked ? '1' : '');
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
@@ -711,6 +749,9 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   document.getElementById('fMaxHold').value = localStorage.getItem('btFilterMaxHold') || '';
   document.getElementById('fMaxDD').value = localStorage.getItem('btFilterMaxDD') || '';
   document.getElementById('fHold').value = localStorage.getItem('btFilterHold') || 'all';
+  document.getElementById('fGenome').value = localStorage.getItem('btFilterGenome') || 'all';
+  // saved but never restored before — the routers filter reset on every reload
+  document.getElementById('fRouters').value = localStorage.getItem('btFilterRouters') || 'all';
   {  // instance options arrive async; remember the choice until they do
     const v = localStorage.getItem('btFilterInst') || 'all';
     const el = document.getElementById('fInst');
@@ -785,6 +826,16 @@ function render(){
   if(fPairV !== 'all') order = order.filter(i=>(BT[i].pair||'SOL_USDT') === fPairV);
   const fTfV = document.getElementById('fTf').value;
   if(fTfV !== 'all') order = order.filter(i=>tfNorm(BT[i].timeframe) === fTfV);
+  // genome: which config of the source run this entry replayed. _oosbest_full
+  // is the holdout-validated one (and the one "Adopt OOS-best" builds from);
+  // plain _full is the train-best. Router entries have neither.
+  const fGenV = document.getElementById('fGenome').value;
+  if(fGenV === 'oos') order = order.filter(i=>/_oosbest(_full)?$/.test(BT[i].name));
+  else if(fGenV === 'train') order = order.filter(i=>{
+    const n = BT[i].name;
+    return !/_oosbest(_full)?$/.test(n) && /_(best_full|best|full)$/.test(n)
+           && !/_(fcfs_full|fcfs_wf|router_full)$/.test(n);
+  });
   const fRtV = document.getElementById('fRouters').value;
   const _isRtr = i => ['metax','metax2','pairx','fcfsx'].includes(BT[i].strategy);
   if(fRtV === 'only') order = order.filter(_isRtr);

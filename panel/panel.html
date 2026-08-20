@@ -122,6 +122,7 @@ details.term > pre{margin-top:4px}
 <h2>Trader settings <span class="note">(applies on next trader start)</span></h2>
 <div class="card row" id="settings">
   <label>file</label><select id="sFile" onchange="loadSettings()"></select>
+  <button class="small danger" onclick="deleteConfig()" title="move this config file aside (recoverable). Refused while an instance is running it.">Delete config</button>
   <label>equity $</label><input id="sEquity">
   <label>poll s</label><input id="sPoll">
   <label>webhook</label><input class="wide" id="sHook">
@@ -969,6 +970,28 @@ async function loadSettings(){
   const c = await fetch('/api/trader_config?file='+$('sFile').value).then(r=>r.json());
   $('sEquity').value = c.equity_usdt; $('sPoll').value = c.poll_seconds;
   $('sHook').value = c.webhook_url; $('sEmerg').value = c.emergency_exit_adverse ? (100*c.emergency_exit_adverse) : '';
+}
+async function deleteConfig(){
+  const file = $('sFile').value;
+  if(!file) return;
+  if(!(await modalWord(`Delete ${file}?\n\nThe file is moved aside as `
+      + `${file}.deleted_<timestamp> (recoverable on the mini). Its state and `
+      + `log files are left alone. A RUNNING instance blocks the delete.`,
+      'DELETE', 'Delete config'))) return;
+  let r = await fetch('/api/trader_configs/delete', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({file})}).then(x=>x.json());
+  // 409: no instance is running it, but one is still POINTED at it
+  if(r.used_by && r.used_by.length){
+    if(!(await modalConfirm(`${r.error}\n\nDelete anyway? Instance(s) `
+        + `${r.used_by.join(', ')} would be left pointing at a config that no `
+        + `longer exists — pick a new one for them afterwards.`,
+        {okLabel:'Delete anyway', danger:true}))) return;
+    r = await fetch('/api/trader_configs/delete', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file, force:true})}).then(x=>x.json());
+  }
+  $('sMsg').textContent = r.ok ? `deleted ✓ (kept as ${r.backup})` : (r.error||'error');
+  if(r.ok){ $('sFile').value = ''; await refresh(); }
 }
 async function saveSettings(){
   const em = $('sEmerg').value.trim();
