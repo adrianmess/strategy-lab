@@ -79,11 +79,13 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 <nav class="rail">
   <div class="logo">SL</div>
   <button class="on" data-go="overview" title="Overview">&#9635;</button>
+  <button data-go="instances" title="Instances">&#9881;</button>
   <button data-go="alerts" title="Alerts">&#9873;</button>
 </nav>
 <div class="main">
-  <div class="banner">New UI — <b>read-only except the kill switch</b>. The classic panel is untouched at
-    <a href="/" style="color:var(--blue)">/</a> and remains the place to start, stop and configure traders.</div>
+  <div class="banner">New UI — instance controls are <b>live and place real orders</b>. The classic panel is
+    untouched at <a href="/" style="color:var(--blue)">/</a>; not yet ported here: executor (Playwright)
+    controls, trader settings, quick backtest, jobs, processes, optimize and backtests pages.</div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <span class="crumb" id="crumb">Overview</span>
@@ -105,6 +107,8 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
     <div class="card"><h3>Open positions <span class="mini">exchange truth via the kill-switch planner</span></h3>
       <div class="body" id="pos"><span class="mini">loading…</span></div></div>
   </div></section>
+
+  <section class="view" id="v-instances"><div class="wrap" id="icards"></div></section>
 
   <section class="view" id="v-alerts"><div class="wrap">
     <div class="card"><h3>Alert rules
@@ -148,9 +152,10 @@ function loadAll(){
     document.getElementById('pLive').style.display = live ? '' : 'none';
     renderInsts();
     INSTS.forEach(function(x){
-      API('performance?instance='+x.id).then(function(p){ PERF[x.id]=p; renderInsts(); renderKpis(); })
-        .catch(function(){});
+      API('performance?instance='+x.id).then(function(p){
+        PERF[x.id]=p; renderInsts(); renderKpis(); renderCards(); }).catch(function(){});
     });
+    loadStatus();
   });
   API('alerts').then(function(a){
     var h = (a.data_age_min||0)/60;
@@ -200,6 +205,163 @@ function renderInsts(){
        '<td class="n">'+(w&&w['30d'].trades ? Math.round(100*w['30d'].wins/w['30d'].trades)+'%' : '—')+'</td>'+
        '<td class="mini">'+(x.cfg||'')+'</td></tr>';
    }).join('') + '</tbody></table>';
+}
+
+// ---------------- instances (full control parity) ----------------
+var STATUS = {}, ERRS = {};
+
+function held(p){
+  var ms = null;
+  if(p.opened_ms) ms = p.opened_ms;
+  else if(p.opened_at){
+    var iso = p.opened_at.replace(' ','T');
+    ms = new Date(iso).getTime();
+    if(isNaN(ms) || ms > Date.now()) ms = new Date(iso+'Z').getTime();
+  }
+  if(ms==null || isNaN(ms)) return '';
+  var m = Math.max(0,(Date.now()-ms)/6e4);
+  return m>=60 ? (Math.floor(m/60)+'h '+Math.round(m%60)+'m') : (Math.round(m)+'m');
+}
+
+function loadStatus(){
+  INSTS.forEach(function(x){
+    API('status?instance='+x.id).then(function(s){ STATUS[x.id]=s; renderCards(); }).catch(function(){});
+  });
+  API('errors').then(function(e){ ERRS=e||{}; renderCards(); }).catch(function(){});
+}
+
+function renderCards(){
+  var box = document.getElementById('icards');
+  if(!box) return;
+  box.innerHTML = INSTS.map(function(x){
+    var s = STATUS[x.id] || {}, p = s.position, perf = PERF[x.id] || {};
+    var nm = x.name || ('Instance '+x.id);
+    // ---- hero position banner ----
+    var hero = '';
+    if(p){
+      var px = +s.price || null;
+      var mv = px ? (px/(+p.entry_price)-1)*(p.dir>0?1:-1) : null;
+      var pct = mv==null ? null : 100*mv*(s.mode==='lev' ? (+p.lev||1) : 1);
+      var cs = s.contract_size;
+      var usd = (px && cs!=null) ? (+p.qty)*cs*(px-(+p.entry_price))*(p.dir>0?1:-1) : null;
+      var neg = pct!=null && pct<0;
+      hero = '<div style="border:1px solid '+(neg?'var(--down)':'var(--up)')+
+        ';border-left-width:4px;border-radius:8px;padding:11px 14px;margin-bottom:11px;background:'+
+        (neg?'rgba(246,70,93,.07)':'rgba(46,189,133,.07)')+'">'+
+        '<div class="rowsb" style="flex-wrap:wrap;align-items:baseline;gap:12px">'+
+          '<b style="font-size:18px">'+(p.symbol||s.symbol||'')+'</b>'+
+          '<span class="tag '+(p.dir>0?'g':'live')+'">'+(p.dir>0?'LONG':'SHORT')+' · '+
+            (s.mode==='lev' ? (+p.lev).toFixed(0)+'x' : 'spot')+'</span>'+
+          '<b class="'+(pct==null?'':(pct>=0?'up':'down'))+'" style="font-size:19px">'+
+            (pct==null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</b>'+
+          '<b class="'+(usd==null?'':(usd>=0?'up':'down'))+'" style="font-size:15px">'+
+            (usd==null?'':(usd>=0?'+$':'-$')+Math.abs(usd).toFixed(2))+'</b>'+
+          '<span class="mini" style="margin-left:auto">'+(held(p)?('open '+held(p)):'')+
+            (p.late_mirror?' · late-join':'')+'</span></div>'+
+        '<div class="mini" style="margin-top:5px;display:flex;gap:18px;flex-wrap:wrap">'+
+          '<span>entry <b class="num">'+(+p.entry_price).toPrecision(6)+'</b></span>'+
+          '<span>now <b class="num">'+(px?px.toPrecision(6):'?')+'</b></span>'+
+          '<span>qty <b class="num">'+p.qty+'</b></span>'+
+          (p.tp_price?'<span>target <b class="num">'+(+p.tp_price).toPrecision(6)+'</b>'+
+            (p.tp_order_id?' &#9875;':'')+'</span>':'')+
+          '<span>via <b>'+(p.group||'')+'</b></span></div>'+
+        '<div style="margin-top:9px;display:flex;gap:7px;flex-wrap:wrap;align-items:center">'+
+          (s.override
+            ? '<span class="tag lev">override armed at '+s.override.price+'</span>'+
+              '<button class="btn sm" onclick="disarm(\''+x.id+'\')">disarm</button>'
+            : '<input id="ov_'+x.id+'" placeholder="price or ±%" style="width:110px">'+
+              '<select id="ovu_'+x.id+'"><option value="price">price</option>'+
+              '<option value="pct">% from entry</option></select>'+
+              '<button class="btn sm" onclick="arm(\''+x.id+'\')">arm</button>')+
+          '<button class="btn sm danger" style="margin-left:auto" onclick="closeNow(\''+x.id+'\')">'+
+            'Close position now</button></div></div>';
+    } else {
+      hero = '<div class="mini" style="border:1px dashed var(--line);border-radius:8px;padding:12px;'+
+             'text-align:center;margin-bottom:11px">No open position</div>';
+    }
+    // ---- API error banner ----
+    var errs = (ERRS[x.id]||[]);
+    var ebar = errs.length ? '<div style="border:1px solid var(--down);background:rgba(246,70,93,.1);'+
+      'border-radius:8px;padding:8px 11px;margin-bottom:11px;font-size:12px">'+
+      '<b class="down">&#9888; '+errs.length+' API error'+(errs.length>1?'s':'')+'</b> '+
+      '<span class="mini">'+String(errs[errs.length-1].msg||'').slice(0,110)+'</span>'+
+      '<button class="btn sm" style="margin-left:8px" onclick="clearErrs(\''+x.id+'\')">clear</button></div>' : '';
+    // ---- performance strip ----
+    var w = perf.windows;
+    function pc(k,l){ return '<div><div class="mini">'+l+'</div><div class="num '+
+      (w?cls(w[k].realized):'')+'" style="font-size:17px">'+(w?money(w[k].realized):'…')+'</div></div>'; }
+    var state = s.running
+      ? (s.live ? '<span class="tag live">RUNNING — LIVE</span>'
+                : '<span class="tag g">running (dry-run)</span>')
+      : '<span class="tag b">stopped</span>';
+    var comps = ((s.candidate||{}).components||[]).length;
+    return '<div class="card"><h3>'+nm+
+      ' <span style="display:flex;gap:6px">'+
+      '<span class="tag '+(s.mode==='spot'?'spot':'lev')+'">'+(s.mode||'?').toUpperCase()+'</span>'+
+      '<span class="tag b">'+(s.api_account||'')+'</span></span></h3><div class="body">'+
+      '<div class="rowsb" style="flex-wrap:wrap;margin-bottom:10px">'+
+        '<div>'+state+' <span class="mini">'+(s.started?('· since '+s.started):'')+'</span>'+
+          '<div class="mini">'+(s.config||'')+'</div>'+
+          '<div class="mini">'+(comps?('FCFS router · '+comps+' components · one shared slot'):
+            ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+'</div></div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          '<button class="btn sm" onclick="startTrader(\''+x.id+'\',false)">Start dry-run</button>'+
+          '<button class="btn sm danger" onclick="startTrader(\''+x.id+'\',true)">Start LIVE</button>'+
+          '<button class="btn sm" onclick="stopTrader(\''+x.id+'\')">Stop</button>'+
+        '</div></div>'+
+      ebar + hero +
+      '<div style="display:flex;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">'+
+        pc('24h','24H')+pc('7d','7D')+pc('30d','30D')+
+        '<div><div class="mini">WIN</div><div class="num" style="font-size:17px">'+
+          (w&&w['30d'].trades?Math.round(100*w['30d'].wins/w['30d'].trades)+'%':'—')+'</div></div>'+
+      '</div>'+
+      '<details style="margin-top:10px"><summary class="mini" style="cursor:pointer">trader log</summary>'+
+        '<pre style="background:#0d1117;border:1px solid var(--line);border-radius:6px;padding:9px;'+
+        'font-size:11px;max-height:220px;overflow:auto;margin:7px 0 0">'+
+        ((s.log||[]).join('\n').replace(/</g,'&lt;')||'–')+'</pre></details>'+
+      '</div></div>';
+  }).join('');
+}
+
+function arm(i){
+  var v = document.getElementById('ov_'+i).value.trim();
+  var u = document.getElementById('ovu_'+i).value;
+  if(!v) return;
+  var body = {instance:i}; body[u==='pct'?'pct':'price'] = v;
+  API('override', {method:'POST', headers:{'Content-Type':'application/json'},
+                   body:JSON.stringify(body)}).then(function(r){
+    if(r.error) alert(r.error); loadStatus(); });
+}
+function disarm(i){
+  API('override?instance='+i, {method:'DELETE'}).then(function(){ loadStatus(); });
+}
+function closeNow(i){
+  var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  if(prompt('Close the open position on '+nm+' at market?\n\nThis places a REAL order. Type CLOSE to confirm.') !== 'CLOSE') return;
+  API('override', {method:'POST', headers:{'Content-Type':'application/json'},
+                   body:JSON.stringify({instance:i, now:true})}).then(function(r){
+    if(r.error) alert(r.error); else alert('Close armed — the trader will flatten on its next check.');
+    loadStatus(); });
+}
+function startTrader(i, live){
+  var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  if(live && prompt('Start '+nm+' with REAL MONEY?\n\nType LIVE to confirm.') !== 'LIVE') return;
+  API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
+                       body:JSON.stringify({instance:i, live:!!live})}).then(function(r){
+    if(r.error) alert(r.error); loadAll(); });
+}
+function stopTrader(i){
+  var s = STATUS[i]||{};
+  var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  var warn = s.position ? '\n\nWARNING: it is holding '+s.position.qty+' '+s.position.symbol+
+    '. Stopping leaves that position OPEN with nothing managing it. Use KILL ALL if you want it flattened.' : '';
+  if(!confirm('Stop '+nm+'?'+warn)) return;
+  API('trader/stop', {method:'POST', headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({instance:i})}).then(function(r){
+    if(r.error) alert(r.error); loadAll(); });
+}
+function clearErrs(i){
+  API('errors/clear?instance='+i, {method:'POST'}).then(function(){ loadStatus(); });
 }
 
 // the kill-switch planner doubles as an exchange-truth position reader
