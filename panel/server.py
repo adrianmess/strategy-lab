@@ -485,6 +485,31 @@ def oos_map():
     return jsonify(out)
 
 
+@app.route("/api/router_components")
+def router_components():
+    """The component RUNS behind one router/combo run, read from its
+    optimizer/runs/<run>/best_config.json. Lets the backtests page filter the
+    list down to the backtests a chosen router was actually built from. One
+    file read per call — never scan the whole runs tree here, that is what
+    pinned a core the last time."""
+    run = os.path.basename(request.args.get("run") or "")
+    if not run or not re.fullmatch(r"[A-Za-z0-9_.\-]+", run):
+        return jsonify(error="bad run name"), 400
+    path = os.path.join(OPT, "runs", run, "best_config.json")
+    if not os.path.isfile(path):
+        return jsonify(error=f"no best_config.json for run '{run}'"), 404
+    try:
+        b = json.load(open(path))
+    except Exception as e:
+        return jsonify(error=f"unreadable: {e}"), 500
+    comps = ((b.get("cand") or {}).get("components") or [])
+    out = [dict(run=c.get("run"), strategy=c.get("strategy"),
+                pair=c.get("pair"), timeframe=c.get("timeframe"),
+                file=c.get("file"))
+           for c in comps if c.get("run")]
+    return jsonify(run=run, n=len(out), components=out)
+
+
 @app.route("/api/gauntlet")
 def gauntlet_api():
     """Holdout-gauntlet verdicts for sweep families: run name ->

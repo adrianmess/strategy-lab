@@ -50,9 +50,14 @@ pre{font-size:11px;overflow:auto;background:#1c2129;padding:10px;border-radius:6
 .mcell{background:var(--hover);border-radius:6px;padding:6px 8px;font-size:11px;text-align:center}
 .hint{color:var(--dim);font-size:12px}
 th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
-button.rtradd{background:none;border:none;cursor:pointer;font-size:13px;opacity:.4;filter:grayscale(1)}
-button.rtradd:hover{opacity:1;filter:none}
-button.rtradd.on{opacity:1;filter:none}
+/* was a bare 🔀 emoji at 40% opacity with grayscale(1) — it read as a faint
+   grey smudge, and fell back to a tofu box wherever the emoji font did not
+   load, so it looked like there was no button at all. Plain legible text. */
+button.rtradd{background:none;border:1px solid var(--border);border-radius:4px;
+  cursor:pointer;font-size:11px;line-height:1;padding:3px 5px;color:var(--dim);
+  font-weight:600}
+button.rtradd:hover{color:var(--blue);border-color:var(--blue)}
+button.rtradd.on{color:#fff;background:var(--blue,#1f6feb);border-color:var(--blue,#1f6feb)}
 #rtrT{width:auto} #rtrT th,#rtrT td{text-align:left;padding:3px 14px 3px 0;white-space:nowrap}
 #rtrT th{cursor:default} #rtrT th:hover{color:var(--dim)} #rtrT tr:hover td{background:transparent}
 .tablewrap{overflow-x:auto}
@@ -144,6 +149,10 @@ button.rtradd.on{opacity:1;filter:none}
         <option value="oos">OOS-best only (_oosbest_full)</option>
         <option value="train">train-best only (_full)</option>
       </select></label><a href="#" onclick="document.getElementById('genomeInfo').style.display=document.getElementById('genomeInfo').style.display==='none'?'block':'none';return false" title="what _full and _oosbest_full mean" style="text-decoration:none;font-weight:700">ⓘ</a>
+    <label class="hint" title="pick a router/combo and see ONLY the backtests it was built from — its component runs, plus the router's own entries. The component list comes from the router run's best_config.json.">router
+      <select id="fRtrOf" onchange="rtrOfChanged()" style="margin-left:4px;max-width:260px">
+        <option value="">all</option>
+      </select></label>
     <label class="hint" title="routers/combos are the composed entries (MetaX, MetaX2, PairX, FCFS) — everything else is a single-strategy run">routers
       <select id="fRouters" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -246,7 +255,7 @@ button.rtradd.on{opacity:1;filter:none}
     <div style="font-weight:600;margin-bottom:6px">Router components <span class="hint" id="rtrCount"></span></div>
     <table style="font-size:12px" id="rtrT"><thead><tr>
       <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th title="out-of-sample verdict for this entry (same logic as the main table's OOS column)">OOS</th><th></th></tr></thead>
-      <tbody id="rtrList"><tr><td colspan="8" class="hint">use the 🔀 button on any run to add it…</td></tr></tbody></table>
+      <tbody id="rtrList"><tr><td colspan="8" class="hint">use the <b>+rtr</b> button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button id="rtrOnlyBtn" onclick="toggleRtrOnly()" title="show ONLY the selected components in the list below (all other filters still apply) — click again to show everything">⧉ show only these below</button>
@@ -469,6 +478,61 @@ async function loadInstanceRuns(){
   }catch(e){}
 }
 loadInstanceRuns(); setInterval(loadInstanceRuns, 30000);
+// ---- "show me one router's backtests" ----------------------------------
+// A published router entry carries no component list of its own; the runs it
+// was built from live in optimizer/runs/<run>/best_config.json, which the panel
+// serves per-router (one file read) via /api/router_components.
+const RTR_SUF = ['_walkforward_router_full', '_refined_router_full',
+                 '_router_full', '_fcfs_full', '_fcfs_wf'];
+function rtrSrcRun(name){                   // entry name -> optimizer run dir
+  for(const s of RTR_SUF) if(name.endsWith(s)) return name.slice(0, -s.length);
+  return name;
+}
+let RTROF = '';                             // selected router run ('' = off)
+const RTROF_CACHE = {};                     // run -> [component run names]
+function fillRtrOfSelect(){
+  const sel = document.getElementById('fRtrOf');
+  if(!sel) return;
+  const runs = [...new Set(BT.filter(e=>['fcfsx','metax','metax2','pairx']
+      .includes(e.strategy)).map(e=>rtrSrcRun(e.name)))].sort();
+  const html = '<option value="">all</option>' +
+    runs.map(r=>`<option value="${r}">${r}</option>`).join('');
+  if(sel._sig === html) return;
+  sel._sig = html; sel.innerHTML = html;
+  if(runs.includes(RTROF)) sel.value = RTROF;
+}
+async function rtrOfChanged(){
+  // NB: do not name this 'sel' — the module-level `sel` is the selected row
+  // index, and shadowing it makes the `sel = null` below a const assignment
+  const el = document.getElementById('fRtrOf');
+  RTROF = el.value;
+  localStorage.setItem('btFilterRtrOf', RTROF);
+  if(RTROF && !RTROF_CACHE[RTROF]){
+    el.disabled = true;
+    try{
+      const r = await fetch('/api/router_components?run=' + encodeURIComponent(RTROF))
+                      .then(x=>x.json());
+      if(r.error){ alert(`could not read that router's components: ${r.error}`);
+                   RTROF = ''; el.value = ''; }
+      else RTROF_CACHE[RTROF] = (r.components||[]).map(c=>c.run);
+    }catch(e){ alert('could not reach the panel to read the components'); RTROF=''; el.value=''; }
+    el.disabled = false;
+  }
+  // mirror the components into the Router components bar so the existing
+  // build/save/"show only these" tools work on them straight away
+  if(RTROF && RTROF_CACHE[RTROF]){
+    const want = RTROF_CACHE[RTROF];
+    const have = BT.filter(e=>entryInRuns(e.name, new Set(want))).map(e=>e.name);
+    const pick = want.map(r=>have.find(n=>n===r+'_oosbest_full')
+                            || have.find(n=>n===r+'_full')
+                            || have.find(n=>n.startsWith(r+'_'))).filter(Boolean);
+    RTRSEL.length = 0; RTRSEL.push(...pick);
+    rtrRender();
+    document.getElementById('rtrCount').textContent =
+      `— ${pick.length} of ${want.length} component run(s) of ${RTROF}`;
+  }
+  sel = null; render();
+}
 function instRunsFor(v){
   if(v === 'any') return new Set(INSTRUNS.flatMap(x=>x.runs));
   const one = INSTRUNS.find(x=>('i:'+x.id) === v);
@@ -597,7 +661,7 @@ function rtrOnlyBtnSync(){
   b.style.color = on ? 'var(--blue)' : '';
 }
 function toggleRtrOnly(){
-  if(!RTRSEL.length){ alert('no components selected — add runs with 🔀, or load a saved selection'); return; }
+  if(!RTRSEL.length){ alert('no components selected — add runs with +rtr, or load a saved selection'); return; }
   RTR_ONLY = !RTR_ONLY;
   rtrOnlyBtnSync();
   sel = null; render();
@@ -782,6 +846,12 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   }
   document.getElementById('fWinMin').value = localStorage.getItem('btFilterWinMin') || '';
   document.getElementById('fGaunt').checked = localStorage.getItem('btFilterGaunt')==='1';
+  fillRtrOfSelect();
+  {  // restore the chosen router (its component list is fetched on demand)
+    const v = localStorage.getItem('btFilterRtrOf') || '';
+    const el = document.getElementById('fRtrOf');
+    if(v && [...el.options].some(o=>o.value===v)){ el.value = v; rtrOfChanged(); }
+  }
   rtrRender();   // shows the Router components bar at load when saved selections exist
 })();
 // ---- "no losing period" support: weekly returns derived from the curve ----
@@ -859,6 +929,12 @@ function render(){
     return !/_oosbest(_full)?$/.test(n) && /_(best_full|best|full)$/.test(n)
            && !/_(fcfs_full|fcfs_wf|router_full)$/.test(n);
   });
+  // one router's world: its component runs' entries plus its own entries
+  if(RTROF && RTROF_CACHE[RTROF]){
+    const runs = new Set(RTROF_CACHE[RTROF]);
+    order = order.filter(i=>entryInRuns(BT[i].name, runs)
+                            || rtrSrcRun(BT[i].name) === RTROF);
+  }
   const fRtV = document.getElementById('fRouters').value;
   const _isRtr = i => ['metax','metax2','pairx','fcfsx'].includes(BT[i].strategy);
   if(fRtV === 'only') order = order.filter(_isRtr);
@@ -949,7 +1025,7 @@ function render(){
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
-      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">${RTRSEL.includes(e.name)?'✓rtr':'+rtr'}</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
