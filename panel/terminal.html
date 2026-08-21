@@ -1,17 +1,46 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Strategy Lab — Terminal</title>
+<script>document.documentElement.setAttribute("data-theme",
+  localStorage.getItem("slTheme")||"dark");</script>
 <style>
+/* ---- themes -----------------------------------------------------------
+   dark  : the working theme
+   light : for daylight and screenshots
+   black : true #000 for an always-on OLED panel in a dark room. Black
+           pixels are OFF on OLED, so the screen emits almost nothing; the
+           foreground is dimmed and the accents desaturated so what IS lit
+           does not glow either. --glow scales the chart fills. */
 :root{--bg:#0b0e11;--panel:#151a21;--panel2:#1b212a;--line:#252c37;--fg:#eaecef;
  --dim:#848e9c;--accent:#f0b90b;--blue:#4c8dff;--violet:#8b5cf6;--cyan:#22d3ee;
- --up:#2ebd85;--down:#f6465d;--warn:#f5b544;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+ --up:#2ebd85;--down:#f6465d;--warn:#f5b544;--rail:#0d1117;--code:#0d1117;
+ --edge:#3a4553;--hover:rgba(255,255,255,.035);--glow:.32;
+ --mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+html[data-theme="light"]{--bg:#f4f6f9;--panel:#ffffff;--panel2:#eef1f5;--line:#d6dde6;
+ --fg:#161c24;--dim:#5c6874;--accent:#a67200;--blue:#2563eb;--violet:#6d28d9;--cyan:#0e7490;
+ --up:#0f8a5f;--down:#c62b3f;--warn:#9a6700;--rail:#ffffff;--code:#f4f6f9;
+ --edge:#b9c3ce;--hover:rgba(0,0,0,.04);--glow:.20}
+/* panels are #000 too: they cover most of the screen, and on OLED a black
+   pixel is an unlit pixel. Structure comes from the 1px borders instead of
+   from lifted backgrounds. */
+html[data-theme="black"]{--bg:#000000;--panel:#000000;--panel2:#08090b;--line:#15191e;
+ --fg:#b9c0c9;--dim:#4e565f;--accent:#a8790a;--blue:#3560a8;--violet:#5b3d9e;--cyan:#1a8ea3;
+ --up:#1e8a63;--down:#a83848;--warn:#93690f;--rail:#000000;--code:#000000;
+ --edge:#232a33;--hover:rgba(255,255,255,.02);--glow:.16}
+/* the blue notice strip is the brightest thing on the page — mute it, and
+   take the glow off the status pills, in the always-on theme */
+html[data-theme="black"] .banner{background:transparent;color:var(--dim);
+  border-bottom-color:var(--line)}
+html[data-theme="black"] .banner b{color:var(--fg)}
+html[data-theme="black"] .pill.ok,html[data-theme="black"] .pill.live{background:transparent}
+html[data-theme="black"] .tbtn.kill{background:transparent}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .up{color:var(--up)}.down{color:var(--down)}.dim{color:var(--dim)}.warn{color:var(--warn)}
 button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 .shell{display:grid;grid-template-columns:56px 1fr;min-height:100vh}
-.rail{background:#0d1117;border-right:1px solid var(--line);display:flex;flex-direction:column;
+.rail{background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;
  align-items:center;padding:10px 0;gap:3px;position:sticky;top:0;height:100vh}
 .rail .logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#c99400);
  color:#000;display:grid;place-items:center;font-weight:800;margin-bottom:8px;font-size:12px}
@@ -28,7 +57,7 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 .pill.ok{border-color:rgba(46,189,133,.4);color:var(--up);background:rgba(46,189,133,.08)}
 .pill.warn{border-color:rgba(245,181,68,.5);color:var(--warn);background:rgba(245,181,68,.08)}
 .btn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:5px 11px}
-.btn:hover{border-color:#3a4553}
+.btn:hover{border-color:var(--edge)}
 .btn.blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
 .btn.danger{background:transparent;border-color:rgba(246,70,93,.5);color:var(--down)}
 .btn.kill{background:var(--down);border-color:var(--down);color:#fff;font-weight:700;letter-spacing:.03em}
@@ -39,14 +68,14 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 .tbtn{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:5px;
   padding:5px 11px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
   font-weight:600;line-height:1.5;white-space:nowrap;text-decoration:none;display:inline-block}
-.tbtn:hover{color:var(--fg);border-color:#3a4553}
+.tbtn:hover{color:var(--fg);border-color:var(--edge)}
 .seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);
   border-radius:5px;overflow:hidden}
 .seg button{background:none;border:0;border-right:1px solid var(--line);color:var(--dim);
   padding:5px 11px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
   font-weight:600;line-height:1.5;white-space:nowrap}
 .seg button:last-child{border-right:0}
-.seg button:hover{color:var(--fg);background:rgba(255,255,255,.035)}
+.seg button:hover{color:var(--fg);background:var(--hover)}
 .seg button.on{color:var(--accent);background:rgba(240,185,11,.13);box-shadow:inset 0 -2px 0 var(--accent)}
 .tbtn.kill{background:rgba(246,70,93,.12);border-color:rgba(246,70,93,.55);color:var(--down)}
 .tbtn.kill:hover{background:var(--down);border-color:var(--down);color:#fff}
@@ -64,7 +93,7 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th{text-align:left;color:var(--dim);font-weight:500;padding:7px 13px;border-bottom:1px solid var(--line);
  font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-td{padding:7px 13px;border-bottom:1px solid rgba(37,44,55,.5)}
+td{padding:7px 13px;border-bottom:1px solid var(--line);border-bottom-color:color-mix(in srgb,var(--line) 60%,transparent)}
 tbody tr:hover{background:var(--panel2)}
 td.n,th.n{text-align:right}td.n{font-family:var(--mono)}
 .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:10.5px;font-weight:600}
@@ -72,7 +101,7 @@ td.n,th.n{text-align:right}td.n{font-family:var(--mono)}
 .tag.spot{background:rgba(55,211,154,.14);color:var(--up)}
 .tag.live{background:rgba(255,93,108,.14);color:var(--down)}
 .tag.g{background:rgba(46,189,133,.14);color:var(--up)}
-.tag.b{background:rgba(120,140,170,.16);color:#9fb0c9}
+.tag.b{background:var(--hover);color:var(--dim);box-shadow:inset 0 0 0 1px var(--line)}
 .mini{font-size:11px;color:var(--dim)}
 input,select{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;
  padding:5px 8px;font:inherit}
@@ -135,6 +164,8 @@ body.masked .amt:hover{filter:none}
       <span class="mini" id="stamp"></span>
       <a class="tbtn" href="/" title="Back to the classic control panel — unchanged, and still the place for executor controls, trader settings, jobs and processes">Classic panel</a>
       <div class="seg">
+        <button id="themeBtn" onclick="cycleTheme()"
+          title="Dark, Light, or Black. Black is true #000 for an always-on OLED screen in a dark room.">Dark</button>
         <button id="dispBtn" onclick="cycleDisplay()"
           title="Show realized figures as money, as a percentage, or both">$ / %</button>
         <button id="maskBtn" onclick="toggleMask()"
@@ -289,6 +320,30 @@ function cls(v){ return v>0?'up':(v<0?'down':'dim'); }
 // Overview cards, the Overview instances table and the Instances page.
 // MASK blurs currency and token amounts but never percentages, so you can
 // screen-share performance without showing the size of the account.
+// ---- theme -------------------------------------------------------------
+var THEMES = ['dark', 'light', 'black'];
+function cssv(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('slTheme', t);
+  var b = document.getElementById('themeBtn');
+  if(b){
+    b.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+    b.classList.toggle('on', t !== 'dark');
+  }
+  // charts are drawn as SVG strings, so they carry the colours they were
+  // built with — repaint them against the new palette
+  if(typeof renderChart === 'function' && Object.keys(PERF).length){
+    renderChart(); renderCards(); renderDaily();
+  }
+}
+function cycleTheme(){
+  var i = THEMES.indexOf(document.documentElement.getAttribute('data-theme') || 'dark');
+  applyTheme(THEMES[(i + 1) % THEMES.length]);
+}
+
 var DISPLAY = localStorage.getItem('slDisplay') || 'both';
 var MASK = localStorage.getItem('slMask') === '1';
 function amt(html){ return '<span class="amt">' + html + '</span>'; }
@@ -541,10 +596,10 @@ function area(vals, w, h, c1, c2){
     '<defs><linearGradient id="l'+id+'" x1="0" x2="1">'+
       '<stop offset="0" stop-color="'+c1+'"/><stop offset="1" stop-color="'+c2+'"/></linearGradient>'+
     '<linearGradient id="f'+id+'" x1="0" y1="0" x2="0" y2="1">'+
-      '<stop offset="0" stop-color="'+c1+'" stop-opacity=".32"/>'+
+      '<stop offset="0" stop-color="'+c1+'" stop-opacity="'+(cssv('--glow')||.32)+'"/>'+
       '<stop offset="1" stop-color="'+c1+'" stop-opacity="0"/></linearGradient></defs>'+
     '<line x1="0" y1="'+Y(0).toFixed(1)+'" x2="'+w+'" y2="'+Y(0).toFixed(1)+
-      '" stroke="#252c37" stroke-dasharray="4,5"/>'+
+      '" stroke="'+cssv('--line')+'" stroke-dasharray="4,5"/>'+
     '<polygon points="0,'+Y(0).toFixed(1)+' '+pts+' '+w+','+Y(0).toFixed(1)+'" fill="url(#f'+id+')"/>'+
     '<polyline points="'+pts+'" fill="none" stroke="url(#l'+id+')" stroke-width="2.2" '+
       'stroke-linejoin="round"/></svg>';
@@ -576,7 +631,7 @@ function renderChart(){
   var vals = ev.map(function(e){ cum += e.pnl; return cum; });
   var last = vals.length ? vals[vals.length-1] : 0;
   document.getElementById('bigchart').innerHTML =
-    area(vals, 900, 205, last>=0?'#2ebd85':'#8b5cf6', last>=0?'#22d3ee':'#22d3ee') +
+    area(vals, 900, 205, last>=0?cssv('--up'):cssv('--violet'), cssv('--cyan')) +
     '<div class="mini" style="margin-top:8px">one step per closed trade &middot; '+
     ev.length+' closes across both accounts</div>';
 }
@@ -1122,8 +1177,8 @@ function renderCards(){
           (w&&w['30d'].trades?Math.round(100*w['30d'].wins/w['30d'].trades)+'%':'—')+'</div></div>'+
       '</div>'+
       '<details style="margin-top:10px"><summary class="mini" style="cursor:pointer">trader log</summary>'+
-        '<pre style="background:#0d1117;border:1px solid var(--line);border-radius:6px;padding:9px;'+
-        'font-size:11px;max-height:220px;overflow:auto;margin:7px 0 0">'+
+        '<pre style="border:1px solid var(--line);border-radius:6px;padding:9px;'+
+        'font-size:11px;max-height:220px;overflow:auto;margin:7px 0 0;background:var(--code)">'+
         ((s.log||[]).join('\n').replace(/</g,'&lt;')||'–')+'</pre></details>'+
       '</div></div>';
   }).join('');
@@ -1343,6 +1398,7 @@ for(var i=0;i<btns.length;i++){
   };
 }
 syncSoundBtn(); syncToggles();
+applyTheme(localStorage.getItem('slTheme') || 'dark');
 loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades();
 setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
