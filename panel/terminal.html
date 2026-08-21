@@ -80,6 +80,10 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .scroll{max-height:420px;overflow:auto}
 @keyframes slidein{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+/* privacy: hide balances and token amounts, keep percentages readable.
+   hover reveals, so you can still check a figure without switching it off */
+body.masked .amt{filter:blur(7px);user-select:none;transition:filter .12s}
+body.masked .amt:hover{filter:none}
 .rowsb{display:flex;justify-content:space-between;align-items:center;gap:10px}
 @media(max-width:900px){.shell{grid-template-columns:1fr}
  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:54px;width:100%;flex-direction:row;
@@ -114,6 +118,10 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
       <span class="mini" id="stamp"></span>
       <a class="btn" href="/" title="Back to the classic control panel — it is unchanged and has the executor controls, trader settings, jobs and processes"
          style="border-color:var(--blue);color:var(--blue);font-weight:600">&larr; Classic panel</a>
+      <button class="btn" id="dispBtn" onclick="cycleDisplay()"
+        title="Show realized figures as money, as a percentage, or both">$ / %</button>
+      <button class="btn" id="maskBtn" onclick="toggleMask()"
+        title="Blur balances, token amounts and P&L in currency. Percentages stay visible; hover a blurred figure to peek.">&#128065; amounts</button>
       <button class="btn" id="soundBtn" onclick="toggleSound()"
         title="beep and show a banner in this tab when a trade opens or closes">&#128266; alerts off</button>
       <button class="btn" onclick="loadAll()">Refresh</button>
@@ -255,6 +263,49 @@ var INSTS = [], PERF = {};
 function money(v){ return (v>=0?'+':'') + v.toFixed(2); }
 function cls(v){ return v>0?'up':(v<0?'down':'dim'); }
 
+// ---- display mode + amount masking -------------------------------------
+// DISPLAY: 'both' | 'money' | 'pct' — applies to the realized figures on the
+// Overview cards, the Overview instances table and the Instances page.
+// MASK blurs currency and token amounts but never percentages, so you can
+// screen-share performance without showing the size of the account.
+var DISPLAY = localStorage.getItem('slDisplay') || 'both';
+var MASK = localStorage.getItem('slMask') === '1';
+function amt(html){ return '<span class="amt">' + html + '</span>'; }
+function cycleDisplay(){
+  DISPLAY = DISPLAY === 'both' ? 'money' : (DISPLAY === 'money' ? 'pct' : 'both');
+  localStorage.setItem('slDisplay', DISPLAY);
+  syncToggles(); renderKpis(); renderInsts(); renderCards();
+}
+function toggleMask(){
+  MASK = !MASK;
+  localStorage.setItem('slMask', MASK ? '1' : '');
+  syncToggles();
+}
+function syncToggles(){
+  var d = document.getElementById('dispBtn');
+  if(d){
+    d.textContent = DISPLAY === 'both' ? '$ / %' : (DISPLAY === 'money' ? '$ only' : '% only');
+    d.style.borderColor = DISPLAY === 'both' ? '' : 'var(--accent)';
+    d.style.color = DISPLAY === 'both' ? '' : 'var(--accent)';
+  }
+  var m = document.getElementById('maskBtn');
+  if(m){
+    m.innerHTML = MASK ? '&#128584; hidden' : '&#128065; amounts';
+    m.style.borderColor = MASK ? 'var(--accent)' : '';
+    m.style.color = MASK ? 'var(--accent)' : '';
+  }
+  document.body.classList.toggle('masked', MASK);
+}
+
+// realized as money, percent, or both — honouring DISPLAY
+function fig(v, pct){
+  var m = amt(money(v));
+  var p = pct == null ? null : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+  if(DISPLAY === 'money' || p == null) return m;
+  if(DISPLAY === 'pct') return p;
+  return m + '<span class="dim" style="margin:0 14px;font-weight:400">/</span><span>' + p + '</span>';
+}
+
 function loadAll(){
   API('instances').then(function(list){
     INSTS = list || [];
@@ -293,13 +344,15 @@ function pctOf(realized){
   if(start <= 0) return null;
   return 100 * realized / start;
 }
-// the percent sits on the value line, same type as the money, just after it
-function moneyPct(v){
-  var p = pctOf(v);
-  return money(v) + (p == null ? '' :
-    '<span class="dim" style="margin:0 14px;font-weight:400">/</span>' +
-    '<span>' + (p >= 0 ? '+' : '') + p.toFixed(2) + '%</span>');
+// per-account version, for the instance rows: percent on that account's own
+// starting balance rather than the combined total
+function pctOfAcct(account, realized){
+  var e = EQ[account];
+  if(!e) return null;
+  var start = e - realized;
+  return start > 0 ? 100 * realized / start : null;
 }
+function moneyPct(v){ return fig(v, pctOf(v)); }
 
 function renderKpis(){
   var d1=0,d7=0,d30=0,tr=0,ex=0;
@@ -312,7 +365,7 @@ function renderKpis(){
     kpi('Realized 7d', moneyPct(d7), 'USDT · % on starting balance', d7) +
     kpi('Realized 30d', moneyPct(d30), tr + ' trades' +
         (ex ? ' · ' + ex + ' excluded' : ''), d30) +
-    kpi('Equity', EQ.total ? '$' + EQ.total.toFixed(2) : '…',
+    kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
         INSTS.length + ' live', 0);
 }
@@ -329,8 +382,10 @@ function renderInsts(){
    '<th>Config</th></tr></thead><tbody>' +
    INSTS.map(function(x){
      var p = PERF[x.id] || {}, w = p.windows;
-     function c(k){ return w ? '<td class="n '+cls(w[k].realized)+'">'+money(w[k].realized)+'</td>'
-                             : '<td class="n dim">…</td>'; }
+     function c(k){
+       if(!w) return '<td class="n dim">…</td>';
+       var v = w[k].realized;
+       return '<td class="n '+cls(v)+'">'+fig(v, pctOfAcct(p.account, v))+'</td>'; }
      var st = x.trader_running
        ? (x.trader_live ? '<span class="tag live">RUNNING — LIVE</span>'
                         : '<span class="tag g">running (dry)</span>')
@@ -557,8 +612,8 @@ function renderAccounts(){
           (mode==='spot'?'SPOT':'FUTURES')+'</span>'+
         (inst.length ? '<span class="tag '+(live?'live':'b')+'">'+(live?'LIVE':'idle')+'</span>' : '')+
         '</span></div>'+
-        '<div class="num" style="font-size:19px;margin:3px 0">$'+eq.toFixed(2)+'</div>'+
-        '<div class="mini">'+sub+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
+        '<div class="num" style="font-size:19px;margin:3px 0">'+amt('$'+eq.toFixed(2))+'</div>'+
+        '<div class="mini">'+amt(sub)+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
         '<div class="bar g" style="margin-top:6px"><i style="width:100%"></i></div></div>';
     }).join('');
     renderKpis();     // percentages need the equity that just arrived
@@ -587,8 +642,8 @@ function renderRisk(){
   var eq = 0;
   Object.keys(PERF).forEach(function(){});
   document.getElementById('riskkpi').innerHTML =
-    kpi('Gross exposure', '$'+gross.toFixed(0), rows.length+' open position(s)', 0) +
-    kpi('Margin committed', '$'+margin.toFixed(2), 'leveraged legs only', 0) +
+    kpi('Gross exposure', amt('$'+gross.toFixed(0)), rows.length+' open position(s)', 0) +
+    kpi('Margin committed', amt('$'+margin.toFixed(2)), 'leveraged legs only', 0) +
     kpi('Nearest liquidation', nearest==null?'n/a':nearest.toFixed(1)+'%',
         nearest==null?'no leveraged position':'of price, at current leverage', nearest!=null&&nearest<10?-1:0) +
     kpi('Stop loss', 'OFF', 'by design on leverage', -1);
@@ -599,10 +654,10 @@ function renderRisk(){
       rows.map(function(r){
         return '<tr><td>'+r.inst+'</td><td><b>'+r.sym+'</b></td>'+
           '<td class="'+(r.dir==='LONG'?'up':'down')+'">'+r.dir+'</td>'+
-          '<td class="n">'+r.qty+'</td><td class="n">'+(r.mode==='lev'?r.lev+'x':'spot')+'</td>'+
+          '<td class="n">'+amt(r.qty)+'</td><td class="n">'+(r.mode==='lev'?r.lev+'x':'spot')+'</td>'+
           '<td class="n">'+(+r.entry).toPrecision(6)+'</td>'+
           '<td class="n">'+(r.now?(+r.now).toPrecision(6):'?')+'</td>'+
-          '<td class="n">$'+r.notional.toFixed(0)+'</td>'+
+          '<td class="n">'+amt('$'+r.notional.toFixed(0))+'</td>'+
           '<td class="n '+(r.dist==null?'dim':(r.dist<10?'down':'up'))+'">'+
             (r.dist==null?'n/a':r.dist.toFixed(1)+'%')+'</td></tr>'; }).join('')+
       '</tbody></table>'
@@ -624,7 +679,7 @@ function renderRisk(){
   document.getElementById('expo').innerHTML = keys.length
     ? '<table><thead><tr><th>Pair</th><th class="n">Realized 30d</th><th>Share</th></tr></thead><tbody>'+
       keys.map(function(k){
-        return '<tr><td><b>'+k+'</b></td><td class="n '+cls(by[k])+'">'+money(by[k])+'</td>'+
+        return '<tr><td><b>'+k+'</b></td><td class="n '+cls(by[k])+'">'+amt(money(by[k]))+'</td>'+
           '<td><div class="bar '+(by[k]>=0?'g':'r')+'"><i style="width:'+
           Math.round(100*Math.abs(by[k])/max)+'%"></i></div></td></tr>'; }).join('')+'</tbody></table>'
     : '<div class="body"><span class="mini">no closed trades in the window</span></div>';
@@ -671,7 +726,7 @@ function renderHistory(){
   var ignNet = rows.filter(function(e){ return e.ignored; })
                    .reduce(function(a,e){ return a+e.pnl; }, 0);
   document.getElementById('hCount').innerHTML = live.length + ' closes &middot; net ' +
-    '<b class="'+cls(net)+'">'+money(net)+'</b>' +
+    '<b class="'+cls(net)+'">'+amt(money(net))+'</b>' +
     (live.length ? ' &middot; ' + Math.round(100*wins/live.length) + '% win' : '') +
     (avg == null ? '' : ' &middot; avg <b class="'+cls(avg)+'">' +
       (avg>=0?'+':'') + avg.toFixed(2) + '%</b>') +
@@ -696,7 +751,7 @@ function renderHistory(){
             (ig?';text-decoration:line-through':'')+'">'+
             (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>'+
           '<td class="n '+(ig?'dim':cls(e.pnl))+'"'+(ig?' style="text-decoration:line-through"':'')+'>'+
-            money(e.pnl)+'</td>'+
+            amt(money(e.pnl))+'</td>'+
           '<td class="n"><button class="btn sm" onclick="toggleIgnore(\''+e.id+'\','+(!ig)+
             ',\''+e.symbol+'\','+e.pnl+')">'+(ig?'Restore':'Exclude')+'</button></td></tr>';
       }).join('')+
@@ -901,13 +956,13 @@ function renderCards(){
           '<b class="'+(pct==null?'':(pct>=0?'up':'down'))+'" style="font-size:19px">'+
             (pct==null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</b>'+
           '<b class="'+(usd==null?'':(usd>=0?'up':'down'))+'" style="font-size:15px">'+
-            (usd==null?'':(usd>=0?'+$':'-$')+Math.abs(usd).toFixed(2))+'</b>'+
+            (usd==null?'':amt((usd>=0?'+$':'-$')+Math.abs(usd).toFixed(2)))+'</b>'+
           '<span class="mini" style="margin-left:auto">'+(held(p)?('open '+held(p)):'')+
             (p.late_mirror?' · late-join':'')+'</span></div>'+
         '<div class="mini" style="margin-top:5px;display:flex;gap:18px;flex-wrap:wrap">'+
           '<span>entry <b class="num">'+(+p.entry_price).toPrecision(6)+'</b></span>'+
           '<span>now <b class="num">'+(px?px.toPrecision(6):'?')+'</b></span>'+
-          '<span>qty <b class="num">'+p.qty+'</b></span>'+
+          '<span>qty <b class="num">'+amt(p.qty)+'</b></span>'+
           (p.tp_price?'<span>target <b class="num">'+(+p.tp_price).toPrecision(6)+'</b>'+
             (p.tp_order_id?' &#9875;':'')+'</span>':'')+
           '<span>via <b>'+(p.group||'')+'</b></span></div>'+
@@ -934,8 +989,11 @@ function renderCards(){
       '<button class="btn sm" style="margin-left:8px" onclick="clearErrs(\''+x.id+'\')">clear</button></div>' : '';
     // ---- performance strip ----
     var w = perf.windows;
-    function pc(k,l){ return '<div><div class="mini">'+l+'</div><div class="num '+
-      (w?cls(w[k].realized):'')+'" style="font-size:17px">'+(w?money(w[k].realized):'…')+'</div></div>'; }
+    function pc(k,l){
+      var v = w ? w[k].realized : null;
+      return '<div><div class="mini">'+l+'</div><div class="num '+
+        (w?cls(v):'')+'" style="font-size:17px">'+
+        (w ? fig(v, pctOfAcct(perf.account, v)) : '…')+'</div></div>'; }
     var state = s.running
       ? (s.live ? '<span class="tag live">RUNNING — LIVE</span>'
                 : '<span class="tag g">running (dry-run)</span>')
@@ -1071,7 +1129,7 @@ function renderPositions(){
           '<td><b>' + r.symbol + '</b></td>'+
           '<td class="dim">' + (r.dir || '—') + '</td>'+
           '<td><span class="tag b">untracked</span></td>'+
-          '<td class="n">' + r.qty + '</td>'+
+          '<td class="n">' + amt(r.qty) + '</td>'+
           '<td class="n dim" colspan="6">on the exchange, not tracked by a trader</td></tr>';
       }
       return '<tr><td>' + r.inst + ' <span class="mini">' + (r.account||'') + '</span></td>'+
@@ -1079,19 +1137,19 @@ function renderPositions(){
         '<td><span class="tag ' + (r.dir === 'LONG' ? 'g' : 'live') + '">' + r.dir + '</span></td>'+
         '<td><span class="tag ' + (r.mode === 'spot' ? 'spot' : 'lev') + '">' +
           (r.mode === 'spot' ? 'SPOT' : 'LEV ' + r.lev.toFixed(0) + 'x') + '</span></td>'+
-        '<td class="n">' + r.qty + '</td>'+
+        '<td class="n">' + amt(r.qty) + '</td>'+
         '<td class="n">' + r.entry.toPrecision(6) + '</td>'+
         '<td class="n">' + (r.now ? r.now.toPrecision(6) : '?') + '</td>'+
-        '<td class="n">' + (r.notional == null ? '—' : '$' + r.notional.toFixed(0)) + '</td>'+
+        '<td class="n">' + (r.notional == null ? '—' : amt('$' + r.notional.toFixed(0))) + '</td>'+
         '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
           (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') + '</td>'+
         '<td class="n ' + (r.usd == null ? 'dim' : cls(r.usd)) + '" style="font-weight:600">' +
-          (r.usd == null ? '—' : (r.usd >= 0 ? '+$' : '-$') + Math.abs(r.usd).toFixed(2)) + '</td>'+
+          (r.usd == null ? '—' : amt((r.usd >= 0 ? '+$' : '-$') + Math.abs(r.usd).toFixed(2))) + '</td>'+
         '<td class="n dim">' + (r.held || '') + '</td></tr>';
     }).join('') +
     '</tbody><tfoot><tr><td colspan="9" class="n dim">unrealized across open positions</td>'+
     '<td class="n ' + cls(net) + '" style="font-weight:700">' +
-      (net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2) + '</td><td></td></tr></tfoot></table>' +
+      amt((net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2)) + '</td><td></td></tr></tfoot></table>' +
     (notes.length ? '<div class="body mini" style="border-top:1px solid var(--line)">' +
       notes.map(function(x){ return (x.symbol||x.asset) + ' — ' +
         (x.step === 'skip_dust' ? 'dust, below the minimum sellable size' : x.why); }).join(' · ') +
@@ -1182,7 +1240,7 @@ for(var i=0;i<btns.length;i++){
     document.getElementById('crumb').textContent=this.title;
   };
 }
-syncSoundBtn();
+syncSoundBtn(); syncToggles();
 loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades();
 setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
