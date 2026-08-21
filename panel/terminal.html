@@ -281,16 +281,38 @@ function loadAll(){
   planKill();
 }
 
+var EQ = {total: 0};
+
+// Return on the balance you STARTED the period with: realized / (equity now
+// minus what you made in the period). Dividing by the current balance would
+// flatter a loss and understate a gain, and after a big loss the two differ a
+// lot — the ETH close alone is a third of this account.
+function pctOf(realized){
+  if(!EQ.total) return null;
+  var start = EQ.total - realized;
+  if(start <= 0) return null;
+  return 100 * realized / start;
+}
+function withPct(v, extra){
+  var p = pctOf(v);
+  var s = p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(2) + '%';
+  return (s ? s + (extra ? ' · ' + extra : '') : (extra || ''));
+}
+
 function renderKpis(){
-  var d1=0,d7=0,d30=0,tr=0;
+  var d1=0,d7=0,d30=0,tr=0,ex=0;
   INSTS.forEach(function(x){ var p=PERF[x.id]; if(!p||!p.windows) return;
     d1+=p.windows['24h'].realized; d7+=p.windows['7d'].realized;
-    d30+=p.windows['30d'].realized; tr+=p.windows['30d'].trades; });
+    d30+=p.windows['30d'].realized; tr+=p.windows['30d'].trades;
+    ex+=(p.windows['30d'].excluded||0); });
   document.getElementById('kpis').innerHTML =
-    kpi('Realized 24h', money(d1), '', d1) + kpi('Realized 7d', money(d7), '', d7) +
-    kpi('Realized 30d', money(d30), tr+' closed trades', d30) +
-    kpi('Instances', String(INSTS.length),
-        INSTS.filter(function(x){return x.trader_live;}).length + ' live', 0);
+    kpi('Realized 24h', money(d1), withPct(d1), d1) +
+    kpi('Realized 7d', money(d7), withPct(d7), d7) +
+    kpi('Realized 30d', money(d30), withPct(d30, tr+' trades' +
+        (ex ? ' · '+ex+' excluded' : '')), d30) +
+    kpi('Equity', EQ.total ? '$'+EQ.total.toFixed(2) : '…',
+        INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
+        INSTS.length + ' live', 0);
 }
 function kpi(l,v,s,sign){
   return '<div class="card kpi"><div class="body"><div class="l">'+l+'</div>'+
@@ -492,25 +514,41 @@ function renderAccounts(){
   var el = document.getElementById('accts');
   API('mexc/account').then(function(accs){
     if(!accs || !accs.length){ el.innerHTML = '<span class="mini">no API keys configured</span>'; return; }
+    EQ = {total: 0};
     el.innerHTML = accs.filter(function(a){ return !a.skipped; }).map(function(a, ix){
       var inst = INSTS.filter(function(x){
-        var p = PERF[x.id]; return p && p.account === a.account; });
+        var p = PERF[x.id], s = STATUS[x.id];
+        return (p && p.account === a.account) || (s && s.api_account === a.account); });
       var live = inst.some(function(x){ return x.trader_live && x.trader_running; });
-      var mode = (PERF[(inst[0]||{}).id] || {}).mode;
+      var id0 = (inst[0] || {}).id;
+      // STATUS arrives before PERF (the perf call reads exchange history and
+      // is slow). Keying only off PERF meant that on the first paint mexc2's
+      // mode was unknown, so it fell to the futures branch and showed its
+      // 0.43 USDC dust instead of the ~$680 of spot it trades.
+      var mode = (STATUS[id0] || {}).mode || (PERF[id0] || {}).mode;
       var eq = 0, sub = '';
       // pick the wallet this account actually TRADES. mexc2 carries a 0.43
       // USDC futures dust balance next to ~$680 of spot — keying off "does a
       // futures wallet exist" showed the dust and hid the real money.
-      if(mode !== 'spot' && (a.futures||[]).length){
+      var futEq = (a.futures||[]).length ? (+a.futures[0].equity || 0) : 0;
+      var spotEq = 0;
+      (a.spot||[]).forEach(function(s){
+        spotEq += (s.usdt_value != null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0); });
+      // if the mode is still unknown, fall back to whichever wallet actually
+      // holds the money rather than guessing
+      var useFut = (mode === 'spot') ? false
+                 : (mode === 'lev' ? true : futEq >= spotEq);
+      if(useFut && (a.futures||[]).length){
         var f = a.futures[0];
-        eq = +f.equity || 0;
+        eq = futEq;
         sub = 'available '+(+f.available||0).toFixed(2)+' / margin '+(+f.position_margin||0).toFixed(2);
       } else {
-        (a.spot||[]).forEach(function(s){
-          eq += (s.usdt_value != null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0); });
+        eq = spotEq;
         sub = (a.spot||[]).map(function(s){ return (+s.free).toFixed(s.asset==='USDT'?2:4)+' '+s.asset; })
                 .slice(0,4).join(' / ');
       }
+      EQ[a.account] = eq;
+      EQ.total += eq;
       return '<div style="'+(ix?'border-top:1px solid var(--line);padding-top:13px;margin-top:13px':'')+'">'+
         '<div class="rowsb"><b>'+a.account+'</b><span style="display:flex;gap:6px">'+
         '<span class="tag '+(mode==='spot'?'spot':'lev')+'">'+
@@ -521,6 +559,7 @@ function renderAccounts(){
         '<div class="mini">'+sub+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
         '<div class="bar g" style="margin-top:6px"><i style="width:100%"></i></div></div>';
     }).join('');
+    renderKpis();     // percentages need the equity that just arrived
   }).catch(function(){ el.innerHTML = '<span class="mini down">could not read accounts</span>'; });
 }
 
