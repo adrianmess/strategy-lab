@@ -293,10 +293,11 @@ function pctOf(realized){
   if(start <= 0) return null;
   return 100 * realized / start;
 }
-function withPct(v, extra){
+// the percent sits on the value line, same type as the money, just after it
+function moneyPct(v){
   var p = pctOf(v);
-  var s = p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(2) + '%';
-  return (s ? s + (extra ? ' · ' + extra : '') : (extra || ''));
+  return money(v) + (p == null ? '' :
+    '<span style="margin-left:12px">' + (p >= 0 ? '+' : '') + p.toFixed(2) + '%</span>');
 }
 
 function renderKpis(){
@@ -306,11 +307,11 @@ function renderKpis(){
     d30+=p.windows['30d'].realized; tr+=p.windows['30d'].trades;
     ex+=(p.windows['30d'].excluded||0); });
   document.getElementById('kpis').innerHTML =
-    kpi('Realized 24h', money(d1), withPct(d1), d1) +
-    kpi('Realized 7d', money(d7), withPct(d7), d7) +
-    kpi('Realized 30d', money(d30), withPct(d30, tr+' trades' +
-        (ex ? ' · '+ex+' excluded' : '')), d30) +
-    kpi('Equity', EQ.total ? '$'+EQ.total.toFixed(2) : '…',
+    kpi('Realized 24h', moneyPct(d1), 'USDT · % on starting balance', d1) +
+    kpi('Realized 7d', moneyPct(d7), 'USDT · % on starting balance', d7) +
+    kpi('Realized 30d', moneyPct(d30), tr + ' trades' +
+        (ex ? ' · ' + ex + ' excluded' : ''), d30) +
+    kpi('Equity', EQ.total ? '$' + EQ.total.toFixed(2) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
         INSTS.length + ' live', 0);
 }
