@@ -297,7 +297,8 @@ function pctOf(realized){
 function moneyPct(v){
   var p = pctOf(v);
   return money(v) + (p == null ? '' :
-    '<span style="margin-left:12px">' + (p >= 0 ? '+' : '') + p.toFixed(2) + '%</span>');
+    '<span class="dim" style="margin:0 14px;font-weight:400">/</span>' +
+    '<span>' + (p >= 0 ? '+' : '') + p.toFixed(2) + '%</span>');
 }
 
 function renderKpis(){
