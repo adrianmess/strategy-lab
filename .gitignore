@@ -31,3 +31,5 @@ ip_proxies_APIs
 adaptive_trader/proxy_pool.json
 optimizer/gamut_limits.json
 panel/panel_key.json
+panel/ignored_trades.json
+panel/alerts.json

@@ -149,6 +149,8 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
       <select id="hSym" onchange="renderHistory()"><option value="">All pairs</option></select>
       <select id="hOut" onchange="renderHistory()"><option value="">All outcomes</option>
         <option value="win">Winners</option><option value="loss">Losers</option></select>
+      <label class="mini" style="display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="checkbox" id="hShowIgn" checked onchange="renderHistory()"> show excluded</label>
       <span class="mini" id="hCount"></span></div></div>
     <div class="card"><h3>Closed positions <span class="mini">realized P&amp;L from the exchange</span></h3>
       <div class="scroll" id="hist"></div></div>
@@ -462,6 +464,7 @@ function allEvents(){
     (p && p.series || []).forEach(function(s){
       ev.push({t:s.t, pnl:s.pnl, pct:s.pct, entry:s.entry, exit:s.exit,
                side:s.side, lev:s.lev, symbol:s.symbol, inst:id,
+               id:s.id, ignored:!!s.ignored, reason:s.reason,
                name:(INSTS.find(function(x){return x.id===id;})||{}).name||id,
                account:p.account, mode:p.mode});
     });
@@ -469,9 +472,13 @@ function allEvents(){
   ev.sort(function(a,b){ return a.t-b.t; });
   return ev;
 }
+// aggregates NEVER include excluded trades; only the history lists them
+function countedEvents(){
+  return allEvents().filter(function(e){ return !e.ignored; });
+}
 
 function renderChart(){
-  var ev = allEvents(), cum = 0;
+  var ev = countedEvents(), cum = 0;
   var vals = ev.map(function(e){ cum += e.pnl; return cum; });
   var last = vals.length ? vals[vals.length-1] : 0;
   document.getElementById('bigchart').innerHTML =
@@ -570,7 +577,7 @@ function renderRisk(){
     'past half the liquidation distance.</div>';
   // realized by pair
   var by = {};
-  allEvents().forEach(function(e){ by[e.symbol] = (by[e.symbol]||0) + e.pnl; });
+  countedEvents().forEach(function(e){ by[e.symbol] = (by[e.symbol]||0) + e.pnl; });
   var keys = Object.keys(by).sort(function(a,b){ return Math.abs(by[b])-Math.abs(by[a]); });
   var max = keys.length ? Math.abs(by[keys[0]]) : 1;
   document.getElementById('expo').innerHTML = keys.length
@@ -603,40 +610,72 @@ function renderHistory(){
       INSTS.map(function(x){ return '<option value="'+x.id+'">'+(x.name||x.id)+'</option>'; }).join('');
     is.value = fi;
   }
+  var showIgn = document.getElementById('hShowIgn').checked;
   var rows = ev.filter(function(e){
     if(fi && e.inst !== fi) return false;
     if(fs && e.symbol !== fs) return false;
     if(fo === 'win' && !(e.pnl > 0)) return false;
     if(fo === 'loss' && !(e.pnl < 0)) return false;
+    if(e.ignored && !showIgn) return false;
     return true;
   });
-  var net = rows.reduce(function(a,e){ return a+e.pnl; }, 0);
-  var wins = rows.filter(function(e){ return e.pnl > 0; }).length;
-  var withPct = rows.filter(function(e){ return e.pct != null; });
+  // the summary counts only what P&L counts
+  var live = rows.filter(function(e){ return !e.ignored; });
+  var nIgn = rows.length - live.length;
+  var net = live.reduce(function(a,e){ return a+e.pnl; }, 0);
+  var wins = live.filter(function(e){ return e.pnl > 0; }).length;
+  var withPct = live.filter(function(e){ return e.pct != null; });
   var avg = withPct.length
     ? withPct.reduce(function(a,e){ return a+e.pct; }, 0) / withPct.length : null;
-  document.getElementById('hCount').innerHTML = rows.length + ' closes &middot; net ' +
+  var ignNet = rows.filter(function(e){ return e.ignored; })
+                   .reduce(function(a,e){ return a+e.pnl; }, 0);
+  document.getElementById('hCount').innerHTML = live.length + ' closes &middot; net ' +
     '<b class="'+cls(net)+'">'+money(net)+'</b>' +
-    (rows.length ? ' &middot; ' + Math.round(100*wins/rows.length) + '% win' : '') +
+    (live.length ? ' &middot; ' + Math.round(100*wins/live.length) + '% win' : '') +
     (avg == null ? '' : ' &middot; avg <b class="'+cls(avg)+'">' +
-      (avg>=0?'+':'') + avg.toFixed(2) + '%</b>');
+      (avg>=0?'+':'') + avg.toFixed(2) + '%</b>') +
+    (nIgn ? ' &middot; <span class="warn">' + nIgn + ' excluded (' + money(ignNet) +
+      ' not counted)</span>' : '');
   document.getElementById('hist').innerHTML = rows.length
     ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Symbol</th><th>Side</th>'+
       '<th class="n">Entry</th><th class="n">Exit</th>'+
-      '<th class="n">P&amp;L %</th><th class="n">Realized</th></tr></thead><tbody>'+
+      '<th class="n">P&amp;L %</th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(e){
         var px = function(v){ return v == null ? '—' : (+v).toPrecision(6); };
-        return '<tr><td class="dim">'+new Date(e.t).toLocaleString()+'</td>'+
+        var ig = e.ignored;
+        return '<tr style="'+(ig?'opacity:.45':'')+'">'+
+          '<td class="dim">'+new Date(e.t).toLocaleString()+'</td>'+
           '<td>'+e.name+' <span class="mini">'+(e.account||'')+'</span></td>'+
-          '<td><b>'+e.symbol+'</b></td>'+
+          '<td><b>'+e.symbol+'</b>'+(ig?'<div class="mini warn">excluded'+
+            (e.reason?' — '+e.reason:'')+'</div>':'')+'</td>'+
           '<td>'+(e.side ? '<span class="tag '+(e.side==='LONG'?'g':'live')+'">'+e.side+
             (e.lev && e.lev > 1 ? ' '+e.lev+'x' : '')+'</span>' : '')+'</td>'+
           '<td class="n">'+px(e.entry)+'</td><td class="n">'+px(e.exit)+'</td>'+
-          '<td class="n '+(e.pct==null?'dim':cls(e.pct))+'" style="font-weight:600">'+
+          '<td class="n '+(ig?'dim':(e.pct==null?'dim':cls(e.pct)))+'" style="font-weight:600'+
+            (ig?';text-decoration:line-through':'')+'">'+
             (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>'+
-          '<td class="n '+cls(e.pnl)+'">'+money(e.pnl)+'</td></tr>'; }).join('')+
+          '<td class="n '+(ig?'dim':cls(e.pnl))+'"'+(ig?' style="text-decoration:line-through"':'')+'>'+
+            money(e.pnl)+'</td>'+
+          '<td class="n"><button class="btn sm" onclick="toggleIgnore(\''+e.id+'\','+(!ig)+
+            ',\''+e.symbol+'\','+e.pnl+')">'+(ig?'Restore':'Exclude')+'</button></td></tr>';
+      }).join('')+
       '</tbody></table>'
     : '<div class="body"><span class="mini">nothing matches those filters</span></div>';
+}
+
+function toggleIgnore(id, ignore, symbol, pnl){
+  if(!id || id === 'undefined'){ alert('this trade has no stable exchange id — cannot exclude it'); return; }
+  var reason = '';
+  if(ignore){
+    reason = prompt('Exclude this '+symbol+' trade ('+money(pnl)+') from all P&L figures?\n\n'+
+                    'It stays in the history, flagged, and you can restore it any time.\n'+
+                    'Optional note (why):', '');
+    if(reason === null) return;
+  }
+  API('ignored', {method:'POST', headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({id:id, ignored:ignore, reason:reason,
+                                       symbol:symbol, realized:pnl})})
+    .then(function(){ loadAll(); });
 }
 
 // ---------------- backtests ----------------

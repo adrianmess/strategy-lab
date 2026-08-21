@@ -1084,9 +1084,10 @@ def _spot_realized(sapi, symbols, since_ms):
             q = float(f.get("qty") or 0)
             if not q:
                 continue
-            key = (f.get("orderId") or f.get("id"), bool(f.get("isBuyer")))
+            oid = f.get("orderId") or f.get("id")
+            key = (oid, bool(f.get("isBuyer")))
             o = orders.setdefault(key, dict(
-                qty=0.0, quote=0.0, fee=0.0, time=0.0,
+                qty=0.0, quote=0.0, fee=0.0, time=0.0, oid=oid,
                 isBuyer=bool(f.get("isBuyer"))))
             o["qty"] += q
             o["quote"] += q * float(f.get("price") or 0)
@@ -1127,6 +1128,7 @@ def _spot_realized(sapi, symbols, since_ms):
                 # the matched lots actually cost — the spot equivalent of
                 # MEXC's profitRatio
                 events.append(dict(t=ts, symbol=sym, realized=pnl,
+                                   id="s:" + str(t.get("oid")),
                                    pct=round(100 * pnl / cost, 4) if cost else None,
                                    entry=round(entry_px / matched, 8) if matched else None,
                                    exit=px, side="LONG", lev=1))
@@ -1156,6 +1158,8 @@ def _futures_realized(fapi, since_ms):
                 # cannot be used as a denominator after the fact.
                 events.append(dict(t=ts, symbol=r.get("symbol"),
                                    realized=float(r.get("realised") or 0),
+                                   id="f:" + str(r.get("positionId")
+                                                 or f"{r.get('symbol')}@{int(ts)}"),
                                    pct=round(100 * float(r.get("profitRatio")
                                                          or 0), 4),
                                    entry=r.get("openAvgPrice"),
@@ -1167,6 +1171,53 @@ def _futures_realized(fapi, since_ms):
             break
         page += 1
     return events
+
+
+IGNORED_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "ignored_trades.json")
+
+
+def _ignored_load():
+    """Trades excluded from P&L. Keyed by the exchange's own id — the futures
+    positionId or the spot orderId — so it survives re-indexing and cannot
+    drift onto a different trade."""
+    try:
+        return json.load(open(IGNORED_P))
+    except Exception:
+        return {}
+
+
+def _ignored_save(d):
+    tmp = IGNORED_P + ".tmp"
+    json.dump(d, open(tmp, "w"), indent=1)
+    os.replace(tmp, IGNORED_P)
+
+
+@app.route("/api/ignored", methods=["GET", "POST"])
+def api_ignored():
+    """Exclude a trade from every P&L figure, or put it back.
+
+    The trade is never deleted: it stays visible in the history, flagged, with
+    the reason and when you excluded it. A number you cannot audit is worse
+    than a number you dislike."""
+    d = _ignored_load()
+    if request.method == "GET":
+        return jsonify(d)
+    b = request.get_json(force=True) or {}
+    tid = b.get("id")
+    if not tid:
+        return jsonify(error="need a trade id"), 400
+    if b.get("ignored") is False:
+        d.pop(tid, None)
+    else:
+        d[tid] = dict(at=time.strftime("%Y-%m-%d %H:%M:%S"),
+                      reason=(b.get("reason") or "").strip()[:200],
+                      symbol=b.get("symbol"), realized=b.get("realized"))
+    _ignored_save(d)
+    # performance is cached 60s per account; without this the figures would
+    # not move until the cache aged out and the exclusion would look broken
+    _PERF_CACHE.clear()
+    return jsonify(ok=True, ignored=list(d))
 
 
 @app.route("/api/performance")
@@ -1205,23 +1256,34 @@ def api_performance():
     except Exception as e:
         return jsonify(error=f"{type(e).__name__}: {e}"), 502
     events.sort(key=lambda e: e["t"])
+    # Excluded trades stay in the series, flagged, so the history can show and
+    # un-exclude them — but they are kept out of every AGGREGATE.
+    ign = _ignored_load()
+    for e in events:
+        e["ignored"] = e.get("id") in ign
+    counted = [e for e in events if not e["ignored"]]
     win = {}
     for label, days in (("24h", 1), ("7d", 7), ("30d", 30)):
         lo = now - days * 86400 * 1000
-        sel = [e for e in events if e["t"] >= lo]
+        sel = [e for e in counted if e["t"] >= lo]
         win[label] = dict(realized=round(sum(e["realized"] for e in sel), 4),
                           trades=len(sel),
-                          wins=sum(1 for e in sel if e["realized"] > 0))
+                          wins=sum(1 for e in sel if e["realized"] > 0),
+                          excluded=sum(1 for e in events
+                                       if e["ignored"] and e["t"] >= lo))
     cum, series = 0.0, []
     for e in events:
-        cum += e["realized"]
+        if not e["ignored"]:
+            cum += e["realized"]
         series.append(dict(t=int(e["t"]), cum=round(cum, 4),
                            pnl=round(e["realized"], 4), symbol=e["symbol"],
+                           id=e.get("id"), ignored=e["ignored"],
+                           reason=(ign.get(e.get("id")) or {}).get("reason"),
                            pct=e.get("pct"), entry=e.get("entry"),
                            exit=e.get("exit"), side=e.get("side"),
                            lev=e.get("lev")))
     by_sym = {}
-    for e in events:
+    for e in counted:
         s = by_sym.setdefault(e["symbol"], dict(symbol=e["symbol"],
                                                 realized=0.0, trades=0))
         s["realized"] += e["realized"]
