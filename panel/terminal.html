@@ -33,6 +33,23 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 .btn.danger{background:transparent;border-color:rgba(246,70,93,.5);color:var(--down)}
 .btn.kill{background:var(--down);border-color:var(--down);color:#fff;font-weight:700;letter-spacing:.03em}
 .btn.sm{padding:3px 9px;font-size:12px}
+/* top-bar controls: one visual language — uppercase micro-type, no icons,
+   flat chips that match the table headers rather than shouting over them */
+.tbar{display:flex;align-items:center;gap:8px}
+.tbtn{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:5px;
+  padding:5px 11px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+  font-weight:600;line-height:1.5;white-space:nowrap;text-decoration:none;display:inline-block}
+.tbtn:hover{color:var(--fg);border-color:#3a4553}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);
+  border-radius:5px;overflow:hidden}
+.seg button{background:none;border:0;border-right:1px solid var(--line);color:var(--dim);
+  padding:5px 11px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+  font-weight:600;line-height:1.5;white-space:nowrap}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--fg);background:rgba(255,255,255,.035)}
+.seg button.on{color:var(--accent);background:rgba(240,185,11,.13);box-shadow:inset 0 -2px 0 var(--accent)}
+.tbtn.kill{background:rgba(246,70,93,.12);border-color:rgba(246,70,93,.55);color:var(--down)}
+.tbtn.kill:hover{background:var(--down);border-color:var(--down);color:#fff}
 .wrap{padding:12px;display:grid;gap:12px}
 .g2{display:grid;grid-template-columns:2fr 1fr;gap:12px}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
@@ -114,18 +131,19 @@ body.masked .amt:hover{filter:none}
       <span class="pill live" id="pLive" style="display:none">LIVE MONEY</span>
       <span class="pill" id="pData" title="age of the BACKTEST market data on disk — live traders use their own feed">…</span>
     </div>
-    <div style="display:flex;gap:7px;align-items:center">
+    <div class="tbar">
       <span class="mini" id="stamp"></span>
-      <a class="btn" href="/" title="Back to the classic control panel — it is unchanged and has the executor controls, trader settings, jobs and processes"
-         style="border-color:var(--blue);color:var(--blue);font-weight:600">&larr; Classic panel</a>
-      <button class="btn" id="dispBtn" onclick="cycleDisplay()"
-        title="Show realized figures as money, as a percentage, or both">$ / %</button>
-      <button class="btn" id="maskBtn" onclick="toggleMask()"
-        title="Blur balances, token amounts and P&L in currency. Percentages stay visible; hover a blurred figure to peek.">&#128065; amounts</button>
-      <button class="btn" id="soundBtn" onclick="toggleSound()"
-        title="beep and show a banner in this tab when a trade opens or closes">&#128266; alerts off</button>
-      <button class="btn" onclick="loadAll()">Refresh</button>
-      <button class="btn kill" onclick="openKill()">KILL ALL</button>
+      <a class="tbtn" href="/" title="Back to the classic control panel — unchanged, and still the place for executor controls, trader settings, jobs and processes">Classic panel</a>
+      <div class="seg">
+        <button id="dispBtn" onclick="cycleDisplay()"
+          title="Show realized figures as money, as a percentage, or both">$ / %</button>
+        <button id="maskBtn" onclick="toggleMask()"
+          title="Blur balances, token amounts and P&L in currency. Percentages stay visible; hover a blurred figure to peek.">Mask</button>
+        <button id="soundBtn" onclick="toggleSound()"
+          title="Tone and banner in this tab when a position opens or closes">Alerts</button>
+      </div>
+      <button class="tbtn" onclick="loadAll()">Refresh</button>
+      <button class="tbtn kill" onclick="openKill()">Kill all</button>
     </div>
   </div>
 
@@ -284,16 +302,11 @@ function toggleMask(){
 function syncToggles(){
   var d = document.getElementById('dispBtn');
   if(d){
-    d.textContent = DISPLAY === 'both' ? '$ / %' : (DISPLAY === 'money' ? '$ only' : '% only');
-    d.style.borderColor = DISPLAY === 'both' ? '' : 'var(--accent)';
-    d.style.color = DISPLAY === 'both' ? '' : 'var(--accent)';
+    d.textContent = DISPLAY === 'both' ? '$ / %' : (DISPLAY === 'money' ? '$' : '%');
+    d.classList.toggle('on', DISPLAY !== 'both');
   }
   var m = document.getElementById('maskBtn');
-  if(m){
-    m.innerHTML = MASK ? '&#128584; hidden' : '&#128065; amounts';
-    m.style.borderColor = MASK ? 'var(--accent)' : '';
-    m.style.color = MASK ? 'var(--accent)' : '';
-  }
+  if(m) m.classList.toggle('on', MASK);
   document.body.classList.toggle('masked', MASK);
 }
 
@@ -418,9 +431,7 @@ function toggleSound(){
 function syncSoundBtn(){
   var b = document.getElementById('soundBtn');
   if(!b) return;
-  b.innerHTML = SOUND ? '&#128266; alerts on' : '&#128263; alerts off';
-  b.style.borderColor = SOUND ? 'var(--up)' : '';
-  b.style.color = SOUND ? 'var(--up)' : '';
+  b.classList.toggle('on', SOUND);
 }
 function beep(freq, dur){
   try{
