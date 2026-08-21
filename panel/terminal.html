@@ -154,6 +154,9 @@ body.masked .amt:hover{filter:none}
         <div class="body" id="bigchart"><span class="mini">loading…</span></div></div>
       <div class="card"><h3>Accounts</h3><div class="body" id="accts"><span class="mini">loading…</span></div></div>
     </div>
+    <div class="card"><h3>Daily P&amp;L — last 30 days
+      <span class="mini">each bar is one day's realized return on that day's opening balance</span></h3>
+      <div class="body" id="daily"><span class="mini">loading…</span></div></div>
     <div class="card"><h3>Instances <span class="mini">live from /api/instances + /api/performance</span></h3>
       <div id="insts"></div></div>
     <div class="card"><h3>Open positions <span class="mini">exchange truth via the kill-switch planner</span></h3>
@@ -292,7 +295,7 @@ function amt(html){ return '<span class="amt">' + html + '</span>'; }
 function cycleDisplay(){
   DISPLAY = DISPLAY === 'both' ? 'money' : (DISPLAY === 'money' ? 'pct' : 'both');
   localStorage.setItem('slDisplay', DISPLAY);
-  syncToggles(); renderKpis(); renderInsts(); renderCards();
+  syncToggles(); renderKpis(); renderInsts(); renderCards(); renderDaily();
 }
 function toggleMask(){
   MASK = !MASK;
@@ -330,7 +333,8 @@ function loadAll(){
     INSTS.forEach(function(x){
       API('performance?instance='+x.id).then(function(p){
         PERF[x.id]=p; renderInsts(); renderKpis(); renderCards();
-        renderChart(); renderAccounts(); renderRisk(); renderHistory(); }).catch(function(){});
+        renderChart(); renderAccounts(); renderRisk(); renderHistory();
+        renderDaily(); }).catch(function(){});
     });
     loadStatus();
   });
@@ -577,6 +581,92 @@ function renderChart(){
     ev.length+' closes across both accounts</div>';
 }
 
+// ---------------- daily P&L ----------------
+// Each day's return is measured on the balance that day OPENED with, not on
+// today's balance — otherwise a day early in the month is judged against
+// money it never had. Equity is walked backwards from the current balance,
+// subtracting each day's realized as we go.
+function dailySeries(days){
+  days = days || 30;
+  var byDay = {};
+  countedEvents().forEach(function(e){
+    var d = new Date(e.t);
+    var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+    byDay[k] = (byDay[k] || 0) + e.pnl;
+  });
+  var out = [], now = new Date();
+  for(var i = days - 1; i >= 0; i--){
+    var d = new Date(now);
+    d.setDate(d.getDate() - i);
+    var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+    out.push({date: d, key: k, pnl: byDay[k] || 0});
+  }
+  var running = EQ.total || 0;
+  for(var j = out.length - 1; j >= 0; j--){
+    out[j].end = running;
+    out[j].start = running - out[j].pnl;
+    out[j].pct = out[j].start > 0 ? 100 * out[j].pnl / out[j].start : null;
+    running = out[j].start;
+  }
+  return out;
+}
+
+function renderDaily(){
+  var el = document.getElementById('daily');
+  if(!el) return;
+  if(!EQ.total){ el.innerHTML = '<span class="mini">waiting for account balances…</span>'; return; }
+  var d = dailySeries(30);
+  var active = d.filter(function(x){ return Math.abs(x.pnl) > 1e-9; });
+  var avgAll = d.reduce(function(a,x){ return a + (x.pct || 0); }, 0) / d.length;
+  var avgAct = active.length
+    ? active.reduce(function(a,x){ return a + (x.pct || 0); }, 0) / active.length : null;
+  // what that daily rate compounds to over 30 days — the honest monthly figure
+  var comp = (Math.pow(1 + avgAll/100, 30) - 1) * 100;
+  var max = Math.max.apply(null, d.map(function(x){ return Math.abs(x.pct || 0); }).concat([0.01]));
+  var H = 46;
+  var bars = d.map(function(x){
+    var h = Math.max(1, Math.round(H * Math.abs(x.pct || 0) / max));
+    var up = (x.pnl || 0) >= 0;
+    var lbl = x.date.toLocaleDateString(undefined, {month:'short', day:'numeric'}) + '  ' +
+      (x.pct == null ? 'no data' : (x.pct >= 0 ? '+' : '') + x.pct.toFixed(2) + '%  ' +
+       (x.pnl >= 0 ? '+' : '') + x.pnl.toFixed(2) + ' USDT');
+    return '<div title="' + lbl + '" style="flex:1;display:flex;flex-direction:column;'+
+      'justify-content:' + (up ? 'flex-end' : 'flex-start') + ';height:' + (H*2+2) + 'px">'+
+      (up ? '' : '<div style="height:' + H + 'px"></div>') +
+      '<div style="height:' + h + 'px;background:' + (up ? 'var(--up)' : 'var(--down)') +
+      ';opacity:' + (Math.abs(x.pnl) > 1e-9 ? '.85' : '.18') + ';border-radius:1px"></div></div>';
+  }).join('');
+  el.innerHTML =
+    '<div style="display:flex;gap:34px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px">'+
+      '<div><div class="mini">AVG PER DAY</div>'+
+        '<div class="num ' + cls(avgAll) + '" style="font-size:22px;font-weight:600">'+
+        (avgAll >= 0 ? '+' : '') + avgAll.toFixed(2) + '%</div>'+
+        '<div class="mini">across all 30 days</div></div>'+
+      '<div><div class="mini">AVG ON DAYS IT TRADED</div>'+
+        '<div class="num ' + (avgAct == null ? 'dim' : cls(avgAct)) + '" style="font-size:22px;font-weight:600">'+
+        (avgAct == null ? '—' : (avgAct >= 0 ? '+' : '') + avgAct.toFixed(2) + '%') + '</div>'+
+        '<div class="mini">' + active.length + ' of 30 days had a close</div></div>'+
+      '<div><div class="mini">COMPOUNDS TO</div>'+
+        '<div class="num ' + cls(comp) + '" style="font-size:22px;font-weight:600">'+
+        (comp >= 0 ? '+' : '') + comp.toFixed(1) + '%</div>'+
+        '<div class="mini">over 30 days at that rate</div></div>'+
+      '<div><div class="mini">BEST / WORST DAY</div>'+
+        '<div class="num" style="font-size:15px;padding-top:5px">'+
+        (function(){
+          var ps = d.filter(function(x){ return x.pct != null; }).map(function(x){ return x.pct; });
+          if(!ps.length) return '—';
+          var b = Math.max.apply(null, ps), w = Math.min.apply(null, ps);
+          return '<span class="up">+' + b.toFixed(2) + '%</span>' +
+                 '<span class="dim"> / </span><span class="down">' + w.toFixed(2) + '%</span>';
+        })() + '</div></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:2px;align-items:stretch">' + bars + '</div>'+
+    '<div class="rowsb mini" style="margin-top:6px">'+
+      '<span>' + d[0].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span>'+
+      '<span>zero line is the middle</span>'+
+      '<span>' + d[d.length-1].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span></div>';
+}
+
 // ---------------- accounts (live state next to the mode) ----------------
 function renderAccounts(){
   var el = document.getElementById('accts');
@@ -628,6 +718,7 @@ function renderAccounts(){
         '<div class="bar g" style="margin-top:6px"><i style="width:100%"></i></div></div>';
     }).join('');
     renderKpis();     // percentages need the equity that just arrived
+    renderDaily();    // and so does the daily series
   }).catch(function(){ el.innerHTML = '<span class="mini down">could not read accounts</span>'; });
 }
 
