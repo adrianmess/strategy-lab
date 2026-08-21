@@ -192,7 +192,10 @@ body.masked .amt:hover{filter:none}
     <div class="card"><h3>Open positions <span class="mini">exchange truth via the kill-switch planner</span></h3>
       <div class="body" id="pos"><span class="mini">loading…</span></div></div>
     <div class="card"><h3>Daily P&amp;L — last 30 days
-      <span class="mini">each bar is one day's realized return on that day's opening balance</span></h3>
+      <span style="display:flex;align-items:center;gap:9px">
+        <span class="mini">each bar is one day's realized return on that day's opening balance</span>
+        <select id="dailyScope" onchange="setDailyScope(this.value)"></select>
+      </span></h3>
       <div class="body" id="daily"><span class="mini">loading…</span></div></div>
   </div></section>
 
@@ -645,10 +648,23 @@ function renderChart(){
 // today's balance — otherwise a day early in the month is judged against
 // money it never had. Equity is walked backwards from the current balance,
 // subtracting each day's realized as we go.
+// scope '' = every account combined, otherwise one account's own events
+// measured against that account's own balance
+var DSCOPE = localStorage.getItem('slDailyScope') || '';
+function setDailyScope(v){
+  DSCOPE = v;
+  localStorage.setItem('slDailyScope', v);
+  renderDaily();
+}
+function dailyEquity(){
+  return DSCOPE ? (EQ[DSCOPE] || 0) : (EQ.total || 0);
+}
 function dailySeries(days){
   days = days || 30;
   var byDay = {};
-  countedEvents().forEach(function(e){
+  countedEvents().filter(function(e){
+    return !DSCOPE || e.account === DSCOPE;
+  }).forEach(function(e){
     var d = new Date(e.t);
     var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
     byDay[k] = (byDay[k] || 0) + e.pnl;
@@ -660,7 +676,7 @@ function dailySeries(days){
     var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
     out.push({date: d, key: k, pnl: byDay[k] || 0});
   }
-  var running = EQ.total || 0;
+  var running = dailyEquity();
   for(var j = out.length - 1; j >= 0; j--){
     out[j].end = running;
     out[j].start = running - out[j].pnl;
@@ -673,7 +689,26 @@ function dailySeries(days){
 function renderDaily(){
   var el = document.getElementById('daily');
   if(!el) return;
-  if(!EQ.total){ el.innerHTML = '<span class="mini">waiting for account balances…</span>'; return; }
+  // the account picker: combined, or one account with its own denominator
+  var sel = document.getElementById('dailyScope');
+  if(sel){
+    var accts = [];
+    INSTS.forEach(function(x){
+      var a = (PERF[x.id] || {}).account || (STATUS[x.id] || {}).api_account;
+      if(a && accts.indexOf(a) < 0) accts.push(a);
+    });
+    var html = '<option value="">All accounts combined</option>' +
+      accts.sort().map(function(a){
+        var owner = INSTS.filter(function(x){
+          return ((PERF[x.id]||{}).account || (STATUS[x.id]||{}).api_account) === a;
+        }).map(function(x){ return x.name || x.id; }).join(', ');
+        return '<option value="' + a + '">' + a + (owner ? ' — ' + owner : '') + '</option>';
+      }).join('');
+    if(sel._sig !== html){ sel._sig = html; sel.innerHTML = html; }
+    if(DSCOPE && accts.indexOf(DSCOPE) < 0) DSCOPE = '';   // account went away
+    sel.value = DSCOPE;
+  }
+  if(!dailyEquity()){ el.innerHTML = '<span class="mini">waiting for account balances…</span>'; return; }
   var d = dailySeries(30);
   var active = d.filter(function(x){ return Math.abs(x.pnl) > 1e-9; });
   var avgAll = d.reduce(function(a,x){ return a + (x.pct || 0); }, 0) / d.length;
@@ -722,7 +757,8 @@ function renderDaily(){
     '<div style="display:flex;gap:2px;align-items:stretch">' + bars + '</div>'+
     '<div class="rowsb mini" style="margin-top:6px">'+
       '<span>' + d[0].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span>'+
-      '<span>zero line is the middle</span>'+
+      '<span>' + (DSCOPE ? (DSCOPE + ' only · on its own balance of $' +
+        dailyEquity().toFixed(2)) : 'both accounts combined') + '</span>'+
       '<span>' + d[d.length-1].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span></div>';
 }
 
