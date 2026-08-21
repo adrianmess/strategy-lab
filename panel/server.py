@@ -1071,20 +1071,38 @@ def _spot_realized(sapi, symbols, since_ms):
     events = []
     for sym in symbols:
         try:
-            trades = sapi.my_trades(sym, 500) or []
+            fills = sapi.my_trades(sym, 500) or []
         except Exception:
             continue
-        trades.sort(key=lambda t: float(t.get("time") or 0))
+        # my_trades returns FILLS, and one market order is routinely filled in
+        # several: the 921.5 SUI sell on 2026-08-20 came back as 473.5 + 134.79
+        # + 313.21, all sharing an orderId. Emitting one event per fill listed
+        # a single close three times. Collapse fills into their order first —
+        # weighted price, summed qty and fee — then match orders.
+        orders = {}
+        for f in fills:
+            q = float(f.get("qty") or 0)
+            if not q:
+                continue
+            key = (f.get("orderId") or f.get("id"), bool(f.get("isBuyer")))
+            o = orders.setdefault(key, dict(
+                qty=0.0, quote=0.0, fee=0.0, time=0.0,
+                isBuyer=bool(f.get("isBuyer"))))
+            o["qty"] += q
+            o["quote"] += q * float(f.get("price") or 0)
+            if str(f.get("commissionAsset") or "") in ("USDT", ""):
+                o["fee"] += float(f.get("commission") or 0)
+            o["time"] = max(o["time"], float(f.get("time") or 0))
+        trades = sorted(orders.values(), key=lambda o: o["time"])
         lots = []                      # [qty, price, fee_per_unit]
         for t in trades:
-            qty = float(t.get("qty") or 0)
-            px = float(t.get("price") or 0)
-            fee = float(t.get("commission") or 0) \
-                if str(t.get("commissionAsset") or "") in ("USDT", "") else 0.0
-            ts = float(t.get("time") or 0)
+            qty = t["qty"]
+            px = (t["quote"] / qty) if qty else 0.0
+            fee = t["fee"]
+            ts = t["time"]
             if not qty:
                 continue
-            if t.get("isBuyer"):
+            if t["isBuyer"]:
                 lots.append([qty, px, fee / qty if qty else 0.0])
                 continue
             need, pnl = qty, -fee            # the sell's own fee
@@ -1244,8 +1262,8 @@ def api_ticker():
             out.append(dict(symbol=s.split("_")[0],
                             price=r.get("lastPrice"),
                             change=round(100 * float(r.get("riseFallRate") or 0), 2)))
-    except Exception as e:
-        return jsonify([]), 200 if not _TICK["data"] else 200
+    except Exception:
+        return jsonify(_TICK["data"] or [])
     if out:
         _TICK.update(t=time.time(), data=out)
     return jsonify(out)
