@@ -14,6 +14,18 @@ html[data-theme="light"]{
   --hover:#eef1f4; --sel:#ddf4ff; --chart-grid:#d8dee4; --chart-tick:#57606a;
   --shadow:0 4px 14px rgba(140,149,159,.2);
 }
+/* Always-on OLED panel in a dark room: page AND panels are #000, so those
+   pixels are unlit rather than dim. Structure comes from the borders. Text
+   and accents are pulled down so what IS lit does not glow either. */
+html[data-theme="black"]{
+  --bg:#000000; --panel:#000000; --border:#15191e; --fg:#b9c0c9; --dim:#4e565f;
+  --green:#1e8a63; --red:#a83848; --amber:#a8790a; --blue:#3560a8; --purple:#5b3d9e;
+  --input-bg:#08090b; --btn-bg:#08090b; --btn-hover:#12151a; --pre-bg:#000000;
+  --hover:#0b0e11; --sel:#12233a; --chart-grid:#15191e; --chart-tick:#4e565f;
+  --shadow:none;
+}
+html[data-theme="black"] header{background:#000!important}
+html[data-theme="black"] .warnbox,html[data-theme="black"] .badge{filter:saturate(.6)}
 /* shared component polish (applies on top of page styles) */
 body{background:var(--bg);color:var(--fg)}
 button{background:var(--btn-bg)!important;color:var(--fg)!important;border:1px solid var(--border)!important}

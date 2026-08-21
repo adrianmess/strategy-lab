@@ -1,7 +1,13 @@
 /* Shared UI helpers: theme toggle + strategy lineage names + css var reader. */
 (function () {
+  // dark -> light -> black. Applied immediately, before DOMContentLoaded, so
+  // a black-mode iPad never flashes the dark palette on a reload.
+  const THEMES = ["dark", "light", "black"];
   const saved = localStorage.getItem("theme");
-  if (saved === "light") document.documentElement.dataset.theme = "light";
+  if (saved === "light" || saved === "black") {
+    document.documentElement.dataset.theme = saved;
+  }
+  const label = t => (t === "light" ? "light" : t === "black" ? "black" : "dark");
   window.addEventListener("DOMContentLoaded", () => {
     // The Control panel lives on the panel server (port 8800). If this page
     // was opened any other way (file://, another static server), rewrite the
@@ -16,12 +22,15 @@
     if (!nav) return;
     const b = document.createElement("button");
     b.id = "themeToggle";
-    b.textContent = document.documentElement.dataset.theme === "light" ? "☾ dark" : "☀ light";
+    b.title = "Cycle theme: dark, light, black. Black is true #000 for an " +
+              "always-on screen in a dark room.";
+    const cur = () => document.documentElement.dataset.theme || "dark";
+    b.textContent = label(cur());
     b.onclick = () => {
-      const light = document.documentElement.dataset.theme === "light";
-      document.documentElement.dataset.theme = light ? "" : "light";
-      localStorage.setItem("theme", light ? "dark" : "light");
-      b.textContent = light ? "☀ light" : "☾ dark";
+      const next = THEMES[(THEMES.indexOf(cur()) + 1) % THEMES.length];
+      document.documentElement.dataset.theme = next === "dark" ? "" : next;
+      localStorage.setItem("theme", next);
+      b.textContent = label(next);
       if (window.onThemeChange) window.onThemeChange();
     };
     nav.appendChild(b);
