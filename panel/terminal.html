@@ -460,7 +460,8 @@ function allEvents(){
   Object.keys(PERF).forEach(function(id){
     var p = PERF[id];
     (p && p.series || []).forEach(function(s){
-      ev.push({t:s.t, pnl:s.pnl, symbol:s.symbol, inst:id,
+      ev.push({t:s.t, pnl:s.pnl, pct:s.pct, entry:s.entry, exit:s.exit,
+               side:s.side, lev:s.lev, symbol:s.symbol, inst:id,
                name:(INSTS.find(function(x){return x.id===id;})||{}).name||id,
                account:p.account, mode:p.mode});
     });
@@ -610,16 +611,31 @@ function renderHistory(){
     return true;
   });
   var net = rows.reduce(function(a,e){ return a+e.pnl; }, 0);
+  var wins = rows.filter(function(e){ return e.pnl > 0; }).length;
+  var withPct = rows.filter(function(e){ return e.pct != null; });
+  var avg = withPct.length
+    ? withPct.reduce(function(a,e){ return a+e.pct; }, 0) / withPct.length : null;
   document.getElementById('hCount').innerHTML = rows.length + ' closes &middot; net ' +
-    '<b class="'+cls(net)+'">'+money(net)+'</b>';
+    '<b class="'+cls(net)+'">'+money(net)+'</b>' +
+    (rows.length ? ' &middot; ' + Math.round(100*wins/rows.length) + '% win' : '') +
+    (avg == null ? '' : ' &middot; avg <b class="'+cls(avg)+'">' +
+      (avg>=0?'+':'') + avg.toFixed(2) + '%</b>');
   document.getElementById('hist').innerHTML = rows.length
-    ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Account</th><th>Symbol</th>'+
-      '<th class="n">Realized</th></tr></thead><tbody>'+
+    ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Symbol</th><th>Side</th>'+
+      '<th class="n">Entry</th><th class="n">Exit</th>'+
+      '<th class="n">P&amp;L %</th><th class="n">Realized</th></tr></thead><tbody>'+
       rows.map(function(e){
+        var px = function(v){ return v == null ? '—' : (+v).toPrecision(6); };
         return '<tr><td class="dim">'+new Date(e.t).toLocaleString()+'</td>'+
-          '<td>'+e.name+'</td><td class="dim">'+(e.account||'')+'</td>'+
+          '<td>'+e.name+' <span class="mini">'+(e.account||'')+'</span></td>'+
           '<td><b>'+e.symbol+'</b></td>'+
-          '<td class="n '+cls(e.pnl)+'">'+money(e.pnl)+'</td></tr>'; }).join('')+'</tbody></table>'
+          '<td>'+(e.side ? '<span class="tag '+(e.side==='LONG'?'g':'live')+'">'+e.side+
+            (e.lev && e.lev > 1 ? ' '+e.lev+'x' : '')+'</span>' : '')+'</td>'+
+          '<td class="n">'+px(e.entry)+'</td><td class="n">'+px(e.exit)+'</td>'+
+          '<td class="n '+(e.pct==null?'dim':cls(e.pct))+'" style="font-weight:600">'+
+            (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>'+
+          '<td class="n '+cls(e.pnl)+'">'+money(e.pnl)+'</td></tr>'; }).join('')+
+      '</tbody></table>'
     : '<div class="body"><span class="mini">nothing matches those filters</span></div>';
 }
 

@@ -1088,9 +1088,14 @@ def _spot_realized(sapi, symbols, since_ms):
                 lots.append([qty, px, fee / qty if qty else 0.0])
                 continue
             need, pnl = qty, -fee            # the sell's own fee
+            cost = 0.0                       # what the matched lots cost us
+            entry_px, matched = 0.0, 0.0
             while need > 1e-12 and lots:
                 take = min(need, lots[0][0])
                 pnl += take * (px - lots[0][1]) - take * lots[0][2]
+                cost += take * lots[0][1] + take * lots[0][2]
+                entry_px += take * lots[0][1]
+                matched += take
                 lots[0][0] -= take
                 need -= take
                 if lots[0][0] <= 1e-12:
@@ -1100,7 +1105,13 @@ def _spot_realized(sapi, symbols, since_ms):
                 # coins predate it) — count only the part we can price
                 pass
             if ts >= since_ms:
-                events.append(dict(t=ts, symbol=sym, realized=pnl))
+                # spot has no P&L field, so the percent is the return on what
+                # the matched lots actually cost — the spot equivalent of
+                # MEXC's profitRatio
+                events.append(dict(t=ts, symbol=sym, realized=pnl,
+                                   pct=round(100 * pnl / cost, 4) if cost else None,
+                                   entry=round(entry_px / matched, 8) if matched else None,
+                                   exit=px, side="LONG", lev=1))
     return events
 
 
@@ -1120,8 +1131,20 @@ def _futures_realized(fapi, since_ms):
             ts = float(r.get("updateTime") or r.get("createTime") or 0)
             oldest = ts if oldest is None else min(oldest, ts)
             if ts >= since_ms:
+                # profitRatio is MEXC's OWN realized return for the position —
+                # the same figure the website shows (it is what made the ETH
+                # close read +5.47% there against our +6.27% signal-price
+                # estimate). im is zeroed once the margin is released, so it
+                # cannot be used as a denominator after the fact.
                 events.append(dict(t=ts, symbol=r.get("symbol"),
-                                   realized=float(r.get("realised") or 0)))
+                                   realized=float(r.get("realised") or 0),
+                                   pct=round(100 * float(r.get("profitRatio")
+                                                         or 0), 4),
+                                   entry=r.get("openAvgPrice"),
+                                   exit=r.get("closeAvgPrice"),
+                                   side=("LONG" if int(r.get("positionType")
+                                                       or 1) == 1 else "SHORT"),
+                                   lev=r.get("leverage")))
         if oldest is not None and oldest < since_ms:
             break
         page += 1
@@ -1175,7 +1198,10 @@ def api_performance():
     for e in events:
         cum += e["realized"]
         series.append(dict(t=int(e["t"]), cum=round(cum, 4),
-                           pnl=round(e["realized"], 4), symbol=e["symbol"]))
+                           pnl=round(e["realized"], 4), symbol=e["symbol"],
+                           pct=e.get("pct"), entry=e.get("entry"),
+                           exit=e.get("exit"), side=e.get("side"),
+                           lev=e.get("lev")))
     by_sym = {}
     for e in events:
         s = by_sym.setdefault(e["symbol"], dict(symbol=e["symbol"],
