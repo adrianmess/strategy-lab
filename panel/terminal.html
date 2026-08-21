@@ -165,7 +165,7 @@ body.masked .amt:hover{filter:none}
       <a class="tbtn" href="/" title="Back to the classic control panel — unchanged, and still the place for executor controls, trader settings, jobs and processes">Classic panel</a>
       <div class="seg">
         <button id="themeBtn" onclick="cycleTheme()"
-          title="Dark, Light, or Black. Black is true #000 for an always-on OLED screen in a dark room.">Dark</button>
+          title="Dark, Light, or Black. Black is true #000 for an always-on OLED screen in a dark room.">&#9680; Dark</button>
         <button id="dispBtn" onclick="cycleDisplay()"
           title="Show realized figures as money, as a percentage, or both">$ / %</button>
         <button id="maskBtn" onclick="toggleMask()"
@@ -330,7 +330,9 @@ function applyTheme(t){
   localStorage.setItem('slTheme', t);
   var b = document.getElementById('themeBtn');
   if(b){
-    b.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+    // the glyph makes it read as the theme control rather than as one more
+    // unlabelled toggle sitting next to Mask and Alerts
+    b.textContent = '◐ ' + t.charAt(0).toUpperCase() + t.slice(1);
     b.classList.toggle('on', t !== 'dark');
   }
   // charts are drawn as SVG strings, so they carry the colours they were

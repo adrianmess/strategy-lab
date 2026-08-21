@@ -7,7 +7,9 @@
   if (saved === "light" || saved === "black") {
     document.documentElement.dataset.theme = saved;
   }
-  const label = t => (t === "light" ? "light" : t === "black" ? "black" : "dark");
+  // "dark" on its own reads as nothing. The half-filled circle is the usual
+  // theme glyph and renders as plain type, not as a colour emoji.
+  const label = t => "◐ " + (t === "light" ? "light" : t === "black" ? "black" : "dark");
   window.addEventListener("DOMContentLoaded", () => {
     // The Control panel lives on the panel server (port 8800). If this page
     // was opened any other way (file://, another static server), rewrite the
