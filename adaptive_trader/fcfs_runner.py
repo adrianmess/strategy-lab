@@ -258,6 +258,48 @@ def main_fcfs(cfg, live):
     pending_opens = []          # [(bar_t, comp_i, dir, lev, px, group_key)]
     pending_deadline = 0.0
 
+    # ---- SHADOW positions: what each component WOULD be holding ----------
+    # The hosts keep evaluating every component whether or not the slot is
+    # busy, so this is bookkeeping, not new computation. Written to the state
+    # file so the panel can show "these trades exist virtually right now" —
+    # the raw material for a deliberate close-and-switch.
+    shadow_by_key = {}          # group key -> [entry, ...] from its last bar
+    _shadow_sig = [None]        # membership signature of the last save
+    _shadow_ts = [0.0]          # last save time (throttles price-only saves)
+
+    def note_shadows(key, cbyi, px, now):
+        sk = state.get("late_skips") or {}
+        rows = []
+        for ci, c in sorted(cbyi.items()):
+            lbl = c.get("open")
+            ep = c.get("entry_px")
+            if lbl is None or not ep:
+                continue
+            if pos is not None and key == pos.get("group") \
+                    and ci == pos.get("comp"):
+                continue          # that IS the real position, not a shadow
+            d = int(c.get("dir") or 1)
+            lv = float(c.get("lev") or 1.0)
+            pct = ((px / float(ep) - 1.0) * d * 100.0 *
+                   (lv if mode == "lev" else 1.0)) if px else None
+            rows.append(dict(comp=ci, label=comp_label(ci), group=key,
+                             dir=d, lev=lv, entry_t=lbl,
+                             entry_px=float(ep), px=px,
+                             pct=round(pct, 3) if pct is not None else None,
+                             skipped=(sk.get(str(ci)) == lbl)))
+        shadow_by_key[key] = rows
+        flat = [r for rs in shadow_by_key.values() for r in rs]
+        sig = tuple(sorted((r["group"], r["comp"], r["entry_t"])
+                           for r in flat))
+        # save on membership change immediately; price refreshes at most
+        # every 30s so twelve hosts do not turn ticks into disk churn
+        if sig != _shadow_sig[0] or now - _shadow_ts[0] > 30:
+            _shadow_sig[0] = sig
+            _shadow_ts[0] = now
+            state["shadow"] = flat
+            state["shadow_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            save()
+
     def flush_pending():
         nonlocal pending_opens, pending_deadline
         if not pending_opens or state.get("position"):
@@ -344,6 +386,7 @@ def main_fcfs(cfg, live):
                     last_bar_at[key] = (bt, now)
                     bars_seen[0] += 1
                     cbyi = {c["i"]: c for c in msg.get("comps", [])}
+                    note_shadows(key, cbyi, float(msg.get("px") or 0), now)
                     if pos is None:
                         sk = state.setdefault("late_skips", {})
                         for ci, c in sorted(cbyi.items()):

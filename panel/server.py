@@ -445,6 +445,10 @@ def status():
         equity_usdt=cfg.get("equity_usdt"),
         candidate=cfg.get("candidate"),
         position=state.get("position"),
+        # components that WOULD hold a position if the slot were free —
+        # written by the fcfs runner every bar (membership changes) / 30s
+        shadow=state.get("shadow") or [],
+        shadow_at=state.get("shadow_at"),
         log=tail(os.path.join(AT, cfg.get("log_file", "trader.log")), 60),
     ))
 

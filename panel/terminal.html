@@ -1177,6 +1177,38 @@ function renderCards(){
       hero = '<div class="mini" style="border:1px dashed var(--line);border-radius:8px;padding:12px;'+
              'text-align:center;margin-bottom:11px">No open position</div>';
     }
+    // ---- shadow positions: what each component WOULD be holding ----
+    var sh = (s.shadow || []).slice().sort(function(a, b){
+      return (b.pct || -999) - (a.pct || -999); });
+    var shadow = '';
+    if(sh.length){
+      shadow = '<details style="margin-bottom:11px"'+(p ? ' open' : '')+'>'+
+        '<summary class="mini" style="cursor:pointer">'+
+          '<b>' + sh.length + '</b> shadow position' + (sh.length>1?'s':'') +
+          ' — virtual trades other components hold right now' +
+          (s.shadow_at ? ' <span class="dim">as of ' + s.shadow_at.slice(11,16) + '</span>' : '') +
+        '</summary>'+
+        '<table style="margin-top:6px"><thead><tr><th>Component</th><th>Side</th>'+
+          '<th class="n">Virtual entry</th><th class="n">Entry px</th>'+
+          '<th class="n">Now</th><th class="n">Unreal</th><th></th></tr></thead><tbody>'+
+        sh.map(function(x){
+          return '<tr'+(x.skipped?' style="opacity:.5"':'')+'>'+
+            '<td>'+x.label+'</td>'+
+            '<td><span class="tag '+(x.dir>0?'g':'live')+'">'+(x.dir>0?'LONG':'SHORT')+
+              (x.lev>1?' '+x.lev.toFixed(0)+'x':'')+'</span></td>'+
+            '<td class="n dim">'+(x.entry_t||'').slice(5,16)+'</td>'+
+            '<td class="n">'+(+x.entry_px).toPrecision(6)+'</td>'+
+            '<td class="n">'+(x.px?(+x.px).toPrecision(6):'?')+'</td>'+
+            '<td class="n '+(x.pct==null?'dim':cls(x.pct))+'" style="font-weight:600">'+
+              (x.pct==null?'—':(x.pct>=0?'+':'')+x.pct.toFixed(2)+'%')+'</td>'+
+            '<td class="mini">'+(x.skipped?'judged, sitting out':'late-join eligible')+'</td></tr>';
+        }).join('')+'</tbody></table>'+
+        '<div class="mini" style="margin-top:5px">These are the components\' SIMULATED '+
+        'positions — nothing is held on the exchange for them. '+
+        (p ? 'If the real position closed, the late-join rule would pick from these.'
+           : 'The slot is free; eligible ones enter via late-join on the next bar.')+
+        '</div></details>';
+    }
     // ---- API error banner ----
     var errs = (ERRS[x.id]||[]);
     var ebar = errs.length ? '<div style="border:1px solid var(--down);background:rgba(246,70,93,.1);'+
@@ -1210,7 +1242,7 @@ function renderCards(){
           '<button class="btn sm danger" onclick="startTrader(\''+x.id+'\',true)">Start LIVE</button>'+
           '<button class="btn sm" onclick="stopTrader(\''+x.id+'\')">Stop</button>'+
         '</div></div>'+
-      ebar + hero +
+      ebar + hero + shadow +
       '<div style="display:flex;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">'+
         pc('24h','24H')+pc('7d','7D')+pc('30d','30D')+
         '<div><div class="mini">WIN</div><div class="num" style="font-size:17px">'+
