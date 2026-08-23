@@ -718,7 +718,7 @@ function rtrSavedDel(){
 function rtrRender(){
   const savedCount = rtrSavedRefresh();
   rtrOnlyBtnSync();
-  document.getElementById('rtrBar').style.display = (RTRSEL.length || savedCount) ? '' : 'none';
+  document.getElementById('rtrBar').style.display = '';   // always visible (collapsed by default)
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
   if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="8" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
