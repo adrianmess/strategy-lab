@@ -670,8 +670,27 @@ function toggleRtrOnly(){
   sel = null; render();
 }
 function clearRtr(){ RTRSEL.length = 0; RTR_ONLY = false; rtrOnlyBtnSync(); rtrRender(); }
-// ---- named saved selections (persist across sessions) ----
-function rtrSavedAll(){ try { return JSON.parse(localStorage.getItem('rtrSaved')||'{}'); } catch(e){ return {}; } }
+// ---- named saved selections ----
+// Server-side (panel/rtr_saved.json via /api/rtr_saved) so they survive
+// browser data wipes and are the same on every device. RTRSAVED is the
+// local cache; every change POSTs the full dict back.
+let RTRSAVED = {};
+function rtrSavedAll(){ return RTRSAVED; }
+function rtrSavedPush(){
+  fetch('/api/rtr_saved',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(RTRSAVED)}).catch(()=>alert('could not save to the panel server — this change will be lost on reload'));
+}
+async function rtrSavedInit(){
+  try{ RTRSAVED = await fetch('/api/rtr_saved').then(r=>r.json()) || {}; }catch(e){ RTRSAVED = {}; }
+  // one-time migration of any selections still sitting in this browser
+  try{
+    const old = JSON.parse(localStorage.getItem('rtrSaved')||'{}');
+    const add = Object.keys(old).filter(n=>!(n in RTRSAVED));
+    if(add.length){ add.forEach(n=>RTRSAVED[n]=old[n]); rtrSavedPush(); }
+    if(Object.keys(old).length) localStorage.removeItem('rtrSaved');
+  }catch(e){}
+  rtrRender();
+}
 function rtrSavedRefresh(){
   const all = rtrSavedAll(), sel = document.getElementById('rtrSavedSel');
   const cur = sel.value;
@@ -688,7 +707,7 @@ function rtrSave(){
   if(!RTRSEL.length){ alert('no components selected'); return; }
   const all = rtrSavedAll();
   all[name] = { runs: [...RTRSEL], at: new Date().toISOString().slice(0,16).replace('T',' ') };
-  localStorage.setItem('rtrSaved', JSON.stringify(all));
+  rtrSavedPush();
   rtrSavedRefresh();
   document.getElementById('rtrSavedSel').value = name;
   document.getElementById('rtrCount').textContent = `— ${RTRSEL.length} selected — saved as “${name}”`;
@@ -711,8 +730,9 @@ function rtrSavedDel(){
   const name = document.getElementById('rtrSavedSel').value;
   const all = rtrSavedAll();
   if(!name || !all[name]) return;
+  if(!confirm(`delete saved selection “${name}”? (this removes it for every device)`)) return;
   delete all[name];
-  localStorage.setItem('rtrSaved', JSON.stringify(all));
+  rtrSavedPush();
   rtrSavedRefresh();
 }
 function rtrRender(){
@@ -857,7 +877,8 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
     const el = document.getElementById('fRtrOf');
     if(v && [...el.options].some(o=>o.value===v)){ el.value = v; rtrOfChanged(); }
   }
-  rtrRender();   // shows the Router components bar at load when saved selections exist
+  rtrRender();
+  rtrSavedInit();   // fetch saved selections from the panel, then re-render
 })();
 // ---- "no losing period" support: weekly returns derived from the curve ----
 const _WEEKOK = new Map();   // entry index -> bool (cached)

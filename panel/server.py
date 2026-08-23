@@ -1224,6 +1224,36 @@ def api_ignored():
     return jsonify(ok=True, ignored=list(d))
 
 
+RTR_SAVED_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "rtr_saved.json")
+
+
+@app.route("/api/rtr_saved", methods=["GET", "POST"])
+def api_rtr_saved():
+    """Saved router-component selections for the Backtests page.
+
+    Server-side (panel/rtr_saved.json) so they survive browser data wipes
+    and show up on every device — they used to live in localStorage, which
+    is per-browser and got lost. Shape: {name: {"runs": [entry, ...],
+    "at": "YYYY-MM-DD HH:MM"}}. POST replaces the whole dict (the page
+    always sends its full state)."""
+    if request.method == "GET":
+        try:
+            return jsonify(json.load(open(RTR_SAVED_P)))
+        except Exception:
+            return jsonify({})
+    b = request.get_json(force=True)
+    if not isinstance(b, dict) or not all(
+            isinstance(v, dict) and isinstance(v.get("runs"), list)
+            and all(isinstance(n, str) for n in v["runs"])
+            for v in b.values()):
+        return jsonify(error="expected {name: {runs: [entry, ...]}}"), 400
+    tmp = RTR_SAVED_P + ".tmp"
+    json.dump(b, open(tmp, "w"), indent=1)
+    os.replace(tmp, RTR_SAVED_P)
+    return jsonify(ok=True, saved=sorted(b))
+
+
 @app.route("/api/performance")
 def api_performance():
     """Realized P&L for ONE instance's exchange account over 24h / 7d / 30d,
