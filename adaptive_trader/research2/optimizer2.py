@@ -313,12 +313,16 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None,
             out[_k] = 0.0
     return out
 
-def feasible3(m, mode, min_tpm=2.0, min_n=10, cand=None, liq_margin=0.6, max_dd=None,
+def feasible3(m, mode, min_tpm=None, min_n=10, cand=None, liq_margin=0.6, max_dd=None,
               max_hold=None):
     if m is None or m["liq"]:
         return False
     if max_hold and m.get("max_hold_days", 0.0) > max_hold:
         return False   # a position stayed open longer than allowed: throw the candidate out
+    # env-default like wf2.feasible: worker processes never see the CLI args,
+    # so --min-tpm travels as LAB_MIN_TPM in the inherited environment
+    if min_tpm is None:
+        min_tpm = float(os.environ.get("LAB_MIN_TPM", 2.0))
     if m["n"] < min_n or m["tpm"] < min_tpm:
         return False
     cap = max_dd if max_dd else (0.80 if mode == "lev" else 0.50)

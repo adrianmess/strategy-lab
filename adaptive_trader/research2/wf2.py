@@ -1040,12 +1040,21 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
         out["trades"] = tr
     return out
 
-def feasible(m, mode, cand=None, max_dd=None, liq_margin=0.6, max_hold=None):
+def feasible(m, mode, cand=None, max_dd=None, liq_margin=0.6, max_hold=None,
+             min_tpm=None):
     if m is None or m["liq"]:
         return False
     if max_hold and m.get("max_hold_days", 0.0) > max_hold:
         return False   # a position stayed open longer than allowed: throw the candidate out
-    if m["n"] < 10 or m["tpm"] < 2:
+    # min_tpm: trades per month the candidate must average to survive. The
+    # 2/month default is a liveness floor, not a style: scalp searches raise
+    # it (30 = one a day) so the optimizer cannot satisfy the gates by
+    # trading five times a year. Read from the environment when not passed,
+    # because the batch_* helpers call this from worker processes that never
+    # see the CLI args — the env is inherited by every child.
+    if min_tpm is None:
+        min_tpm = float(os.environ.get("LAB_MIN_TPM", 2.0))
+    if m["n"] < 10 or m["tpm"] < min_tpm:
         return False
     cap = max_dd if max_dd else (0.80 if mode == "lev" else 0.50)
     if m["maxdd"] > cap:

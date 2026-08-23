@@ -324,7 +324,8 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                                  alt=alt, gap_mode=args.gap_mode, scoring=_scoring(args))
         def feas(m, c):
             return W.feasible(m, args.mode, cand=c, max_dd=args.max_dd,
-                              max_hold=args.max_hold_days)
+                              max_hold=args.max_hold_days,
+                              min_tpm=args.min_tpm)
     else:
         import optimizer2 as O
         def ev(c, alt):
@@ -332,7 +333,8 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                            scoring=_scoring(args))
         def feas(m, c):
             return O.feasible3(m, args.mode, cand=c, max_dd=args.max_dd,
-                               max_hold=args.max_hold_days)
+                               max_hold=args.max_hold_days,
+                               min_tpm=args.min_tpm)
 
     total_budget = args.total
     hours_budget = args.hours
@@ -721,6 +723,10 @@ def main():
                     choices=["skip_open", "skip_contaminated"],
                     help="evaluation gap handling — matches the backtest default so "
                          "candidates are searched and displayed under the same rules")
+    ap.add_argument("--min-tpm", type=float, default=2.0,
+                    help="candidate must average at least this many trades per "
+                         "month on TRAIN to be feasible (default 2 — the old "
+                         "liveness floor). Scalp searches want 20-45.")
     ap.add_argument("--max-hold-days", type=float, default=None,
                     help="throw out any candidate whose simulation ever holds a "
                          "position longer than this many days (blank = unlimited)")
@@ -752,6 +758,7 @@ def main():
                          "runs so cross-run hybrids get bred")
     ap.add_argument("--name", required=True)
     args = ap.parse_args()
+    os.environ["LAB_MIN_TPM"] = str(args.min_tpm)
     if args.hours is None and args.total is None:
         args.hours = 1.0
     # trading pair: LAB_COIN drives data loading + cache locations everywhere
@@ -964,7 +971,8 @@ def main():
                                  gap_mode=args.gap_mode, scoring=_scoring(args))
         def feas_any(m, c):
             return W.feasible(m, args.mode, cand=c, max_dd=args.max_dd,
-                              max_hold=args.max_hold_days)
+                              max_hold=args.max_hold_days,
+                              min_tpm=args.min_tpm)
     else:
         import optimizer2 as O
         O.load_g3()
@@ -986,7 +994,8 @@ def main():
                            scoring=_scoring(args))
         def feas_any(m, c):
             return O.feasible3(m, args.mode, cand=c, max_dd=args.max_dd,
-                               max_hold=args.max_hold_days)
+                               max_hold=args.max_hold_days,
+                               min_tpm=args.min_tpm)
 
     per_regime = not args.single_set
     if args.cadapt:
