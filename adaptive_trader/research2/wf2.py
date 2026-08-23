@@ -1022,6 +1022,14 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                win=float((tr["net"] > 0).mean()),
                max_hold_days=float(max_hold),
                in_market=float(held_bars / max(total_bars, 1.0)),
+               # losing-period counts for the no-losing feasibility gates.
+               # Weekly uses the same closed-trade equity the monthly series
+               # does, so the gate matches what the Backtests page filter
+               # ('no losing = month/week') measures.
+               neg_months=int((gm < -1e-9).sum()),
+               neg_weeks=int((pd.DataFrame(dict(
+                   wk=pd.to_datetime(tr["exit_t"]).dt.to_period("W"), lg=lg))
+                   .groupby("wk")["lg"].last().diff().dropna() < -1e-9).sum()),
                score=g_mean - 0.25 * g_std)
     if scoring == "worst_window":
         rw = gm.rolling(3).mean().dropna()
@@ -1055,6 +1063,16 @@ def feasible(m, mode, cand=None, max_dd=None, liq_margin=0.6, max_hold=None,
     if min_tpm is None:
         min_tpm = float(os.environ.get("LAB_MIN_TPM", 2.0))
     if m["n"] < 10 or m["tpm"] < min_tpm:
+        return False
+    # no-losing-period gates (off unless set): LAB_MAX_NEG_MONTHS=0 demands a
+    # clean monthly record on TRAIN, LAB_MAX_NEG_WEEKS likewise for weeks.
+    # These were only ever display filters before, so survivors passed them by
+    # luck; as feasibility gates the search selects for them directly.
+    _mnm = os.environ.get("LAB_MAX_NEG_MONTHS")
+    if _mnm not in (None, "") and m.get("neg_months", 0) > int(_mnm):
+        return False
+    _mnw = os.environ.get("LAB_MAX_NEG_WEEKS")
+    if _mnw not in (None, "") and m.get("neg_weeks", 0) > int(_mnw):
         return False
     cap = max_dd if max_dd else (0.80 if mode == "lev" else 0.50)
     if m["maxdd"] > cap:

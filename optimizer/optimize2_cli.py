@@ -727,6 +727,12 @@ def main():
                     help="candidate must average at least this many trades per "
                          "month on TRAIN to be feasible (default 2 — the old "
                          "liveness floor). Scalp searches want 20-45.")
+    ap.add_argument("--max-neg-months", type=int, default=None,
+                    help="candidate is infeasible if TRAIN has more than this "
+                         "many losing calendar months (0 = a clean sheet). "
+                         "Off by default.")
+    ap.add_argument("--max-neg-weeks", type=int, default=None,
+                    help="same, for losing calendar weeks")
     ap.add_argument("--max-hold-days", type=float, default=None,
                     help="throw out any candidate whose simulation ever holds a "
                          "position longer than this many days (blank = unlimited)")
@@ -759,6 +765,10 @@ def main():
     ap.add_argument("--name", required=True)
     args = ap.parse_args()
     os.environ["LAB_MIN_TPM"] = str(args.min_tpm)
+    if args.max_neg_months is not None:
+        os.environ["LAB_MAX_NEG_MONTHS"] = str(args.max_neg_months)
+    if args.max_neg_weeks is not None:
+        os.environ["LAB_MAX_NEG_WEEKS"] = str(args.max_neg_weeks)
     if args.hours is None and args.total is None:
         args.hours = 1.0
     # trading pair: LAB_COIN drives data loading + cache locations everywhere
