@@ -25,6 +25,14 @@ Resumable: same --name continues. Output: runs/<name>/best_config.json
 """
 import _bootstrap as B
 import argparse, json, os, signal, sys, time
+# ONE BLAS thread per process, set BEFORE numpy loads and inherited by every
+# spawned worker. Apple's Accelerate otherwise fans each numpy op across all
+# cores from EACH worker: 10 workers x 12-way BLAS = thread thrash — observed
+# 2026-08-24 as workers pinned at ~20% CPU in sem_wait, the whole Mac mini at
+# ~30% utilisation and load 22 while a gamut "ran".
+for _v in ("VECLIB_MAXIMUM_THREADS", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+           "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
 import multiprocessing as mp
 import numpy as np
 
