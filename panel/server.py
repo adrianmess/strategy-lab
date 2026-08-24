@@ -1691,10 +1691,15 @@ def backtests_lite():
     if mode:
         rows = [r for r in rows if r.get("mode") == mode]
     total = len(rows)
-    sort = request.args.get("sort") or "growth"
+    # default NEWEST FIRST: sorting by growth buried freshly published runs
+    # hundreds of rows deep ("my campaign's runs aren't appearing")
+    sort = request.args.get("sort") or "created"
     if sort == "growth":
         rows = sorted(rows, key=lambda r: (r.get("growth") is None,
                                            -(r.get("growth") or 0)))
+    else:
+        rows = sorted(rows, key=lambda r: str(r.get("created") or ""),
+                      reverse=True)
     try:
         lim = max(1, min(300, int(request.args.get("limit") or 60)))
     except Exception:

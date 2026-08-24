@@ -239,9 +239,12 @@ body.masked .amt:hover{filter:none}
         <select id="bVerdict" onchange="loadBT()"><option value="">any verdict</option>
           <option>Honest</option><option>Optimistic</option><option>Passed</option>
           <option>Train-best</option></select>
+        <select id="bSort" onchange="loadBT()">
+          <option value="created">newest first</option>
+          <option value="growth">best growth/mo</option></select>
         <input id="bQ" placeholder="search name" style="min-width:190px" onchange="loadBT()">
         <button class="btn sm" onclick="loadBT()">Search</button></div></div>
-    <div class="card"><h3>Published backtests <span class="mini">sorted by growth/mo</span></h3>
+    <div class="card"><h3>Published backtests <span class="mini" id="btSortNote">newest first</span></h3>
       <div class="scroll" id="bt"></div></div>
   </div></section>
 
@@ -1020,7 +1023,10 @@ function loadBT(){
   var q = encodeURIComponent(document.getElementById('bQ').value||'');
   var v = document.getElementById('bVerdict').value;
   var m = document.getElementById('bMode').value;
-  API('backtests_lite?limit=80&q='+q+'&verdict='+v+'&mode='+m).then(function(d){
+  var srt = (document.getElementById('bSort')||{}).value || 'created';
+  var note = document.getElementById('btSortNote');
+  if(note) note.textContent = srt === 'growth' ? 'sorted by growth/mo' : 'newest first';
+  API('backtests_lite?limit=80&sort='+srt+'&q='+q+'&verdict='+v+'&mode='+m).then(function(d){
     document.getElementById('btState').textContent =
       d.state === 'ready' ? (d.total.toLocaleString()+' matching of '+d.indexed.toLocaleString()+' indexed')
                           : ('index '+d.state+'…');
