@@ -550,6 +550,70 @@ def trader_start():
     _save_instances()
     return jsonify(ok=True, instance=i)
 
+_DUST_CACHE = {"t": 0.0, "d": None}
+
+
+@app.route("/api/dust")
+def api_dust():
+    """Small spot balances on both accounts (each worth < 5 USDT): the stuff
+    the kill-switch planner skips as dust. Cached 120s. ?refresh=1 busts it."""
+    if (_DUST_CACHE["d"] is not None and
+            time.time() - _DUST_CACHE["t"] < 120 and
+            not request.args.get("refresh")):
+        return jsonify(_DUST_CACHE["d"])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    rows, errs = [], []
+    for acct in ("mexc1", "mexc2"):
+        try:
+            sapi = MexcSpotAPI(account=acct)
+            for b in sapi.account_info().get("balances", []):
+                a = b.get("asset")
+                qty = float(b.get("free") or 0) + float(b.get("locked") or 0)
+                if not a or a in ("USDT", "USDC") or qty <= 0:
+                    continue
+                try:
+                    px = float(sapi.ticker_price(f"{a}_USDT") or 0)
+                except Exception:
+                    px = 0.0
+                val = qty * px
+                if val >= 5.0:          # not dust — a real holding
+                    continue
+                rows.append(dict(account=acct, asset=a, qty=qty,
+                                 value=round(val, 4),
+                                 excluded=(a in _KILL_EXCLUDE)))
+        except Exception as e:
+            errs.append(f"{acct}: {str(e)[:160]}")
+    out = dict(dust=rows, errors=errs,
+               total=round(sum(r["value"] for r in rows), 4),
+               at=time.strftime("%Y-%m-%d %H:%M:%S"))
+    _DUST_CACHE.update(t=time.time(), d=out)
+    return jsonify(out)
+
+
+@app.route("/api/dust/convert", methods=["POST"])
+def api_dust_convert():
+    """Convert the given small balances to MX on ONE account (MEXC's own
+    small-balance conversion: 0.2% fee, <5 USDT per asset, 10x/day)."""
+    d = request.get_json(force=True)
+    if d.get("confirm") != "CONVERT":
+        return jsonify(error="requires confirm='CONVERT'"), 400
+    acct = d.get("account")
+    assets = [str(a).upper() for a in (d.get("assets") or []) if a]
+    if acct not in ("mexc1", "mexc2") or not assets:
+        return jsonify(error="need account (mexc1|mexc2) and assets[]"), 400
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    try:
+        res = MexcSpotAPI(account=acct).dust_convert(assets)
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    _DUST_CACHE["t"] = 0.0        # balances just changed
+    return jsonify(ok=True, result=res)
+
+
 @app.route("/api/adopt_shadow", methods=["POST"])
 def adopt_shadow():
     """Ask a FLAT running trader to open ONE chosen shadow component's trade.

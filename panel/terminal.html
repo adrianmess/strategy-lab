@@ -110,6 +110,16 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .view{display:none}.view.on{display:block}
 .modal{position:fixed;inset:0;background:rgba(3,5,8,.8);display:none;place-items:center;z-index:60;padding:20px}
 .modal.on{display:grid}
+.brow{display:flex;gap:8px;margin-top:11px;align-items:center;flex-wrap:wrap}
+.b4{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;border-radius:20px;
+ padding:3px 11px;cursor:pointer;border:1px solid var(--line);user-select:none}
+.b4:hover{filter:brightness(1.3)}
+.b4.s{background:rgba(88,166,255,.10);border-color:rgba(88,166,255,.35);color:var(--fg)}
+.b4.s .cnt{background:var(--blue);color:#0b0e11;border-radius:9px;padding:0 6px;font-weight:700}
+.b4.d{background:rgba(240,185,11,.10);border-color:rgba(240,185,11,.35);color:var(--fg)}
+.b4.d .val{color:var(--accent);font-weight:700}
+.b4 .chev{opacity:.55;font-size:10px;transition:transform .15s;display:inline-block}
+.b4.open .chev{transform:rotate(90deg)}
 .mbox{width:min(560px,96vw);background:var(--panel);border:1px solid rgba(246,70,93,.5);border-radius:14px;
  overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.7);max-height:90vh;display:flex;flex-direction:column}
 .mbox header{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;color:var(--down);font-size:15px}
@@ -312,6 +322,16 @@ body.masked .amt:hover{filter:none}
     <div id="killout" class="plan" style="display:none"></div>
   </div>
 </div></div>
+
+<div class="modal" id="dustm" onclick="if(event.target===this)closeDust()">
+  <div class="mbox" style="border-color:rgba(240,185,11,.5)">
+    <header style="color:var(--accent);display:flex;justify-content:space-between;align-items:center">
+      Dust balances
+      <span style="cursor:pointer;color:var(--dim);font-weight:400" onclick="closeDust()">&#10005;</span>
+    </header>
+    <div class="mb" id="dustb"><span class="mini">loading…</span></div>
+  </div>
+</div>
 
 <script>
 var API = function(p, opt){ return fetch('/api/'+p, opt).then(function(r){ return r.json(); }); };
@@ -1421,9 +1441,9 @@ function posRows(){
   return rows;
 }
 
-function shadowBlock(){
-  // shadows from EVERY instance, shown on the Overview so "what would be
-  // open" is visible without drilling into the instance cards
+var SH_OPEN = localStorage.getItem('shOpen') === '1';
+var DUST = null;
+function shadowRows(){
   var rows = [];
   INSTS.forEach(function(x){
     var s = STATUS[x.id]||{};
@@ -1431,12 +1451,16 @@ function shadowBlock(){
       rows.push({id:x.id, inst:(x.name||x.id), held:!!s.position, r:r});
     });
   });
-  if(!rows.length) return '';
   rows.sort(function(a,b){ return ((b.r.pct||0)-(a.r.pct||0)); });
-  return '<details style="margin-top:10px" open><summary class="mini" style="cursor:pointer">'+
-    '<b>'+rows.length+'</b> shadow position'+(rows.length>1?'s':'')+
-    ' — what components would be holding if the slot were free</summary>'+
-    '<table style="margin-top:6px"><thead><tr><th>Instance</th><th>Component</th><th>Side</th>'+
+  return rows;
+}
+function toggleShadows(){
+  SH_OPEN = !SH_OPEN;
+  localStorage.setItem('shOpen', SH_OPEN ? '1' : '');
+  renderPositions();
+}
+function shadowTable(rows){
+  return '<table style="margin-top:9px"><thead><tr><th>Instance</th><th>Component</th><th>Side</th>'+
     '<th class="n">Virtual entry</th><th class="n">Entry px</th><th class="n">Unreal %</th><th></th></tr></thead><tbody>'+
     rows.map(function(o){
       var r = o.r;
@@ -1455,8 +1479,86 @@ function shadowBlock(){
     }).join('')+'</tbody></table>'+
     '<div class="mini" style="margin-top:5px">Simulated positions — nothing is held for them. '+
     'After a manual close nothing joins automatically; Adopt the one you want. '+
-    'Adopting opens at the LIVE price: P&amp;L counts from your fill, not the virtual entry.</div>'+
-    '</details>';
+    'Adopting opens at the LIVE price: P&amp;L counts from your fill, not the virtual entry.</div>';
+}
+function extrasRow(){
+  // compact B4 badges under the positions table: shadows (blue, expands
+  // in place) and dust (gold, hover for detail, click for convert modal)
+  var rows = shadowRows();
+  var sb = rows.length
+    ? '<span class="b4 s'+(SH_OPEN?' open':'')+'" onclick="toggleShadows()" '+
+      'title="virtual trades components would be holding — click to '+
+      (SH_OPEN?'collapse':'expand')+'"><span class="cnt">'+rows.length+'</span> shadow'+
+      (rows.length>1?'s':'')+' <span class="chev">&#9654;</span></span>'
+    : '';
+  var db = '';
+  if(DUST && DUST.dust && DUST.dust.length){
+    var tip = DUST.dust.map(function(r){
+      return r.asset+' '+amt(r.qty)+' ($'+(+r.value).toFixed(2)+', '+r.account+')'+
+             (r.excluded?' — kill-switch excluded':'');
+    }).join('\n')+'\neach below 5 USDT — skipped by KILL ALL. Click to view & convert to MX.';
+    db = '<span class="b4 d" onclick="openDust()" title="'+tip.replace(/"/g,'&quot;')+'">'+
+         '&#10022; dust <span class="val">'+amt('$'+(+DUST.total).toFixed(2))+'</span></span>';
+  }
+  if(!sb && !db) return '';
+  return '<div class="brow">'+sb+db+'</div>'+(SH_OPEN && rows.length ? shadowTable(rows) : '');
+}
+function openDust(){
+  document.getElementById('dustm').classList.add('on');
+  renderDustModal();
+}
+function closeDust(){ document.getElementById('dustm').classList.remove('on'); }
+function renderDustModal(){
+  var el = document.getElementById('dustb');
+  if(!el) return;
+  if(ARMED) return;   // an inline Confirm/Cancel is up — do not wipe it
+  if(!DUST){ el.innerHTML = '<span class="mini">loading…</span>'; return; }
+  var rows = DUST.dust || [];
+  if(!rows.length){ el.innerHTML = '<span class="mini">no dust — both accounts are clean</span>'; return; }
+  var accts = {};
+  rows.forEach(function(r){ (accts[r.account] = accts[r.account]||[]).push(r); });
+  el.innerHTML =
+    '<table><thead><tr><th>Asset</th><th>Account</th><th class="n">Amount</th><th class="n">Value</th></tr></thead><tbody>'+
+    rows.map(function(r){
+      return '<tr'+(r.excluded?' style="opacity:.55"':'')+'><td><b>'+r.asset+'</b>'+
+        (r.excluded?' <span class="tag b">kill-switch excluded</span>':'')+'</td>'+
+        '<td class="mini">'+r.account+'</td>'+
+        '<td class="n">'+amt(r.qty)+'</td>'+
+        '<td class="n">'+amt('$'+(+r.value).toFixed(2))+'</td></tr>';
+    }).join('')+'</tbody></table>'+
+    '<div style="background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.35);border-radius:8px;'+
+      'padding:8px 11px;font-size:12px;margin-top:10px">MEXC converts balances under 5 USDT to MX with a '+
+      '<b>0.2% fee</b>, up to 10&times; per day. MX itself is on the kill-switch exclude list, so converted '+
+      'dust is never sold by KILL ALL.</div>'+
+    '<div style="display:flex;gap:8px;margin-top:13px;justify-content:flex-end;flex-wrap:wrap">'+
+    Object.keys(accts).map(function(a){
+      var conv = accts[a].filter(function(r){ return !r.excluded; });
+      return conv.length
+        ? '<button class="btn sm" style="border-color:var(--accent);color:var(--accent)" '+
+          'onclick="convertDust(this,\''+a+'\')">Convert '+a+' to MX ('+conv.length+')</button>'
+        : '';
+    }).join('')+
+    '<button class="btn sm" onclick="closeDust()">Close</button></div>'+
+    (DUST.errors && DUST.errors.length
+      ? '<div class="mini down" style="margin-top:8px">'+DUST.errors.join(' · ')+'</div>' : '');
+}
+function convertDust(btn, acct){
+  var assets = (DUST.dust||[]).filter(function(r){ return r.account===acct && !r.excluded; })
+                              .map(function(r){ return r.asset; });
+  if(!assets.length){ flash('nothing convertible on '+acct, 'r'); return; }
+  armConfirm(btn, 'Confirm convert — 0.2% fee', function(){
+    API('dust/convert', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body:JSON.stringify({account:acct, assets:assets,
+                                              confirm:'CONVERT'})}).then(function(r){
+      if(r.error) flash(r.error, 'r');
+      else flash('Converted '+assets.join(', ')+' to MX on '+acct+'.', 'g');
+      loadDust(true); });
+  });
+}
+function loadDust(refresh){
+  API('dust'+(refresh?'?refresh=1':'')).then(function(d){
+    DUST = d; renderPositions(); renderDustModal();
+  }).catch(function(){});
 }
 function adoptShadow(btn, i, comp, entryT){
   var s = STATUS[i]||{};
@@ -1478,14 +1580,8 @@ function renderPositions(){
   if(!el) return;
   if(ARMED) return;   // an inline Confirm/Cancel is up — do not wipe it
   var rows = posRows();
-  var notes = ((LASTPLAN && LASTPLAN.report) || []).filter(function(x){
-    return x.step === 'skip_excluded' || x.step === 'skip_dust'; });
   if(!rows.length){
-    el.innerHTML = '<span class="mini">both accounts are flat</span>' +
-      (notes.length ? '<div class="mini" style="margin-top:8px">' + notes.map(function(x){
-        return (x.symbol||x.asset) + ' — ' + (x.step === 'skip_dust' ? 'dust' : x.why);
-      }).join(' · ') + '</div>' : '') +
-      shadowBlock();
+    el.innerHTML = '<span class="mini">both accounts are flat</span>' + extrasRow();
     return;
   }
   var net = rows.reduce(function(a, r){ return a + (r.usd || 0); }, 0);
@@ -1525,11 +1621,7 @@ function renderPositions(){
     '</tbody><tfoot><tr><td colspan="9" class="n dim">unrealized across open positions</td>'+
     '<td class="n ' + cls(net) + '" style="font-weight:700">' +
       amt((net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2)) + '</td><td></td></tr></tfoot></table>' +
-    (notes.length ? '<div class="body mini" style="border-top:1px solid var(--line)">' +
-      notes.map(function(x){ return (x.symbol||x.asset) + ' — ' +
-        (x.step === 'skip_dust' ? 'dust, below the minimum sellable size' : x.why); }).join(' · ') +
-      '</div>' : '') +
-    shadowBlock();
+    extrasRow();
 }
 
 function planKill(target){
@@ -1618,9 +1710,10 @@ for(var i=0;i<btns.length;i++){
 }
 syncSoundBtn(); syncToggles();
 applyTheme(localStorage.getItem('slTheme') || 'dark');
-loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades();
+loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust();
 setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
+setInterval(loadDust, 300000);
 setInterval(loadTicker, 15000);
 setInterval(loadStatus, 20000);
 setInterval(function(){ loadOptimize(); loadProgress(); }, 90000);

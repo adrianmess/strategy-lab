@@ -260,6 +260,16 @@ class MexcSpotAPI:
         p = {"symbol": self.spot_symbol(symbol)} if symbol else {}
         return self._signed("GET", "/api/v3/openOrders", p)
 
+    def dust_convertible(self):
+        """Assets MEXC will convert to MX (each worth < 5 USDT)."""
+        return self._signed("GET", "/api/v3/capital/convert/list", {})
+
+    def dust_convert(self, assets):
+        """Convert small balances to MX. MEXC charges a 0.2% fee and allows
+        up to 10 conversions per 24h; each asset must be worth < 5 USDT."""
+        return self._signed("POST", "/api/v3/capital/convert",
+                            {"asset": ",".join(assets)})
+
     _scale_cache = {}
 
     def quantity_scale(self, symbol):
