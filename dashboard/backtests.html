@@ -930,6 +930,11 @@ function _noNegMonth(i){
     if(months.get(ks[k]) < months.get(ks[k-1]) - 1e-9) return false;
   return true;
 }
+function resetFilters(){
+  Object.keys(localStorage).filter(function(k){ return k.indexOf('btFilter') === 0; })
+    .forEach(function(k){ localStorage.removeItem(k); });
+  location.reload();
+}
 function render(){
   const holder = document.getElementById('detailHolder');
   holder.style.display='none'; document.querySelector('main').appendChild(holder);
@@ -1017,8 +1022,15 @@ function render(){
   }
   const fStratV = ss_.value;
   if(fStratV !== 'all') order = order.filter(i=>(BT[i].strategy||'unknown') === fStratV);
-  document.getElementById('fCount').textContent =
-    (fModeV!=='all'||fPairV!=='all'||fTfV!=='all'||fRtV!=='all'||fStratV!=='all'||fNoLiqV||fOpenV!=='all'||fNegV!=='all') ? `showing ${order.length} of ${BT.length}` : '';
+  // ALWAYS say how many rows the filters hide — the old condition ignored
+  // max-hold/max-DD/genome/holdout/etc., so a fully-filtered-out batch of
+  // fresh runs simply looked like it was never published
+  const _hidden = BT.length - order.length;
+  document.getElementById('fCount').innerHTML = _hidden > 0
+    ? `showing ${order.length} of ${BT.length} — ${_hidden} hidden by filters · ` +
+      `<a href="#" onclick="resetFilters();return false" ` +
+      `title="clear every saved filter and reload">reset filters</a>`
+    : '';
   if(sortKey){
     order.sort((a,b)=>{
       const va=colval(BT[a],sortKey), vb=colval(BT[b],sortKey);
