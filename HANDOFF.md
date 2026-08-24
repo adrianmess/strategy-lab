@@ -145,3 +145,6 @@ Personal platform (`/Users/adrian/Code/strategy-lab`) for optimizing, backtestin
 3. Investigate the rocx-lev 20.1d max-hold gate violation.
 4. Decide on backtests.js size mitigation (publish-time cap on curve/trade points).
 5. When a gamut finishes: review `campaigns/gamut_<name>/report.md`; promote winners through causal walk-forward before any adoption talk.
+
+## 2026-08-25 — HARVX research
+Red-window harvest policy (Adrian's manual adopt-low/sell-strength loop, automated): full evidence chain + per-pair trained results in docs/HARVX_RESEARCH.md. Verdict: HYPE/SOL/ETH have holdout-positive policies; XRP/DOGE do not. Runner execution not built yet.
