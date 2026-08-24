@@ -386,9 +386,10 @@ def dash(p):
     # the classic Backtests page pulls it in full after each change. JSON
     # gzips ~10x, so compress once per change (cached as .gz beside it)
     # and serve that to any client that accepts gzip.
-    if (p == "backtests.js"
+    if ((p == "backtests.js"
+         or (p.startswith("backtests_part") and p.endswith(".js")))
             and "gzip" in (request.headers.get("Accept-Encoding") or "")):
-        src = os.path.join(DASH, "backtests.js")
+        src = os.path.join(DASH, p)
         gz = src + ".gz"
         try:
             with _GZ_LOCK:
@@ -402,7 +403,7 @@ def dash(p):
                         _sh.copyfileobj(fi, fo, 1 << 20)
                     # keep the .gz mtime >= source so the check above settles
                     os.replace(tmp, gz)
-            resp = send_from_directory(DASH, "backtests.js.gz",
+            resp = send_from_directory(DASH, p + ".gz",
                                        mimetype="application/javascript",
                                        conditional=True)
             resp.headers["Content-Encoding"] = "gzip"
@@ -410,12 +411,129 @@ def dash(p):
             resp.headers["Cache-Control"] = "no-cache"
             return resp
         except Exception as e:
-            print(f"backtests.js gzip failed ({e}) — serving raw", flush=True)
+            print(f"{p} gzip failed ({e}) — serving raw", flush=True)
     resp = send_from_directory(DASH, p)
     # pages and their inline JS change often — force revalidation so stale
     # cached pages can't hide new features ("I don't see the badges")
     if p.endswith((".html", ".js", ".css")):
         resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+# ---- classic-page parts: Chrome refuses any single <script> over ~512MiB
+# (V8's string cap, 2^29-24 bytes). backtests.js crossed it at 554MB and the
+# classic Backtests page went silently blank. The panel splits the blob into
+# <=200MB part files; backtests_parts.js document.writes them so they load
+# in order and the page's inline code still sees a full window.BACKTESTS. ----
+_BT_PARTS = {"building": False}
+BT_PART_BYTES = 200 * 1024 * 1024
+BT_PARTS_MAN = os.path.join(DASH, "backtests_parts.json")
+
+
+def _bt_parts_fresh():
+    try:
+        src_mt = os.path.getmtime(os.path.join(DASH, "backtests.js"))
+        man = json.load(open(BT_PARTS_MAN))
+        return man if man.get("mtime") == src_mt else None
+    except Exception:
+        return None
+
+
+def _bt_parts_build():
+    _BT_PARTS["building"] = True
+    try:
+        src = os.path.join(DASH, "backtests.js")
+        mt = os.path.getmtime(src)
+        s = open(src).read()
+        dec = json.JSONDecoder()
+        i = s.index("[") + 1
+        n = len(s)
+        k = 0
+        written = 0
+        first = True
+
+        def _open_part(k):
+            f = open(os.path.join(DASH, f"backtests_part{k}.js.tmp"), "w")
+            f.write("window.BACKTESTS.push(")
+            return f
+
+        def _close_part(f, k):
+            f.write(");\n")
+            f.close()
+            d = os.path.join(DASH, f"backtests_part{k}.js")
+            os.replace(d + ".tmp", d)
+
+        out = _open_part(0)
+        while True:
+            while i < n and s[i] in " \t\r\n,":
+                i += 1
+            if i >= n or s[i] == "]":
+                break
+            start = i
+            _, i = dec.raw_decode(s, i)   # raw slice reused — no re-dump
+            ent = s[start:i]
+            if written and written + len(ent) > BT_PART_BYTES:
+                _close_part(out, k)
+                k += 1
+                out = _open_part(k)
+                written = 0
+                first = True
+            if not first:
+                out.write(",\n")
+            out.write(ent)
+            written += len(ent)
+            first = False
+        _close_part(out, k)
+        del s
+        # drop leftover higher-numbered parts (+ their .gz) from bigger builds
+        j = k + 1
+        while True:
+            stale = os.path.join(DASH, f"backtests_part{j}.js")
+            if not os.path.exists(stale):
+                break
+            for f in (stale, stale + ".gz"):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+            j += 1
+        tmp = BT_PARTS_MAN + ".tmp"
+        json.dump(dict(n=k + 1, mtime=mt), open(tmp, "w"))
+        os.replace(tmp, BT_PARTS_MAN)
+        print(f"backtests parts rebuilt: {k + 1} file(s)", flush=True)
+    except Exception as e:
+        print(f"backtests parts build failed ({e}) — will retry on next "
+              "request", flush=True)
+    finally:
+        _BT_PARTS["building"] = False
+
+
+@app.route("/dashboard/backtests_parts.js")
+def bt_parts_js():
+    man = _bt_parts_fresh()
+    if man is None:
+        if not _BT_PARTS["building"]:
+            threading.Thread(target=_bt_parts_build, daemon=True).start()
+        # serve the last complete set while rebuilding; only the very first
+        # request ever has nothing at all and must wait for the build
+        try:
+            man = json.load(open(BT_PARTS_MAN))
+        except Exception:
+            for _ in range(600):
+                if not _BT_PARTS["building"]:
+                    break
+                time.sleep(1)
+            man = _bt_parts_fresh()
+    if not man:
+        return app.response_class(
+            "document.write('backtests parts unavailable — see panel log');",
+            mimetype="application/javascript"), 500
+    v = int(man.get("mtime") or 0)
+    body = "window.BACKTESTS = window.BACKTESTS || [];\n" + "".join(
+        f"document.write('<script src=\"backtests_part{k}.js?v={v}\">"
+        "<\\/script>');\n" for k in range(int(man.get("n") or 0)))
+    resp = app.response_class(body, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"
     return resp
 
 

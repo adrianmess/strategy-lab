@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Backtests — Strategy Lab</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="backtests.js"></script>
+<!-- backtests.js outgrew Chrome's ~512MiB per-script cap (the page went
+     silently blank at 554MB). The panel splits it into <=200MB parts; this
+     loader script document.writes the part tags so they load in order and
+     the inline code below still sees a fully-populated window.BACKTESTS. -->
+<script src="backtests_parts.js"></script>
 <style>
 :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#e6edf3;--dim:#8b949e;
 --green:#3fb950;--red:#f85149;--amber:#d29922;--blue:#58a6ff}
