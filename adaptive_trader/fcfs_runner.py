@@ -84,7 +84,16 @@ class Host:
 
     def start(self):
         self.started_at = time.time()
-        env = {**os.environ, "LAB_TF": str(self.tf_min)}
+        # Each host gets its OWN numba cache dir. With a shared cache, two
+        # hosts compiling the same jitted function at the same time corrupt
+        # the cache file for everyone; the next host to LOAD it segfaults in
+        # numba's dispatcher (no traceback — the process just dies), and
+        # lockstep restart backoffs then keep re-corrupting it forever.
+        # 2026-08-23: ETH@3m + SUI@3m crash-looped for 2h exactly this way.
+        nb_cache = os.path.join(HERE, ".numba_cache", self.key)
+        os.makedirs(nb_cache, exist_ok=True)
+        env = {**os.environ, "LAB_TF": str(self.tf_min),
+               "NUMBA_CACHE_DIR": nb_cache}
         errlog = open(os.path.join(HERE, f".fcfs_host_{self.key}.err"), "a")
         self.proc = subprocess.Popen(
             [sys.executable, os.path.join(HERE, "fcfs_host.py")],

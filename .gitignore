@@ -33,3 +33,4 @@ optimizer/gamut_limits.json
 panel/panel_key.json
 panel/ignored_trades.json
 panel/alerts.json
+adaptive_trader/.numba_cache/

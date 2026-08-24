@@ -116,18 +116,25 @@ class _PidProc:
         self._rc = None
 
     def _alive(self):
+        """True/False when ps answered definitively; None when ps itself
+        failed (timeout, fork pressure). Callers must never treat None as
+        dead — one ps hiccup used to permanently mark a LIVE trader as
+        stopped, which then invited a doomed duplicate start."""
         try:
-            out = subprocess.run(["ps", "-p", str(self.pid), "-o", "command="],
-                                 capture_output=True, text=True,
-                                 timeout=5).stdout
-            return self._sig in out
+            r = subprocess.run(["ps", "-p", str(self.pid), "-o", "command="],
+                               capture_output=True, text=True, timeout=5)
         except Exception:
-            return False
+            return None
+        if r.returncode == 0:
+            return self._sig in r.stdout       # pid alive; is it still ours?
+        if r.returncode == 1:
+            return False                       # ps ran fine: no such pid
+        return None
 
     def poll(self):
         if self._rc is not None:
             return self._rc
-        if self._alive():
+        if self._alive() is not False:         # alive OR indeterminate
             return None
         self._rc = 0
         return self._rc
@@ -179,6 +186,10 @@ def _readopt_orphans():
                 if not busy and I.get("cfg") == cfg:
                     t.update(proc=_PidProc(pid, "trader.py"), config=cfg,
                              live=("--live" in cmd), started=started)
+                    # it IS running — repair the persisted intent too, so a
+                    # reboot resumes it (a lost handle may have saved
+                    # should_run=false while the trader was in fact alive)
+                    I.pop("stopped_by_user", None)
                     print(f"re-adopted trader pid {pid} ({cfg}) -> "
                           f"instance {i}", flush=True)
                     break
@@ -201,6 +212,7 @@ def _readopt_orphans():
                           headless=("--headless" in cmd))
                 print(f"re-adopted executor pid {pid} -> instance {inst}",
                       flush=True)
+    _save_instances()   # persist any repaired run/live intent
 
 
 _readopt_orphans()
@@ -459,6 +471,34 @@ def _state_file_of(cfg_name):
     except Exception:
         return None
 
+
+def _find_trader_proc(cfg_name):
+    """(pid, live, started) of a running trader.py whose TRADER_CONFIG is
+    exactly cfg_name, else None. Used by /api/trader/start so that a trader
+    the panel lost track of is RE-ATTACHED instead of shadowed by a duplicate
+    that only prints REFUSING TO START and exits — which then made the panel
+    track the dead duplicate and show a live trader as stopped."""
+    try:
+        ps = subprocess.run(["ps", "eww", "-axo", "pid=,lstart=,command="],
+                            capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return None
+    for line in ps.splitlines():
+        parts = line.strip().split(None, 6)
+        if len(parts) < 7:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        cmd = parts[6]
+        if "trader.py" not in cmd or "TRADER_CONFIG=" not in cmd:
+            continue
+        if cmd.split("TRADER_CONFIG=")[1].split()[0] != cfg_name:
+            continue
+        return pid, ("--live" in cmd), " ".join(parts[3:6])
+    return None
+
 @app.route("/api/trader/start", methods=["POST"])
 def trader_start():
     d = request.get_json(force=True)
@@ -467,6 +507,21 @@ def trader_start():
     if t["proc"] is not None and t["proc"].poll() is None:
         return jsonify(error=f"{_iname(i)}: trader already running"), 400
     cfg_name = d.get("config", I["cfg"] or "config.json")
+    # a trader with this config may still be running even though the panel
+    # lost its handle (e.g. a ps hiccup latched it as dead) — re-attach it,
+    # in whatever live/dry state it truly is, rather than spawn a duplicate
+    orphan = _find_trader_proc(cfg_name)
+    if orphan:
+        opid, olive, ostarted = orphan
+        t.update(proc=_PidProc(opid, "trader.py"), config=cfg_name,
+                 live=olive, started=ostarted)
+        I.pop("stopped_by_user", None)
+        I["cfg"] = cfg_name
+        _save_instances()
+        return jsonify(ok=True, instance=i, readopted=True,
+                       note=(f"{_iname(i)}: re-attached to the trader already "
+                             f"running ({'LIVE' if olive else 'dry'}) — "
+                             f"nothing new was started"))
     live = bool(d.get("live"))
     if live and d.get("confirm") != "LIVE":
         return jsonify(error="live start requires confirm='LIVE'"), 400
