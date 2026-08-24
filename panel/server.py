@@ -550,6 +550,42 @@ def trader_start():
     _save_instances()
     return jsonify(ok=True, instance=i)
 
+@app.route("/api/adopt_shadow", methods=["POST"])
+def adopt_shadow():
+    """Ask a FLAT running trader to open ONE chosen shadow component's trade.
+    Writes the adopt sidecar; the runner acts within a few seconds, opening
+    at the LIVE price (P&L measured from OUR fill, not the virtual entry).
+    Nothing is ever adopted automatically — this endpoint is the only path."""
+    d = request.get_json(force=True)
+    i, I = _inst()
+    t = I["trader"]
+    if t["proc"] is None or t["proc"].poll() is not None:
+        return jsonify(error=f"{_iname(i)}: trader not running"), 400
+    if bool(t.get("live")) and d.get("confirm") != "ADOPT":
+        return jsonify(error=f"{_iname(i)} is LIVE — adopting places a real "
+                             "order; requires confirm='ADOPT'"), 400
+    if d.get("comp") is None or not d.get("entry_t"):
+        return jsonify(error="need comp and entry_t"), 400
+    cfg_name = t["config"] or I["cfg"] or "config.json"
+    sfile = _state_file_of(cfg_name)
+    if not sfile:
+        return jsonify(error="could not resolve the trader's state file"), 500
+    try:
+        st = json.load(open(os.path.join(AT, sfile)))
+    except Exception:
+        st = {}
+    if st.get("position"):
+        return jsonify(error=f"{_iname(i)} already holds a position — "
+                             "close it first, then adopt"), 400
+    p = os.path.join(AT, ".adopt_" + os.path.basename(sfile))
+    json.dump(dict(comp=int(d["comp"]), entry_t=d["entry_t"],
+                   at=time.strftime("%Y-%m-%d %H:%M:%S")), open(p, "w"))
+    return jsonify(ok=True, note=(f"{_iname(i)}: adopt armed — the trader "
+                                  "acts within a few seconds. If the virtual "
+                                  "trade closed meanwhile it is refused "
+                                  "(see the trader log)."))
+
+
 @app.route("/api/trader/restart", methods=["POST"])
 def trader_restart():
     """Stop + start in one step, PRESERVING the live/dry state. A manual

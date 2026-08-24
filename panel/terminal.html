@@ -1178,6 +1178,7 @@ function renderCards(){
              'text-align:center;margin-bottom:11px">No open position</div>';
     }
     // ---- shadow positions: what each component WOULD be holding ----
+    var xid = x.id;   // sh.map() shadows `x` below
     var sh = (s.shadow || []).slice().sort(function(a, b){
       return (b.pct || -999) - (a.pct || -999); });
     var shadow = '';
@@ -1201,12 +1202,16 @@ function renderCards(){
             '<td class="n">'+(x.px?(+x.px).toPrecision(6):'?')+'</td>'+
             '<td class="n '+(x.pct==null?'dim':cls(x.pct))+'" style="font-weight:600">'+
               (x.pct==null?'—':(x.pct>=0?'+':'')+x.pct.toFixed(2)+'%')+'</td>'+
-            '<td class="mini">'+(x.skipped?'judged, sitting out':'late-join eligible')+'</td></tr>';
+            '<td class="mini">'+(x.skipped?'judged, sitting out':'late-join eligible')+
+              (p ? '' : ' <button class="btn sm" onclick="adoptShadow(\''+xid+'\','+x.comp+
+                        ',\''+String(x.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
+            '</td></tr>';
         }).join('')+'</tbody></table>'+
         '<div class="mini" style="margin-top:5px">These are the components\' SIMULATED '+
         'positions — nothing is held on the exchange for them. '+
-        (p ? 'If the real position closed, the late-join rule would pick from these.'
-           : 'The slot is free; eligible ones enter via late-join on the next bar.')+
+        (p ? 'Close the real position first to make Adopt available.'
+           : 'Nothing joins automatically after a manual close — Adopt the one you want, '+
+             'or wait for a fresh signal.')+
         '</div></details>';
     }
     // ---- API error banner ----
@@ -1347,6 +1352,11 @@ function posRows(){
       symbol: p.symbol || s.symbol, dir: p.dir > 0 ? 'LONG' : 'SHORT',
       mode: s.mode, lev: lev, qty: p.qty, entry: +p.entry_price, now: px,
       pct: mv == null ? null : 100 * mv * lev,
+      // adopted positions: what the P&L WOULD be from the component's
+      // virtual entry (the primary number always counts from OUR fill)
+      virt: (px && p.mirror_entry_px)
+        ? 100 * (px/(+p.mirror_entry_px) - 1) * (p.dir > 0 ? 1 : -1) * lev : null,
+      adopted: !!p.adopted,
       usd: (px != null) ? (+p.qty) * cs * (px - (+p.entry_price)) * (p.dir > 0 ? 1 : -1) : null,
       notional: px != null ? (+p.qty) * cs * px : null,
       held: held(p), comp: p.group || ''
@@ -1369,7 +1379,7 @@ function shadowBlock(){
   INSTS.forEach(function(x){
     var s = STATUS[x.id]||{};
     (s.shadow||[]).forEach(function(r){
-      rows.push({inst:(x.name||x.id), held:!!s.position, r:r});
+      rows.push({id:x.id, inst:(x.name||x.id), held:!!s.position, r:r});
     });
   });
   if(!rows.length) return '';
@@ -1389,8 +1399,35 @@ function shadowBlock(){
         '<td class="n">'+(r.entry_px?(+r.entry_px).toPrecision(6):'—')+'</td>'+
         '<td class="n '+(r.pct==null?'dim':cls(r.pct))+'" style="font-weight:600">'+
           (r.pct==null?'—':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
-        '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+'</td></tr>';
-    }).join('')+'</tbody></table></details>';
+        '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+
+          (o.held ? '' : ' <button class="btn sm" onclick="adoptShadow(\''+o.id+'\','+r.comp+
+                         ',\''+String(r.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
+        '</td></tr>';
+    }).join('')+'</tbody></table>'+
+    '<div class="mini" style="margin-top:5px">Simulated positions — nothing is held for them. '+
+    'After a manual close nothing joins automatically; Adopt the one you want. '+
+    'Adopting opens at the LIVE price: P&amp;L counts from your fill, not the virtual entry.</div>'+
+    '</details>';
+}
+function adoptShadow(i, comp, entryT){
+  var s = STATUS[i]||{};
+  var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  var r = (s.shadow||[]).find(function(x){ return x.comp===comp && x.entry_t===entryT; }) || {};
+  if(s.position){ alert(nm+' already holds a position — close it first.'); return; }
+  var what = (r.label||('#'+comp))+' '+(r.dir>0?'LONG':'SHORT')+
+             (r.lev>1?' '+(+r.lev).toFixed(0)+'x':'')+
+             (r.pct!=null?(' (virtual '+(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%)'):'');
+  if(s.live){
+    if(!typedConfirm('Adopt '+what+' on '+nm+'?\nThis opens a REAL position at the live price. '+
+                     'P&L will count from YOUR fill, not the virtual entry.', 'ADOPT')) return;
+  } else if(!confirm('Adopt '+what+' on '+nm+' (dry-run)?')) return;
+  API('adopt_shadow', {method:'POST', headers:{'Content-Type':'application/json'},
+                       body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
+                                            confirm:'ADOPT'})}).then(function(r2){
+    if(r2.error) alert(r2.error);
+    else alert(r2.note || 'Adopt armed.');
+    setTimeout(loadAll, 4000);
+    loadAll(); });
 }
 function renderPositions(){
   var el = document.getElementById('pos');
@@ -1422,7 +1459,8 @@ function renderPositions(){
           '<td class="n dim" colspan="6">on the exchange, not tracked by a trader</td></tr>';
       }
       return '<tr><td>' + r.inst + ' <span class="mini">' + (r.account||'') + '</span></td>'+
-        '<td><b>' + r.symbol + '</b>' + (r.comp ? '<div class="mini">via ' + r.comp + '</div>' : '') + '</td>'+
+        '<td><b>' + r.symbol + '</b>' + (r.adopted ? ' <span class="tag b">adopted</span>' : '') +
+          (r.comp ? '<div class="mini">via ' + r.comp + '</div>' : '') + '</td>'+
         '<td><span class="tag ' + (r.dir === 'LONG' ? 'g' : 'live') + '">' + r.dir + '</span></td>'+
         '<td><span class="tag ' + (r.mode === 'spot' ? 'spot' : 'lev') + '">' +
           (r.mode === 'spot' ? 'SPOT' : 'LEV ' + r.lev.toFixed(0) + 'x') + '</span></td>'+
@@ -1431,7 +1469,10 @@ function renderPositions(){
         '<td class="n">' + (r.now ? r.now.toPrecision(6) : '?') + '</td>'+
         '<td class="n">' + (r.notional == null ? '—' : amt('$' + r.notional.toFixed(0))) + '</td>'+
         '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
-          (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') + '</td>'+
+          (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') +
+          (r.adopted && r.virt != null
+            ? '<div class="mini" title="if it had been held since the component\'s virtual entry">'+
+              'virtual: ' + (r.virt >= 0 ? '+' : '') + r.virt.toFixed(2) + '%</div>' : '') + '</td>'+
         '<td class="n ' + (r.usd == null ? 'dim' : cls(r.usd)) + '" style="font-weight:600">' +
           (r.usd == null ? '—' : amt((r.usd >= 0 ? '+$' : '-$') + Math.abs(r.usd).toFixed(2))) + '</td>'+
         '<td class="n dim">' + (r.held || '') + '</td></tr>';

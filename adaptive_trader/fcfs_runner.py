@@ -181,6 +181,10 @@ def main_fcfs(cfg, live):
     ov_path = os.path.join(HERE, ".override_" +
                            os.path.basename(cfg["state_file"]))
     ov = {"m": 0.0, "d": None}
+    # adopt-shadow sidecar: the panel asks a FLAT trader to open a CHOSEN
+    # component's virtual trade (deliberate close-and-switch, stage 2)
+    ad_path = os.path.join(HERE, ".adopt_" +
+                           os.path.basename(cfg["state_file"]))
 
     # state
     sf = os.path.join(HERE, cfg["state_file"])
@@ -254,12 +258,28 @@ def main_fcfs(cfg, live):
         # re-enters within a bar or two — exactly what happened on
         # 2026-08-17 (closed 124 @08:07:32, re-opened 119 @08:09:14).
         if reason in ("manual_override", "emergency_exit", "close_now"):
+            sk = state.setdefault("late_skips", {})
             lbl = pos.get("mirror_entry_t")
             if lbl:
-                state.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+                sk[str(pos["comp"])] = lbl
                 log.info("marking %s's virtual trade %s as skipped so the "
                          "late-join will not re-enter it",
                          comp_label(pos["comp"]), lbl)
+            # A deliberate close means the HUMAN owns the next move: mark every
+            # currently-open virtual trade skipped too, so no OTHER component
+            # auto-joins into the freed slot seconds later. Adrian picks a
+            # shadow explicitly (Adopt in the panel) or waits for fresh
+            # signals — opens_now entries are untouched by late_skips.
+            n_extra = 0
+            for rows in shadow_by_key.values():
+                for r in rows:
+                    if str(r["comp"]) not in sk or sk[str(r["comp"])] != r["entry_t"]:
+                        n_extra += 1
+                    sk[str(r["comp"])] = r["entry_t"]
+            if n_extra:
+                log.info("manual close: %d other virtual trade(s) marked "
+                         "skipped — nothing auto-joins; use Adopt to switch",
+                         n_extra)
         state["position"] = None
         save(); tell_flat()
 
@@ -308,6 +328,89 @@ def main_fcfs(cfg, live):
             state["shadow"] = flat
             state["shadow_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
             save()
+
+    _ad_seen = [0.0]
+
+    def try_adopt():
+        """Panel-requested adopt of ONE chosen shadow (mtime-polled sidecar).
+        Opens at the LIVE price; entry_price is OUR real fill (that is what
+        P&L is measured from), the component's virtual entry is kept in
+        mirror_entry_px for the 'what it would have been' display."""
+        try:
+            m = os.path.getmtime(ad_path)
+        except OSError:
+            return
+        if m == _ad_seen[0]:
+            return
+        _ad_seen[0] = m
+        try:
+            req = json.load(open(ad_path))
+        except Exception:
+            req = None
+        try:
+            os.remove(ad_path)
+        except OSError:
+            pass
+        if not req:
+            return
+        if state.get("position"):
+            log.warning("ADOPT refused: a position is already open")
+            return
+        ci = int(req.get("comp", -1))
+        want = req.get("entry_t")
+        row = None
+        for rows in shadow_by_key.values():
+            for r in rows:
+                if r["comp"] == ci and r["entry_t"] == want:
+                    row = r
+        if row is None:
+            log.warning("ADOPT refused: %s no longer holds virtual trade %s "
+                        "(it may have just closed)", comp_label(ci), want)
+            return
+        d = int(row["dir"])
+        lv = float(row["lev"]) if mode == "lev" else 1.0
+        ep = float(row["entry_px"])
+        h = hosts.get(row["group"])
+        px = float(getattr(h, "last_px", None) or row.get("px") or 0)
+        if not px:
+            log.warning("ADOPT refused: no live price for %s", row["group"])
+            return
+        # keep the liq-distance guard — a deliberate switch must still not
+        # inherit a virtual trade that is about to be liquidated
+        if lv > 1:
+            adv = (px / ep - 1.0) * d * -1.0
+            cap = float(cfg.get("late_join_max_drawdown", 0.5))
+            if (adv / max(1.0 / lv - 0.008, 1e-9)) > cap:
+                log.warning("ADOPT refused %s: %.1f%% underwater at %gx — "
+                            "too close to ITS liquidation",
+                            comp_label(ci), 100 * adv, lv)
+                return
+        res, qty = ex_for(comps[ci]["pair"]).open(d, lv, px)
+        if (res or {}).get("status") == "error" or not qty:
+            notify("order_failed", account="fcfs", action="adopt",
+                   config=os.path.basename(cfg.get("_path", "?")),
+                   detail=(res or {}).get("message"))
+            log.error("ADOPT open failed: %s", (res or {}).get("message"))
+            return
+        fill = float((res or {}).get("fill_price") or px)
+        state.setdefault("late_skips", {}).pop(str(ci), None)
+        opened_bar[ci] = row["entry_t"]
+        state["position"] = dict(
+            symbol=comps[ci]["pair"], comp=ci, dir=d, lev=lv, qty=qty,
+            entry_price=fill, group=row["group"],
+            mirror_entry_t=row["entry_t"], mirror_entry_px=ep, adopted=True,
+            opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+            opened_ms=int(time.time() * 1000))
+        log.info("ADOPTED %s: virtual entry %s @%.6g, joined @%.6g "
+                 "dir=%+d lev=%.1f qty=%s", comp_label(ci),
+                 row["entry_t"], ep, fill, d, lv, qty)
+        notify("position_opened", account="fcfs",
+               config=os.path.basename(cfg.get("_path", "?")),
+               symbol=comps[ci]["pair"], side=("LONG" if d > 0 else "SHORT"),
+               qty=qty, lev=lv, price=fill,
+               comp=comp_label(ci) + " (adopted)",
+               live=(not cfg["dry_run"]))
+        save(); tell_flat()
 
     def flush_pending():
         nonlocal pending_opens, pending_deadline
@@ -534,6 +637,10 @@ def main_fcfs(cfg, live):
                                     save()
                                 else:
                                     do_close("virtual_exit", msg.get("px"))
+
+            # panel-requested adopt of a chosen shadow (only when flat)
+            if state.get("position") is None:
+                try_adopt()
 
             # arbitration window expired?
             if pending_deadline and now >= pending_deadline:
