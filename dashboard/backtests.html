@@ -209,9 +209,11 @@ button.rtradd.on{opacity:1;filter:none}
     <label style="margin-left:10px;cursor:pointer" title="only show backtests whose source run belongs to a sweep family that passed ALL 5 holdout types without liquidating">
       <input type="checkbox" id="fGaunt" onchange="saveBtFilters()"> ✓ all-5 holdouts</label>
     <label class="hint" title="only backtests created ON or AFTER this date">created from
-      <input id="fFrom" type="date" onchange="saveBtFilters()" style="margin-left:4px"></label>
+      <input id="fFrom" type="date" onchange="saveBtFilters()" onclick="openCal(this)"
+             style="margin-left:4px;cursor:pointer"></label>
     <label class="hint" title="only backtests created ON or BEFORE this date">to
-      <input id="fTo" type="date" onchange="saveBtFilters()" style="margin-left:4px"></label>
+      <input id="fTo" type="date" onchange="saveBtFilters()" onclick="openCal(this)"
+             style="margin-left:4px;cursor:pointer"></label>
     <label class="hint">search
       <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
     <button onclick="resetFilters()" title="clear every saved filter (mode, pair, chart, genome, hold, DD, holdout, routers…) and reload">⟲ reset filters</button>
@@ -942,6 +944,12 @@ function _noNegMonth(i){
   for(let k = 1; k < ks.length; k++)
     if(months.get(ks[k]) < months.get(ks[k-1]) - 1e-9) return false;
   return true;
+}
+function openCal(el){
+  // clicking ANYWHERE on the date field opens the browser's calendar popup
+  // (month/day grid, scrollable months, click the header for a year list) —
+  // not just the tiny picker icon at its right edge
+  try { if(el.showPicker) el.showPicker(); } catch(e){}
 }
 function resetFilters(){
   Object.keys(localStorage).filter(function(k){ return k.indexOf('btFilter') === 0; })
