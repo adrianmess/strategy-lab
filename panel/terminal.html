@@ -1272,20 +1272,29 @@ function disarm(i){
 }
 function closeNow(i){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  if(prompt('Close the open position on '+nm+' at market?\n\nThis places a REAL order. Type CLOSE to confirm.') !== 'CLOSE') return;
+  if(!typedConfirm('Close the open position on '+nm+' at market?\nThis places a REAL order.', 'CLOSE')) return;
   API('override', {method:'POST', headers:{'Content-Type':'application/json'},
                    body:JSON.stringify({instance:i, now:true})}).then(function(r){
     if(r.error) alert(r.error); else alert('Close armed — the trader will flatten on its next check.');
     loadStatus(); });
 }
+function typedConfirm(msg, word){
+  // prompt() that is forgiving about case/whitespace and NEVER fails
+  // silently: cancelling returns false quietly, a wrong word says so.
+  var v = prompt(msg + '\n\nType ' + word + ' to confirm.');
+  if(v === null) return false;
+  if(String(v).trim().toUpperCase() === word) return true;
+  alert('Cancelled — you typed "' + v + '", not ' + word + '.');
+  return false;
+}
 function startTrader(i, live){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  if(live && prompt('Start '+nm+' with REAL MONEY?\n\nType LIVE to confirm.') !== 'LIVE') return;
+  if(live && !typedConfirm('Start '+nm+' with REAL MONEY?', 'LIVE')) return;
   API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
                        body:JSON.stringify({instance:i, live:!!live,
                                             confirm:(live?'LIVE':undefined)})}).then(function(r){
     if(r.error) alert(r.error);
-    else if(r.note) alert(r.note);   // e.g. re-attached to a running trader
+    else alert(r.note || (nm+' started ('+(live?'LIVE':'dry-run')+').'));
     loadAll(); });
 }
 function restartTrader(i){
@@ -1294,12 +1303,14 @@ function restartTrader(i){
   if(!s.running){ alert(nm+' is not running — use Start.'); return; }
   var posNote = s.position ? '\nIts open '+s.position.symbol+' position is kept and re-tracked.' : '';
   if(s.live){
-    if(prompt('Restart '+nm+'? It is LIVE and will come back LIVE.'+posNote+
-              '\n\nType LIVE to confirm.') !== 'LIVE') return;
+    if(!typedConfirm('Restart '+nm+'? It is LIVE and will come back LIVE.'+posNote, 'LIVE')) return;
   } else if(!confirm('Restart '+nm+' (dry-run)?'+posNote)) return;
   API('trader/restart', {method:'POST', headers:{'Content-Type':'application/json'},
                          body:JSON.stringify({instance:i, confirm:'LIVE'})}).then(function(r){
-    if(r.error) alert(r.error); loadAll(); });
+    if(r.error) alert(r.error);
+    else alert(nm+' restarted — running '+(r.live?'LIVE':'dry-run')+' again. '+
+               'Hosts take a few minutes to backfill before signals resume.');
+    loadAll(); });
 }
 function stopTrader(i){
   var s = STATUS[i]||{};
@@ -1351,6 +1362,36 @@ function posRows(){
   return rows;
 }
 
+function shadowBlock(){
+  // shadows from EVERY instance, shown on the Overview so "what would be
+  // open" is visible without drilling into the instance cards
+  var rows = [];
+  INSTS.forEach(function(x){
+    var s = STATUS[x.id]||{};
+    (s.shadow||[]).forEach(function(r){
+      rows.push({inst:(x.name||x.id), held:!!s.position, r:r});
+    });
+  });
+  if(!rows.length) return '';
+  rows.sort(function(a,b){ return ((b.r.pct||0)-(a.r.pct||0)); });
+  return '<details style="margin-top:10px" open><summary class="mini" style="cursor:pointer">'+
+    '<b>'+rows.length+'</b> shadow position'+(rows.length>1?'s':'')+
+    ' — what components would be holding if the slot were free</summary>'+
+    '<table style="margin-top:6px"><thead><tr><th>Instance</th><th>Component</th><th>Side</th>'+
+    '<th class="n">Virtual entry</th><th class="n">Entry px</th><th class="n">Unreal %</th><th></th></tr></thead><tbody>'+
+    rows.map(function(o){
+      var r = o.r;
+      return '<tr'+(r.skipped?' style="opacity:.55"':'')+'><td>'+o.inst+'</td>'+
+        '<td>'+(r.label||('#'+r.comp))+'</td>'+
+        '<td><span class="tag '+(r.dir>0?'g':'live')+'">'+(r.dir>0?'LONG':'SHORT')+
+          (r.lev>1?' '+(+r.lev).toFixed(0)+'x':'')+'</span></td>'+
+        '<td class="n dim">'+(r.entry_t||'')+'</td>'+
+        '<td class="n">'+(r.entry_px?(+r.entry_px).toPrecision(6):'—')+'</td>'+
+        '<td class="n '+(r.pct==null?'dim':cls(r.pct))+'" style="font-weight:600">'+
+          (r.pct==null?'—':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
+        '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+'</td></tr>';
+    }).join('')+'</tbody></table></details>';
+}
 function renderPositions(){
   var el = document.getElementById('pos');
   if(!el) return;
@@ -1361,7 +1402,8 @@ function renderPositions(){
     el.innerHTML = '<span class="mini">both accounts are flat</span>' +
       (notes.length ? '<div class="mini" style="margin-top:8px">' + notes.map(function(x){
         return (x.symbol||x.asset) + ' — ' + (x.step === 'skip_dust' ? 'dust' : x.why);
-      }).join(' · ') + '</div>' : '');
+      }).join(' · ') + '</div>' : '') +
+      shadowBlock();
     return;
   }
   var net = rows.reduce(function(a, r){ return a + (r.usd || 0); }, 0);
@@ -1400,7 +1442,8 @@ function renderPositions(){
     (notes.length ? '<div class="body mini" style="border-top:1px solid var(--line)">' +
       notes.map(function(x){ return (x.symbol||x.asset) + ' — ' +
         (x.step === 'skip_dust' ? 'dust, below the minimum sellable size' : x.why); }).join(' · ') +
-      '</div>' : '');
+      '</div>' : '') +
+    shadowBlock();
 }
 
 function planKill(target){
