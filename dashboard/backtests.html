@@ -208,6 +208,10 @@ button.rtradd.on{opacity:1;filter:none}
       </select></label>
     <label style="margin-left:10px;cursor:pointer" title="only show backtests whose source run belongs to a sweep family that passed ALL 5 holdout types without liquidating">
       <input type="checkbox" id="fGaunt" onchange="saveBtFilters()"> ✓ all-5 holdouts</label>
+    <label class="hint" title="only backtests created ON or AFTER this date">created from
+      <input id="fFrom" type="date" onchange="saveBtFilters()" style="margin-left:4px"></label>
+    <label class="hint" title="only backtests created ON or BEFORE this date">to
+      <input id="fTo" type="date" onchange="saveBtFilters()" style="margin-left:4px"></label>
     <label class="hint">search
       <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
     <button onclick="resetFilters()" title="clear every saved filter (mode, pair, chart, genome, hold, DD, holdout, routers…) and reload">⟲ reset filters</button>
@@ -817,6 +821,8 @@ function saveBtFilters(){
   localStorage.setItem('btFilterInst', document.getElementById('fInst').value);
   localStorage.setItem('btFilterWinMin', document.getElementById('fWinMin').value);
   localStorage.setItem('btFilterGaunt', document.getElementById('fGaunt').checked?'1':'');
+  localStorage.setItem('btFilterFrom', document.getElementById('fFrom').value);
+  localStorage.setItem('btFilterTo', document.getElementById('fTo').value);
   sel = null; render();
 }
 function pairPill(p, mkt, tf){
@@ -874,6 +880,8 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   }
   document.getElementById('fWinMin').value = localStorage.getItem('btFilterWinMin') || '';
   document.getElementById('fGaunt').checked = localStorage.getItem('btFilterGaunt')==='1';
+  document.getElementById('fFrom').value = localStorage.getItem('btFilterFrom') || '';
+  document.getElementById('fTo').value = localStorage.getItem('btFilterTo') || '';
   // the components panel is collapsed unless it was left open last time
   document.getElementById('rtrDet').open = localStorage.getItem('rtrOpen')==='1';
   fillRtrOfSelect();
@@ -1010,6 +1018,12 @@ function render(){
     const h = ((BT[i].opt||{}).holdout) || 'none';
     if(fHo === 'notnone') return h !== 'none';
     return h === 'none' ? fHo === 'none' : h.startsWith(fHo);});
+  // created-date window: entry.created is "YYYY-MM-DD HH:MM", so plain
+  // string comparison against the date inputs' YYYY-MM-DD values works
+  const fFromV = document.getElementById('fFrom').value;
+  const fToV = document.getElementById('fTo').value;
+  if(fFromV) order = order.filter(i=>(BT[i].created||'') >= fFromV);
+  if(fToV) order = order.filter(i=>(BT[i].created||'') <= fToV + ' 23:59');
   const fq = (document.getElementById('fFind').value||'').trim().toLowerCase();
   if(fq) order = order.filter(i=>{const e=BT[i];
     return (e.name||'').toLowerCase().includes(fq) || (e.strategy||'').toLowerCase().includes(fq)
