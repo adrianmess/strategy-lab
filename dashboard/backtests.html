@@ -206,6 +206,7 @@ button.rtradd.on{opacity:1;filter:none}
       <input type="checkbox" id="fGaunt" onchange="saveBtFilters()"> ✓ all-5 holdouts</label>
     <label class="hint">search
       <input id="fFind" placeholder="name / strategy / kind…" style="margin-left:4px;width:190px" oninput="sel=null;render()"></label>
+    <button onclick="resetFilters()" title="clear every saved filter (mode, pair, chart, genome, hold, DD, holdout, routers…) and reload">⟲ reset filters</button>
     <span class="hint" id="fCount"></span>
   </div>
   <div id="genomeInfo" style="display:none;margin:4px 0 10px;padding:10px 14px;border:1px solid var(--border);border-left:4px solid #58a6ff;border-radius:6px;line-height:1.5;font-size:13px">

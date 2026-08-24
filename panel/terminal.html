@@ -243,7 +243,8 @@ body.masked .amt:hover{filter:none}
           <option value="created">newest first</option>
           <option value="growth">best growth/mo</option></select>
         <input id="bQ" placeholder="search name" style="min-width:190px" onchange="loadBT()">
-        <button class="btn sm" onclick="loadBT()">Search</button></div></div>
+        <button class="btn sm" onclick="loadBT()">Search</button>
+        <button class="btn sm" onclick="resetBTFilters()">Reset</button></div></div>
     <div class="card"><h3>Published backtests <span class="mini" id="btSortNote">newest first</span></h3>
       <div class="scroll" id="bt"></div></div>
   </div></section>
@@ -1019,6 +1020,13 @@ function toggleIgnore(id, ignore, symbol, pnl){
 
 // ---------------- backtests ----------------
 var PROMO = [];
+function resetBTFilters(){
+  document.getElementById('bMode').value = '';
+  document.getElementById('bVerdict').value = '';
+  document.getElementById('bQ').value = '';
+  document.getElementById('bSort').value = 'created';
+  loadBT();
+}
 function loadBT(){
   var q = encodeURIComponent(document.getElementById('bQ').value||'');
   var v = document.getElementById('bVerdict').value;
