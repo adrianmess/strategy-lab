@@ -3622,10 +3622,22 @@ def gamut_progress():
 
     if not name:   # default: the campaign with the freshest WORKER ACTIVITY
         def _act(d):
-            ws = os.path.join(OPT, "campaigns", d, "worker_state.json")
-            return (os.path.getmtime(ws) if os.path.exists(ws) else
-                    os.path.getmtime(os.path.join(OPT, "campaigns", d,
-                                                  "plan.json")) - 1e9)
+            # worker_state.json only appears after the FIRST job completes,
+            # so a freshly queued campaign used to lose the default to an
+            # old finished one — look at the live job logs and plan too
+            base = os.path.join(OPT, "campaigns", d)
+            ts = []
+            for f in ("worker_state.json", "plan.json"):
+                p = os.path.join(base, f)
+                if os.path.exists(p):
+                    ts.append(os.path.getmtime(p))
+            lg = os.path.join(base, "logs")
+            try:
+                ts.extend(os.path.getmtime(os.path.join(lg, x))
+                          for x in os.listdir(lg))
+            except OSError:
+                pass
+            return max(ts) if ts else 0
         name = _disp(sorted(cs, key=_act)[-1])
     # de-dup: a gamut_X symlink beside a real X directory is the same campaign
     campaign_names = sorted({_disp(d) for d in cs})
