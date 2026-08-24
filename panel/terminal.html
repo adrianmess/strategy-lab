@@ -1154,6 +1154,7 @@ function loadStatus(){
 function renderCards(){
   var box = document.getElementById('icards');
   if(!box) return;
+  if(ARMED) return;   // an inline Confirm/Cancel is up — do not wipe it
   box.innerHTML = INSTS.map(function(x){
     var s = STATUS[x.id] || {}, p = s.position, perf = PERF[x.id] || {};
     var nm = x.name || ('Instance '+x.id);
@@ -1194,7 +1195,7 @@ function renderCards(){
               '<select id="ovu_'+x.id+'"><option value="price">price</option>'+
               '<option value="pct">% from entry</option></select>'+
               '<button class="btn sm" onclick="arm(\''+x.id+'\')">arm</button>')+
-          '<button class="btn sm danger" style="margin-left:auto" onclick="closeNow(\''+x.id+'\')">'+
+          '<button class="btn sm danger" style="margin-left:auto" onclick="closeNow(this,\''+x.id+'\')">'+
             'Close position now</button></div></div>';
     } else {
       hero = '<div class="mini" style="border:1px dashed var(--line);border-radius:8px;padding:12px;'+
@@ -1226,7 +1227,7 @@ function renderCards(){
             '<td class="n '+(x.pct==null?'dim':cls(x.pct))+'" style="font-weight:600">'+
               (x.pct==null?'—':(x.pct>=0?'+':'')+x.pct.toFixed(2)+'%')+'</td>'+
             '<td class="mini">'+(x.skipped?'judged, sitting out':'late-join eligible')+
-              (p ? '' : ' <button class="btn sm" onclick="adoptShadow(\''+xid+'\','+x.comp+
+              (p ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+xid+'\','+x.comp+
                         ',\''+String(x.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
             '</td></tr>';
         }).join('')+'</tbody></table>'+
@@ -1267,10 +1268,10 @@ function renderCards(){
             ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+'</div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (s.running
-            ? '<button class="btn sm" onclick="restartTrader(\''+x.id+'\')">Restart</button>'+
-              '<button class="btn sm" onclick="stopTrader(\''+x.id+'\')">Stop</button>'
-            : '<button class="btn sm" onclick="startTrader(\''+x.id+'\',false)">Start dry-run</button>'+
-              '<button class="btn sm danger" onclick="startTrader(\''+x.id+'\',true)">Start LIVE</button>')+
+            ? '<button class="btn sm" onclick="restartTrader(this,\''+x.id+'\')">Restart</button>'+
+              '<button class="btn sm" onclick="stopTrader(this,\''+x.id+'\')">Stop</button>'
+            : '<button class="btn sm" onclick="startTrader(this,\''+x.id+'\',false)">Start dry-run</button>'+
+              '<button class="btn sm danger" onclick="startTrader(this,\''+x.id+'\',true)">Start LIVE</button>')+
         '</div></div>'+
       ebar + hero + shadow +
       '<div style="display:flex;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">'+
@@ -1298,59 +1299,73 @@ function arm(i){
 function disarm(i){
   API('override?instance='+i, {method:'DELETE'}).then(function(){ loadStatus(); });
 }
-function closeNow(i){
+var ARMED = 0;   // inline confirms in progress — pauses card re-renders
+function armConfirm(btn, label, fn, note){
+  // Inline two-step confirm: the clicked button is swapped IN PLACE for a
+  // Confirm + Cancel pair. Never a native dialog. Un-arms itself after 10s.
+  if(!btn || btn._armed) return;
+  btn._armed = true; ARMED++;
+  var wrap = document.createElement('span');
+  wrap.style.cssText = 'display:inline-flex;gap:6px;align-items:center';
+  var c = document.createElement('button'); c.className = 'btn sm danger'; c.textContent = label;
+  var x = document.createElement('button'); x.className = 'btn sm'; x.textContent = 'Cancel';
+  btn.style.display = 'none';
+  btn.parentNode.insertBefore(wrap, btn);
+  wrap.appendChild(c); wrap.appendChild(x);
+  if(note) flash(note);
+  var undo = function(){ wrap.remove(); btn.style.display = ''; btn._armed = false;
+                         ARMED = Math.max(0, ARMED-1); };
+  var tid = setTimeout(undo, 10000);
+  x.onclick = function(ev){ ev.stopPropagation(); clearTimeout(tid); undo(); };
+  c.onclick = function(ev){ ev.stopPropagation(); clearTimeout(tid); undo(); fn(); };
+}
+function closeNow(btn, i){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  if(!typedConfirm('Close the open position on '+nm+' at market?\nThis places a REAL order.', 'CLOSE')) return;
-  API('override', {method:'POST', headers:{'Content-Type':'application/json'},
-                   body:JSON.stringify({instance:i, now:true})}).then(function(r){
-    if(r.error) flash(r.error, 'r');
-    else flash('Close armed — the trader will flatten on its next check.', 'g');
-    loadStatus(); });
+  armConfirm(btn, 'Confirm close — real order', function(){
+    API('override', {method:'POST', headers:{'Content-Type':'application/json'},
+                     body:JSON.stringify({instance:i, now:true})}).then(function(r){
+      if(r.error) flash(r.error, 'r');
+      else flash('Close armed — the trader will flatten on its next check.', 'g');
+      loadStatus(); });
+  });
 }
-function typedConfirm(msg, word){
-  // prompt() that is forgiving about case/whitespace and NEVER fails
-  // silently: cancelling returns false quietly, a wrong word says so.
-  var v = prompt(msg + '\n\nType ' + word + ' to confirm.');
-  if(v === null) return false;
-  if(String(v).trim().toUpperCase() === word) return true;
-  flash('Cancelled — you typed "' + v + '", not ' + word + '.', 'r');
-  return false;
-}
-function startTrader(i, live){
+function startTrader(btn, i, live){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  if(live && !typedConfirm('Start '+nm+' with REAL MONEY?', 'LIVE')) return;
-  API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
-                       body:JSON.stringify({instance:i, live:!!live,
-                                            confirm:(live?'LIVE':undefined)})}).then(function(r){
-    if(r.error) flash(r.error, 'r');
-    else flash(r.note || (nm+' started ('+(live?'LIVE':'dry-run')+').'), 'g');
-    loadAll(); });
+  var go = function(){
+    API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body:JSON.stringify({instance:i, live:!!live,
+                                              confirm:(live?'LIVE':undefined)})}).then(function(r){
+      if(r.error) flash(r.error, 'r');
+      else flash(r.note || (nm+' started ('+(live?'LIVE':'dry-run')+').'), 'g');
+      loadAll(); });
+  };
+  if(live) armConfirm(btn, 'Confirm LIVE start — real money', go);
+  else go();
 }
-function restartTrader(i){
+function restartTrader(btn, i){
   var s = STATUS[i]||{};
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
   if(!s.running){ flash(nm+' is not running — use Start.', 'r'); return; }
-  var posNote = s.position ? '\nIts open '+s.position.symbol+' position is kept and re-tracked.' : '';
-  // OK/Cancel only — a restart preserves the live/dry state, so it does not
-  // need the typed-LIVE ritual that creating a position does
-  if(!confirm('Restart '+nm+'?'+(s.live?' It is LIVE and will come back LIVE.':' (dry-run)')+posNote)) return;
-  API('trader/restart', {method:'POST', headers:{'Content-Type':'application/json'},
-                         body:JSON.stringify({instance:i, confirm:'LIVE'})}).then(function(r){
-    if(r.error) flash(r.error, 'r');
-    else flash(nm+' restarted — running '+(r.live?'LIVE':'dry-run')+' again. '+
-               'Hosts take a few minutes to backfill.', 'g');
-    loadAll(); });
+  armConfirm(btn, s.live ? 'Confirm restart (stays LIVE)' : 'Confirm restart', function(){
+    API('trader/restart', {method:'POST', headers:{'Content-Type':'application/json'},
+                           body:JSON.stringify({instance:i, confirm:'LIVE'})}).then(function(r){
+      if(r.error) flash(r.error, 'r');
+      else flash(nm+' restarted — running '+(r.live?'LIVE':'dry-run')+' again. '+
+                 'Hosts take a few minutes to backfill.', 'g');
+      loadAll(); });
+  }, s.position ? ('Open '+s.position.symbol+' position is kept and re-tracked.') : null);
 }
-function stopTrader(i){
+function stopTrader(btn, i){
   var s = STATUS[i]||{};
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  var warn = s.position ? '\n\nWARNING: it is holding '+s.position.qty+' '+s.position.symbol+
-    '. Stopping leaves that position OPEN with nothing managing it. Use KILL ALL if you want it flattened.' : '';
-  if(!confirm('Stop '+nm+'?'+warn)) return;
-  API('trader/stop', {method:'POST', headers:{'Content-Type':'application/json'},
-                      body:JSON.stringify({instance:i})}).then(function(r){
-    if(r.error) flash(r.error, 'r'); else flash(nm+' stopped.', 'g');
-    loadAll(); });
+  armConfirm(btn, 'Confirm stop', function(){
+    API('trader/stop', {method:'POST', headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({instance:i})}).then(function(r){
+      if(r.error) flash(r.error, 'r'); else flash(nm+' stopped.', 'g');
+      loadAll(); });
+  }, s.position ? ('WARNING: '+nm+' is holding '+s.position.qty+' '+s.position.symbol+
+                   ' — stopping leaves that position OPEN with nothing managing it. '+
+                   'Use KILL ALL if you want it flattened.') : null);
 }
 function clearErrs(i){
   API('errors/clear?instance='+i, {method:'POST'}).then(function(){ loadStatus(); });
@@ -1425,7 +1440,7 @@ function shadowBlock(){
         '<td class="n '+(r.pct==null?'dim':cls(r.pct))+'" style="font-weight:600">'+
           (r.pct==null?'—':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
         '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+
-          (o.held ? '' : ' <button class="btn sm" onclick="adoptShadow(\''+o.id+'\','+r.comp+
+          (o.held ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+o.id+'\','+r.comp+
                          ',\''+String(r.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
         '</td></tr>';
     }).join('')+'</tbody></table>'+
@@ -1434,29 +1449,25 @@ function shadowBlock(){
     'Adopting opens at the LIVE price: P&amp;L counts from your fill, not the virtual entry.</div>'+
     '</details>';
 }
-function adoptShadow(i, comp, entryT){
+function adoptShadow(btn, i, comp, entryT){
   var s = STATUS[i]||{};
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
   var r = (s.shadow||[]).find(function(x){ return x.comp===comp && x.entry_t===entryT; }) || {};
   if(s.position){ flash(nm+' already holds a position — close it first.', 'r'); return; }
-  var what = (r.label||('#'+comp))+' '+(r.dir>0?'LONG':'SHORT')+
-             (r.lev>1?' '+(+r.lev).toFixed(0)+'x':'')+
-             (r.pct!=null?(' (virtual '+(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%)'):'');
-  if(s.live){
-    if(!typedConfirm('Adopt '+what+' on '+nm+'?\nThis opens a REAL position at the live price. '+
-                     'P&L will count from YOUR fill, not the virtual entry.', 'ADOPT')) return;
-  } else if(!confirm('Adopt '+what+' on '+nm+' (dry-run)?')) return;
-  API('adopt_shadow', {method:'POST', headers:{'Content-Type':'application/json'},
-                       body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
-                                            confirm:'ADOPT'})}).then(function(r2){
-    if(r2.error) flash(r2.error, 'r');
-    else flash(r2.note || 'Adopt armed.', 'g');
-    setTimeout(loadAll, 4000);
-    loadAll(); });
+  armConfirm(btn, s.live ? 'Confirm adopt — real order' : 'Confirm adopt (dry-run)', function(){
+    API('adopt_shadow', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
+                                              confirm:'ADOPT'})}).then(function(r2){
+      if(r2.error) flash(r2.error, 'r');
+      else flash(r2.note || 'Adopt armed.', 'g');
+      setTimeout(loadAll, 4000);
+      loadAll(); });
+  }, s.live ? 'Opens at the LIVE price — P&L counts from your fill, not the virtual entry.' : null);
 }
 function renderPositions(){
   var el = document.getElementById('pos');
   if(!el) return;
+  if(ARMED) return;   // an inline Confirm/Cancel is up — do not wipe it
   var rows = posRows();
   var notes = ((LASTPLAN && LASTPLAN.report) || []).filter(function(x){
     return x.step === 'skip_excluded' || x.step === 'skip_dust'; });
