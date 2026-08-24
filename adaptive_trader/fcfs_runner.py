@@ -578,6 +578,14 @@ def main_fcfs(cfg, live):
                         # position open: watch ONLY the owning component
                         if key == pos["group"] and pos["comp"] in cbyi:
                             me = cbyi[pos["comp"]]
+                            # backfill the virtual entry price for positions
+                            # opened before it was recorded (late-joins under
+                            # the old code): powers the "virtual: ±x%" line
+                            if (pos.get("mirror_entry_px") is None
+                                    and me.get("entry_px")
+                                    and me.get("open") == pos.get("mirror_entry_t")):
+                                pos["mirror_entry_px"] = float(me["entry_px"])
+                                save()
                             if pos.get("standalone"):
                                 pass          # detached: no mirror to follow
                             elif pos.get("mirror_entry_t") is None:

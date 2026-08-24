@@ -544,6 +544,29 @@ function toast(title, body, kind){
   }, 700);
 }
 
+function flash(msg, kind){
+  // transient on-screen feedback for button actions: appears, auto-hides.
+  // No OK to click (unlike alert), no title flash (unlike trade toasts).
+  var host = document.getElementById('toasts');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'toasts';
+    host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:80;display:grid;gap:9px;max-width:380px';
+    document.body.appendChild(host);
+  }
+  var col = kind === 'r' ? 'var(--down)' : (kind === 'g' ? 'var(--up)' : 'var(--blue)');
+  var el = document.createElement('div');
+  el.style.cssText = 'background:var(--panel);border:1px solid '+col+';border-left-width:4px;'+
+    'border-radius:10px;padding:11px 14px;box-shadow:0 12px 34px rgba(0,0,0,.55);'+
+    'animation:slidein .18s ease-out;font-size:13px';
+  el.textContent = msg;
+  el.onclick = function(){ el.remove(); };
+  host.appendChild(el);
+  setTimeout(function(){ el.style.opacity='0'; el.style.transition='opacity .4s';
+                         setTimeout(function(){ el.remove(); }, 420); },
+             kind === 'r' ? 9000 : 5000);
+}
+
 function pollTrades(){
   API('trades?limit=25').then(function(d){
     var ts = (d && d.trades) || [];
@@ -1280,7 +1303,8 @@ function closeNow(i){
   if(!typedConfirm('Close the open position on '+nm+' at market?\nThis places a REAL order.', 'CLOSE')) return;
   API('override', {method:'POST', headers:{'Content-Type':'application/json'},
                    body:JSON.stringify({instance:i, now:true})}).then(function(r){
-    if(r.error) alert(r.error); else alert('Close armed — the trader will flatten on its next check.');
+    if(r.error) flash(r.error, 'r');
+    else flash('Close armed — the trader will flatten on its next check.', 'g');
     loadStatus(); });
 }
 function typedConfirm(msg, word){
@@ -1289,7 +1313,7 @@ function typedConfirm(msg, word){
   var v = prompt(msg + '\n\nType ' + word + ' to confirm.');
   if(v === null) return false;
   if(String(v).trim().toUpperCase() === word) return true;
-  alert('Cancelled — you typed "' + v + '", not ' + word + '.');
+  flash('Cancelled — you typed "' + v + '", not ' + word + '.', 'r');
   return false;
 }
 function startTrader(i, live){
@@ -1298,23 +1322,23 @@ function startTrader(i, live){
   API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
                        body:JSON.stringify({instance:i, live:!!live,
                                             confirm:(live?'LIVE':undefined)})}).then(function(r){
-    if(r.error) alert(r.error);
-    else alert(r.note || (nm+' started ('+(live?'LIVE':'dry-run')+').'));
+    if(r.error) flash(r.error, 'r');
+    else flash(r.note || (nm+' started ('+(live?'LIVE':'dry-run')+').'), 'g');
     loadAll(); });
 }
 function restartTrader(i){
   var s = STATUS[i]||{};
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  if(!s.running){ alert(nm+' is not running — use Start.'); return; }
+  if(!s.running){ flash(nm+' is not running — use Start.', 'r'); return; }
   var posNote = s.position ? '\nIts open '+s.position.symbol+' position is kept and re-tracked.' : '';
-  if(s.live){
-    if(!typedConfirm('Restart '+nm+'? It is LIVE and will come back LIVE.'+posNote, 'LIVE')) return;
-  } else if(!confirm('Restart '+nm+' (dry-run)?'+posNote)) return;
+  // OK/Cancel only — a restart preserves the live/dry state, so it does not
+  // need the typed-LIVE ritual that creating a position does
+  if(!confirm('Restart '+nm+'?'+(s.live?' It is LIVE and will come back LIVE.':' (dry-run)')+posNote)) return;
   API('trader/restart', {method:'POST', headers:{'Content-Type':'application/json'},
                          body:JSON.stringify({instance:i, confirm:'LIVE'})}).then(function(r){
-    if(r.error) alert(r.error);
-    else alert(nm+' restarted — running '+(r.live?'LIVE':'dry-run')+' again. '+
-               'Hosts take a few minutes to backfill before signals resume.');
+    if(r.error) flash(r.error, 'r');
+    else flash(nm+' restarted — running '+(r.live?'LIVE':'dry-run')+' again. '+
+               'Hosts take a few minutes to backfill.', 'g');
     loadAll(); });
 }
 function stopTrader(i){
@@ -1325,7 +1349,8 @@ function stopTrader(i){
   if(!confirm('Stop '+nm+'?'+warn)) return;
   API('trader/stop', {method:'POST', headers:{'Content-Type':'application/json'},
                       body:JSON.stringify({instance:i})}).then(function(r){
-    if(r.error) alert(r.error); loadAll(); });
+    if(r.error) flash(r.error, 'r'); else flash(nm+' stopped.', 'g');
+    loadAll(); });
 }
 function clearErrs(i){
   API('errors/clear?instance='+i, {method:'POST'}).then(function(){ loadStatus(); });
@@ -1413,7 +1438,7 @@ function adoptShadow(i, comp, entryT){
   var s = STATUS[i]||{};
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
   var r = (s.shadow||[]).find(function(x){ return x.comp===comp && x.entry_t===entryT; }) || {};
-  if(s.position){ alert(nm+' already holds a position — close it first.'); return; }
+  if(s.position){ flash(nm+' already holds a position — close it first.', 'r'); return; }
   var what = (r.label||('#'+comp))+' '+(r.dir>0?'LONG':'SHORT')+
              (r.lev>1?' '+(+r.lev).toFixed(0)+'x':'')+
              (r.pct!=null?(' (virtual '+(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%)'):'');
@@ -1424,8 +1449,8 @@ function adoptShadow(i, comp, entryT){
   API('adopt_shadow', {method:'POST', headers:{'Content-Type':'application/json'},
                        body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
                                             confirm:'ADOPT'})}).then(function(r2){
-    if(r2.error) alert(r2.error);
-    else alert(r2.note || 'Adopt armed.');
+    if(r2.error) flash(r2.error, 'r');
+    else flash(r2.note || 'Adopt armed.', 'g');
     setTimeout(loadAll, 4000);
     loadAll(); });
 }
@@ -1470,7 +1495,7 @@ function renderPositions(){
         '<td class="n">' + (r.notional == null ? '—' : amt('$' + r.notional.toFixed(0))) + '</td>'+
         '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
           (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') +
-          (r.adopted && r.virt != null
+          (r.virt != null
             ? '<div class="mini" title="if it had been held since the component\'s virtual entry">'+
               'virtual: ' + (r.virt >= 0 ? '+' : '') + r.virt.toFixed(2) + '%</div>' : '') + '</td>'+
         '<td class="n ' + (r.usd == null ? 'dim' : cls(r.usd)) + '" style="font-weight:600">' +
