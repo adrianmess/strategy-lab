@@ -1166,6 +1166,10 @@ function renderCards(){
       var pct = mv==null ? null : 100*mv*(s.mode==='lev' ? (+p.lev||1) : 1);
       var cs = s.contract_size;
       var usd = (px && cs!=null) ? (+p.qty)*cs*(px-(+p.entry_price))*(p.dir>0?1:-1) : null;
+      // what the P&L WOULD be from the component's virtual entry (the big
+      // number always counts from OUR real fill)
+      var virt = (px && p.mirror_entry_px)
+        ? 100*(px/(+p.mirror_entry_px)-1)*(p.dir>0?1:-1)*(s.mode==='lev' ? (+p.lev||1) : 1) : null;
       var neg = pct!=null && pct<0;
       hero = '<div style="border:1px solid '+(neg?'var(--down)':'var(--up)')+
         ';border-left-width:4px;border-radius:8px;padding:11px 14px;margin-bottom:11px;background:'+
@@ -1178,6 +1182,11 @@ function renderCards(){
             (pct==null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</b>'+
           '<b class="'+(usd==null?'':(usd>=0?'up':'down'))+'" style="font-size:15px">'+
             (usd==null?'':amt((usd>=0?'+$':'-$')+Math.abs(usd).toFixed(2)))+'</b>'+
+          (virt!=null
+            ? '<span class="mini" title="if it had been held since the component\'s virtual entry '+
+              (p.mirror_entry_t||'')+' UTC @'+(+p.mirror_entry_px).toPrecision(6)+'">virtual '+
+              '<b class="'+(virt>=0?'up':'down')+'">'+(virt>=0?'+':'')+virt.toFixed(2)+'%</b></span>'
+            : '')+
           '<span class="mini" style="margin-left:auto">'+(held(p)?('open '+held(p)):'')+
             (p.late_mirror?' · late-join':'')+'</span></div>'+
         '<div class="mini" style="margin-top:5px;display:flex;gap:18px;flex-wrap:wrap">'+
