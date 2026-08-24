@@ -550,6 +550,55 @@ def trader_start():
     _save_instances()
     return jsonify(ok=True, instance=i)
 
+@app.route("/api/trader/restart", methods=["POST"])
+def trader_restart():
+    """Stop + start in one step, PRESERVING the live/dry state. A manual
+    stop-then-start once silently downgraded a LIVE trader to dry; this
+    carries the flag across (and demands the usual confirm for live).
+    The trader re-adopts any open position from its state file."""
+    d = request.get_json(force=True)
+    i, I = _inst()
+    t = I["trader"]
+    p = t["proc"]
+    if p is None or p.poll() is not None:
+        return jsonify(error=f"{_iname(i)}: trader not running — use start"), 400
+    live = bool(t.get("live"))
+    if live and d.get("confirm") != "LIVE":
+        return jsonify(error=f"{_iname(i)} is LIVE — restart requires "
+                             "confirm='LIVE'"), 400
+    cfg_name = t["config"] or I["cfg"] or "config.json"
+    p.send_signal(signal.SIGINT)
+    try:
+        p.wait(10)
+    except subprocess.TimeoutExpired:
+        p.terminate()
+        try:
+            p.wait(5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            try:
+                p.wait(5)
+            except subprocess.TimeoutExpired:
+                pass
+    if p.poll() is None:
+        # old process still holds the state-file lock; a new trader would
+        # only print REFUSING TO START and exit
+        return jsonify(error=f"{_iname(i)}: old trader would not die — "
+                             "not starting a duplicate"), 500
+    cmd = [sys.executable, "trader.py"] + (["--live"] if live else [])
+    log = os.path.join(JOBS_DIR, "trader_stdout.log" if i == "1"
+                       else f"trader_stdout_i{i}.log")
+    with open(log, "a") as lf:
+        proc = subprocess.Popen(cmd, cwd=AT, stdout=lf,
+                                stderr=subprocess.STDOUT,
+                                env={**os.environ, "TRADER_CONFIG": cfg_name})
+    t.update(proc=proc, config=cfg_name, live=live,
+             started=time.strftime("%Y-%m-%d %H:%M:%S"))
+    I.pop("stopped_by_user", None)
+    _save_instances()
+    return jsonify(ok=True, instance=i, live=live)
+
+
 @app.route("/api/trader/stop", methods=["POST"])
 def trader_stop():
     i, I = _inst()

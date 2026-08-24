@@ -1238,9 +1238,11 @@ function renderCards(){
           '<div class="mini">'+(comps?('FCFS router · '+comps+' components · one shared slot'):
             ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+'</div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-          '<button class="btn sm" onclick="startTrader(\''+x.id+'\',false)">Start dry-run</button>'+
-          '<button class="btn sm danger" onclick="startTrader(\''+x.id+'\',true)">Start LIVE</button>'+
-          '<button class="btn sm" onclick="stopTrader(\''+x.id+'\')">Stop</button>'+
+          (s.running
+            ? '<button class="btn sm" onclick="restartTrader(\''+x.id+'\')">Restart</button>'+
+              '<button class="btn sm" onclick="stopTrader(\''+x.id+'\')">Stop</button>'
+            : '<button class="btn sm" onclick="startTrader(\''+x.id+'\',false)">Start dry-run</button>'+
+              '<button class="btn sm danger" onclick="startTrader(\''+x.id+'\',true)">Start LIVE</button>')+
         '</div></div>'+
       ebar + hero + shadow +
       '<div style="display:flex;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">'+
@@ -1280,7 +1282,23 @@ function startTrader(i, live){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
   if(live && prompt('Start '+nm+' with REAL MONEY?\n\nType LIVE to confirm.') !== 'LIVE') return;
   API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
-                       body:JSON.stringify({instance:i, live:!!live})}).then(function(r){
+                       body:JSON.stringify({instance:i, live:!!live,
+                                            confirm:(live?'LIVE':undefined)})}).then(function(r){
+    if(r.error) alert(r.error);
+    else if(r.note) alert(r.note);   // e.g. re-attached to a running trader
+    loadAll(); });
+}
+function restartTrader(i){
+  var s = STATUS[i]||{};
+  var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  if(!s.running){ alert(nm+' is not running — use Start.'); return; }
+  var posNote = s.position ? '\nIts open '+s.position.symbol+' position is kept and re-tracked.' : '';
+  if(s.live){
+    if(prompt('Restart '+nm+'? It is LIVE and will come back LIVE.'+posNote+
+              '\n\nType LIVE to confirm.') !== 'LIVE') return;
+  } else if(!confirm('Restart '+nm+' (dry-run)?'+posNote)) return;
+  API('trader/restart', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body:JSON.stringify({instance:i, confirm:'LIVE'})}).then(function(r){
     if(r.error) alert(r.error); loadAll(); });
 }
 function stopTrader(i){
