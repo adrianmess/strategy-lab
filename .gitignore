@@ -34,3 +34,4 @@ panel/panel_key.json
 panel/ignored_trades.json
 panel/alerts.json
 adaptive_trader/.numba_cache/
+dashboard/backtests.js.gz

@@ -377,8 +377,40 @@ def doctor_fix():
     import doctor
     return jsonify(removed=doctor.fix_caches())
 
+_GZ_LOCK = threading.Lock()
+
+
 @app.route("/dashboard/<path:p>")
 def dash(p):
+    # backtests.js is half a gigabyte and grows with every published run;
+    # the classic Backtests page pulls it in full after each change. JSON
+    # gzips ~10x, so compress once per change (cached as .gz beside it)
+    # and serve that to any client that accepts gzip.
+    if (p == "backtests.js"
+            and "gzip" in (request.headers.get("Accept-Encoding") or "")):
+        src = os.path.join(DASH, "backtests.js")
+        gz = src + ".gz"
+        try:
+            with _GZ_LOCK:
+                if (not os.path.exists(gz)
+                        or os.path.getmtime(gz) < os.path.getmtime(src)):
+                    import gzip as _gzip
+                    import shutil as _sh
+                    tmp = f"{gz}.tmp{os.getpid()}"
+                    with open(src, "rb") as fi, \
+                         _gzip.open(tmp, "wb", compresslevel=2) as fo:
+                        _sh.copyfileobj(fi, fo, 1 << 20)
+                    # keep the .gz mtime >= source so the check above settles
+                    os.replace(tmp, gz)
+            resp = send_from_directory(DASH, "backtests.js.gz",
+                                       mimetype="application/javascript",
+                                       conditional=True)
+            resp.headers["Content-Encoding"] = "gzip"
+            resp.headers["Vary"] = "Accept-Encoding"
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
+        except Exception as e:
+            print(f"backtests.js gzip failed ({e}) — serving raw", flush=True)
     resp = send_from_directory(DASH, p)
     # pages and their inline JS change often — force revalidation so stale
     # cached pages can't hide new features ("I don't see the badges")
