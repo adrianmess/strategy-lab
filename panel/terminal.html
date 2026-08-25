@@ -1789,11 +1789,12 @@ function tdSpot(btn, act){
   });
 }
 function tdXferLoad(){
-  TR.el = 'tdXfer'; TR.acct = TD.acct; TR.bal = null;
-  API('transfer/balances?account='+TD.acct).then(function(d){
-    if(d.error || TR.el !== 'tdXfer') return;
-    TR.bal = d; renderTransfer();
-  });
+  var el = document.getElementById('tdXfer');
+  if(el) el.innerHTML =
+    '<div style="display:flex;gap:8px">'+
+    '<button class="btn sm" onclick="openTransfer(TD.acct)">Transfer</button>'+
+    '<button class="btn sm" onclick="openTransfer(TD.acct)">Convert</button>'+
+    '<span class="mini" style="align-self:center">wallet moves &amp; USDC&harr;USDT on '+TD.acct+'</span></div>';
 }
 function tdRefresh(){
   tdInit(); tdRefreshChips(); tdKlines(); tdState(); tdXferLoad();
@@ -1847,9 +1848,7 @@ function renderTransfer(){
     '<div style="display:flex;gap:8px">'+
       '<button class="btn sm danger" onclick="doTransfer(this)">Transfer</button>'+
       (TR.el==='trb' ? '<button class="btn sm" onclick="closeTransfer()">Close</button>' : '')+'</div>'+
-    '<div class="mini" style="margin-top:10px">Internal wallet move on '+TR.acct+' — no withdrawal is possible '+
-      'from the panel. Live traders size positions from their config equity, not the wallet, so a transfer '+
-      'does not change open positions.</div>'+
+    '<div class="mini" style="margin-top:10px">Internal move on '+TR.acct+' — withdrawals are impossible from the panel.</div>'+
     '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:11px">'+
       '<div class="mini" style="margin-bottom:8px"><b>Convert</b> — market order on USDC/USDT, spot wallet '+
         '(USDC free: <b class="num">'+(b.spot_usdc==null?'?':amt((+b.spot_usdc).toFixed(2)))+'</b>)</div>'+
@@ -1859,8 +1858,7 @@ function renderTransfer(){
         '<input class="cvAmt" type="number" step="1" min="0" style="width:110px" placeholder="amount">'+
         '<button class="btn sm" onclick="cvMax(this)">max</button>'+
         '<button class="btn sm danger" onclick="doConvert(this)">Convert</button></div>'+
-      '<div class="mini" style="margin-top:6px">taker fee applies (0-0.05%% on stable pairs); fills at the '+
-        'live order book, so the received amount can differ by a few cents</div></div>';
+      '<div class="mini" style="margin-top:6px">market order on USDC/USDT — received amount can differ by cents</div></div>';
 }
 function cvMax(btn){
   var b = TR.bal || {};
