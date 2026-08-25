@@ -237,6 +237,7 @@ body.masked .amt:hover{filter:none}
             </div>
             <div id="tdHeld"></div>
             <div id="tdPanel"><span class="mini">loading…</span></div>
+            <div id="tdXfer" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"></div>
           </div>
         </div>
       </div>
@@ -1769,8 +1770,15 @@ function tdSpot(btn, act){
         tdState(); });
   });
 }
+function tdXferLoad(){
+  TR.el = 'tdXfer'; TR.acct = TD.acct; TR.bal = null;
+  API('transfer/balances?account='+TD.acct).then(function(d){
+    if(d.error || TR.el !== 'tdXfer') return;
+    TR.bal = d; renderTransfer();
+  });
+}
 function tdRefresh(){
-  tdInit(); tdRefreshChips(); tdKlines(); tdState();
+  tdInit(); tdRefreshChips(); tdKlines(); tdState(); tdXferLoad();
   if(!TD.timer) TD.timer = setInterval(function(){
     var v = document.getElementById('v-trade');
     if(v && v.classList.contains('on')){ tdKlines(); tdState(); }
@@ -1778,9 +1786,10 @@ function tdRefresh(){
 }
 
 // ---- spot<->futures USDT transfer (internal — never leaves MEXC) ----
-var TR = {acct:null, dir:'spot_to_futures', bal:null};
+var TR = {acct:null, dir:'spot_to_futures', bal:null, el:'trb'};
+TR.box = function(){ return document.getElementById(TR.el || 'trb'); };
 function openTransfer(acct){
-  TR.acct = acct; TR.dir = 'spot_to_futures'; TR.bal = null;
+  TR.acct = acct; TR.dir = 'spot_to_futures'; TR.bal = null; TR.el = 'trb';
   document.getElementById('trTitle').textContent = '— '+acct+' (internal, never leaves MEXC)';
   document.getElementById('trm').classList.add('on');
   document.getElementById('trb').innerHTML = '<span class="mini">reading wallet balances…</span>';
@@ -1796,8 +1805,12 @@ function renderTransfer(){
   var b = TR.bal || {};
   var s2f = TR.dir === 'spot_to_futures';
   var from = s2f ? b.spot_usdt : b.fut_usdt;
-  var el = document.getElementById('trb');
+  var el = TR.box();
+  if(!el) return;
   el.innerHTML =
+    (TR.el !== 'trb'
+      ? '<div class="mini" style="margin-bottom:9px"><b>Transfer &amp; Convert</b> — '+TR.acct+' wallets (internal, never leaves MEXC)</div>'
+      : '')+
     '<div style="display:flex;gap:6px;margin-bottom:13px">'+
       '<button class="btn sm" style="'+(s2f?'border-color:var(--accent);color:var(--accent)':'')+'" '+
         'onclick="trDir(\'spot_to_futures\')">Spot &rarr; Futures</button>'+
@@ -1809,13 +1822,13 @@ function renderTransfer(){
       (b.fut_usdt==null?(b.fut_err||'?'):amt('$'+(+b.fut_usdt).toFixed(2)))+'</b></div>'+
     '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">'+
       '<span class="mini">amount</span>'+
-      '<input id="trAmt" type="number" step="1" min="0" style="width:120px" placeholder="USDT">'+
-      '<button class="btn sm" onclick="document.getElementById(\'trAmt\').value='+
+      '<input class="trAmt" type="number" step="1" min="0" style="width:120px" placeholder="USDT">'+
+      '<button class="btn sm" onclick="this.parentNode.querySelector(\'.trAmt\').value='+
         ((from==null?0:Math.floor(from*100)/100))+'">max ('+(from==null?'?':(+from).toFixed(2))+')</button>'+
       '<span class="mini">USDT '+(s2f?'from spot to futures':'from futures to spot')+'</span></div>'+
     '<div style="display:flex;gap:8px">'+
       '<button class="btn sm danger" onclick="doTransfer(this)">Transfer</button>'+
-      '<button class="btn sm" onclick="closeTransfer()">Close</button></div>'+
+      (TR.el==='trb' ? '<button class="btn sm" onclick="closeTransfer()">Close</button>' : '')+'</div>'+
     '<div class="mini" style="margin-top:10px">Internal wallet move on '+TR.acct+' — no withdrawal is possible '+
       'from the panel. Live traders size positions from their config equity, not the wallet, so a transfer '+
       'does not change open positions.</div>'+
@@ -1823,23 +1836,25 @@ function renderTransfer(){
       '<div class="mini" style="margin-bottom:8px"><b>Convert</b> — market order on USDC/USDT, spot wallet '+
         '(USDC free: <b class="num">'+(b.spot_usdc==null?'?':amt((+b.spot_usdc).toFixed(2)))+'</b>)</div>'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-        '<select id="cvDir"><option value="usdc_to_usdt">USDC &rarr; USDT</option>'+
+        '<select class="cvDir"><option value="usdc_to_usdt">USDC &rarr; USDT</option>'+
           '<option value="usdt_to_usdc">USDT &rarr; USDC</option></select>'+
-        '<input id="cvAmt" type="number" step="1" min="0" style="width:110px" placeholder="amount">'+
-        '<button class="btn sm" onclick="cvMax()">max</button>'+
+        '<input class="cvAmt" type="number" step="1" min="0" style="width:110px" placeholder="amount">'+
+        '<button class="btn sm" onclick="cvMax(this)">max</button>'+
         '<button class="btn sm danger" onclick="doConvert(this)">Convert</button></div>'+
       '<div class="mini" style="margin-top:6px">taker fee applies (0-0.05%% on stable pairs); fills at the '+
         'live order book, so the received amount can differ by a few cents</div></div>';
 }
-function cvMax(){
+function cvMax(btn){
   var b = TR.bal || {};
-  var d = document.getElementById('cvDir').value;
+  var row = btn.parentNode;
+  var d = row.querySelector('.cvDir').value;
   var v = d === 'usdc_to_usdt' ? b.spot_usdc : b.spot_usdt;
-  document.getElementById('cvAmt').value = v == null ? 0 : Math.floor(v * 100) / 100;
+  row.querySelector('.cvAmt').value = v == null ? 0 : Math.floor(v * 100) / 100;
 }
 function doConvert(btn){
-  var v = parseFloat(document.getElementById('cvAmt').value);
-  var d = document.getElementById('cvDir').value;
+  var row = btn.parentNode;
+  var v = parseFloat(row.querySelector('.cvAmt').value);
+  var d = row.querySelector('.cvDir').value;
   if(isNaN(v) || v <= 0){ flash('enter a positive amount', 'r'); return; }
   var lbl = d === 'usdc_to_usdt' ? v.toFixed(2)+' USDC → USDT' : v.toFixed(2)+' USDT → USDC';
   armConfirm(btn, 'Confirm: convert '+lbl, function(){
@@ -1856,7 +1871,7 @@ function doConvert(btn){
   });
 }
 function doTransfer(btn){
-  var v = parseFloat(document.getElementById('trAmt').value);
+  var v = parseFloat((TR.box().querySelector('.trAmt')||{}).value);
   if(isNaN(v) || v <= 0){ flash('enter a positive USDT amount', 'r'); return; }
   var s2f = TR.dir === 'spot_to_futures';
   armConfirm(btn, 'Confirm: move '+v.toFixed(2)+' USDT '+(s2f?'spot→futures':'futures→spot'), function(){
