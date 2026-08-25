@@ -834,6 +834,9 @@ def trade_order():
     pair = (d.get("pair") or "").upper()
     action = d.get("action")
     acct = d.get("account") or ("mexc1" if market == "fut" else "mexc2")
+    print(f"trade/order request: {acct} {market} {pair} {action} "
+          f"margin={d.get('margin')} lev={d.get('lev')} usdt={d.get('usdt')} "
+          f"qty={d.get('qty')} pct={d.get('pct')}", flush=True)
     if not pair or market not in ("fut", "spot") \
             or acct not in ("mexc1", "mexc2"):
         return jsonify(error="need market (fut|spot), pair and a valid "

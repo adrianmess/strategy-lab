@@ -1689,11 +1689,12 @@ function tdPanel(){
       '<div class="mini" style="margin-bottom:11px">available for leverage (futures wallet, '+TD.acct+'): <b class="num">'+
         amt('$'+(+(d.available||0)).toFixed(2))+'</b> &middot; position &asymp; <b class="num" id="tdNotion">$0</b>'+
         ((+(d.available||0)) < 1 ? ' &middot; <span style="color:var(--accent)">fund it via Transfer on the Overview</span>' : '')+'</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
         '<button class="btn" style="border-color:var(--up);color:var(--up);font-weight:700;padding:11px" '+
           'onclick="tdOpen(this,\'long\')">Open Long</button>'+
         '<button class="btn" style="border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
           'onclick="tdOpen(this,\'short\')">Open Short</button></div>'+
+      '<div id="tdMsg" style="margin-bottom:11px"></div>'+
       (pos
         ? '<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px">'+
           '<div class="mini" style="margin-bottom:5px">OPEN POSITION '+
@@ -1724,7 +1725,8 @@ function tdPanel(){
         '<button class="btn sm" onclick="document.getElementById(\'tdSell\').value='+(d.base_free||0)+'">max</button></div>'+
       '<div class="mini" style="margin-bottom:9px">holding <b class="num">'+amt(String(d.base_free||0))+' '+TD.pair+'</b></div>'+
       '<button class="btn" style="width:100%;border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
-        'onclick="tdSpot(this,\'sell\')">Sell '+TD.pair+'</button>';
+        'onclick="tdSpot(this,\'sell\')">Sell '+TD.pair+'</button>'+
+      '<div id="tdMsg" style="margin-top:11px"></div>';
   }
 }
 function tdPrev(){
@@ -1735,16 +1737,30 @@ function tdPrev(){
   var q = document.getElementById('tdLiq');
   if(q) q.textContent = '-' + (92/Math.max(l,1)).toFixed(1) + '%';
 }
+function tdMsg(txt, bad){
+  var el = document.getElementById('tdMsg');
+  if(el) el.innerHTML = txt
+    ? '<div style="border:1px solid '+(bad?'var(--down)':'var(--up)')+';border-radius:8px;'+
+      'padding:8px 11px;font-size:12px;color:'+(bad?'var(--down)':'var(--up)')+'">'+txt+'</div>'
+    : '';
+}
 function tdOpen(btn, side){
   var m = +document.getElementById('tdMarg').value;
   var l = +document.getElementById('tdLev').value;
-  if(!(m > 0)){ flash('enter a margin amount', 'r'); return; }
+  if(!(m > 0)){ tdMsg('Enter a margin amount first.', true); return; }
+  var avail = +((TD.state||{}).available || 0);
+  if(m > avail + 0.01){
+    tdMsg('Margin $'+m.toFixed(2)+' exceeds the '+TD.acct+' FUTURES wallet ($'+avail.toFixed(2)+'). '+
+          'Move USDT there with the Transfer block below first.', true);
+    return;
+  }
+  tdMsg('');
   armConfirm(btn, 'Confirm: OPEN '+side.toUpperCase()+' '+TD.pair+' '+l+'x — $'+m.toFixed(2)+' margin', function(){
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({market:'fut', account:TD.acct, pair:TD.pair, action:side, margin:m, lev:l, confirm:'TRADE'})})
       .then(function(r){
-        if(r.error) flash(r.error, 'r');
-        else flash('Opened '+side+' '+TD.pair+' at '+l+'x.', 'g');
+        if(r.error){ flash(r.error, 'r'); tdMsg(r.error, true); }
+        else { flash('Opened '+side+' '+TD.pair+' at '+l+'x.', 'g'); tdMsg('Opened '+side.toUpperCase()+' '+TD.pair+' at '+l+'x with $'+m.toFixed(2)+' margin.'); }
         tdState(); });
   });
 }
@@ -1753,7 +1769,8 @@ function tdClose(btn, pct){
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({market:'fut', account:TD.acct, pair:TD.pair, action:'close', pct:pct, confirm:'TRADE'})})
       .then(function(r){
-        if(r.error) flash(r.error, 'r'); else flash('Close sent.', 'g');
+        if(r.error){ flash(r.error, 'r'); tdMsg(r.error, true); }
+        else { flash('Close sent.', 'g'); tdMsg('Close sent.'); }
         tdState(); });
   });
 }
@@ -1766,7 +1783,8 @@ function tdSpot(btn, act){
     if(act === 'buy') body.usdt = v; else body.qty = v;
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)}).then(function(r){
-        if(r.error) flash(r.error, 'r'); else flash(lbl+' — done.', 'g');
+        if(r.error){ flash(r.error, 'r'); tdMsg(r.error, true); }
+        else { flash(lbl+' — done.', 'g'); tdMsg(lbl+' — done.'); }
         tdState(); });
   });
 }
