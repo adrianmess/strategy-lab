@@ -702,6 +702,121 @@ def trader_start():
     _save_instances()
     return jsonify(ok=True, instance=i)
 
+# ---- deposits: read-only address/QR display. The panel can SHOW where to
+# send funds; it has no withdrawal or transfer capability anywhere. ----
+_DEP_COINS = ("USDT", "USDC", "BTC", "ETH", "SOL", "XRP", "DOGE", "SUI",
+              "HYPE", "MX")
+_DEP_CFG = {}     # account -> (ts, coins payload)
+_DEP_ADDR = {}    # (account, coin, network) -> (ts, payload)
+
+
+@app.route("/api/deposit/coins")
+def deposit_coins():
+    """Deposit-enabled networks for the curated coin set on one account.
+    From MEXC's own coin catalog — networks are never hardcoded. Cached 1h."""
+    acct = request.args.get("account")
+    if acct not in ("mexc1", "mexc2"):
+        return jsonify(error="need account=mexc1|mexc2"), 400
+    hit = _DEP_CFG.get(acct)
+    if hit and time.time() - hit[0] < 3600:
+        return jsonify(coins=hit[1])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    try:
+        cat = MexcSpotAPI(account=acct).capital_config()
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    out = []
+    for c in cat:
+        sym = (c.get("coin") or "").upper()
+        if sym not in _DEP_COINS:
+            continue
+        nets = []
+        for n in (c.get("networkList") or []):
+            if not n.get("depositEnable"):
+                continue
+            nets.append(dict(
+                network=n.get("network") or n.get("netWork"),
+                name=n.get("name") or "",
+                min_confirm=n.get("minConfirm"),
+                deposit_tips=(n.get("depositTips") or n.get("depositDesc")
+                              or "")[:200],
+                contract=(n.get("contract") or "")[:80]))
+        if nets:
+            out.append(dict(coin=sym, networks=nets))
+    out.sort(key=lambda c: _DEP_COINS.index(c["coin"]))
+    _DEP_CFG[acct] = (time.time(), out)
+    return jsonify(coins=out)
+
+
+@app.route("/api/deposit/address")
+def deposit_address():
+    """The deposit address (+ memo/tag when the chain needs one) for one
+    account+coin+network. Cached 24h — addresses are stable."""
+    acct = request.args.get("account")
+    coin = (request.args.get("coin") or "").upper()
+    net = request.args.get("network") or ""
+    if acct not in ("mexc1", "mexc2") or not coin or not net:
+        return jsonify(error="need account, coin and network"), 400
+    key = (acct, coin, net)
+    hit = _DEP_ADDR.get(key)
+    if hit and time.time() - hit[0] < 86400:
+        return jsonify(**hit[1])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    api = MexcSpotAPI(account=acct)
+
+    def _pick(rows):
+        if isinstance(rows, dict):
+            rows = [rows]
+        return next((r for r in rows or []
+                     if (r.get("network") or r.get("netWork")) in (net, None)
+                     and r.get("address")), None) \
+            or next((r for r in rows or [] if r.get("address")), None)
+    gen_err = None
+    try:
+        row = _pick(api.deposit_address(coin, net))
+        if not row:
+            # no address exists yet for this coin+network — try to mint one
+            # (works only if the API key has the deposit permission; the
+            # website does the same thing when its deposit page opens)
+            try:
+                api.deposit_address_generate(coin, net)
+            except Exception as ge:
+                gen_err = str(ge)
+            row = _pick(api.deposit_address(coin, net))
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    if not row:
+        have = []
+        try:
+            allrows = api.deposit_address(coin)
+            if isinstance(allrows, dict):
+                allrows = [allrows]
+            have = sorted({r.get("network") or r.get("netWork")
+                           for r in allrows or [] if r.get("address")} - {None})
+        except Exception:
+            pass
+        msg = f"no {coin} address exists on {net} yet"
+        if gen_err and "700007" in gen_err:
+            msg += (" and the API key lacks permission to create one. Open "
+                    f"mexc.com's deposit page for {coin} on {net} once "
+                    "(that creates it) — or add the deposit permission to "
+                    "the key.")
+        elif gen_err:
+            msg += f" (generate failed: {gen_err[:120]})"
+        if have:
+            msg += f" Networks that already have an address: {', '.join(have)}."
+        return jsonify(error=msg), 404
+    payload = dict(account=acct, coin=coin, network=net,
+                   address=row.get("address"),
+                   memo=(row.get("memo") or row.get("tag") or ""))
+    _DEP_ADDR[key] = (time.time(), payload)
+    return jsonify(**payload)
+
+
 _DUST_CACHE = {"t": 0.0, "d": None}
 
 

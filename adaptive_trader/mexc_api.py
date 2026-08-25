@@ -260,6 +260,29 @@ class MexcSpotAPI:
         p = {"symbol": self.spot_symbol(symbol)} if symbol else {}
         return self._signed("GET", "/api/v3/openOrders", p)
 
+    def capital_config(self):
+        """Coin catalog with per-network deposit/withdraw availability."""
+        return self._signed("GET", "/api/v3/capital/config/getall", {})
+
+    def deposit_address(self, coin, network=None):
+        """Deposit address(es) for a coin (+ optional network). READ-ONLY —
+        shows where to send funds; the panel never initiates transfers.
+        Network names contain spaces/parens ("Tron(TRC20)") which break the
+        raw-string signer — pre-encode so signature and URL agree."""
+        from urllib.parse import quote
+        p = {"coin": coin}
+        if network:
+            p["network"] = quote(network, safe="")
+        return self._signed("GET", "/api/v3/capital/deposit/address", p)
+
+    def deposit_address_generate(self, coin, network):
+        """Create the deposit address for a coin+network that has none yet
+        (the website does this implicitly when you open its deposit page).
+        Deposit-only: it mints a receiving address, nothing more."""
+        from urllib.parse import quote
+        return self._signed("POST", "/api/v3/capital/deposit/address",
+                            {"coin": coin, "network": quote(network, safe="")})
+
     def dust_convertible(self):
         """Assets MEXC will convert to MX (each worth < 5 USDT)."""
         return self._signed("GET", "/api/v3/capital/convert/list", {})

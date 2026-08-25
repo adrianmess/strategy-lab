@@ -327,6 +327,16 @@ body.masked .amt:hover{filter:none}
   </div>
 </div></div>
 
+<div class="modal" id="depm" onclick="if(event.target===this)closeDeposit()">
+  <div class="mbox" style="border-color:rgba(88,166,255,.5)">
+    <header style="color:var(--blue);display:flex;justify-content:space-between;align-items:center">
+      <span>Deposit <span class="mini" id="depTitle"></span></span>
+      <span style="cursor:pointer;color:var(--dim);font-weight:400" onclick="closeDeposit()">&#10005;</span>
+    </header>
+    <div class="mb" id="depb"><span class="mini">loading…</span></div>
+  </div>
+</div>
+
 <div class="modal" id="dustm" onclick="if(event.target===this)closeDust()">
   <div class="mbox" style="border-color:rgba(240,185,11,.5)">
     <header style="color:var(--accent);display:flex;justify-content:space-between;align-items:center">
@@ -337,6 +347,7 @@ body.masked .amt:hover{filter:none}
   </div>
 </div>
 
+<script src="/dashboard/assets/qrcode.min.js"></script>
 <script>
 var API = function(p, opt){ return fetch('/api/'+p, opt).then(function(r){ return r.json(); }); };
 var INSTS = [], PERF = {};
@@ -1320,6 +1331,7 @@ function renderCards(){
               '<button class="btn sm" onclick="stopTrader(this,\''+x.id+'\')">Stop</button>'
             : '<button class="btn sm" onclick="startTrader(this,\''+x.id+'\',false)">Start dry-run</button>'+
               '<button class="btn sm danger" onclick="startTrader(this,\''+x.id+'\',true)">Start LIVE</button>')+
+          '<button class="btn sm" onclick="openDeposit(\''+x.id+'\')">Deposit</button>'+
         '</div></div>'+
       ebar + hero + shadow + autoLine +
       '<div style="display:flex;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">'+
@@ -1522,6 +1534,98 @@ function extrasRow(){
   }
   if(!sb && !db) return '';
   return '<div class="brow">'+sb+db+'</div>'+(SH_OPEN && rows.length ? shadowTable(rows) : '');
+}
+// ---- deposits: read-only address/QR display per instance's account ----
+var DEP = {acct:null, inst:null, coins:null, coin:null, net:null, cfgs:{}};
+function openDeposit(i){
+  var s = STATUS[i]||{};
+  DEP.inst = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  DEP.acct = s.api_account || 'mexc1';
+  DEP.coin = DEP.net = null;
+  document.getElementById('depTitle').textContent = '— '+DEP.inst+' ('+DEP.acct+')';
+  document.getElementById('depm').classList.add('on');
+  document.getElementById('depb').innerHTML = '<span class="mini">loading coin catalog from MEXC…</span>';
+  var cached = DEP.cfgs[DEP.acct];
+  (cached ? Promise.resolve(cached) : API('deposit/coins?account='+DEP.acct))
+    .then(function(d){
+      if(d.error){ document.getElementById('depb').innerHTML =
+        '<span class="mini down">'+d.error+'</span>'; return; }
+      DEP.cfgs[DEP.acct] = d;
+      DEP.coins = d.coins||[];
+      if(!DEP.coin && DEP.coins.length){
+        DEP.coin = DEP.coins[0].coin;
+        DEP.net = (DEP.coins[0].networks[0]||{}).network;
+      }
+      renderDeposit();
+    });
+}
+function closeDeposit(){ document.getElementById('depm').classList.remove('on'); }
+function depPick(coin, net){
+  DEP.coin = coin;
+  var c = DEP.coins.find(function(x){return x.coin===coin;});
+  DEP.net = net || ((c&&c.networks[0])||{}).network;
+  renderDeposit();
+}
+function renderDeposit(){
+  var el = document.getElementById('depb');
+  var c = DEP.coins.find(function(x){return x.coin===DEP.coin;}) || {networks:[]};
+  var chips = function(list, cur, cb){
+    return list.map(function(o){
+      var v = o.coin || o.network;
+      return '<button class="btn sm" style="border-radius:20px'+
+        (v===cur?';border-color:var(--accent);color:var(--accent)':'')+'" '+
+        'onclick="'+cb.replace('%V', v)+'">'+v+'</button>';
+    }).join(' ');
+  };
+  el.innerHTML =
+    '<div class="mini" style="margin-bottom:6px">Coin</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+
+      chips(DEP.coins, DEP.coin, "depPick('%V')")+'</div>'+
+    '<div class="mini" style="margin-bottom:6px">Network <span style="color:var(--down)">— must match the sending wallet exactly</span></div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'+
+      chips(c.networks, DEP.net, "depPick('"+DEP.coin+"','%V')")+'</div>'+
+    '<div id="depAddr"><span class="mini">fetching address…</span></div>'+
+    '<div style="background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.35);border-radius:8px;'+
+      'padding:8px 11px;font-size:12px;margin-top:12px">Verify the first and last 4 characters against '+
+      'mexc.com before sending anything meaningful, and send a small test amount first for a new address. '+
+      'The wrong network loses funds.</div>';
+  API('deposit/address?account='+DEP.acct+'&coin='+DEP.coin+'&network='+encodeURIComponent(DEP.net||''))
+    .then(function(d){
+      var a = document.getElementById('depAddr');
+      if(!a) return;
+      if(d.error){ a.innerHTML = '<span class="mini down">'+d.error+'</span>'; return; }
+      if(d.coin !== DEP.coin || d.network !== DEP.net) return;   // stale reply
+      var net = c.networks.find(function(n){return n.network===DEP.net;}) || {};
+      a.innerHTML =
+        '<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">'+
+        '<div id="depQR" style="background:#fff;padding:10px;border-radius:10px;width:170px;height:170px"></div>'+
+        '<div style="flex:1;min-width:240px">'+
+          '<div class="mini" style="margin-bottom:6px">'+d.coin+' on '+d.network+' — '+DEP.acct+'</div>'+
+          '<div style="display:flex;gap:8px;align-items:stretch">'+
+            '<div style="font-family:var(--mono);font-size:12.5px;background:var(--code);border:1px solid var(--line);'+
+              'border-radius:8px;padding:9px 11px;word-break:break-all;flex:1" id="depAddrTxt">'+d.address+'</div>'+
+            '<button class="btn sm" style="border-color:var(--accent);color:var(--accent);white-space:nowrap" '+
+              'onclick="depCopy(this,\'depAddrTxt\')">Copy</button></div>'+
+          (d.memo
+            ? '<div style="background:rgba(246,70,93,.08);border:1px solid rgba(246,70,93,.4);border-radius:8px;'+
+              'padding:8px 11px;font-size:12px;margin-top:9px"><b>Memo/tag REQUIRED:</b> '+
+              '<span style="font-family:var(--mono)" id="depMemoTxt">'+d.memo+'</span> '+
+              '<button class="btn sm" onclick="depCopy(this,\'depMemoTxt\')">Copy tag</button>'+
+              '<div class="mini" style="margin-top:3px">deposits without the tag are lost or need manual recovery</div></div>'
+            : '')+
+          (net.min_confirm ? '<div class="mini" style="margin-top:8px">credited after ~'+net.min_confirm+' confirmation(s)</div>' : '')+
+          (net.deposit_tips ? '<div class="mini" style="margin-top:4px">'+net.deposit_tips+'</div>' : '')+
+        '</div></div>';
+      new QRCode(document.getElementById('depQR'),
+                 {text:d.address, width:150, height:150,
+                  colorDark:'#000', colorLight:'#fff'});
+    });
+}
+function depCopy(b, id){
+  navigator.clipboard.writeText(document.getElementById(id).textContent).then(function(){
+    var t = b.textContent; b.textContent = 'Copied ✓';
+    setTimeout(function(){ b.textContent = t; }, 1400);
+  });
 }
 function openDust(){
   document.getElementById('dustm').classList.add('on');
