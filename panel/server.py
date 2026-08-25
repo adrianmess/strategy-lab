@@ -612,6 +612,7 @@ def status():
         shadow=state.get("shadow") or [],
         shadow_at=state.get("shadow_at"),
         armed=_armed_rules(cfg_name),
+        armed_auto=_armed_doc(cfg_name)["auto"],
         log=tail(os.path.join(AT, cfg.get("log_file", "trader.log")), 60),
     ))
 
@@ -771,12 +772,17 @@ def _armed_path(cfg_name):
             if sfile else None)
 
 
-def _armed_rules(cfg_name):
+def _armed_doc(cfg_name):
     p = _armed_path(cfg_name)
     try:
-        return json.load(open(p)).get("rules") or []
+        d = json.load(open(p))
+        return dict(rules=d.get("rules") or [], auto=d.get("auto"))
     except Exception:
-        return []
+        return dict(rules=[], auto=None)
+
+
+def _armed_rules(cfg_name):
+    return _armed_doc(cfg_name)["rules"]
 
 
 @app.route("/api/shadow_arm", methods=["GET", "POST"])
@@ -789,12 +795,40 @@ def shadow_arm():
     t = I["trader"]
     cfg_name = t["config"] or I["cfg"] or "config.json"
     if request.method == "GET":
-        return jsonify(rules=_armed_rules(cfg_name))
+        return jsonify(**_armed_doc(cfg_name))
     d = request.get_json(force=True)
     p = _armed_path(cfg_name)
     if not p:
         return jsonify(error="could not resolve the trader's state file"), 500
-    rules = _armed_rules(cfg_name)
+    doc = _armed_doc(cfg_name)
+    rules = doc["rules"]
+    # ---- instance-level STANDING auto-adopt rule (enable/disable) ----
+    if "auto" in d:
+        a = d.get("auto")
+        if not a or not a.get("enabled"):
+            doc["auto"] = None
+        else:
+            if bool(t.get("live")) and d.get("confirm") != "ARM":
+                return jsonify(error=f"{_iname(i)} is LIVE — auto-adopt "
+                                     "places real orders; requires "
+                                     "confirm='ARM'"), 400
+            try:
+                doc["auto"] = dict(enabled=True,
+                                   adopt_pct=float(a["adopt_pct"]),
+                                   at=time.strftime("%Y-%m-%d %H:%M"))
+            except (KeyError, TypeError, ValueError):
+                return jsonify(error="auto needs a numeric adopt_pct"), 400
+            if a.get("close_pct") not in (None, ""):
+                doc["auto"]["close_pct"] = float(a["close_pct"])
+        tmp = p + ".tmp"
+        json.dump(dict(rules=rules, auto=doc["auto"]), open(tmp, "w"),
+                  indent=1)
+        os.replace(tmp, p)
+        return jsonify(ok=True, auto=doc["auto"],
+                       note=("auto-adopt disabled" if not doc["auto"] else
+                             f"{_iname(i)}: auto-adopt ON — whenever flat, "
+                             "the deepest shadow at or below the threshold "
+                             "is adopted"))
     comp = d.get("comp")
     entry_t = d.get("entry_t")
     if comp is None or not entry_t:
@@ -818,7 +852,7 @@ def shadow_arm():
             rule["close_pct"] = float(d["close_pct"])
         rules.append(rule)
     tmp = p + ".tmp"
-    json.dump(dict(rules=rules), open(tmp, "w"), indent=1)
+    json.dump(dict(rules=rules, auto=doc["auto"]), open(tmp, "w"), indent=1)
     os.replace(tmp, p)
     return jsonify(ok=True, rules=rules,
                    note=("rule removed" if d.get("remove") else

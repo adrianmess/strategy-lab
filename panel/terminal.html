@@ -1284,6 +1284,8 @@ function renderCards(){
              'or wait for a fresh signal.')+
         '</div></details>';
     }
+    var autoLine = '<div class="mini" style="margin:0 0 11px;display:flex;gap:8px;align-items:center">'+
+      autoCtl(xid, s.armed_auto)+'</div>';
     // ---- API error banner ----
     var errs = (ERRS[x.id]||[]);
     var ebar = errs.length ? '<div style="border:1px solid var(--down);background:rgba(246,70,93,.1);'+
@@ -1319,7 +1321,7 @@ function renderCards(){
             : '<button class="btn sm" onclick="startTrader(this,\''+x.id+'\',false)">Start dry-run</button>'+
               '<button class="btn sm danger" onclick="startTrader(this,\''+x.id+'\',true)">Start LIVE</button>')+
         '</div></div>'+
-      ebar + hero + shadow +
+      ebar + hero + shadow + autoLine +
       '<div style="display:flex;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">'+
         pc('24h','24H')+pc('7d','7D')+pc('30d','30D')+
         '<div><div class="mini">WIN</div><div class="num" style="font-size:17px">'+
@@ -1592,39 +1594,75 @@ function armCell(id, comp, entryT, armed){
   }
   return ' <button class="btn sm" onclick="openArmForm(this,\''+id+'\','+comp+',\''+e+'\')">Arm</button>';
 }
-function openArmForm(btn, i, comp, entryT){
+function pctForm(btn, okLabel, onOk){
+  // inline "adopt when ≤ [spinner]% / close when ≥ [spinner]%" form: number
+  // inputs with up/down arrows and the comparators spelled out — nothing to
+  // guess. close is optional (blank = let the strategy close it).
   if(!btn || btn._armed) return;
   btn._armed = true; ARMED++;
   var wrap = document.createElement('span');
-  wrap.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
-  var a = document.createElement('input');
-  a.placeholder = 'adopt ≤ %'; a.style.width = '76px';
-  a.title = 'adopt when the shadow\'s unrealized falls to this percent or lower (usually negative, e.g. -3)';
-  var c = document.createElement('input');
-  c.placeholder = 'close ≥ % (opt)'; c.style.width = '92px';
-  c.title = 'optional: after adopting, close automatically when YOUR unrealized reaches this percent or better (e.g. 2)';
-  var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = 'Arm';
+  wrap.style.cssText = 'display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap';
+  wrap.innerHTML =
+    '<span class="mini">open when unreal <b>&le;</b></span>'+
+    '<input type="number" step="0.5" value="-3" style="width:64px" '+
+      'title="adopt when the shadow\'s unrealized is this percent or LOWER (arrows step 0.5)">'+
+    '<span class="mini">% &nbsp; close when yours <b>&ge;</b></span>'+
+    '<input type="number" step="0.5" placeholder="off" style="width:64px" '+
+      'title="optional: close automatically when YOUR unrealized is this percent or HIGHER — leave blank to let the strategy manage the exit">'+
+    '<span class="mini">%</span>';
+  var ins = wrap.querySelectorAll('input');
+  var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = okLabel;
   var no = document.createElement('button'); no.className = 'btn sm'; no.textContent = 'Cancel';
   btn.style.display = 'none';
   btn.parentNode.insertBefore(wrap, btn);
-  wrap.appendChild(a); wrap.appendChild(c); wrap.appendChild(ok); wrap.appendChild(no);
-  a.focus();
+  wrap.appendChild(ok); wrap.appendChild(no);
+  ins[0].focus();
   var undo = function(){ wrap.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
   no.onclick = function(ev){ ev.stopPropagation(); undo(); };
   ok.onclick = function(ev){
     ev.stopPropagation();
-    var ap = parseFloat(a.value);
-    if(isNaN(ap)){ flash('adopt % is required (e.g. -3)', 'r'); return; }
-    var cp = c.value.trim() === '' ? null : parseFloat(c.value);
-    if(c.value.trim() !== '' && isNaN(cp)){ flash('close % must be a number (or empty)', 'r'); return; }
+    var ap = parseFloat(ins[0].value);
+    if(isNaN(ap)){ flash('the open threshold is required (e.g. -3)', 'r'); return; }
+    var cp = ins[1].value.trim() === '' ? null : parseFloat(ins[1].value);
     undo();
+    onOk(ap, cp);
+  };
+}
+function openArmForm(btn, i, comp, entryT){
+  pctForm(btn, 'Arm', function(ap, cp){
     API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
                        body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
                                             adopt_pct:ap, close_pct:cp, confirm:'ARM'})})
       .then(function(r){
         if(r.error) flash(r.error, 'r'); else flash(r.note || 'Armed.', 'g');
         loadStatus(); });
-  };
+  });
+}
+function openAutoForm(btn, i){
+  pctForm(btn, 'Enable auto', function(ap, cp){
+    API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
+                       body:JSON.stringify({instance:i, confirm:'ARM',
+                                            auto:{enabled:true, adopt_pct:ap, close_pct:cp}})})
+      .then(function(r){
+        if(r.error) flash(r.error, 'r'); else flash(r.note || 'Auto-adopt enabled.', 'g');
+        loadStatus(); });
+  });
+}
+function autoOff(i){
+  API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
+                     body:JSON.stringify({instance:i, auto:{enabled:false}})})
+    .then(function(r){
+      if(r.error) flash(r.error, 'r'); else flash('Auto-adopt disabled.', 'g');
+      loadStatus(); });
+}
+function autoCtl(id, au){
+  return au && au.enabled
+    ? '<span class="tag g" title="whenever this instance is flat, the deepest shadow at or below the threshold is adopted automatically'+
+      (au.close_pct!=null?', then closed at the target':'')+
+      ' (stays on until disabled; same trade re-adopts only 1% below its last exit)">auto-adopt ON &le;'+au.adopt_pct+'%'+
+      (au.close_pct!=null?(' &rarr; &ge;'+(au.close_pct>=0?'+':'')+au.close_pct+'%'):'')+'</span> '+
+      '<button class="btn sm" onclick="autoOff(\''+id+'\')">turn off</button>'
+    : '<button class="btn sm" onclick="openAutoForm(this,\''+id+'\')">Enable auto-adopt</button>';
 }
 function disarmShadow(btn, i, comp, entryT){
   API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},

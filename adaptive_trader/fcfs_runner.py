@@ -283,6 +283,12 @@ def main_fcfs(cfg, live):
                 log.info("manual close: %d other virtual trade(s) marked "
                          "skipped — nothing auto-joins; use Adopt to switch",
                          n_extra)
+        if pos.get("auto"):
+            # anti-churn memory for the standing auto-adopt rule: the same
+            # virtual trade is only re-adopted >=1% below this exit
+            state["auto_last"] = dict(comp=pos.get("comp"),
+                                      entry_t=pos.get("mirror_entry_t"),
+                                      exit_px=(px or pos.get("entry_price")))
         state["position"] = None
         save(); tell_flat()
 
@@ -406,6 +412,7 @@ def main_fcfs(cfg, live):
             symbol=comps[ci]["pair"], comp=ci, dir=d, lev=lv, qty=qty,
             entry_price=fill, group=row["group"],
             mirror_entry_t=row["entry_t"], mirror_entry_px=ep, adopted=True,
+            auto=(src == "auto"),
             armed_close_pct=(float(close_pct) if close_pct is not None
                              else None),
             opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -429,28 +436,32 @@ def main_fcfs(cfg, live):
     # fires ONCE and is removed; rules whose virtual trade ended are pruned.
     ar_path = os.path.join(HERE, ".armed_" +
                            os.path.basename(cfg["state_file"]))
-    _ar = {"m": 0.0, "rules": []}
+    _ar = {"m": 0.0, "rules": [], "auto": None}
 
     def _armed_load():
         try:
             m = os.path.getmtime(ar_path)
         except OSError:
-            if _ar["rules"]:
-                _ar["rules"] = []
+            if _ar["rules"] or _ar["auto"]:
+                _ar["rules"], _ar["auto"] = [], None
             return
         if m != _ar["m"]:
             _ar["m"] = m
             try:
-                _ar["rules"] = json.load(open(ar_path)).get("rules") or []
-                log.info("armed rules loaded: %d", len(_ar["rules"]))
+                doc = json.load(open(ar_path))
+                _ar["rules"] = doc.get("rules") or []
+                _ar["auto"] = doc.get("auto") or None
+                log.info("armed rules loaded: %d, auto=%s",
+                         len(_ar["rules"]), _ar["auto"])
             except Exception:
-                _ar["rules"] = []
+                _ar["rules"], _ar["auto"] = [], None
 
     def _armed_write():
         try:
-            if _ar["rules"]:
+            if _ar["rules"] or _ar["auto"]:
                 tmp = ar_path + ".tmp"
-                json.dump(dict(rules=_ar["rules"]), open(tmp, "w"), indent=1)
+                json.dump(dict(rules=_ar["rules"], auto=_ar["auto"]),
+                          open(tmp, "w"), indent=1)
                 os.replace(tmp, ar_path)
             elif os.path.exists(ar_path):
                 os.remove(ar_path)
@@ -459,9 +470,43 @@ def main_fcfs(cfg, live):
         except OSError:
             pass
 
+    def check_auto():
+        """Standing per-instance rule: whenever the slot is flat, adopt the
+        DEEPEST-red shadow whose unrealized is <= adopt_pct. Not one-shot —
+        stays active until disabled in the panel. Anti-churn guard: after a
+        close of an auto-adopted position, the SAME virtual trade is only
+        re-adopted once price has dropped >=1% below that exit."""
+        au = _ar["auto"]
+        if not au or not au.get("enabled") or state.get("position"):
+            return
+        thr = float(au.get("adopt_pct", -1e9))
+        last = state.get("auto_last") or {}
+        best = None
+        for rows in shadow_by_key.values():
+            for r in rows:
+                pct = r.get("pct")
+                if pct is None or pct > thr:
+                    continue
+                if (last and r["comp"] == last.get("comp")
+                        and r["entry_t"] == last.get("entry_t")):
+                    px = r.get("px")
+                    xp = last.get("exit_px")
+                    if not px or not xp or px > float(xp) * 0.99:
+                        continue          # not 1% below our last exit yet
+                if best is None or pct < best.get("pct"):
+                    best = r
+        if best is not None:
+            log.info("AUTO-adopt trigger: %s at %+.2f%% <= %.2f%%",
+                     comp_label(best["comp"]), best["pct"], thr)
+            do_adopt(best["comp"], best["entry_t"],
+                     close_pct=au.get("close_pct"), src="auto")
+
     def check_armed():
         _armed_load()
-        if not _ar["rules"] or state.get("position"):
+        if state.get("position"):
+            return
+        if not _ar["rules"]:
+            check_auto()
             return
         keep = []
         changed = False
@@ -493,6 +538,8 @@ def main_fcfs(cfg, live):
         if changed:
             _ar["rules"] = keep
             _armed_write()
+        if state.get("position") is None:
+            check_auto()
 
     def check_armed_close():
         pos2 = state.get("position")
