@@ -1793,8 +1793,7 @@ function tdXferLoad(){
   if(el) el.innerHTML =
     '<div style="display:flex;gap:8px">'+
     '<button class="btn sm" onclick="openTransfer(TD.acct)">Transfer</button>'+
-    '<button class="btn sm" onclick="openTransfer(TD.acct)">Convert</button>'+
-    '<span class="mini" style="align-self:center">wallet moves &amp; USDC&harr;USDT on '+TD.acct+'</span></div>';
+    '<button class="btn sm" onclick="openTransfer(TD.acct)">Convert</button></div>';
 }
 function tdRefresh(){
   tdInit(); tdRefreshChips(); tdKlines(); tdState(); tdXferLoad();
