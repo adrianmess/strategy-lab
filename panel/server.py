@@ -823,10 +823,24 @@ def shadow_arm():
             pr = a.get("pairs")
             if isinstance(pr, str):
                 pr = pr.split(",")
-            pr = [str(x).strip().lower().split("_")[0]
-                  for x in (pr or []) if str(x).strip()]
-            if pr:
-                doc["auto"]["pairs"] = pr
+            plain, pmap = [], {}
+            for x in (pr or []):
+                x = str(x).strip().lower()
+                if not x:
+                    continue
+                if ":" in x:            # per-pair depth, e.g. "hype:-3"
+                    nm, v = x.split(":", 1)
+                    try:
+                        pmap[nm.strip().split("_")[0]] = float(v)
+                    except ValueError:
+                        return jsonify(error=f"bad pair threshold '{x}' — "
+                                             "use name:pct like hype:-3"), 400
+                else:
+                    plain.append(x.split("_")[0])
+            if plain:
+                doc["auto"]["pairs"] = plain
+            if pmap:
+                doc["auto"]["pair_pcts"] = pmap
         tmp = p + ".tmp"
         json.dump(dict(rules=rules, auto=doc["auto"]), open(tmp, "w"),
                   indent=1)

@@ -1612,8 +1612,8 @@ function pctForm(btn, okLabel, onOk, withPairs){
     '<span class="mini">%</span>'+
     (withPairs
       ? '<span class="mini">&nbsp;pairs</span>'+
-        '<input placeholder="all (e.g. hype)" style="width:110px" '+
-        'title="optional: only adopt shadows on these pairs — comma-separated short names, e.g. hype or hype,sui,doge. Blank = any pair. (Backtest: HYPE-only at -3% beat adopting from every pair.)">'
+        '<input placeholder="all — or hype:-3, sui:-3.6" style="width:190px" '+
+        'title="optional: restrict pairs and/or give each its OWN depth. Plain names use the main threshold (hype, sui); name:pct overrides it per pair (hype:-3, sui:-3.6, doge:-4.5, sol:-4.6, eth:-5, xrp:-5.3, btc:-6.6 was the best backtest). Blank = any pair at the main threshold.">'
       : '');
   var ins = wrap.querySelectorAll('input');
   var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = okLabel;
@@ -1668,7 +1668,12 @@ function autoCtl(id, au){
       (au.close_pct!=null?', then closed at the target':'')+
       ' (stays on until disabled; same trade re-adopts only 1% below its last exit)">auto-adopt ON &le;'+au.adopt_pct+'%'+
       (au.close_pct!=null?(' &rarr; &ge;'+(au.close_pct>=0?'+':'')+au.close_pct+'%'):'')+
-      (au.pairs&&au.pairs.length?(' ['+au.pairs.join(', ').toUpperCase()+']'):'')+'</span> '+
+      (function(){
+        var pl = [];
+        if(au.pair_pcts) for(var k in au.pair_pcts) pl.push(k.toUpperCase()+':'+au.pair_pcts[k]+'%');
+        if(au.pairs) au.pairs.forEach(function(p){ pl.push(p.toUpperCase()); });
+        return pl.length ? ' ['+pl.join(', ')+']' : '';
+      })()+'</span> '+
       '<button class="btn sm" onclick="autoOff(\''+id+'\')">turn off</button>'
     : '<button class="btn sm" onclick="openAutoForm(this,\''+id+'\')">Enable auto-adopt</button>';
 }

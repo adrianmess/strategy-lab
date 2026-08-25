@@ -480,20 +480,24 @@ def main_fcfs(cfg, live):
         if not au or not au.get("enabled") or state.get("position"):
             return
         thr = float(au.get("adopt_pct", -1e9))
-        # optional pair restriction (research 2026-08-25: HYPE-only <=-3%
-        # beat adopting from every pair — shallow adoptions only pay on
-        # pairs volatile enough to rebound)
+        # optional pair restriction and PER-PAIR depths (research
+        # 2026-08-25: thresholds scaled to each pair's volatility — deeper
+        # for calm pairs — beat every single-threshold variant: hype -3,
+        # sui -3.6, doge -4.5, sol -4.6, eth -5.0, xrp -5.3, btc -6.6)
+        pair_pcts = {str(k).strip().lower().split("_")[0]: float(v)
+                     for k, v in (au.get("pair_pcts") or {}).items()}
         pairs = {str(p).strip().lower().split("_")[0]
                  for p in (au.get("pairs") or []) if str(p).strip()}
+        pairs |= set(pair_pcts)
         last = state.get("auto_last") or {}
         best = None
         for rows in shadow_by_key.values():
             for r in rows:
-                if pairs and \
-                        r["group"].split("_")[0].lower() not in pairs:
+                pr = r["group"].split("_")[0].lower()
+                if pairs and pr not in pairs:
                     continue
                 pct = r.get("pct")
-                if pct is None or pct > thr:
+                if pct is None or pct > pair_pcts.get(pr, thr):
                     continue
                 if (last and r["comp"] == last.get("comp")
                         and r["entry_t"] == last.get("entry_t")):
