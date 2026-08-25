@@ -2355,9 +2355,17 @@ for(var i=0;i<btns.length;i++){
     var vs=document.querySelectorAll('.view');
     for(var k=0;k<vs.length;k++){ vs[k].classList.toggle('on', vs[k].id==='v-'+g); }
     document.getElementById('crumb').textContent=this.title;
+    localStorage.setItem('slView', g);   // survive reloads on the same page
     if(g==='trade') tdRefresh();
   };
 }
+// restore the page that was open before the reload
+(function(){
+  var g = localStorage.getItem('slView');
+  if(!g || g === 'overview') return;
+  var b = document.querySelector('.rail button[data-go="'+g+'"]');
+  if(b) b.onclick();
+})();
 syncSoundBtn(); syncToggles();
 applyTheme(localStorage.getItem('slTheme') || 'dark');
 loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust();
