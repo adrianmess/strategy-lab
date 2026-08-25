@@ -257,7 +257,10 @@ def main_fcfs(cfg, live):
         # sees the component's virtual trade still open, still "red", and
         # re-enters within a bar or two — exactly what happened on
         # 2026-08-17 (closed 124 @08:07:32, re-opened 119 @08:09:14).
-        if reason in ("manual_override", "emergency_exit", "close_now"):
+        # armed_target is user-directed too: after it fires nothing may
+        # auto-rejoin — the human (or a new armed rule) owns the next move
+        if reason in ("manual_override", "emergency_exit", "close_now",
+                      "armed_target"):
             sk = state.setdefault("late_skips", {})
             lbl = pos.get("mirror_entry_t")
             if lbl:
@@ -353,11 +356,15 @@ def main_fcfs(cfg, live):
             pass
         if not req:
             return
+        do_adopt(int(req.get("comp", -1)), req.get("entry_t"),
+                 close_pct=req.get("close_pct"), src="panel")
+
+    def do_adopt(ci, want, close_pct=None, src="panel"):
+        """Open the chosen shadow as a REAL position (shared by the panel
+        Adopt button and the armed auto-adopt rules)."""
         if state.get("position"):
-            log.warning("ADOPT refused: a position is already open")
-            return
-        ci = int(req.get("comp", -1))
-        want = req.get("entry_t")
+            log.warning("ADOPT (%s) refused: a position is already open", src)
+            return False
         row = None
         for rows in shadow_by_key.values():
             for r in rows:
@@ -366,7 +373,7 @@ def main_fcfs(cfg, live):
         if row is None:
             log.warning("ADOPT refused: %s no longer holds virtual trade %s "
                         "(it may have just closed)", comp_label(ci), want)
-            return
+            return False
         d = int(row["dir"])
         lv = float(row["lev"]) if mode == "lev" else 1.0
         ep = float(row["entry_px"])
@@ -374,7 +381,7 @@ def main_fcfs(cfg, live):
         px = float(getattr(h, "last_px", None) or row.get("px") or 0)
         if not px:
             log.warning("ADOPT refused: no live price for %s", row["group"])
-            return
+            return False
         # keep the liq-distance guard — a deliberate switch must still not
         # inherit a virtual trade that is about to be liquidated
         if lv > 1:
@@ -384,14 +391,14 @@ def main_fcfs(cfg, live):
                 log.warning("ADOPT refused %s: %.1f%% underwater at %gx — "
                             "too close to ITS liquidation",
                             comp_label(ci), 100 * adv, lv)
-                return
+                return False
         res, qty = ex_for(comps[ci]["pair"]).open(d, lv, px)
         if (res or {}).get("status") == "error" or not qty:
             notify("order_failed", account="fcfs", action="adopt",
                    config=os.path.basename(cfg.get("_path", "?")),
                    detail=(res or {}).get("message"))
             log.error("ADOPT open failed: %s", (res or {}).get("message"))
-            return
+            return False
         fill = float((res or {}).get("fill_price") or px)
         state.setdefault("late_skips", {}).pop(str(ci), None)
         opened_bar[ci] = row["entry_t"]
@@ -399,11 +406,13 @@ def main_fcfs(cfg, live):
             symbol=comps[ci]["pair"], comp=ci, dir=d, lev=lv, qty=qty,
             entry_price=fill, group=row["group"],
             mirror_entry_t=row["entry_t"], mirror_entry_px=ep, adopted=True,
+            armed_close_pct=(float(close_pct) if close_pct is not None
+                             else None),
             opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
             opened_ms=int(time.time() * 1000))
-        log.info("ADOPTED %s: virtual entry %s @%.6g, joined @%.6g "
-                 "dir=%+d lev=%.1f qty=%s", comp_label(ci),
-                 row["entry_t"], ep, fill, d, lv, qty)
+        log.info("ADOPTED (%s) %s: virtual entry %s @%.6g, joined @%.6g "
+                 "dir=%+d lev=%.1f qty=%s close_at=%s", src, comp_label(ci),
+                 row["entry_t"], ep, fill, d, lv, qty, close_pct)
         notify("position_opened", account="fcfs",
                config=os.path.basename(cfg.get("_path", "?")),
                symbol=comps[ci]["pair"], side=("LONG" if d > 0 else "SHORT"),
@@ -411,6 +420,95 @@ def main_fcfs(cfg, live):
                comp=comp_label(ci) + " (adopted)",
                live=(not cfg["dry_run"]))
         save(); tell_flat()
+        return True
+
+    # ---- ARMED shadow rules: adopt automatically when a chosen shadow's
+    # unrealized falls to <= adopt_pct (usually negative); optionally close
+    # the adopted position when OUR unrealized reaches >= close_pct.
+    # Rules live in a panel-written sidecar so they survive restarts; a rule
+    # fires ONCE and is removed; rules whose virtual trade ended are pruned.
+    ar_path = os.path.join(HERE, ".armed_" +
+                           os.path.basename(cfg["state_file"]))
+    _ar = {"m": 0.0, "rules": []}
+
+    def _armed_load():
+        try:
+            m = os.path.getmtime(ar_path)
+        except OSError:
+            if _ar["rules"]:
+                _ar["rules"] = []
+            return
+        if m != _ar["m"]:
+            _ar["m"] = m
+            try:
+                _ar["rules"] = json.load(open(ar_path)).get("rules") or []
+                log.info("armed rules loaded: %d", len(_ar["rules"]))
+            except Exception:
+                _ar["rules"] = []
+
+    def _armed_write():
+        try:
+            if _ar["rules"]:
+                tmp = ar_path + ".tmp"
+                json.dump(dict(rules=_ar["rules"]), open(tmp, "w"), indent=1)
+                os.replace(tmp, ar_path)
+            elif os.path.exists(ar_path):
+                os.remove(ar_path)
+            _ar["m"] = (os.path.getmtime(ar_path)
+                        if os.path.exists(ar_path) else 0.0)
+        except OSError:
+            pass
+
+    def check_armed():
+        _armed_load()
+        if not _ar["rules"] or state.get("position"):
+            return
+        keep = []
+        changed = False
+        for rule in _ar["rules"]:
+            ci = int(rule.get("comp", -1))
+            want = rule.get("entry_t")
+            row = None
+            for rows in shadow_by_key.values():
+                for r in rows:
+                    if r["comp"] == ci and r["entry_t"] == want:
+                        row = r
+            if row is None:
+                if shadow_by_key:          # hosts reporting; trade truly gone
+                    log.info("armed rule pruned: %s virtual trade %s ended",
+                             comp_label(ci), want)
+                    changed = True
+                    continue
+                keep.append(rule)
+                continue
+            pct = row.get("pct")
+            if pct is not None and pct <= float(rule.get("adopt_pct", -1e9)):
+                log.info("ARMED trigger: %s at %+.2f%% <= %.2f%%",
+                         comp_label(ci), pct, float(rule["adopt_pct"]))
+                do_adopt(ci, want, close_pct=rule.get("close_pct"),
+                         src="armed")
+                changed = True             # fired (or refused) — one shot
+                continue
+            keep.append(rule)
+        if changed:
+            _ar["rules"] = keep
+            _armed_write()
+
+    def check_armed_close():
+        pos2 = state.get("position")
+        cap = (pos2 or {}).get("armed_close_pct")
+        if not pos2 or cap is None:
+            return
+        h = hosts.get(pos2.get("group"))
+        px = float(getattr(h, "last_px", None) or 0)
+        if not px:
+            return
+        d = int(pos2.get("dir") or 1)
+        lv = float(pos2.get("lev") or 1.0) if mode == "lev" else 1.0
+        pct = (px / float(pos2["entry_price"]) - 1.0) * d * 100.0 * lv
+        if pct >= float(cap):
+            log.info("ARMED close: %+.2f%% >= %.2f%% target", pct, float(cap))
+            do_close("armed_target", px)
 
     def flush_pending():
         nonlocal pending_opens, pending_deadline
@@ -646,9 +744,13 @@ def main_fcfs(cfg, live):
                                 else:
                                     do_close("virtual_exit", msg.get("px"))
 
-            # panel-requested adopt of a chosen shadow (only when flat)
+            # panel-requested adopt of a chosen shadow (only when flat) +
+            # armed auto-adopt / auto-close rules
             if state.get("position") is None:
                 try_adopt()
+                check_armed()
+            else:
+                check_armed_close()
 
             # arbitration window expired?
             if pending_deadline and now >= pending_deadline:

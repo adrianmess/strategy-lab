@@ -1222,7 +1222,9 @@ function renderCards(){
               '<b class="'+(virt>=0?'up':'down')+'">'+(virt>=0?'+':'')+virt.toFixed(2)+'%</b></span>'
             : '')+
           '<span class="mini" style="margin-left:auto">'+(held(p)?('open '+held(p)):'')+
-            (p.late_mirror?' · late-join':'')+'</span></div>'+
+            (p.late_mirror?' · late-join':'')+
+            (p.armed_close_pct!=null?' · auto-close ≥'+(p.armed_close_pct>=0?'+':'')+p.armed_close_pct+'%':'')+
+            '</span></div>'+
         '<div class="mini" style="margin-top:5px;display:flex;gap:18px;flex-wrap:wrap">'+
           '<span>entry <b class="num">'+(+p.entry_price).toPrecision(6)+'</b></span>'+
           '<span>now <b class="num">'+(px?px.toPrecision(6):'?')+'</b></span>'+
@@ -1272,6 +1274,7 @@ function renderCards(){
             '<td class="mini">'+(x.skipped?'judged, sitting out':'late-join eligible')+
               (p ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+xid+'\','+x.comp+
                         ',\''+String(x.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
+              armCell(xid, x.comp, x.entry_t, s.armed)+
             '</td></tr>';
         }).join('')+'</tbody></table>'+
         '<div class="mini" style="margin-top:5px">These are the components\' SIMULATED '+
@@ -1489,6 +1492,7 @@ function shadowTable(rows){
         '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+
           (o.held ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+o.id+'\','+r.comp+
                          ',\''+String(r.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
+          armCell(o.id, r.comp, r.entry_t, (STATUS[o.id]||{}).armed)+
         '</td></tr>';
     }).join('')+'</tbody></table>'+
     '<div class="mini" style="margin-top:5px">Simulated positions — nothing is held for them. '+
@@ -1573,6 +1577,61 @@ function loadDust(refresh){
   API('dust'+(refresh?'?refresh=1':'')).then(function(d){
     DUST = d; renderPositions(); renderDustModal();
   }).catch(function(){});
+}
+function armCell(id, comp, entryT, armed){
+  // per-shadow automation: adopt when unreal falls to <= X%, optional
+  // auto-close at >= Y%. Badge + disarm when a rule exists, Arm otherwise.
+  var rule = (armed||[]).find(function(r){ return r.comp===comp && r.entry_t===entryT; });
+  var e = String(entryT||'').replace(/'/g,'');
+  if(rule){
+    return ' <span class="tag b" title="auto-adopt when this shadow\'s unrealized falls to '+
+      rule.adopt_pct+'% or lower'+(rule.close_pct!=null?', then auto-close your position at '+rule.close_pct+'% or better':'')+
+      ' (one-shot; survives restarts)">armed ≤'+rule.adopt_pct+'%'+
+      (rule.close_pct!=null?(' → ≥'+(rule.close_pct>=0?'+':'')+rule.close_pct+'%'):'')+'</span>'+
+      '<button class="btn sm" title="remove this rule" onclick="disarmShadow(this,\''+id+'\','+comp+',\''+e+'\')">✕</button>';
+  }
+  return ' <button class="btn sm" onclick="openArmForm(this,\''+id+'\','+comp+',\''+e+'\')">Arm</button>';
+}
+function openArmForm(btn, i, comp, entryT){
+  if(!btn || btn._armed) return;
+  btn._armed = true; ARMED++;
+  var wrap = document.createElement('span');
+  wrap.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
+  var a = document.createElement('input');
+  a.placeholder = 'adopt ≤ %'; a.style.width = '76px';
+  a.title = 'adopt when the shadow\'s unrealized falls to this percent or lower (usually negative, e.g. -3)';
+  var c = document.createElement('input');
+  c.placeholder = 'close ≥ % (opt)'; c.style.width = '92px';
+  c.title = 'optional: after adopting, close automatically when YOUR unrealized reaches this percent or better (e.g. 2)';
+  var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = 'Arm';
+  var no = document.createElement('button'); no.className = 'btn sm'; no.textContent = 'Cancel';
+  btn.style.display = 'none';
+  btn.parentNode.insertBefore(wrap, btn);
+  wrap.appendChild(a); wrap.appendChild(c); wrap.appendChild(ok); wrap.appendChild(no);
+  a.focus();
+  var undo = function(){ wrap.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
+  no.onclick = function(ev){ ev.stopPropagation(); undo(); };
+  ok.onclick = function(ev){
+    ev.stopPropagation();
+    var ap = parseFloat(a.value);
+    if(isNaN(ap)){ flash('adopt % is required (e.g. -3)', 'r'); return; }
+    var cp = c.value.trim() === '' ? null : parseFloat(c.value);
+    if(c.value.trim() !== '' && isNaN(cp)){ flash('close % must be a number (or empty)', 'r'); return; }
+    undo();
+    API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
+                       body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
+                                            adopt_pct:ap, close_pct:cp, confirm:'ARM'})})
+      .then(function(r){
+        if(r.error) flash(r.error, 'r'); else flash(r.note || 'Armed.', 'g');
+        loadStatus(); });
+  };
+}
+function disarmShadow(btn, i, comp, entryT){
+  API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
+                     body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,
+                                          remove:true})}).then(function(r){
+    if(r.error) flash(r.error, 'r'); else flash('Rule removed.', 'g');
+    loadStatus(); });
 }
 function adoptShadow(btn, i, comp, entryT){
   var s = STATUS[i]||{};

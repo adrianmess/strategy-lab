@@ -611,6 +611,7 @@ def status():
         # written by the fcfs runner every bar (membership changes) / 30s
         shadow=state.get("shadow") or [],
         shadow_at=state.get("shadow_at"),
+        armed=_armed_rules(cfg_name),
         log=tail(os.path.join(AT, cfg.get("log_file", "trader.log")), 60),
     ))
 
@@ -762,6 +763,67 @@ def api_dust_convert():
         return jsonify(error=str(e)[:300]), 502
     _DUST_CACHE["t"] = 0.0        # balances just changed
     return jsonify(ok=True, result=res)
+
+
+def _armed_path(cfg_name):
+    sfile = _state_file_of(cfg_name)
+    return (os.path.join(AT, ".armed_" + os.path.basename(sfile))
+            if sfile else None)
+
+
+def _armed_rules(cfg_name):
+    p = _armed_path(cfg_name)
+    try:
+        return json.load(open(p)).get("rules") or []
+    except Exception:
+        return []
+
+
+@app.route("/api/shadow_arm", methods=["GET", "POST"])
+def shadow_arm():
+    """Per-shadow automation rules, evaluated by the RUNNER every cycle:
+    adopt the chosen shadow when its unrealized falls to <= adopt_pct
+    (usually negative), and optionally close the adopted position when OUR
+    unrealized reaches >= close_pct. One-shot: a fired rule is removed."""
+    i, I = _inst()
+    t = I["trader"]
+    cfg_name = t["config"] or I["cfg"] or "config.json"
+    if request.method == "GET":
+        return jsonify(rules=_armed_rules(cfg_name))
+    d = request.get_json(force=True)
+    p = _armed_path(cfg_name)
+    if not p:
+        return jsonify(error="could not resolve the trader's state file"), 500
+    rules = _armed_rules(cfg_name)
+    comp = d.get("comp")
+    entry_t = d.get("entry_t")
+    if comp is None or not entry_t:
+        return jsonify(error="need comp and entry_t"), 400
+    rules = [r for r in rules
+             if not (r.get("comp") == int(comp)
+                     and r.get("entry_t") == entry_t)]
+    if d.get("remove"):
+        pass                                  # deletion needs no confirm
+    else:
+        if bool(t.get("live")) and d.get("confirm") != "ARM":
+            return jsonify(error=f"{_iname(i)} is LIVE — arming schedules a "
+                                 "real order; requires confirm='ARM'"), 400
+        try:
+            rule = dict(comp=int(comp), entry_t=entry_t,
+                        adopt_pct=float(d["adopt_pct"]),
+                        at=time.strftime("%Y-%m-%d %H:%M"))
+        except (KeyError, TypeError, ValueError):
+            return jsonify(error="need a numeric adopt_pct"), 400
+        if d.get("close_pct") not in (None, ""):
+            rule["close_pct"] = float(d["close_pct"])
+        rules.append(rule)
+    tmp = p + ".tmp"
+    json.dump(dict(rules=rules), open(tmp, "w"), indent=1)
+    os.replace(tmp, p)
+    return jsonify(ok=True, rules=rules,
+                   note=("rule removed" if d.get("remove") else
+                         f"{_iname(i)}: armed — the trader acts on its next "
+                         "cycle once the threshold is reached"))
 
 
 @app.route("/api/adopt_shadow", methods=["POST"])
