@@ -1590,7 +1590,42 @@ function renderTransfer(){
       '<button class="btn sm" onclick="closeTransfer()">Close</button></div>'+
     '<div class="mini" style="margin-top:10px">Internal wallet move on '+TR.acct+' — no withdrawal is possible '+
       'from the panel. Live traders size positions from their config equity, not the wallet, so a transfer '+
-      'does not change open positions.</div>';
+      'does not change open positions.</div>'+
+    '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:11px">'+
+      '<div class="mini" style="margin-bottom:8px"><b>Convert</b> — market order on USDC/USDT, spot wallet '+
+        '(USDC free: <b class="num">'+(b.spot_usdc==null?'?':amt((+b.spot_usdc).toFixed(2)))+'</b>)</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<select id="cvDir"><option value="usdc_to_usdt">USDC &rarr; USDT</option>'+
+          '<option value="usdt_to_usdc">USDT &rarr; USDC</option></select>'+
+        '<input id="cvAmt" type="number" step="1" min="0" style="width:110px" placeholder="amount">'+
+        '<button class="btn sm" onclick="cvMax()">max</button>'+
+        '<button class="btn sm danger" onclick="doConvert(this)">Convert</button></div>'+
+      '<div class="mini" style="margin-top:6px">taker fee applies (0-0.05%% on stable pairs); fills at the '+
+        'live order book, so the received amount can differ by a few cents</div></div>';
+}
+function cvMax(){
+  var b = TR.bal || {};
+  var d = document.getElementById('cvDir').value;
+  var v = d === 'usdc_to_usdt' ? b.spot_usdc : b.spot_usdt;
+  document.getElementById('cvAmt').value = v == null ? 0 : Math.floor(v * 100) / 100;
+}
+function doConvert(btn){
+  var v = parseFloat(document.getElementById('cvAmt').value);
+  var d = document.getElementById('cvDir').value;
+  if(isNaN(v) || v <= 0){ flash('enter a positive amount', 'r'); return; }
+  var lbl = d === 'usdc_to_usdt' ? v.toFixed(2)+' USDC → USDT' : v.toFixed(2)+' USDT → USDC';
+  armConfirm(btn, 'Confirm: convert '+lbl, function(){
+    API('convert', {method:'POST', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({account:TR.acct, direction:d, amount:v,
+                                         confirm:'CONVERT'})}).then(function(r){
+      if(r.error){ flash(r.error, 'r'); return; }
+      flash('Converted '+lbl+' ('+TR.acct+').', 'g');
+      API('transfer/balances?account='+TR.acct).then(function(bd){
+        if(!bd.error){ TR.bal = bd; renderTransfer(); }
+      });
+      renderAccounts();
+    });
+  });
 }
 function doTransfer(btn){
   var v = parseFloat(document.getElementById('trAmt').value);
@@ -1664,7 +1699,12 @@ function renderDeposit(){
     '<div style="background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.35);border-radius:8px;'+
       'padding:8px 11px;font-size:12px;margin-top:12px">Verify the first and last 4 characters against '+
       'mexc.com before sending anything meaningful, and send a small test amount first for a new address. '+
-      'The wrong network loses funds.</div>';
+      'The wrong network loses funds.</div>'+
+    '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:10px">'+
+      '<div class="rowsb"><span class="mini"><b>Recent deposits</b> — in-flight ones highlighted</span>'+
+      '<button class="btn sm" onclick="depHist(true)">refresh</button></div>'+
+      '<div id="depHist" class="mini" style="margin-top:6px">loading…</div></div>';
+  depHist();
   API('deposit/address?account='+DEP.acct+'&coin='+DEP.coin+'&network='+encodeURIComponent(DEP.net||''))
     .then(function(d){
       var a = document.getElementById('depAddr');
@@ -1696,6 +1736,28 @@ function renderDeposit(){
                  {text:d.address, width:150, height:150,
                   colorDark:'#000', colorLight:'#fff'});
     });
+}
+function depHist(force){
+  var el = document.getElementById('depHist');
+  if(!el) return;
+  API('deposit/history?account='+DEP.acct+(force?'&_='+Date.now():'')).then(function(d){
+    var el2 = document.getElementById('depHist');
+    if(!el2) return;
+    if(d.error){ el2.innerHTML = '<span class="down">'+d.error+'</span>'; return; }
+    var rows = d.rows||[];
+    if(!rows.length){ el2.textContent = 'no deposits on record for '+DEP.acct; return; }
+    el2.innerHTML = '<table style="font-size:12px"><thead><tr><th>time</th><th>amount</th>'+
+      '<th>network</th><th>status</th><th class="n">confirms</th><th>txid</th></tr></thead><tbody>'+
+      rows.map(function(r){
+        return '<tr'+(r.pending?' style="color:var(--accent)"':'')+'>'+
+          '<td>'+r.t+'</td><td>'+amt(r.amount+' '+r.coin)+'</td>'+
+          '<td>'+(r.network||'')+'</td>'+
+          '<td>'+(r.status==='rejected'?'<span class="down">rejected</span>':r.status)+
+            (r.pending?' &#9203;':'')+'</td>'+
+          '<td class="n">'+(r.confirms||'')+'</td>'+
+          '<td style="font-family:var(--mono);font-size:10.5px">'+(r.txid||'').slice(0,14)+'…</td></tr>';
+      }).join('')+'</tbody></table>';
+  });
 }
 function depCopy(b, id){
   navigator.clipboard.writeText(document.getElementById(id).textContent).then(function(){

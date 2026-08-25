@@ -712,9 +712,15 @@ def transfer_balances():
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
-    out = dict(account=acct, spot_usdt=None, fut_usdt=None)
+    out = dict(account=acct, spot_usdt=None, fut_usdt=None, spot_usdc=None)
     try:
-        out["spot_usdt"] = MexcSpotAPI(account=acct).balance("USDT")
+        sapi = MexcSpotAPI(account=acct)
+        for b in sapi.account_info().get("balances", []):
+            if b.get("asset") == "USDT":
+                out["spot_usdt"] = float(b.get("free") or 0)
+            elif b.get("asset") == "USDC":
+                out["spot_usdc"] = float(b.get("free") or 0)
+        out["spot_usdt"] = out["spot_usdt"] or 0.0
     except Exception as e:
         out["spot_err"] = str(e)[:160]
     try:
@@ -759,6 +765,48 @@ def transfer():
         return jsonify(error=str(e)[:300]), 502
     print(f"TRANSFER {acct}: {amount} USDT {frm}->{to} -> {res}", flush=True)
     return jsonify(ok=True, result=res)
+
+
+@app.route("/api/convert", methods=["POST"])
+def convert_stables():
+    """USDC<->USDT on the SPOT wallet via a market order on the USDC/USDT
+    pair (MEXC's Convert product has no public API; the order book is the
+    conversion). Executed only on an explicit user confirm."""
+    d = request.get_json(force=True)
+    if d.get("confirm") != "CONVERT":
+        return jsonify(error="requires confirm='CONVERT'"), 400
+    acct = d.get("account")
+    direction = d.get("direction")
+    if acct not in ("mexc1", "mexc2") or direction not in ("usdc_to_usdt",
+                                                           "usdt_to_usdc"):
+        return jsonify(error="need account and direction "
+                             "(usdc_to_usdt|usdt_to_usdc)"), 400
+    try:
+        amount = float(d.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if not (0 < amount <= 1_000_000):
+        return jsonify(error="need a positive amount"), 400
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    api = MexcSpotAPI(account=acct)
+    try:
+        if direction == "usdc_to_usdt":
+            qty = api.floor_qty("USDC_USDT", amount)
+            if not qty or qty <= 0:
+                return jsonify(error="amount below the pair's minimum "
+                                     "order size"), 400
+            res = api.market_sell("USDC_USDT", qty)
+        else:
+            res = api.market_buy_quote("USDC_USDT", amount)
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    print(f"CONVERT {acct}: {amount} {direction} -> "
+          f"{str(res)[:160]}", flush=True)
+    return jsonify(ok=True, result=dict(
+        orderId=res.get("orderId"), executedQty=res.get("executedQty"),
+        cummulativeQuoteQty=res.get("cummulativeQuoteQty")))
 
 
 # ---- deposits: read-only address/QR display. The panel can SHOW where to
@@ -874,6 +922,50 @@ def deposit_address():
                    memo=(row.get("memo") or row.get("tag") or ""))
     _DEP_ADDR[key] = (time.time(), payload)
     return jsonify(**payload)
+
+
+# MEXC deposit status codes seen in the wild: 9 = credited (verified against
+# the wallet balance 2026-08-25); the documented 1-7 follow Binance's shape
+_DEP_STATUS = {1: "small", 2: "delayed", 3: "delayed (large)", 4: "pending",
+               5: "credited", 6: "auditing", 7: "rejected", 9: "credited"}
+_DEP_HIST = {}    # account -> (ts, rows)
+
+
+@app.route("/api/deposit/history")
+def deposit_history():
+    """Recent deposits for one account, including in-flight ones. 30s cache
+    so an open modal can poll without hammering MEXC."""
+    acct = request.args.get("account")
+    if acct not in ("mexc1", "mexc2"):
+        return jsonify(error="need account=mexc1|mexc2"), 400
+    hit = _DEP_HIST.get(acct)
+    if hit and time.time() - hit[0] < 30:
+        return jsonify(rows=hit[1])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    try:
+        raw = MexcSpotAPI(account=acct).deposit_history(limit=15)
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    rows = []
+    for r in raw or []:
+        try:
+            st = int(r.get("status"))
+        except (TypeError, ValueError):
+            st = None
+        rows.append(dict(
+            t=time.strftime("%Y-%m-%d %H:%M",
+                            time.localtime(int(r.get("insertTime", 0)) / 1000)),
+            coin=r.get("coin"), amount=r.get("amount"),
+            network=r.get("network"),
+            status=_DEP_STATUS.get(st, f"status {st}"),
+            pending=(st not in (5, 7, 9)),
+            confirms=r.get("confirmTimes"),
+            txid=(str(r.get("txId") or ""))[:70]))
+    rows.sort(key=lambda x: x["t"], reverse=True)
+    _DEP_HIST[acct] = (time.time(), rows)
+    return jsonify(rows=rows)
 
 
 _DUST_CACHE = {"t": 0.0, "d": None}

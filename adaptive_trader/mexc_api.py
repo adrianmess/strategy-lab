@@ -294,6 +294,13 @@ class MexcSpotAPI:
         return self._signed("POST", "/api/v3/capital/deposit/address",
                             {"coin": coin, "network": quote(network, safe="")})
 
+    def deposit_history(self, coin=None, limit=20):
+        """Recent deposits incl. IN-FLIGHT ones (status + confirmations)."""
+        p = {"limit": limit}
+        if coin:
+            p["coin"] = coin
+        return self._signed("GET", "/api/v3/capital/deposit/hisrec", p)
+
     def dust_convertible(self):
         """Assets MEXC will convert to MX (each worth < 5 USDT)."""
         return self._signed("GET", "/api/v3/capital/convert/list", {})
