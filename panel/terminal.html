@@ -210,6 +210,32 @@ body.masked .amt:hover{filter:none}
       <div class="body" id="daily"><span class="mini">loading…</span></div></div>
   </div></section>
 
+  <section class="view" id="v-trade"><div class="wrap" style="max-width:none">
+    <div class="card"><h3>Trade
+        <span class="mini">manual orders — futures &rarr; mexc1, spot &rarr; mexc2; shares accounts with the live traders</span>
+        <span class="mini" id="tdPx" style="margin-left:auto;font-size:16px;font-weight:700;color:var(--fg)"></span></h3>
+      <div class="body" style="padding:10px 14px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
+          <span id="tdPairs"></span>
+          <span style="width:12px"></span>
+          <span id="tdTfs"></span>
+          <span class="mini" style="margin-left:auto">TradingView lightweight-charts &middot; MEXC klines via the panel</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start">
+          <div id="tdChart" style="height:480px;border:1px solid var(--line);border-radius:8px"></div>
+          <div>
+            <div style="display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:12px" id="tdMkt">
+              <button class="btn" style="flex:1;border:none;border-radius:0" data-m="fut">Futures <span class="mini">mexc1</span></button>
+              <button class="btn" style="flex:1;border:none;border-radius:0" data-m="spot">Spot <span class="mini">mexc2</span></button>
+            </div>
+            <div id="tdHeld"></div>
+            <div id="tdPanel"><span class="mini">loading…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></section>
+
   <section class="view" id="v-risk"><div class="wrap">
     <div class="g4" id="riskkpi"></div>
     <div class="g2">
@@ -327,32 +353,6 @@ body.masked .amt:hover{filter:none}
     <div id="killout" class="plan" style="display:none"></div>
   </div>
 </div></div>
-
-<section class="view" id="v-trade"><div class="wrap" style="max-width:none">
-  <div class="card"><h3>Trade
-      <span class="mini">manual orders — futures &rarr; mexc1, spot &rarr; mexc2; shares accounts with the live traders</span>
-      <span class="mini" id="tdPx" style="margin-left:auto;font-size:16px;font-weight:700;color:var(--fg)"></span></h3>
-    <div class="body" style="padding:10px 14px">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
-        <span id="tdPairs"></span>
-        <span style="width:12px"></span>
-        <span id="tdTfs"></span>
-        <span class="mini" style="margin-left:auto">TradingView lightweight-charts &middot; MEXC klines via the panel</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start">
-        <div id="tdChart" style="height:480px;border:1px solid var(--line);border-radius:8px"></div>
-        <div>
-          <div style="display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:12px" id="tdMkt">
-            <button class="btn" style="flex:1;border:none;border-radius:0" data-m="fut">Futures <span class="mini">mexc1</span></button>
-            <button class="btn" style="flex:1;border:none;border-radius:0" data-m="spot">Spot <span class="mini">mexc2</span></button>
-          </div>
-          <div id="tdHeld"></div>
-          <div id="tdPanel"><span class="mini">loading…</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div></section>
 
 <div class="modal" id="trm" onclick="if(event.target===this)closeTransfer()">
   <div class="mbox" style="border-color:rgba(240,185,11,.5)">
