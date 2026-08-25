@@ -260,6 +260,17 @@ class MexcSpotAPI:
         p = {"symbol": self.spot_symbol(symbol)} if symbol else {}
         return self._signed("GET", "/api/v3/openOrders", p)
 
+    def universal_transfer(self, asset, amount, from_type, to_type):
+        """Internal transfer between THIS account's own wallets (SPOT and
+        FUTURES). Not a withdrawal — funds never leave the MEXC account.
+        Returns {'tranId': ...} on success."""
+        assert from_type in ("SPOT", "FUTURES") and to_type in ("SPOT",
+                                                                "FUTURES")
+        return self._signed("POST", "/api/v3/capital/transfer",
+                            dict(fromAccountType=from_type,
+                                 toAccountType=to_type,
+                                 asset=asset, amount=f"{float(amount):.8f}"))
+
     def capital_config(self):
         """Coin catalog with per-network deposit/withdraw availability."""
         return self._signed("GET", "/api/v3/capital/config/getall", {})

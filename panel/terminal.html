@@ -327,6 +327,16 @@ body.masked .amt:hover{filter:none}
   </div>
 </div></div>
 
+<div class="modal" id="trm" onclick="if(event.target===this)closeTransfer()">
+  <div class="mbox" style="border-color:rgba(240,185,11,.5)">
+    <header style="color:var(--accent);display:flex;justify-content:space-between;align-items:center">
+      <span>Transfer USDT <span class="mini" id="trTitle"></span></span>
+      <span style="cursor:pointer;color:var(--dim);font-weight:400" onclick="closeTransfer()">&#10005;</span>
+    </header>
+    <div class="mb" id="trb"><span class="mini">loading…</span></div>
+  </div>
+</div>
+
 <div class="modal" id="depm" onclick="if(event.target===this)closeDeposit()">
   <div class="mbox" style="border-color:rgba(88,166,255,.5)">
     <header style="color:var(--blue);display:flex;justify-content:space-between;align-items:center">
@@ -868,7 +878,11 @@ function renderAccounts(){
         '</span></div>'+
         '<div class="num" style="font-size:19px;margin:3px 0">'+amt('$'+eq.toFixed(2))+'</div>'+
         '<div class="mini">'+amt(sub)+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
-        '<div class="bar g" style="margin-top:6px"><i style="width:100%"></i></div></div>';
+        '<div style="margin-top:7px;display:flex;gap:6px">'+
+          '<button class="btn sm" onclick="openTransfer(\''+a.account+'\')">Transfer</button>'+
+          (inst.length?'<button class="btn sm" onclick="openDeposit(\''+inst[0].id+'\')">Deposit</button>':'')+
+        '</div>'+
+        '<div class="bar g" style="margin-top:8px"><i style="width:100%"></i></div></div>';
     }).join('');
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
@@ -1535,6 +1549,68 @@ function extrasRow(){
   if(!sb && !db) return '';
   return '<div class="brow">'+sb+db+'</div>'+(SH_OPEN && rows.length ? shadowTable(rows) : '');
 }
+// ---- spot<->futures USDT transfer (internal — never leaves MEXC) ----
+var TR = {acct:null, dir:'spot_to_futures', bal:null};
+function openTransfer(acct){
+  TR.acct = acct; TR.dir = 'spot_to_futures'; TR.bal = null;
+  document.getElementById('trTitle').textContent = '— '+acct+' (internal, never leaves MEXC)';
+  document.getElementById('trm').classList.add('on');
+  document.getElementById('trb').innerHTML = '<span class="mini">reading wallet balances…</span>';
+  API('transfer/balances?account='+acct).then(function(d){
+    if(d.error){ document.getElementById('trb').innerHTML =
+      '<span class="mini down">'+d.error+'</span>'; return; }
+    TR.bal = d; renderTransfer();
+  });
+}
+function closeTransfer(){ document.getElementById('trm').classList.remove('on'); }
+function trDir(d){ TR.dir = d; renderTransfer(); }
+function renderTransfer(){
+  var b = TR.bal || {};
+  var s2f = TR.dir === 'spot_to_futures';
+  var from = s2f ? b.spot_usdt : b.fut_usdt;
+  var el = document.getElementById('trb');
+  el.innerHTML =
+    '<div style="display:flex;gap:6px;margin-bottom:13px">'+
+      '<button class="btn sm" style="'+(s2f?'border-color:var(--accent);color:var(--accent)':'')+'" '+
+        'onclick="trDir(\'spot_to_futures\')">Spot &rarr; Futures</button>'+
+      '<button class="btn sm" style="'+(!s2f?'border-color:var(--accent);color:var(--accent)':'')+'" '+
+        'onclick="trDir(\'futures_to_spot\')">Futures &rarr; Spot</button></div>'+
+    '<div class="mini" style="margin-bottom:10px">spot wallet: <b class="num">'+
+      (b.spot_usdt==null?(b.spot_err||'?'):amt('$'+(+b.spot_usdt).toFixed(2)))+'</b>'+
+      ' &nbsp;&middot;&nbsp; futures wallet: <b class="num">'+
+      (b.fut_usdt==null?(b.fut_err||'?'):amt('$'+(+b.fut_usdt).toFixed(2)))+'</b></div>'+
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">'+
+      '<span class="mini">amount</span>'+
+      '<input id="trAmt" type="number" step="1" min="0" style="width:120px" placeholder="USDT">'+
+      '<button class="btn sm" onclick="document.getElementById(\'trAmt\').value='+
+        ((from==null?0:Math.floor(from*100)/100))+'">max ('+(from==null?'?':(+from).toFixed(2))+')</button>'+
+      '<span class="mini">USDT '+(s2f?'from spot to futures':'from futures to spot')+'</span></div>'+
+    '<div style="display:flex;gap:8px">'+
+      '<button class="btn sm danger" onclick="doTransfer(this)">Transfer</button>'+
+      '<button class="btn sm" onclick="closeTransfer()">Close</button></div>'+
+    '<div class="mini" style="margin-top:10px">Internal wallet move on '+TR.acct+' — no withdrawal is possible '+
+      'from the panel. Live traders size positions from their config equity, not the wallet, so a transfer '+
+      'does not change open positions.</div>';
+}
+function doTransfer(btn){
+  var v = parseFloat(document.getElementById('trAmt').value);
+  if(isNaN(v) || v <= 0){ flash('enter a positive USDT amount', 'r'); return; }
+  var s2f = TR.dir === 'spot_to_futures';
+  armConfirm(btn, 'Confirm: move '+v.toFixed(2)+' USDT '+(s2f?'spot→futures':'futures→spot'), function(){
+    API('transfer', {method:'POST', headers:{'Content-Type':'application/json'},
+                     body:JSON.stringify({account:TR.acct, direction:TR.dir,
+                                          amount:v, confirm:'TRANSFER'})})
+      .then(function(r){
+        if(r.error){ flash(r.error, 'r'); return; }
+        flash('Transferred '+v.toFixed(2)+' USDT ('+TR.acct+', '+(s2f?'spot→futures':'futures→spot')+').', 'g');
+        API('transfer/balances?account='+TR.acct).then(function(d){
+          if(!d.error){ TR.bal = d; renderTransfer(); }
+        });
+        if(typeof refreshMexc === 'function') refreshMexc(); else renderAccounts();
+      });
+  });
+}
+
 // ---- deposits: read-only address/QR display per instance's account ----
 var DEP = {acct:null, inst:null, coins:null, coin:null, net:null, cfgs:{}};
 function openDeposit(i){

@@ -702,6 +702,65 @@ def trader_start():
     _save_instances()
     return jsonify(ok=True, instance=i)
 
+@app.route("/api/transfer/balances")
+def transfer_balances():
+    """USDT available on the spot and futures wallets of one account —
+    feeds the transfer modal's max buttons."""
+    acct = request.args.get("account")
+    if acct not in ("mexc1", "mexc2"):
+        return jsonify(error="need account=mexc1|mexc2"), 400
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    out = dict(account=acct, spot_usdt=None, fut_usdt=None)
+    try:
+        out["spot_usdt"] = MexcSpotAPI(account=acct).balance("USDT")
+    except Exception as e:
+        out["spot_err"] = str(e)[:160]
+    try:
+        for a in (MexcFuturesAPI(account=acct).assets() or []):
+            if a.get("currency") == "USDT":
+                out["fut_usdt"] = float(a.get("availableBalance") or 0)
+    except Exception as e:
+        out["fut_err"] = str(e)[:160]
+    return jsonify(**out)
+
+
+@app.route("/api/transfer", methods=["POST"])
+def transfer():
+    """INTERNAL spot<->futures USDT transfer on one account, executed only
+    on an explicit user confirm. Funds never leave MEXC; the panel still has
+    no withdrawal capability. USDT only — it is the margin currency and the
+    only asset either trader ever needs moved."""
+    d = request.get_json(force=True)
+    if d.get("confirm") != "TRANSFER":
+        return jsonify(error="requires confirm='TRANSFER'"), 400
+    acct = d.get("account")
+    direction = d.get("direction")
+    if acct not in ("mexc1", "mexc2") or direction not in ("spot_to_futures",
+                                                           "futures_to_spot"):
+        return jsonify(error="need account and direction "
+                             "(spot_to_futures|futures_to_spot)"), 400
+    try:
+        amount = float(d.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if not (0 < amount <= 1_000_000):
+        return jsonify(error="need a positive amount"), 400
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    frm, to = (("SPOT", "FUTURES") if direction == "spot_to_futures"
+               else ("FUTURES", "SPOT"))
+    try:
+        res = MexcSpotAPI(account=acct).universal_transfer(
+            "USDT", amount, frm, to)
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    print(f"TRANSFER {acct}: {amount} USDT {frm}->{to} -> {res}", flush=True)
+    return jsonify(ok=True, result=res)
+
+
 # ---- deposits: read-only address/QR display. The panel can SHOW where to
 # send funds; it has no withdrawal or transfer capability anywhere. ----
 _DEP_COINS = ("USDT", "USDC", "BTC", "ETH", "SOL", "XRP", "DOGE", "SUI",
