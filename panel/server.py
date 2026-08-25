@@ -746,20 +746,26 @@ def _contract_size(symbol):
 
 
 def _trader_holds(pair):
-    """Which running instances' strategies hold this pair right now."""
+    """Running instances whose strategy holds this pair right now, with the
+    account+mode they trade on — so the Trade page warns ONLY when the
+    selected account/market combination is the one the strategy uses."""
     out = []
     for i, I in instances.items():
         t = I["trader"]
         if t["proc"] is None or t["proc"].poll() is not None:
             continue
-        sfile = _state_file_of(t["config"] or I.get("cfg") or "")
+        cfg_name = t["config"] or I.get("cfg") or ""
+        sfile = _state_file_of(cfg_name)
         try:
             st = json.load(open(os.path.join(AT, sfile)))
+            c = json.load(open(os.path.join(AT, cfg_name)))
         except Exception:
             continue
         p = st.get("position")
         if p and (p.get("symbol") or "").startswith(pair + "_"):
-            out.append(_iname(i))
+            out.append(dict(name=_iname(i),
+                            account=c.get("api_account", "mexc1"),
+                            mode=c.get("mode", "lev")))
     return out
 
 
@@ -776,7 +782,10 @@ def trade_state():
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
-    out = dict(market=market, pair=pair, held_by=_trader_holds(pair))
+    want_mode = "lev" if market == "fut" else "spot"
+    out = dict(market=market, pair=pair,
+               held_by=[h["name"] for h in _trader_holds(pair)
+                        if h["account"] == acct and h["mode"] == want_mode])
     try:
         if market == "fut":
             api = MexcFuturesAPI(account=acct)
