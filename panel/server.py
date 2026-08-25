@@ -820,6 +820,13 @@ def shadow_arm():
                 return jsonify(error="auto needs a numeric adopt_pct"), 400
             if a.get("close_pct") not in (None, ""):
                 doc["auto"]["close_pct"] = float(a["close_pct"])
+            pr = a.get("pairs")
+            if isinstance(pr, str):
+                pr = pr.split(",")
+            pr = [str(x).strip().lower().split("_")[0]
+                  for x in (pr or []) if str(x).strip()]
+            if pr:
+                doc["auto"]["pairs"] = pr
         tmp = p + ".tmp"
         json.dump(dict(rules=rules, auto=doc["auto"]), open(tmp, "w"),
                   indent=1)

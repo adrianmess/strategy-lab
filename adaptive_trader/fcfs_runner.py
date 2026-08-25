@@ -480,10 +480,18 @@ def main_fcfs(cfg, live):
         if not au or not au.get("enabled") or state.get("position"):
             return
         thr = float(au.get("adopt_pct", -1e9))
+        # optional pair restriction (research 2026-08-25: HYPE-only <=-3%
+        # beat adopting from every pair — shallow adoptions only pay on
+        # pairs volatile enough to rebound)
+        pairs = {str(p).strip().lower().split("_")[0]
+                 for p in (au.get("pairs") or []) if str(p).strip()}
         last = state.get("auto_last") or {}
         best = None
         for rows in shadow_by_key.values():
             for r in rows:
+                if pairs and \
+                        r["group"].split("_")[0].lower() not in pairs:
+                    continue
                 pct = r.get("pct")
                 if pct is None or pct > thr:
                     continue
