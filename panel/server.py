@@ -793,33 +793,213 @@ def trade_state():
             for a in (api.assets() or []):
                 if a.get("currency") == "USDT":
                     out["available"] = float(a.get("availableBalance") or 0)
+            # mark prices for EVERY symbol in one call
+            import requests as _rq
+            marks = {}
+            try:
+                for t in (_rq.get("https://contract.mexc.com/api/v1/"
+                                  "contract/ticker", timeout=10)
+                          .json().get("data") or []):
+                    marks[t.get("symbol")] = float(t.get("lastPrice") or 0)
+            except Exception:
+                pass
             pos = []
-            for p in (api.open_positions(f"{pair}_USDT") or []):
+            for p in (api.open_positions() or []):     # ALL symbols
                 hv = float(p.get("holdVol") or 0)
                 if hv <= 0:
                     continue
+                sym = p.get("symbol")
+                d_ = 1 if int(p.get("positionType") or 1) == 1 else -1
+                avg = float(p.get("holdAvgPrice") or 0)
+                mark = marks.get(sym) or avg
+                cs = _contract_size(sym)
+                margin = float(p.get("im") or p.get("oim") or 0)
+                upnl = (mark - avg) * hv * cs * d_
                 pos.append(dict(
-                    side=("long" if int(p.get("positionType") or 1) == 1
-                          else "short"),
-                    vol=hv, avg=float(p.get("holdAvgPrice") or 0),
-                    lev=p.get("leverage"),
-                    liq=float(p.get("liquidatePrice") or 0),
-                    margin=float(p.get("im") or p.get("oim") or 0)))
+                    symbol=sym, side=("long" if d_ > 0 else "short"),
+                    vol=hv, avg=avg, mark=mark, lev=p.get("leverage"),
+                    liq=float(p.get("liquidatePrice") or 0), margin=margin,
+                    upnl_usd=round(upnl, 4),
+                    upnl_pct=round(100 * upnl / margin, 2) if margin else None,
+                    realised=float(p.get("realised") or 0)))
             out["positions"] = pos
             out["contract_size"] = _contract_size(f"{pair}_USDT")
+            try:
+                out["orders"] = [dict(
+                    id=o.get("orderId"), symbol=o.get("symbol"),
+                    side=int(o.get("side") or 0), price=o.get("price"),
+                    vol=o.get("vol"), dealt=o.get("dealVol"))
+                    for o in (api.open_orders() or [])]
+            except Exception as oe:
+                out["orders_err"] = str(oe)[:120]
         else:
             api = MexcSpotAPI(account=acct)
             out["account"] = acct
+            holds = []
             for b in api.account_info().get("balances", []):
-                if b.get("asset") == "USDT":
-                    out["available"] = float(b.get("free") or 0)
-                elif b.get("asset") == pair:
-                    out["base_free"] = float(b.get("free") or 0)
+                a_ = b.get("asset")
+                free = float(b.get("free") or 0)
+                if a_ == "USDT":
+                    out["available"] = free
+                    continue
+                if a_ == pair:
+                    out["base_free"] = free
+                if free <= 0:
+                    continue
+                try:
+                    px = float(api.ticker_price(f"{a_}_USDT") or 0)
+                except Exception:
+                    px = 0.0
+                if free * px >= 1.0:
+                    holds.append(dict(asset=a_, qty=free, px=px,
+                                      value=round(free * px, 2)))
+            holds.sort(key=lambda h: -h["value"])
+            out["holdings"] = holds
             out.setdefault("available", 0.0)
             out.setdefault("base_free", 0.0)
+            try:
+                out["orders"] = [dict(
+                    id=o.get("orderId"), symbol=o.get("symbol"),
+                    side=o.get("side"), price=o.get("price"),
+                    vol=o.get("origQty"), dealt=o.get("executedQty"))
+                    for o in (api.open_orders() or [])]
+            except Exception as oe:
+                out["orders_err"] = str(oe)[:120]
+        out["tpsl"] = [r for r in _tpsl_rules()
+                       if r.get("account") == acct
+                       and r.get("market") == market]
     except Exception as e:
         out["error"] = str(e)[:250]
     return jsonify(**out)
+
+
+# ---- TP/SL watcher: panel-side take-profit / stop-loss on MANUAL positions.
+# Rules live in panel/tpsl.json; a 20s thread checks prices and closes at
+# market when a threshold is crossed. One-shot; removed after firing.
+TPSL_P = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tpsl.json")
+
+
+def _tpsl_rules():
+    try:
+        return json.load(open(TPSL_P)).get("rules") or []
+    except Exception:
+        return []
+
+
+def _tpsl_write(rules):
+    tmp = TPSL_P + ".tmp"
+    json.dump(dict(rules=rules), open(tmp, "w"), indent=1)
+    os.replace(tmp, TPSL_P)
+
+
+@app.route("/api/tpsl", methods=["POST"])
+def tpsl():
+    """Arm/remove a TP/SL rule for a manual position. tp_pct / sl_pct are
+    margin-basis percentages for futures (like the displayed uPnL%), plain
+    price-move percentages for spot."""
+    d = request.get_json(force=True)
+    rules = _tpsl_rules()
+    key = (d.get("account"), d.get("market"), (d.get("symbol") or "").upper())
+    if not all(key):
+        return jsonify(error="need account, market, symbol"), 400
+    rules = [r for r in rules if (r.get("account"), r.get("market"),
+                                  r.get("symbol")) != key]
+    if not d.get("remove"):
+        if d.get("confirm") != "ARM":
+            return jsonify(error="requires confirm='ARM'"), 400
+        tp = d.get("tp_pct")
+        sl = d.get("sl_pct")
+        if tp in (None, "") and sl in (None, ""):
+            return jsonify(error="set tp_pct and/or sl_pct"), 400
+        rule = dict(account=key[0], market=d.get("market"), symbol=key[2],
+                    entry=float(d.get("entry") or 0),
+                    side=d.get("side") or "long",
+                    lev=float(d.get("lev") or 1),
+                    qty=float(d.get("qty") or 0),
+                    at=time.strftime("%Y-%m-%d %H:%M"))
+        if tp not in (None, ""):
+            rule["tp_pct"] = float(tp)
+        if sl not in (None, ""):
+            rule["sl_pct"] = float(sl)
+        if not rule["entry"]:
+            return jsonify(error="missing entry price"), 400
+        rules.append(rule)
+    _tpsl_write(rules)
+    return jsonify(ok=True, rules=rules,
+                   note=("rule removed" if d.get("remove") else
+                         "TP/SL armed — checked every ~20s by the panel"))
+
+
+def _tpsl_fire(rule, why, px):
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    acct = rule["account"]
+    sym = rule["symbol"]
+    if rule["market"] == "fut":
+        MexcFuturesAPI(account=acct).close_position(sym)
+    else:
+        api = MexcSpotAPI(account=acct)
+        qty = rule.get("qty") or api.balance(sym.split("_")[0])
+        q, _sc = api.floor_qty(sym, qty)
+        if q > 0:
+            api.market_sell(sym, q)
+    print(f"TPSL FIRED {acct} {rule['market']} {sym}: {why} at {px} "
+          f"(entry {rule['entry']})", flush=True)
+    try:
+        subprocess.run([os.path.expanduser("~/.hermes/hermes"), "send",
+                        "-t", "whatsapp", f"TP/SL {why}: closed {sym} "
+                        f"({acct}) at {px}"], timeout=20)
+    except Exception:
+        pass
+
+
+def _tpsl_watch():
+    import requests as _rq
+    while True:
+        time.sleep(20)
+        rules = _tpsl_rules()
+        if not rules:
+            continue
+        keep = []
+        changed = False
+        for r in rules:
+            try:
+                if r["market"] == "fut":
+                    px = float((_rq.get("https://contract.mexc.com/api/v1/"
+                                        "contract/ticker",
+                                        params=dict(symbol=r["symbol"]),
+                                        timeout=10).json().get("data") or {})
+                               .get("lastPrice") or 0)
+                    d_ = 1 if r.get("side", "long") == "long" else -1
+                    pct = (px / r["entry"] - 1) * 100 * d_ * float(
+                        r.get("lev") or 1)
+                else:
+                    px = float(_rq.get("https://api.mexc.com/api/v3/ticker/"
+                                       "price",
+                                       params=dict(symbol=r["symbol"]
+                                                   .replace("_", "")),
+                                       timeout=10).json().get("price") or 0)
+                    pct = (px / r["entry"] - 1) * 100
+                if not px:
+                    keep.append(r)
+                    continue
+                if r.get("tp_pct") is not None and pct >= r["tp_pct"]:
+                    _tpsl_fire(r, f"take-profit {pct:+.2f}%", px)
+                    changed = True
+                elif r.get("sl_pct") is not None and pct <= r["sl_pct"]:
+                    _tpsl_fire(r, f"stop-loss {pct:+.2f}%", px)
+                    changed = True
+                else:
+                    keep.append(r)
+            except Exception as e:
+                print(f"tpsl check error {r.get('symbol')}: {e}", flush=True)
+                keep.append(r)
+        if changed:
+            _tpsl_write(keep)
+
+
+threading.Thread(target=_tpsl_watch, daemon=True).start()
 
 
 @app.route("/api/trade/order", methods=["POST"])
@@ -851,6 +1031,8 @@ def trade_order():
             if action in ("long", "short"):
                 margin = float(d.get("margin") or 0)
                 lev = int(d.get("lev") or 1)
+                lim = (float(d.get("price")) if d.get("price")
+                       not in (None, "") else None)
                 if not (0 < margin <= 1_000_000) or not (1 <= lev <= 200):
                     return jsonify(error="need margin>0 and 1<=lev<=200"), 400
                 cs = _contract_size(sym)
@@ -862,49 +1044,71 @@ def trade_order():
                 if not cs or not px:
                     return jsonify(error="could not read contract size/"
                                          "price"), 502
-                vol = int(margin * lev / (px * cs))
+                ref = lim or px
+                vol = int(margin * lev / (ref * cs))
                 if vol < 1:
                     return jsonify(error=f"margin x lev too small for one "
                                          f"contract (1 contract = {cs} "
-                                         f"{pair} ≈ ${cs*px:.2f} at "
+                                         f"{pair} ≈ ${cs*ref:.2f} at "
                                          f"{lev}x needs "
-                                         f"${cs*px/lev:.2f} margin)"), 400
-                res = (api.open_long if action == "long"
-                       else api.open_short)(sym, vol, lev, px)
+                                         f"${cs*ref/lev:.2f} margin)"), 400
+                if lim:
+                    from mexc_api import OPEN_LONG, OPEN_SHORT
+                    res = api.place_limit(sym, OPEN_LONG if action == "long"
+                                          else OPEN_SHORT, vol, lim, lev)
+                else:
+                    res = (api.open_long if action == "long"
+                           else api.open_short)(sym, vol, lev, px)
             elif action == "close":
+                csym = (d.get("symbol") or sym).upper()
                 pct = float(d.get("pct") or 100)
-                poss = [p for p in (api.open_positions(sym) or [])
+                poss = [p for p in (api.open_positions(csym) or [])
                         if float(p.get("holdVol") or 0) > 0]
                 if not poss:
                     return jsonify(error="no open futures position on "
-                                         + sym), 400
+                                         + csym), 400
                 p0 = poss[0]
                 hv = float(p0.get("holdVol") or 0)
                 if pct >= 100:
-                    res = api.close_position(sym)
+                    res = api.close_position(csym)
                 else:
                     vol = max(1, int(hv * pct / 100))
                     side = 4 if int(p0.get("positionType") or 1) == 1 else 2
-                    res = api.place_market(sym, side, vol)
+                    res = api.place_market(csym, side, vol)
+            elif action == "cancel":
+                res = api.cancel_orders([d.get("order_id")])
             else:
-                return jsonify(error="fut action must be long|short|"
-                                     "close"), 400
+                return jsonify(error="fut action must be long|short|close|"
+                                     "cancel"), 400
         else:
             api = MexcSpotAPI(account=acct)
             sym = f"{pair}_USDT"
+            lim = (float(d.get("price")) if d.get("price")
+                   not in (None, "") else None)
             if action == "buy":
                 usdt = float(d.get("usdt") or 0)
                 if not (0 < usdt <= 1_000_000):
                     return jsonify(error="need usdt>0"), 400
-                res = api.market_buy_quote(sym, usdt)
+                if lim:
+                    res = api.place_limit_buy(sym, usdt / lim, lim)
+                else:
+                    res = api.market_buy_quote(sym, usdt)
             elif action == "sell":
-                qty, _sc = api.floor_qty(sym, float(d.get("qty") or 0))
-                if not qty or qty <= 0:
-                    return jsonify(error="quantity below the pair "
-                                         "minimum"), 400
-                res = api.market_sell(sym, qty)
+                qraw = float(d.get("qty") or 0)
+                if lim:
+                    res = api.place_limit_sell(sym, qraw, lim)
+                else:
+                    qty, _sc = api.floor_qty(sym, qraw)
+                    if not qty or qty <= 0:
+                        return jsonify(error="quantity below the pair "
+                                             "minimum"), 400
+                    res = api.market_sell(sym, qty)
+            elif action == "cancel":
+                res = api.cancel_order(d.get("symbol") or sym,
+                                       d.get("order_id"))
             else:
-                return jsonify(error="spot action must be buy|sell"), 400
+                return jsonify(error="spot action must be buy|sell|"
+                                     "cancel"), 400
     except Exception as e:
         return jsonify(error=str(e)[:300]), 502
     print(f"MANUAL TRADE {acct} {market} {pair} {action}: {str(res)[:180]}",

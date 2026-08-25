@@ -33,6 +33,7 @@ PROXY_FILE = os.path.join(os.path.dirname(HERE), "proxy_config.json")
 
 # order sides (API constants)
 OPEN_LONG, CLOSE_SHORT, OPEN_SHORT, CLOSE_LONG = 1, 2, 3, 4
+TYPE_LIMIT = 1
 TYPE_MARKET = 5
 ISOLATED, CROSS = 1, 2
 
@@ -124,7 +125,8 @@ class MexcFuturesAPI:
         return self._out(r)
 
     def _post(self, path, body):
-        body = {k: v for k, v in body.items() if v is not None}
+        if isinstance(body, dict):
+            body = {k: v for k, v in body.items() if v is not None}
         raw = json.dumps(body)
         r = requests.post(BASE + path, data=raw,
                           headers=self._headers(raw),
@@ -186,6 +188,25 @@ class MexcFuturesAPI:
 
     def open_short(self, symbol, vol, leverage, price):
         return self.place_market(symbol, OPEN_SHORT, vol, leverage, price)
+
+    def place_limit(self, symbol, side, vol, price, leverage=None,
+                    open_type=ISOLATED):
+        """LIMIT order (rests on the book until filled or cancelled)."""
+        return self._post("/api/v1/private/order/create", dict(
+            symbol=symbol, price=float(price), vol=float(vol),
+            leverage=(int(leverage) if leverage else None), side=int(side),
+            type=TYPE_LIMIT, openType=open_type))
+
+    def open_orders(self, symbol=None, page_size=50):
+        """Resting (unfilled) futures orders."""
+        return self._get("/api/v1/private/order/list/open_orders" +
+                         (f"/{symbol}" if symbol else ""),
+                         {"page_num": 1, "page_size": int(page_size)}) or []
+
+    def cancel_orders(self, ids):
+        """Cancel futures orders by id list."""
+        return self._post("/api/v1/private/order/cancel",
+                          [int(i) for i in ids])
 
     def close_position(self, symbol, price=None):
         """Close every open position on the symbol with market orders."""
@@ -377,6 +398,14 @@ class MexcSpotAPI:
                     or info.get("quoteAssetPrecision") or 4)
         MexcSpotAPI._scale_cache[key] = scale
         return scale
+
+    def place_limit_buy(self, symbol, qty, price):
+        """Resting LIMIT BUY of qty base at price (mirror of limit sell)."""
+        q, _ = self.floor_qty(symbol, qty)
+        return self._signed("POST", "/api/v3/order", dict(
+            symbol=self.spot_symbol(symbol), side="BUY", type="LIMIT",
+            quantity=f"{q:.{self.quantity_scale(symbol)}f}",
+            price=f"{float(price):.{self.price_scale(symbol)}f}"))
 
     def place_limit_sell(self, symbol, qty, price):
         """Resting GTC LIMIT SELL — the exchange-side take-profit net. Sits on

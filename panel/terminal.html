@@ -240,6 +240,7 @@ body.masked .amt:hover{filter:none}
             <div id="tdXfer" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"></div>
           </div>
         </div>
+        <div id="tdPos" style="margin-top:12px"></div>
       </div>
     </div>
   </div></section>
@@ -1661,7 +1662,121 @@ function tdState(){
         'padding:8px 11px;font-size:12px;margin-bottom:11px"><b>&#9888; '+d.held_by.join(', ')+
         '</b> holds a '+TD.pair+' position — manual orders on that account change the STRATEGY\'S position.</div>'
       : '';
-    tdPanel();
+    tdPanel(); renderTdPos();
+  });
+}
+function renderTdPos(){
+  if(ARMED) return;
+  var d = TD.state || {};
+  var el = document.getElementById('tdPos');
+  if(!el) return;
+  var rules = d.tpsl || [];
+  function tpslCell(sym, side, entry, lev, qty){
+    var r = rules.find(function(x){ return x.symbol === sym; });
+    if(r) return '<span class="tag b" title="panel checks every ~20s; closes at market when crossed">TP/SL'+
+      (r.tp_pct!=null?(' &ge;+'+r.tp_pct+'%'):'')+(r.sl_pct!=null?(' &le;'+r.sl_pct+'%'):'')+'</span>'+
+      '<button class="btn sm" title="remove rule" onclick="tpslRemove(this,\''+sym+'\')">&#10005;</button>';
+    return '<button class="btn sm" onclick="openTpsl(this,\''+sym+'\',\''+side+'\','+entry+','+(lev||1)+','+(qty||0)+')">TP/SL</button>';
+  }
+  var h = '';
+  if(TD.mkt === 'fut'){
+    var ps = d.positions || [];
+    h += '<div class="card"><h3>Open futures positions <span class="mini">'+TD.acct+' — all pairs</span></h3><div class="body">'+
+      (ps.length ? '<table><thead><tr><th>symbol</th><th>side</th><th class="n">contracts</th><th class="n">entry</th><th class="n">mark</th><th class="n">liq</th><th class="n">margin</th><th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
+        ps.map(function(p){
+          var up = (p.upnl_pct||0) >= 0;
+          return '<tr><td><b>'+p.symbol+'</b></td>'+
+            '<td><span class="tag '+(p.side==='long'?'g':'live')+'">'+p.side.toUpperCase()+' '+(p.lev||'?')+'x</span></td>'+
+            '<td class="n">'+p.vol+'</td><td class="n">'+(+p.avg).toPrecision(6)+'</td>'+
+            '<td class="n">'+(+p.mark).toPrecision(6)+'</td><td class="n down">'+(p.liq?(+p.liq).toPrecision(6):'—')+'</td>'+
+            '<td class="n">$'+(+p.margin).toFixed(2)+'</td>'+
+            '<td class="n" style="font-weight:700;color:var(--'+(up?'up':'down')+')">'+
+              (p.upnl_pct!=null?((p.upnl_pct>=0?'+':'')+p.upnl_pct.toFixed(2)+'%'):'—')+' &middot; '+
+              ((p.upnl_usd||0)>=0?'+$':'-$')+Math.abs(p.upnl_usd||0).toFixed(2)+'</td>'+
+            '<td class="n '+((p.realised||0)>=0?'up':'down')+'">'+((p.realised||0)>=0?'+$':'-$')+Math.abs(p.realised||0).toFixed(2)+'</td>'+
+            '<td style="white-space:nowrap">'+tpslCell(p.symbol,p.side,p.avg,p.lev,p.vol)+
+              ' <button class="btn sm danger" onclick="tdCloseSym(this,\''+p.symbol+'\')">Close</button></td></tr>';
+        }).join('')+'</tbody></table>'
+      : '<span class="mini">no open futures positions on '+TD.acct+'</span>')+'</div></div>';
+  } else {
+    var hs = d.holdings || [];
+    h += '<div class="card"><h3>Spot holdings <span class="mini">'+TD.acct+' — anything worth &ge;$1</span></h3><div class="body">'+
+      (hs.length ? '<table><thead><tr><th>asset</th><th class="n">quantity</th><th class="n">price</th><th class="n">value</th><th></th></tr></thead><tbody>'+
+        hs.map(function(x){
+          var sym = x.asset+'_USDT';
+          return '<tr><td><b>'+x.asset+'</b></td><td class="n">'+amt(String(x.qty))+'</td>'+
+            '<td class="n">'+(x.px?(+x.px).toPrecision(6):'—')+'</td>'+
+            '<td class="n">'+amt('$'+(+x.value).toFixed(2))+'</td>'+
+            '<td style="white-space:nowrap">'+tpslCell(sym,'long',x.px,1,x.qty)+
+              ' <button class="btn sm danger" onclick="tdSellAsset(this,\''+x.asset+'\','+x.qty+')">Sell all</button></td></tr>';
+        }).join('')+'</tbody></table>'+
+        '<div class="mini" style="margin-top:6px">spot has no cost-basis from the exchange, so TP/SL here measures from the price at the moment you arm it</div>'
+      : '<span class="mini">no spot holdings &ge;$1 on '+TD.acct+'</span>')+'</div></div>';
+  }
+  var os = d.orders || [];
+  var FSIDE = {1:'open long',2:'close short',3:'open short',4:'close long'};
+  h += '<div class="card" style="margin-top:12px"><h3>Open (resting) orders <span class="mini">'+TD.acct+' '+(TD.mkt==='fut'?'futures':'spot')+'</span></h3><div class="body">'+
+    (os.length ? '<table><thead><tr><th>symbol</th><th>side</th><th class="n">price</th><th class="n">qty</th><th class="n">filled</th><th></th></tr></thead><tbody>'+
+      os.map(function(o){
+        var sd = TD.mkt==='fut' ? (FSIDE[o.side]||o.side) : String(o.side||'').toLowerCase();
+        return '<tr><td><b>'+o.symbol+'</b></td><td>'+sd+'</td>'+
+          '<td class="n">'+o.price+'</td><td class="n">'+o.vol+'</td><td class="n">'+(o.dealt||0)+'</td>'+
+          '<td><button class="btn sm" onclick="tdCancel(this,\''+o.id+'\',\''+o.symbol+'\')">Cancel</button></td></tr>';
+      }).join('')+'</tbody></table>'
+    : '<span class="mini">none</span>')+
+    (d.orders_err?'<div class="mini down" style="margin-top:5px">'+d.orders_err+'</div>':'')+'</div></div>';
+  el.innerHTML = h;
+}
+function openTpsl(btn, sym, side, entry, lev, qty){
+  if(!btn || btn._armed) return;
+  btn._armed = true; ARMED++;
+  var w = document.createElement('span');
+  w.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
+  w.innerHTML = '<span class="mini">tp&ge;</span><input type="number" step="0.5" style="width:58px" placeholder="%" title="close when PnL% reaches this or higher">'+
+    '<span class="mini">sl&le;</span><input type="number" step="0.5" style="width:58px" placeholder="%" title="close when PnL% falls to this or lower (negative)">';
+  var ok = document.createElement('button'); ok.className='btn sm danger'; ok.textContent='Arm';
+  var no = document.createElement('button'); no.className='btn sm'; no.textContent='&#10005;'; no.innerHTML='&#10005;';
+  btn.style.display = 'none';
+  btn.parentNode.insertBefore(w, btn); w.appendChild(ok); w.appendChild(no);
+  var undo = function(){ w.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
+  no.onclick = function(e){ e.stopPropagation(); undo(); };
+  ok.onclick = function(e){
+    e.stopPropagation();
+    var ins = w.querySelectorAll('input');
+    var tp = ins[0].value.trim()===''?null:parseFloat(ins[0].value);
+    var sl = ins[1].value.trim()===''?null:parseFloat(ins[1].value);
+    if(tp==null && sl==null){ flash('set tp and/or sl', 'r'); return; }
+    undo();
+    API('tpsl', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym, side:side,
+                           entry:entry, lev:lev, qty:qty, tp_pct:tp, sl_pct:sl, confirm:'ARM'})})
+      .then(function(r){ if(r.error) flash(r.error,'r'); else flash(r.note||'Armed.','g'); tdState(); });
+  };
+}
+function tpslRemove(btn, sym){
+  API('tpsl', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym, remove:true})})
+    .then(function(r){ if(r.error) flash(r.error,'r'); else flash('TP/SL removed.','g'); tdState(); });
+}
+function tdCloseSym(btn, sym){
+  armConfirm(btn, 'Confirm: CLOSE '+sym+' — market', function(){
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({market:'fut', account:TD.acct, pair:sym.split('_')[0], action:'close', symbol:sym, pct:100, confirm:'TRADE'})})
+      .then(function(r){ if(r.error){flash(r.error,'r');tdMsg(r.error,true);} else {flash('Closed '+sym+'.','g');tdMsg('Closed '+sym+'.');} tdState(); });
+  });
+}
+function tdSellAsset(btn, asset, qty){
+  armConfirm(btn, 'Confirm: SELL ALL '+asset+' — market', function(){
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({market:'spot', account:TD.acct, pair:asset, action:'sell', qty:qty, confirm:'TRADE'})})
+      .then(function(r){ if(r.error){flash(r.error,'r');tdMsg(r.error,true);} else {flash('Sold '+asset+'.','g');tdMsg('Sold '+asset+'.');} tdState(); });
+  });
+}
+function tdCancel(btn, id, sym){
+  armConfirm(btn, 'Confirm: cancel order', function(){
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({market:TD.mkt, account:TD.acct, pair:sym.split('_')[0], action:'cancel', order_id:id, symbol:sym, confirm:'TRADE'})})
+      .then(function(r){ if(r.error) flash(r.error,'r'); else flash('Order cancelled.','g'); tdState(); });
   });
 }
 function tdPanel(){
@@ -1686,6 +1801,8 @@ function tdPanel(){
         '<input id="tdMarg" type="number" placeholder="0" style="flex:1" oninput="tdPrev()">'+
         '<button class="btn sm" onclick="document.getElementById(\'tdMarg\').value='+
           (d.available!=null?Math.floor(d.available*100)/100:0)+';tdPrev()">max</button></div>'+
+      '<div class="mini" style="margin-bottom:5px">LIMIT PRICE <span style="text-transform:none">(optional — blank = market order)</span></div>'+
+      '<input id="tdLimPx" type="number" placeholder="market" style="width:100%;margin-bottom:8px">'+
       '<div class="mini" style="margin-bottom:11px">available for leverage (futures wallet, '+TD.acct+'): <b class="num">'+
         amt('$'+(+(d.available||0)).toFixed(2))+'</b> &middot; position &asymp; <b class="num" id="tdNotion">$0</b>'+
         ((+(d.available||0)) < 1 ? ' &middot; <span style="color:var(--accent)">fund it via Transfer on the Overview</span>' : '')+'</div>'+
@@ -1712,6 +1829,7 @@ function tdPanel(){
       '<div class="mini" style="margin-bottom:5px">BUY — spend USDT (market)</div>'+
       '<div style="display:flex;gap:7px;margin-bottom:5px">'+
         '<input id="tdBuy" type="number" placeholder="0" style="flex:1">'+
+        '<input id="tdBuyPx" type="number" placeholder="limit px (opt)" style="width:105px">'+
         '<button class="btn sm" onclick="document.getElementById(\'tdBuy\').value='+
           (d.available!=null?Math.floor(d.available*100)/100:0)+'">max</button></div>'+
       '<div class="mini" style="margin-bottom:9px">available for spot (spot wallet, '+TD.acct+'): <b class="num">'+
@@ -1722,6 +1840,7 @@ function tdPanel(){
       '<div class="mini" style="margin-bottom:5px">SELL — quantity of '+TD.pair+' (market)</div>'+
       '<div style="display:flex;gap:7px;margin-bottom:5px">'+
         '<input id="tdSell" type="number" placeholder="0" style="flex:1">'+
+        '<input id="tdSellPx" type="number" placeholder="limit px (opt)" style="width:105px">'+
         '<button class="btn sm" onclick="document.getElementById(\'tdSell\').value='+(d.base_free||0)+'">max</button></div>'+
       '<div class="mini" style="margin-bottom:9px">holding <b class="num">'+amt(String(d.base_free||0))+' '+TD.pair+'</b></div>'+
       '<button class="btn" style="width:100%;border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
@@ -1755,9 +1874,10 @@ function tdOpen(btn, side){
     return;
   }
   tdMsg('');
-  armConfirm(btn, 'Confirm: OPEN '+side.toUpperCase()+' '+TD.pair+' '+l+'x — $'+m.toFixed(2)+' margin', function(){
+  var lim = ((document.getElementById('tdLimPx')||{}).value||'').trim();
+  armConfirm(btn, 'Confirm: '+(lim?('LIMIT '):'OPEN ')+side.toUpperCase()+' '+TD.pair+' '+l+'x — $'+m.toFixed(2)+' margin'+(lim?(' @ '+lim):''), function(){
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({market:'fut', account:TD.acct, pair:TD.pair, action:side, margin:m, lev:l, confirm:'TRADE'})})
+      body:JSON.stringify({market:'fut', account:TD.acct, pair:TD.pair, action:side, margin:m, lev:l, price:(lim||null), confirm:'TRADE'})})
       .then(function(r){
         if(r.error){ flash(r.error, 'r'); tdMsg(r.error, true); }
         else { flash('Opened '+side+' '+TD.pair+' at '+l+'x.', 'g'); tdMsg('Opened '+side.toUpperCase()+' '+TD.pair+' at '+l+'x with $'+m.toFixed(2)+' margin.'); }
@@ -1777,9 +1897,10 @@ function tdClose(btn, pct){
 function tdSpot(btn, act){
   var v = +(document.getElementById(act === 'buy' ? 'tdBuy' : 'tdSell').value || 0);
   if(!(v > 0)){ flash('enter an amount', 'r'); return; }
-  var lbl = act === 'buy' ? ('BUY '+TD.pair+' for $'+v.toFixed(2)) : ('SELL '+v+' '+TD.pair);
-  armConfirm(btn, 'Confirm: '+lbl+' — market', function(){
-    var body = {market:'spot', account:TD.acct, pair:TD.pair, action:act, confirm:'TRADE'};
+  var px = ((document.getElementById(act==='buy'?'tdBuyPx':'tdSellPx')||{}).value||'').trim();
+  var lbl = (act === 'buy' ? ('BUY '+TD.pair+' for $'+v.toFixed(2)) : ('SELL '+v+' '+TD.pair)) + (px?(' LIMIT @ '+px):'');
+  armConfirm(btn, 'Confirm: '+lbl+(px?'':' — market'), function(){
+    var body = {market:'spot', account:TD.acct, pair:TD.pair, action:act, confirm:'TRADE', price:(px||null)};
     if(act === 'buy') body.usdt = v; else body.qty = v;
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)}).then(function(r){
