@@ -1602,34 +1602,58 @@ function pctForm(btn, okLabel, onOk, withPairs){
   btn._armed = true; ARMED++;
   var wrap = document.createElement('span');
   wrap.style.cssText = 'display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap';
+  // vol-scaled depths from the 2026-08-25 backtest sweep — the config that
+  // made x83.5k vs x44k baseline at unchanged drawdown
+  var PAIR_DEFS = [['hype',-3],['sui',-3.6],['doge',-4.5],['sol',-4.6],
+                   ['eth',-5],['xrp',-5.3],['btc',-6.6]];
   wrap.innerHTML =
     '<span class="mini">open when unreal <b>&le;</b></span>'+
-    '<input type="number" step="0.5" value="-3" style="width:64px" '+
+    '<input data-r="open" type="number" step="0.5" value="-3" style="width:64px" '+
       'title="adopt when the shadow\'s unrealized is this percent or LOWER (arrows step 0.5)">'+
     '<span class="mini">% &nbsp; close when yours <b>&ge;</b></span>'+
-    '<input type="number" step="0.5" placeholder="off" style="width:64px" '+
+    '<input data-r="close" type="number" step="0.5" placeholder="off" style="width:64px" '+
       'title="optional: close automatically when YOUR unrealized is this percent or HIGHER — leave blank to let the strategy manage the exit">'+
     '<span class="mini">%</span>'+
     (withPairs
-      ? '<span class="mini">&nbsp;pairs</span>'+
-        '<input placeholder="all — or hype:-3, sui:-3.6" style="width:190px" '+
-        'title="optional: restrict pairs and/or give each its OWN depth. Plain names use the main threshold (hype, sui); name:pct overrides it per pair (hype:-3, sui:-3.6, doge:-4.5, sol:-4.6, eth:-5, xrp:-5.3, btc:-6.6 was the best backtest). Blank = any pair at the main threshold.">'
+      ? '<div style="flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:5px">'+
+        '<span class="mini" title="tick a pair to include it, with its own depth (prefilled with the backtested vol-scaled value). None ticked = every pair at the main threshold.">pairs:</span>'+
+        PAIR_DEFS.map(function(pd){
+          return '<label class="mini" style="display:inline-flex;gap:3px;align-items:center;cursor:pointer">'+
+            '<input type="checkbox" data-pair="'+pd[0]+'"> '+pd[0].toUpperCase()+
+            ' &le;<input type="number" step="0.1" value="'+pd[1]+'" data-pv="'+pd[0]+'" style="width:58px">%</label>';
+        }).join('')+
+        '<button class="btn sm" data-r="recall" title="tick all 7 pairs at the backtested vol-scaled depths (the best configuration found: +39.6%/mo vs +37.0%/mo baseline)">use recommended set</button>'+
+        '</div>'
       : '');
-  var ins = wrap.querySelectorAll('input');
   var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = okLabel;
   var no = document.createElement('button'); no.className = 'btn sm'; no.textContent = 'Cancel';
   btn.style.display = 'none';
   btn.parentNode.insertBefore(wrap, btn);
   wrap.appendChild(ok); wrap.appendChild(no);
-  ins[0].focus();
+  var rec = wrap.querySelector('[data-r=recall]');
+  if(rec) rec.onclick = function(ev){
+    ev.stopPropagation();
+    wrap.querySelectorAll('[data-pair]').forEach(function(cb){ cb.checked = true; });
+  };
+  wrap.querySelector('[data-r=open]').focus();
   var undo = function(){ wrap.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
   no.onclick = function(ev){ ev.stopPropagation(); undo(); };
   ok.onclick = function(ev){
     ev.stopPropagation();
-    var ap = parseFloat(ins[0].value);
+    var ap = parseFloat(wrap.querySelector('[data-r=open]').value);
     if(isNaN(ap)){ flash('the open threshold is required (e.g. -3)', 'r'); return; }
-    var cp = ins[1].value.trim() === '' ? null : parseFloat(ins[1].value);
-    var pr = (withPairs && ins[2]) ? ins[2].value.trim() : '';
+    var cv = wrap.querySelector('[data-r=close]').value.trim();
+    var cp = cv === '' ? null : parseFloat(cv);
+    var pr = '';
+    if(withPairs){
+      var parts = [];
+      wrap.querySelectorAll('[data-pair]').forEach(function(cb){
+        if(!cb.checked) return;
+        var v = wrap.querySelector('[data-pv="'+cb.getAttribute('data-pair')+'"]').value;
+        parts.push(cb.getAttribute('data-pair')+':'+v);
+      });
+      pr = parts.join(', ');
+    }
     undo();
     onOk(ap, cp, pr);
   };
