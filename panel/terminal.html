@@ -120,6 +120,9 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .b4.d .val{color:var(--accent);font-weight:700}
 .b4 .chev{opacity:.55;font-size:10px;transition:transform .15s;display:inline-block}
 .b4.open .chev{transform:rotate(90deg)}
+.tdgrid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+@media(max-width:980px){.tdgrid{grid-template-columns:1fr}}
+#tdChart{min-width:0;overflow:hidden}
 .mbox{width:min(560px,96vw);background:var(--panel);border:1px solid rgba(246,70,93,.5);border-radius:14px;
  overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.7);max-height:90vh;display:flex;flex-direction:column}
 .mbox header{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;color:var(--down);font-size:15px}
@@ -212,7 +215,7 @@ body.masked .amt:hover{filter:none}
 
   <section class="view" id="v-trade"><div class="wrap" style="max-width:none">
     <div class="card"><h3>Trade
-        <span class="mini">manual orders — futures &rarr; mexc1, spot &rarr; mexc2; shares accounts with the live traders</span>
+        <span class="mini">manual orders — any account, spot or leverage; shares accounts with the live traders</span>
         <span class="mini" id="tdPx" style="margin-left:auto;font-size:16px;font-weight:700;color:var(--fg)"></span></h3>
       <div class="body" style="padding:10px 14px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
@@ -221,12 +224,16 @@ body.masked .amt:hover{filter:none}
           <span id="tdTfs"></span>
           <span class="mini" style="margin-left:auto">TradingView lightweight-charts &middot; MEXC klines via the panel</span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start">
+        <div class="tdgrid">
           <div id="tdChart" style="height:480px;border:1px solid var(--line);border-radius:8px"></div>
           <div>
+            <div style="display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:8px" id="tdAcct">
+              <button class="btn" style="flex:1;border:none;border-radius:0" data-a="mexc1">mexc1 <span class="mini" id="tdA1n"></span></button>
+              <button class="btn" style="flex:1;border:none;border-radius:0" data-a="mexc2">mexc2 <span class="mini" id="tdA2n"></span></button>
+            </div>
             <div style="display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:12px" id="tdMkt">
-              <button class="btn" style="flex:1;border:none;border-radius:0" data-m="fut">Futures <span class="mini">mexc1</span></button>
-              <button class="btn" style="flex:1;border:none;border-radius:0" data-m="spot">Spot <span class="mini">mexc2</span></button>
+              <button class="btn" style="flex:1;border:none;border-radius:0" data-m="fut">Leverage</button>
+              <button class="btn" style="flex:1;border:none;border-radius:0" data-m="spot">Spot</button>
             </div>
             <div id="tdHeld"></div>
             <div id="tdPanel"><span class="mini">loading…</span></div>
@@ -1578,8 +1585,8 @@ function extrasRow(){
   return '<div class="brow">'+sb+db+'</div>'+(SH_OPEN && rows.length ? shadowTable(rows) : '');
 }
 // ---------------- Trade page (manual orders + chart) ----------------
-var TD = {pair:'BTC', tf:'15m', mkt:'fut', chart:null, series:null,
-          state:null, timer:null};
+var TD = {pair:'BTC', tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
+          series:null, state:null, timer:null};
 var TD_PAIRS = ['BTC','ETH','SOL','XRP','DOGE','SUI','HYPE'];
 var TD_TFS = ['1m','5m','15m','1h','4h','1d'];
 function tdChips(el, list, cur, cb){
@@ -1617,6 +1624,20 @@ function tdRefreshChips(){
     b.style.color = on ? 'var(--accent)' : '';
     b.onclick = function(){ TD.mkt = b.getAttribute('data-m'); tdRefresh(); };
   });
+  document.querySelectorAll('#tdAcct button').forEach(function(b){
+    var on = b.getAttribute('data-a') === TD.acct;
+    b.style.background = on ? 'rgba(240,185,11,.13)' : '';
+    b.style.color = on ? 'var(--accent)' : '';
+    b.onclick = function(){ TD.acct = b.getAttribute('data-a'); tdRefresh(); };
+  });
+  // show which instance runs each account, so "whose money" stays obvious
+  var nm = {mexc1:'', mexc2:''};
+  INSTS.forEach(function(x){
+    var s = STATUS[x.id]||{};
+    if(s.api_account && nm[s.api_account] === '') nm[s.api_account] = x.name || x.id;
+  });
+  var a1 = document.getElementById('tdA1n'), a2 = document.getElementById('tdA2n');
+  if(a1) a1.textContent = nm.mexc1; if(a2) a2.textContent = nm.mexc2;
 }
 function tdKlines(){
   API('klines?pair='+TD.pair+'&tf='+TD.tf+'&limit=400').then(function(d){
@@ -1629,7 +1650,7 @@ function tdKlines(){
   });
 }
 function tdState(){
-  API('trade/state?market='+TD.mkt+'&pair='+TD.pair).then(function(d){
+  API('trade/state?market='+TD.mkt+'&pair='+TD.pair+'&account='+TD.acct).then(function(d){
     if(document.getElementById('v-trade') &&
        !document.getElementById('v-trade').classList.contains('on')) return;
     TD.state = d;
@@ -1664,8 +1685,9 @@ function tdPanel(){
         '<input id="tdMarg" type="number" placeholder="0" style="flex:1" oninput="tdPrev()">'+
         '<button class="btn sm" onclick="document.getElementById(\'tdMarg\').value='+
           (d.available!=null?Math.floor(d.available*100)/100:0)+';tdPrev()">max</button></div>'+
-      '<div class="mini" style="margin-bottom:11px">available <b class="num">'+amt('$'+(+(d.available||0)).toFixed(2))+
-        '</b> &middot; position &asymp; <b class="num" id="tdNotion">$0</b></div>'+
+      '<div class="mini" style="margin-bottom:11px">available for leverage (futures wallet, '+TD.acct+'): <b class="num">'+
+        amt('$'+(+(d.available||0)).toFixed(2))+'</b> &middot; position &asymp; <b class="num" id="tdNotion">$0</b>'+
+        ((+(d.available||0)) < 1 ? ' &middot; <span style="color:var(--accent)">fund it via Transfer on the Overview</span>' : '')+'</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px">'+
         '<button class="btn" style="border-color:var(--up);color:var(--up);font-weight:700;padding:11px" '+
           'onclick="tdOpen(this,\'long\')">Open Long</button>'+
@@ -1690,7 +1712,9 @@ function tdPanel(){
         '<input id="tdBuy" type="number" placeholder="0" style="flex:1">'+
         '<button class="btn sm" onclick="document.getElementById(\'tdBuy\').value='+
           (d.available!=null?Math.floor(d.available*100)/100:0)+'">max</button></div>'+
-      '<div class="mini" style="margin-bottom:9px">spot USDT <b class="num">'+amt('$'+(+(d.available||0)).toFixed(2))+'</b></div>'+
+      '<div class="mini" style="margin-bottom:9px">available for spot (spot wallet, '+TD.acct+'): <b class="num">'+
+        amt('$'+(+(d.available||0)).toFixed(2))+'</b>'+
+        ((+(d.available||0)) < 1 ? ' &middot; <span style="color:var(--accent)">fund it via Transfer or Convert on the Overview</span>' : '')+'</div>'+
       '<button class="btn" style="width:100%;border-color:var(--up);color:var(--up);font-weight:700;padding:11px;margin-bottom:14px" '+
         'onclick="tdSpot(this,\'buy\')">Buy '+TD.pair+'</button>'+
       '<div class="mini" style="margin-bottom:5px">SELL — quantity of '+TD.pair+' (market)</div>'+
@@ -1716,7 +1740,7 @@ function tdOpen(btn, side){
   if(!(m > 0)){ flash('enter a margin amount', 'r'); return; }
   armConfirm(btn, 'Confirm: OPEN '+side.toUpperCase()+' '+TD.pair+' '+l+'x — $'+m.toFixed(2)+' margin', function(){
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({market:'fut', pair:TD.pair, action:side, margin:m, lev:l, confirm:'TRADE'})})
+      body:JSON.stringify({market:'fut', account:TD.acct, pair:TD.pair, action:side, margin:m, lev:l, confirm:'TRADE'})})
       .then(function(r){
         if(r.error) flash(r.error, 'r');
         else flash('Opened '+side+' '+TD.pair+' at '+l+'x.', 'g');
@@ -1726,7 +1750,7 @@ function tdOpen(btn, side){
 function tdClose(btn, pct){
   armConfirm(btn, 'Confirm: CLOSE '+(pct>=100?'position':pct+'%')+' — market', function(){
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({market:'fut', pair:TD.pair, action:'close', pct:pct, confirm:'TRADE'})})
+      body:JSON.stringify({market:'fut', account:TD.acct, pair:TD.pair, action:'close', pct:pct, confirm:'TRADE'})})
       .then(function(r){
         if(r.error) flash(r.error, 'r'); else flash('Close sent.', 'g');
         tdState(); });
@@ -1737,7 +1761,7 @@ function tdSpot(btn, act){
   if(!(v > 0)){ flash('enter an amount', 'r'); return; }
   var lbl = act === 'buy' ? ('BUY '+TD.pair+' for $'+v.toFixed(2)) : ('SELL '+v+' '+TD.pair);
   armConfirm(btn, 'Confirm: '+lbl+' — market', function(){
-    var body = {market:'spot', pair:TD.pair, action:act, confirm:'TRADE'};
+    var body = {market:'spot', account:TD.acct, pair:TD.pair, action:act, confirm:'TRADE'};
     if(act === 'buy') body.usdt = v; else body.qty = v;
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)}).then(function(r){

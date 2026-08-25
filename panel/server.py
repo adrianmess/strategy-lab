@@ -765,18 +765,22 @@ def _trader_holds(pair):
 
 @app.route("/api/trade/state")
 def trade_state():
-    """Balances + current position/holdings for the Trade page.
-    Convention: futures = mexc1 (MEX Lev 1's account), spot = mexc2."""
+    """Balances + current position/holdings for the Trade page. Any account
+    x any market — both accounts have both wallets."""
     market = request.args.get("market") or "fut"
     pair = (request.args.get("pair") or "BTC").upper()
+    acct = request.args.get("account") or ("mexc1" if market == "fut"
+                                           else "mexc2")
+    if acct not in ("mexc1", "mexc2"):
+        return jsonify(error="account must be mexc1|mexc2"), 400
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
     out = dict(market=market, pair=pair, held_by=_trader_holds(pair))
     try:
         if market == "fut":
-            api = MexcFuturesAPI(account="mexc1")
-            out["account"] = "mexc1"
+            api = MexcFuturesAPI(account=acct)
+            out["account"] = acct
             for a in (api.assets() or []):
                 if a.get("currency") == "USDT":
                     out["available"] = float(a.get("availableBalance") or 0)
@@ -795,8 +799,8 @@ def trade_state():
             out["positions"] = pos
             out["contract_size"] = _contract_size(f"{pair}_USDT")
         else:
-            api = MexcSpotAPI(account="mexc2")
-            out["account"] = "mexc2"
+            api = MexcSpotAPI(account=acct)
+            out["account"] = acct
             for b in api.account_info().get("balances", []):
                 if b.get("asset") == "USDT":
                     out["available"] = float(b.get("free") or 0)
@@ -820,14 +824,17 @@ def trade_order():
     market = d.get("market")
     pair = (d.get("pair") or "").upper()
     action = d.get("action")
-    if not pair or market not in ("fut", "spot"):
-        return jsonify(error="need market (fut|spot) and pair"), 400
+    acct = d.get("account") or ("mexc1" if market == "fut" else "mexc2")
+    if not pair or market not in ("fut", "spot") \
+            or acct not in ("mexc1", "mexc2"):
+        return jsonify(error="need market (fut|spot), pair and a valid "
+                             "account"), 400
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
     try:
         if market == "fut":
-            api = MexcFuturesAPI(account="mexc1")
+            api = MexcFuturesAPI(account=acct)
             sym = f"{pair}_USDT"
             if action in ("long", "short"):
                 margin = float(d.get("margin") or 0)
@@ -871,7 +878,7 @@ def trade_order():
                 return jsonify(error="fut action must be long|short|"
                                      "close"), 400
         else:
-            api = MexcSpotAPI(account="mexc2")
+            api = MexcSpotAPI(account=acct)
             sym = f"{pair}_USDT"
             if action == "buy":
                 usdt = float(d.get("usdt") or 0)
@@ -888,7 +895,7 @@ def trade_order():
                 return jsonify(error="spot action must be buy|sell"), 400
     except Exception as e:
         return jsonify(error=str(e)[:300]), 502
-    print(f"MANUAL TRADE {market} {pair} {action}: {str(res)[:180]}",
+    print(f"MANUAL TRADE {acct} {market} {pair} {action}: {str(res)[:180]}",
           flush=True)
     return jsonify(ok=True, result=(res if isinstance(res, dict) else
                                     dict(raw=str(res)[:200])))
