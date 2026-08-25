@@ -886,7 +886,7 @@ def trade_order():
                     return jsonify(error="need usdt>0"), 400
                 res = api.market_buy_quote(sym, usdt)
             elif action == "sell":
-                qty = api.floor_qty(sym, float(d.get("qty") or 0))
+                qty, _sc = api.floor_qty(sym, float(d.get("qty") or 0))
                 if not qty or qty <= 0:
                     return jsonify(error="quantity below the pair "
                                          "minimum"), 400
@@ -992,7 +992,7 @@ def convert_stables():
     api = MexcSpotAPI(account=acct)
     try:
         if direction == "usdc_to_usdt":
-            qty = api.floor_qty("USDC_USDT", amount)
+            qty, _sc = api.floor_qty("USDC_USDT", amount)
             if not qty or qty <= 0:
                 return jsonify(error="amount below the pair's minimum "
                                      "order size"), 400
