@@ -153,6 +153,7 @@ body.masked .amt:hover{filter:none}
   <div class="logo">SL</div>
   <button class="on" data-go="overview" title="Overview">&#9635;</button>
   <button data-go="instances" title="Instances">&#9881;</button>
+  <button data-go="trade" title="Trade">&#8645;</button>
   <button data-go="risk" title="Risk">&#9888;</button>
   <button data-go="history" title="History">&#8801;</button>
   <button data-go="backtests" title="Backtests">&#9636;</button>
@@ -327,6 +328,32 @@ body.masked .amt:hover{filter:none}
   </div>
 </div></div>
 
+<section class="view" id="v-trade"><div class="wrap" style="max-width:none">
+  <div class="card"><h3>Trade
+      <span class="mini">manual orders — futures &rarr; mexc1, spot &rarr; mexc2; shares accounts with the live traders</span>
+      <span class="mini" id="tdPx" style="margin-left:auto;font-size:16px;font-weight:700;color:var(--fg)"></span></h3>
+    <div class="body" style="padding:10px 14px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
+        <span id="tdPairs"></span>
+        <span style="width:12px"></span>
+        <span id="tdTfs"></span>
+        <span class="mini" style="margin-left:auto">TradingView lightweight-charts &middot; MEXC klines via the panel</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start">
+        <div id="tdChart" style="height:480px;border:1px solid var(--line);border-radius:8px"></div>
+        <div>
+          <div style="display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:12px" id="tdMkt">
+            <button class="btn" style="flex:1;border:none;border-radius:0" data-m="fut">Futures <span class="mini">mexc1</span></button>
+            <button class="btn" style="flex:1;border:none;border-radius:0" data-m="spot">Spot <span class="mini">mexc2</span></button>
+          </div>
+          <div id="tdHeld"></div>
+          <div id="tdPanel"><span class="mini">loading…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
 <div class="modal" id="trm" onclick="if(event.target===this)closeTransfer()">
   <div class="mbox" style="border-color:rgba(240,185,11,.5)">
     <header style="color:var(--accent);display:flex;justify-content:space-between;align-items:center">
@@ -358,6 +385,7 @@ body.masked .amt:hover{filter:none}
 </div>
 
 <script src="/dashboard/assets/qrcode.min.js"></script>
+<script src="/dashboard/assets/lightweight-charts.js"></script>
 <script>
 var API = function(p, opt){ return fetch('/api/'+p, opt).then(function(r){ return r.json(); }); };
 var INSTS = [], PERF = {};
@@ -1549,6 +1577,182 @@ function extrasRow(){
   if(!sb && !db) return '';
   return '<div class="brow">'+sb+db+'</div>'+(SH_OPEN && rows.length ? shadowTable(rows) : '');
 }
+// ---------------- Trade page (manual orders + chart) ----------------
+var TD = {pair:'BTC', tf:'15m', mkt:'fut', chart:null, series:null,
+          state:null, timer:null};
+var TD_PAIRS = ['BTC','ETH','SOL','XRP','DOGE','SUI','HYPE'];
+var TD_TFS = ['1m','5m','15m','1h','4h','1d'];
+function tdChips(el, list, cur, cb){
+  var s = document.getElementById(el); s.innerHTML = '';
+  list.forEach(function(v){
+    var b = document.createElement('button');
+    b.className = 'btn sm'; b.style.borderRadius = '20px';
+    if(v === cur){ b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }
+    b.textContent = v;
+    b.onclick = function(){ cb(v); };
+    s.appendChild(b); s.append(' ');
+  });
+}
+function tdInit(){
+  if(TD.chart) return;
+  var el = document.getElementById('tdChart');
+  TD.chart = LightweightCharts.createChart(el, {
+    layout:{background:{color:'transparent'}, textColor:'#8b95a3'},
+    grid:{vertLines:{color:'rgba(139,149,163,.08)'}, horzLines:{color:'rgba(139,149,163,.08)'}},
+    timeScale:{borderColor:'rgba(139,149,163,.2)', timeVisible:true},
+    rightPriceScale:{borderColor:'rgba(139,149,163,.2)'},
+    width:el.clientWidth, height:480});
+  TD.series = TD.chart.addCandlestickSeries({upColor:'#2ebd85',downColor:'#f6465d',
+    borderVisible:false, wickUpColor:'#2ebd85', wickDownColor:'#f6465d'});
+  new ResizeObserver(function(){
+    if(el.clientWidth) TD.chart.applyOptions({width:el.clientWidth});
+  }).observe(el);
+}
+function tdRefreshChips(){
+  tdChips('tdPairs', TD_PAIRS, TD.pair, function(v){ TD.pair = v; tdRefresh(); });
+  tdChips('tdTfs', TD_TFS, TD.tf, function(v){ TD.tf = v; tdKlines(); tdRefreshChips(); });
+  document.querySelectorAll('#tdMkt button').forEach(function(b){
+    var on = b.getAttribute('data-m') === TD.mkt;
+    b.style.background = on ? 'rgba(240,185,11,.13)' : '';
+    b.style.color = on ? 'var(--accent)' : '';
+    b.onclick = function(){ TD.mkt = b.getAttribute('data-m'); tdRefresh(); };
+  });
+}
+function tdKlines(){
+  API('klines?pair='+TD.pair+'&tf='+TD.tf+'&limit=400').then(function(d){
+    if(d.error || !TD.series) return;
+    TD.series.setData(d.rows || []);
+    TD.chart.timeScale().fitContent();
+    var last = (d.rows || [])[d.rows.length - 1];
+    if(last) document.getElementById('tdPx').textContent =
+      TD.pair + ' ' + last.close.toLocaleString(undefined, {maximumFractionDigits: last.close > 100 ? 1 : 5});
+  });
+}
+function tdState(){
+  API('trade/state?market='+TD.mkt+'&pair='+TD.pair).then(function(d){
+    if(document.getElementById('v-trade') &&
+       !document.getElementById('v-trade').classList.contains('on')) return;
+    TD.state = d;
+    var held = document.getElementById('tdHeld');
+    held.innerHTML = (d.held_by && d.held_by.length)
+      ? '<div style="background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.4);border-radius:8px;'+
+        'padding:8px 11px;font-size:12px;margin-bottom:11px"><b>&#9888; '+d.held_by.join(', ')+
+        '</b> holds a '+TD.pair+' position — manual orders on that account change the STRATEGY\'S position.</div>'
+      : '';
+    tdPanel();
+  });
+}
+function tdPanel(){
+  if(ARMED) return;
+  var d = TD.state || {};
+  var el = document.getElementById('tdPanel');
+  if(d.error){ el.innerHTML = '<span class="mini down">'+d.error+'</span>'; return; }
+  if(TD.mkt === 'fut'){
+    var pos = (d.positions || [])[0];
+    el.innerHTML =
+      '<div class="mini" style="margin-bottom:5px">LEVERAGE</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">'+
+        [3,5,10,20,50,100].map(function(x){
+          return '<button class="btn sm" style="border-radius:20px" '+
+            'onclick="document.getElementById(\'tdLev\').value='+x+';tdPrev()">'+x+'x</button>';
+        }).join('')+'</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:11px">'+
+        '<input id="tdLev" type="number" value="10" min="1" max="200" style="width:70px" oninput="tdPrev()">'+
+        '<span class="mini">x isolated &middot; est. liq distance <b class="num" id="tdLiq"></b></span></div>'+
+      '<div class="mini" style="margin-bottom:5px">MARGIN (USDT)</div>'+
+      '<div style="display:flex;gap:7px;margin-bottom:5px">'+
+        '<input id="tdMarg" type="number" placeholder="0" style="flex:1" oninput="tdPrev()">'+
+        '<button class="btn sm" onclick="document.getElementById(\'tdMarg\').value='+
+          (d.available!=null?Math.floor(d.available*100)/100:0)+';tdPrev()">max</button></div>'+
+      '<div class="mini" style="margin-bottom:11px">available <b class="num">'+amt('$'+(+(d.available||0)).toFixed(2))+
+        '</b> &middot; position &asymp; <b class="num" id="tdNotion">$0</b></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px">'+
+        '<button class="btn" style="border-color:var(--up);color:var(--up);font-weight:700;padding:11px" '+
+          'onclick="tdOpen(this,\'long\')">Open Long</button>'+
+        '<button class="btn" style="border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
+          'onclick="tdOpen(this,\'short\')">Open Short</button></div>'+
+      (pos
+        ? '<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px">'+
+          '<div class="mini" style="margin-bottom:5px">OPEN POSITION '+
+            '<span class="tag '+(pos.side==='long'?'g':'live')+'">'+pos.side.toUpperCase()+' '+(pos.lev||'?')+'x</span></div>'+
+          '<div class="num" style="font-size:15px">'+pos.vol+' contracts @ '+(+pos.avg).toPrecision(6)+'</div>'+
+          '<div class="mini" style="margin:4px 0 9px">liq <span class="down num">'+(+pos.liq).toPrecision(6)+
+            '</span> &middot; margin <span class="num">$'+(+pos.margin).toFixed(2)+'</span></div>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+            '<button class="btn sm" onclick="tdClose(this,50)">Close 50%</button>'+
+            '<button class="btn sm danger" onclick="tdClose(this,100)">Close position</button></div></div>'
+        : '<div class="mini" style="border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center">no open '+TD.pair+' futures position</div>');
+    tdPrev();
+  } else {
+    el.innerHTML =
+      '<div class="mini" style="margin-bottom:5px">BUY — spend USDT (market)</div>'+
+      '<div style="display:flex;gap:7px;margin-bottom:5px">'+
+        '<input id="tdBuy" type="number" placeholder="0" style="flex:1">'+
+        '<button class="btn sm" onclick="document.getElementById(\'tdBuy\').value='+
+          (d.available!=null?Math.floor(d.available*100)/100:0)+'">max</button></div>'+
+      '<div class="mini" style="margin-bottom:9px">spot USDT <b class="num">'+amt('$'+(+(d.available||0)).toFixed(2))+'</b></div>'+
+      '<button class="btn" style="width:100%;border-color:var(--up);color:var(--up);font-weight:700;padding:11px;margin-bottom:14px" '+
+        'onclick="tdSpot(this,\'buy\')">Buy '+TD.pair+'</button>'+
+      '<div class="mini" style="margin-bottom:5px">SELL — quantity of '+TD.pair+' (market)</div>'+
+      '<div style="display:flex;gap:7px;margin-bottom:5px">'+
+        '<input id="tdSell" type="number" placeholder="0" style="flex:1">'+
+        '<button class="btn sm" onclick="document.getElementById(\'tdSell\').value='+(d.base_free||0)+'">max</button></div>'+
+      '<div class="mini" style="margin-bottom:9px">holding <b class="num">'+amt(String(d.base_free||0))+' '+TD.pair+'</b></div>'+
+      '<button class="btn" style="width:100%;border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
+        'onclick="tdSpot(this,\'sell\')">Sell '+TD.pair+'</button>';
+  }
+}
+function tdPrev(){
+  var m = +((document.getElementById('tdMarg')||{}).value || 0);
+  var l = +((document.getElementById('tdLev')||{}).value || 1);
+  var n = document.getElementById('tdNotion');
+  if(n) n.textContent = '$' + (m*l).toLocaleString(undefined,{maximumFractionDigits:0});
+  var q = document.getElementById('tdLiq');
+  if(q) q.textContent = '-' + (92/Math.max(l,1)).toFixed(1) + '%';
+}
+function tdOpen(btn, side){
+  var m = +document.getElementById('tdMarg').value;
+  var l = +document.getElementById('tdLev').value;
+  if(!(m > 0)){ flash('enter a margin amount', 'r'); return; }
+  armConfirm(btn, 'Confirm: OPEN '+side.toUpperCase()+' '+TD.pair+' '+l+'x — $'+m.toFixed(2)+' margin', function(){
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({market:'fut', pair:TD.pair, action:side, margin:m, lev:l, confirm:'TRADE'})})
+      .then(function(r){
+        if(r.error) flash(r.error, 'r');
+        else flash('Opened '+side+' '+TD.pair+' at '+l+'x.', 'g');
+        tdState(); });
+  });
+}
+function tdClose(btn, pct){
+  armConfirm(btn, 'Confirm: CLOSE '+(pct>=100?'position':pct+'%')+' — market', function(){
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({market:'fut', pair:TD.pair, action:'close', pct:pct, confirm:'TRADE'})})
+      .then(function(r){
+        if(r.error) flash(r.error, 'r'); else flash('Close sent.', 'g');
+        tdState(); });
+  });
+}
+function tdSpot(btn, act){
+  var v = +(document.getElementById(act === 'buy' ? 'tdBuy' : 'tdSell').value || 0);
+  if(!(v > 0)){ flash('enter an amount', 'r'); return; }
+  var lbl = act === 'buy' ? ('BUY '+TD.pair+' for $'+v.toFixed(2)) : ('SELL '+v+' '+TD.pair);
+  armConfirm(btn, 'Confirm: '+lbl+' — market', function(){
+    var body = {market:'spot', pair:TD.pair, action:act, confirm:'TRADE'};
+    if(act === 'buy') body.usdt = v; else body.qty = v;
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(function(r){
+        if(r.error) flash(r.error, 'r'); else flash(lbl+' — done.', 'g');
+        tdState(); });
+  });
+}
+function tdRefresh(){
+  tdInit(); tdRefreshChips(); tdKlines(); tdState();
+  if(!TD.timer) TD.timer = setInterval(function(){
+    var v = document.getElementById('v-trade');
+    if(v && v.classList.contains('on')){ tdKlines(); tdState(); }
+  }, 12000);
+}
+
 // ---- spot<->futures USDT transfer (internal — never leaves MEXC) ----
 var TR = {acct:null, dir:'spot_to_futures', bal:null};
 function openTransfer(acct){
@@ -2096,6 +2300,7 @@ for(var i=0;i<btns.length;i++){
     var vs=document.querySelectorAll('.view');
     for(var k=0;k<vs.length;k++){ vs[k].classList.toggle('on', vs[k].id==='v-'+g); }
     document.getElementById('crumb').textContent=this.title;
+    if(g==='trade') tdRefresh();
   };
 }
 syncSoundBtn(); syncToggles();

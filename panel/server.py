@@ -702,6 +702,198 @@ def trader_start():
     _save_instances()
     return jsonify(ok=True, instance=i)
 
+# ---------------- manual Trade page ----------------
+_KL_INTERVALS = {"1m": "Min1", "5m": "Min5", "15m": "Min15", "1h": "Min60",
+                 "4h": "Hour4", "1d": "Day1"}
+_CT_SIZE = {}     # symbol -> contract size (futures)
+
+
+@app.route("/api/klines")
+def klines():
+    """Candles for the Trade chart — proxied from MEXC's public contract
+    klines (same feed the engines use), so the browser needs no internet."""
+    pair = (request.args.get("pair") or "BTC").upper()
+    tf = request.args.get("tf") or "15m"
+    iv = _KL_INTERVALS.get(tf)
+    if not iv:
+        return jsonify(error=f"tf must be one of {list(_KL_INTERVALS)}"), 400
+    limit = min(1000, int(request.args.get("limit") or 300))
+    import requests as _rq
+    try:
+        r = _rq.get("https://contract.mexc.com/api/v1/contract/kline/"
+                    f"{pair}_USDT", params=dict(interval=iv), timeout=15).json()
+        d = r.get("data") or {}
+        t, o, h, lo, c = (d.get(k) or [] for k in
+                          ("time", "open", "high", "low", "close"))
+        rows = [dict(time=int(t[i]), open=float(o[i]), high=float(h[i]),
+                     low=float(lo[i]), close=float(c[i]))
+                for i in range(max(0, len(t) - limit), len(t))]
+        return jsonify(rows=rows)
+    except Exception as e:
+        return jsonify(error=str(e)[:200]), 502
+
+
+def _contract_size(symbol):
+    if symbol in _CT_SIZE:
+        return _CT_SIZE[symbol]
+    import requests as _rq
+    d = _rq.get("https://contract.mexc.com/api/v1/contract/detail",
+                params=dict(symbol=symbol), timeout=15).json()
+    cs = float(((d.get("data") or {}) or {}).get("contractSize") or 0)
+    if cs:
+        _CT_SIZE[symbol] = cs
+    return cs
+
+
+def _trader_holds(pair):
+    """Which running instances' strategies hold this pair right now."""
+    out = []
+    for i, I in instances.items():
+        t = I["trader"]
+        if t["proc"] is None or t["proc"].poll() is not None:
+            continue
+        sfile = _state_file_of(t["config"] or I.get("cfg") or "")
+        try:
+            st = json.load(open(os.path.join(AT, sfile)))
+        except Exception:
+            continue
+        p = st.get("position")
+        if p and (p.get("symbol") or "").startswith(pair + "_"):
+            out.append(_iname(i))
+    return out
+
+
+@app.route("/api/trade/state")
+def trade_state():
+    """Balances + current position/holdings for the Trade page.
+    Convention: futures = mexc1 (MEX Lev 1's account), spot = mexc2."""
+    market = request.args.get("market") or "fut"
+    pair = (request.args.get("pair") or "BTC").upper()
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    out = dict(market=market, pair=pair, held_by=_trader_holds(pair))
+    try:
+        if market == "fut":
+            api = MexcFuturesAPI(account="mexc1")
+            out["account"] = "mexc1"
+            for a in (api.assets() or []):
+                if a.get("currency") == "USDT":
+                    out["available"] = float(a.get("availableBalance") or 0)
+            pos = []
+            for p in (api.open_positions(f"{pair}_USDT") or []):
+                hv = float(p.get("holdVol") or 0)
+                if hv <= 0:
+                    continue
+                pos.append(dict(
+                    side=("long" if int(p.get("positionType") or 1) == 1
+                          else "short"),
+                    vol=hv, avg=float(p.get("holdAvgPrice") or 0),
+                    lev=p.get("leverage"),
+                    liq=float(p.get("liquidatePrice") or 0),
+                    margin=float(p.get("im") or p.get("oim") or 0)))
+            out["positions"] = pos
+            out["contract_size"] = _contract_size(f"{pair}_USDT")
+        else:
+            api = MexcSpotAPI(account="mexc2")
+            out["account"] = "mexc2"
+            for b in api.account_info().get("balances", []):
+                if b.get("asset") == "USDT":
+                    out["available"] = float(b.get("free") or 0)
+                elif b.get("asset") == pair:
+                    out["base_free"] = float(b.get("free") or 0)
+            out.setdefault("available", 0.0)
+            out.setdefault("base_free", 0.0)
+    except Exception as e:
+        out["error"] = str(e)[:250]
+    return jsonify(**out)
+
+
+@app.route("/api/trade/order", methods=["POST"])
+def trade_order():
+    """Manual market orders, executed only on an explicit user confirm.
+    Futures on mexc1 (open long/short at chosen leverage+margin, partial or
+    full close); spot on mexc2 (buy by USDT, sell by quantity)."""
+    d = request.get_json(force=True)
+    if d.get("confirm") != "TRADE":
+        return jsonify(error="requires confirm='TRADE'"), 400
+    market = d.get("market")
+    pair = (d.get("pair") or "").upper()
+    action = d.get("action")
+    if not pair or market not in ("fut", "spot"):
+        return jsonify(error="need market (fut|spot) and pair"), 400
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    try:
+        if market == "fut":
+            api = MexcFuturesAPI(account="mexc1")
+            sym = f"{pair}_USDT"
+            if action in ("long", "short"):
+                margin = float(d.get("margin") or 0)
+                lev = int(d.get("lev") or 1)
+                if not (0 < margin <= 1_000_000) or not (1 <= lev <= 200):
+                    return jsonify(error="need margin>0 and 1<=lev<=200"), 400
+                cs = _contract_size(sym)
+                import requests as _rq
+                px = float((_rq.get("https://contract.mexc.com/api/v1/"
+                                    "contract/ticker",
+                                    params=dict(symbol=sym), timeout=10)
+                            .json().get("data") or {}).get("lastPrice") or 0)
+                if not cs or not px:
+                    return jsonify(error="could not read contract size/"
+                                         "price"), 502
+                vol = int(margin * lev / (px * cs))
+                if vol < 1:
+                    return jsonify(error=f"margin x lev too small for one "
+                                         f"contract (1 contract = {cs} "
+                                         f"{pair} ≈ ${cs*px:.2f} at "
+                                         f"{lev}x needs "
+                                         f"${cs*px/lev:.2f} margin)"), 400
+                res = (api.open_long if action == "long"
+                       else api.open_short)(sym, vol, lev, px)
+            elif action == "close":
+                pct = float(d.get("pct") or 100)
+                poss = [p for p in (api.open_positions(sym) or [])
+                        if float(p.get("holdVol") or 0) > 0]
+                if not poss:
+                    return jsonify(error="no open futures position on "
+                                         + sym), 400
+                p0 = poss[0]
+                hv = float(p0.get("holdVol") or 0)
+                if pct >= 100:
+                    res = api.close_position(sym)
+                else:
+                    vol = max(1, int(hv * pct / 100))
+                    side = 4 if int(p0.get("positionType") or 1) == 1 else 2
+                    res = api.place_market(sym, side, vol)
+            else:
+                return jsonify(error="fut action must be long|short|"
+                                     "close"), 400
+        else:
+            api = MexcSpotAPI(account="mexc2")
+            sym = f"{pair}_USDT"
+            if action == "buy":
+                usdt = float(d.get("usdt") or 0)
+                if not (0 < usdt <= 1_000_000):
+                    return jsonify(error="need usdt>0"), 400
+                res = api.market_buy_quote(sym, usdt)
+            elif action == "sell":
+                qty = api.floor_qty(sym, float(d.get("qty") or 0))
+                if not qty or qty <= 0:
+                    return jsonify(error="quantity below the pair "
+                                         "minimum"), 400
+                res = api.market_sell(sym, qty)
+            else:
+                return jsonify(error="spot action must be buy|sell"), 400
+    except Exception as e:
+        return jsonify(error=str(e)[:300]), 502
+    print(f"MANUAL TRADE {market} {pair} {action}: {str(res)[:180]}",
+          flush=True)
+    return jsonify(ok=True, result=(res if isinstance(res, dict) else
+                                    dict(raw=str(res)[:200])))
+
+
 @app.route("/api/transfer/balances")
 def transfer_balances():
     """USDT available on the spot and futures wallets of one account —
