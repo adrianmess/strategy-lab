@@ -1588,7 +1588,31 @@ function extrasRow(){
 }
 // ---------------- Trade page (manual orders + chart) ----------------
 var TD = {pair:'BTC', tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
-          series:null, state:null, timer:null};
+          series:null, state:null, timer:null, cache:{}, pf:0};
+function tdKey(a, m, p2){ return (a||TD.acct)+'|'+(m||TD.mkt)+'|'+(p2||TD.pair); }
+function tdTyping(){
+  var a = document.activeElement;
+  return a && (a.tagName === 'INPUT' || a.tagName === 'SELECT') && a.closest &&
+    (a.closest('#tdPanel') || a.closest('#tdPos') || a.closest('#tdXfer'));
+}
+function tdKeepInputs(fn){
+  // re-render without eating what the user typed: skip entirely while a
+  // field is focused; otherwise snapshot values and put them back after
+  if(tdTyping()) return;
+  var keep = {};
+  ['tdMarg','tdLev','tdLimPx','tdBuy','tdBuyPx','tdSell','tdSellPx'].forEach(function(id){
+    var e = document.getElementById(id);
+    if(e && e.value !== '') keep[id] = e.value;
+  });
+  fn();
+  if(TD.renderKey === tdKey()){
+    Object.keys(keep).forEach(function(id){
+      var e = document.getElementById(id);
+      if(e) e.value = keep[id];
+    });
+  }
+  TD.renderKey = tdKey();
+}
 var TD_PAIRS = ['BTC','ETH','SOL','XRP','DOGE','SUI','HYPE'];
 var TD_TFS = ['1m','5m','15m','1h','4h','1d'];
 function tdChips(el, list, cur, cb){
@@ -1651,10 +1675,7 @@ function tdKlines(){
       TD.pair + ' ' + last.close.toLocaleString(undefined, {maximumFractionDigits: last.close > 100 ? 1 : 5});
   });
 }
-function tdState(){
-  API('trade/state?market='+TD.mkt+'&pair='+TD.pair+'&account='+TD.acct).then(function(d){
-    if(document.getElementById('v-trade') &&
-       !document.getElementById('v-trade').classList.contains('on')) return;
+function tdApply(d){
     TD.state = d;
     var held = document.getElementById('tdHeld');
     held.innerHTML = (d.held_by && d.held_by.length)
@@ -1662,8 +1683,29 @@ function tdState(){
         'padding:8px 11px;font-size:12px;margin-bottom:11px"><b>&#9888; '+d.held_by.join(', ')+
         '</b> holds a '+TD.pair+' position — manual orders on that account change the STRATEGY\'S position.</div>'
       : '';
-    tdPanel(); renderTdPos();
+    tdKeepInputs(function(){ tdPanel(); renderTdPos(); });
+}
+function tdState(){
+  var k = tdKey();
+  if(TD.cache[k]) tdApply(TD.cache[k]);          // instant from cache
+  API('trade/state?market='+TD.mkt+'&pair='+TD.pair+'&account='+TD.acct).then(function(d){
+    if(d && !d.error) TD.cache[k] = d;
+    var v = document.getElementById('v-trade');
+    if(v && v.classList.contains('on') && k === tdKey()) tdApply(d);
   });
+  // quietly pre-warm the other account/market combos so switching is instant
+  if(Date.now() - TD.pf > 60000){
+    TD.pf = Date.now();
+    ['mexc1','mexc2'].forEach(function(a){
+      ['fut','spot'].forEach(function(m){
+        var kk = tdKey(a, m);
+        if(kk === k) return;
+        API('trade/state?market='+m+'&pair='+TD.pair+'&account='+a)
+          .then(function(d){ if(d && !d.error) TD.cache[kk] = d; })
+          .catch(function(){});
+      });
+    });
+  }
 }
 function renderTdPos(){
   if(ARMED) return;
