@@ -187,6 +187,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=None)
     ap.add_argument("--resume", default=None)
+    ap.add_argument("--plan-only", action="store_true",
+                    help="build plan.json and exit — a remote worker box "
+                         "(MacBook agent) executes the specs")
     a = ap.parse_args()
     if a.resume:
         execute(a.resume if os.path.isabs(a.resume)
@@ -208,6 +211,10 @@ def main():
     for f in (os.path.join(pdir, "STOP"),):
         if os.path.exists(f):
             os.remove(f)
+    if a.plan_only:
+        print("plan-only: waiting for the remote worker to pick this up",
+              flush=True)
+        return
     execute(pdir)
 
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.strategylab.gamut-agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/adrian/Code/strategy-lab/scripts/macbook_gamut_agent.sh</string>
+  </array>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <!-- without this, launchd kills the nohup'd workers when each 60s tick
+       exits — the macOS twin of the EC2 lesson "systemd reaped the workers" -->
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/strategylab_gamut_agent.err</string>
+</dict>
+</plist>

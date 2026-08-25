@@ -276,6 +276,9 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="gmmh">Max days in trade</label><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span id="gmChips_mh"></span><input id="gmIn_mh" type="number" step="0.5" placeholder="7" style="width:55px" onkeydown="if(event.key==='Enter'){event.preventDefault();gmAdd('mh');}"><button class="small" onclick="gmAdd('mh')">+</button></span></div>
       <div class="field"><label data-x="gmevals">Evals per run</label><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span id="gmChips_total"></span><input id="gmIn_total" type="number" step="10000" placeholder="100000" style="width:80px" onkeydown="if(event.key==='Enter'){event.preventDefault();gmAdd('total');}"><button class="small" onclick="gmAdd('total')">+</button></span></div>
       <div class="field"><label>Processes</label><input id="gmProcs" value="14" style="width:55px"></div>
+      <div class="field"><label title="host = the Mac mini runs everything as usual. MacBook = the plan is built here but YOUR computer executes it: the MacBook agent picks it up within a minute, runs it on its own cores and syncs results back automatically (MacBook must be awake)">Run on</label>
+        <select id="gmRunner"><option value="host">Mac mini (host)</option>
+          <option value="macbook">MacBook (this computer)</option></select></div>
       <div class="field"><label data-x="gmspace">Parameter space</label>
         <select id="gmSpace"><option value="active">imported / active</option><option value="ai">AI-generated</option></select></div>
       <div class="field"><label data-x="gmname">Name</label><input id="gmName" placeholder="auto (AI-named)" style="width:120px"></div>
@@ -2027,6 +2030,7 @@ function gamutCfg(){
     totals: GM_LISTS.total.slice(),
     holdouts: gamutHoldouts(),
     space_variant: $('gmSpace').value,
+    runner: ($('gmRunner')||{}).value || 'host',
     lev_stops: $('gmLevStops').checked, cadapt: $('gmCadapt').checked };
 }
 // evals/min measured from 309 completed runs at 14 procs (median, p25=slow, p75=fast);
@@ -2070,7 +2074,8 @@ async function gamutStart(){
   if(r.error){ $('gmMsg').textContent = 'error: '+r.error; return; }
   GAMUT_NAME = r.name || c.name || '';
   if(r.name && !c.name) $('gmName').value = r.name;   // show the AI/auto name
-  $('gmMsg').textContent = 'running — watch the Jobs section; runs appear in Runs as they finish; report: campaigns/gamut_<name>/report.md';
+  $('gmMsg').textContent = r.note ||
+    'running — watch the Jobs section; runs appear in Runs as they finish; report: campaigns/gamut_<name>/report.md';
   gamutPoll();
   if(typeof refreshJobs==='function') refreshJobs();
 }

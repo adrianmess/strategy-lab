@@ -3700,13 +3700,57 @@ def gamut_start():
         name = f"{base_name}_{n2}"
         n2 += 1
     cfg["name"] = name
+    # runner: "host" (this Mac mini, default) or "macbook" — the browser
+    # machine. For macbook, only the PLAN is built here; the MacBook's
+    # gamut agent polls /api/gamut/remote_queue, syncs the campaign + data,
+    # runs gamut_worker locally and rsyncs results back (mac2_sync).
+    runner = cfg.get("runner") or "host"
     pdir = os.path.join(OPT, "campaigns", f"gamut_{name}")
     os.makedirs(pdir, exist_ok=True)
     cfg_p = os.path.join(pdir, "config.json")
     json.dump(cfg, open(cfg_p, "w"), indent=1)
-    return jsonify(id=spawn("gamut", name,
-                            [sys.executable, "gamut.py", "--config", cfg_p],
-                            OPT), name=name)
+    cmd = [sys.executable, "gamut.py", "--config", cfg_p]
+    if runner != "host":
+        cmd.append("--plan-only")
+    return jsonify(id=spawn("gamut", name, cmd, OPT), name=name,
+                   runner=runner,
+                   note=(None if runner == "host" else
+                         "plan queued for the MacBook — its agent picks it "
+                         "up within a minute (MacBook must be awake)"))
+
+
+@app.route("/api/gamut/remote_queue")
+def gamut_remote_queue():
+    """Campaigns assigned to a remote box (runner != host) that still have
+    unfinished specs. The MacBook agent polls this via ssh+loopback."""
+    out = []
+    croot = os.path.join(OPT, "campaigns")
+    for d in sorted(os.listdir(croot)):
+        cfg_p = os.path.join(croot, d, "config.json")
+        plan_p = os.path.join(croot, d, "plan.json")
+        if not (os.path.exists(cfg_p) and os.path.exists(plan_p)):
+            continue
+        try:
+            cfg = json.load(open(cfg_p))
+        except Exception:
+            continue
+        if (cfg.get("runner") or "host") == "host":
+            continue
+        try:
+            plan = json.load(open(plan_p))
+        except Exception:
+            continue
+        pend = 0
+        for s in plan.get("specs") or []:
+            rd = os.path.join(OPT, "runs", s["name"])
+            if not (os.path.exists(os.path.join(rd, "best_config.json"))
+                    or os.path.exists(os.path.join(rd, "no_survivor.json"))):
+                pend += 1
+        if pend:
+            out.append(dict(dir=d, name=cfg.get("name"),
+                            pairs=cfg.get("pairs"), pending=pend,
+                            total=len(plan.get("specs") or [])))
+    return jsonify(queue=out)
 
 
 @app.route("/api/gamut/stop", methods=["POST"])
