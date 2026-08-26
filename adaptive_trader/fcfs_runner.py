@@ -666,6 +666,15 @@ def main_fcfs(cfg, live):
                                      float(c.get("lev") or 1.0),
                                      float(msg.get("px") or 0), key))
                                 continue
+                            # With auto-adopt enabled, mid-trade joins are
+                            # governed ONLY by its per-pair thresholds: the
+                            # adopt-sim (2026-08-25) showed the backtest
+                            # baseline never joins already-open virtual
+                            # trades, and unthresholded joins underperform
+                            # fresh-signals-only. Late-join below stays as
+                            # the legacy behavior when auto-adopt is OFF.
+                            if (_ar["auto"] or {}).get("enabled"):
+                                continue
                             # LATE-JOIN: the component's virtual position was
                             # opened while we were down or otherwise flat.
                             # Join ONLY in the red (entering at or below the
