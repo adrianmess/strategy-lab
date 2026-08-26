@@ -33,7 +33,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RUNS = os.path.join(HERE, "runs")
 DASH = os.path.join(os.path.dirname(HERE), "dashboard")
 PAIRS = ["sol", "btc", "eth", "doge", "xrp", "sui"]
-SPOT_COMM = 0.0005
+sys.path.insert(0, os.path.join(os.path.dirname(HERE),
+                                "adaptive_trader", "research2"))
+try:      # live exchange rate (fees.json, panel-refreshed) per LAB_COIN
+    from fees_live import per_side as _fee_per_side
+    SPOT_COMM = _fee_per_side("spot")
+except Exception:
+    SPOT_COMM = 0.0005
 MAX_HOLD_D = 7.0
 _DAY_NS = 86_400_000_000_000
 

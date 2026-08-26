@@ -57,8 +57,11 @@ def mtm_curve(trades: pd.DataFrame, closes: np.ndarray, initial: float = 1000.0)
     return mtm, (float(np.nanmax(dd)) if n else 0.0)
 
 RESULT_DIR = "wf2_results"
-FUT_COMM = 0.0004
-SPOT_COMM = 0.0005
+# live exchange rates per LAB_COIN when fees.json is present (refreshed
+# hourly by the panel); the historic constants are the fallback inside
+from fees_live import per_side as _fee_per_side
+FUT_COMM = _fee_per_side("lev")
+SPOT_COMM = _fee_per_side("spot")
 
 REFIT_DATES = pd.date_range("2024-11-15", "2026-06-05", freq="28D")
 TEST_DAYS = 28

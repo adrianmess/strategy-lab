@@ -33,9 +33,11 @@ sys.path.insert(0, os.path.join(HERE, "research"))
 sys.path.insert(0, os.path.join(HERE, "research2"))
 
 from regimes import regime_features, make_regimes          # noqa: E402
+from fees_live import per_side as _fee_per_side            # noqa: E402
 
 logger = logging.getLogger(__name__)
 WARMUP = 3000
+# historic fallbacks; live evaluation asks fees_live per pair (fees.json)
 FUT_COMM, SPOT_COMM = 0.0004, 0.0005
 BUCKET_METHOD = {"vol3": "vol3", "trend3": "trend3", "vt9": "volXtrend9",
                  "vol3_7d": "vol3_7d", "volume3": "volume3"}
@@ -289,7 +291,7 @@ def run_component_engine(comp, mode, df3, df1, feats):
     method = comp.get("method", "vol3")
     reg, R = make_regimes(feats, method)
     warmup = min(WARMUP, max(0, len(df3) - 200))
-    comm = FUT_COMM if mode == "lev" else SPOT_COMM
+    comm = _fee_per_side(mode, comp.get("pair"))
     if strat == "macdx":
         from macdx_engine import precompute_macdx, run_macdx_P, MACDX_DEFAULTS
         from wf2 import build_P_macdx

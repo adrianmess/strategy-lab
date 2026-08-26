@@ -33,7 +33,13 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNS = os.path.join(HERE, "runs")
 DASH = os.path.join(os.path.dirname(HERE), "dashboard")
-FUT_COMM, SPOT_COMM = 0.0004, 0.0005
+sys.path.insert(0, os.path.join(os.path.dirname(HERE),
+                                "adaptive_trader", "research2"))
+try:      # live exchange rates (fees.json, panel-refreshed) per LAB_COIN
+    from fees_live import per_side as _fee_per_side
+    FUT_COMM, SPOT_COMM = _fee_per_side("lev"), _fee_per_side("spot")
+except Exception:
+    FUT_COMM, SPOT_COMM = 0.0004, 0.0005
 BLOCK_DAYS = 21
 MAX_HOLD_D = 7.0
 MAX_DD = 0.55

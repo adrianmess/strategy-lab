@@ -22,8 +22,10 @@ from regimes import make_regimes, DAY
 from wf2 import mtm_curve
 from adaptive import slice_pre
 
-FUT_COMM = 0.0004
-SPOT_COMM = 0.0005
+# live exchange rates per LAB_COIN when fees.json is present (panel-refreshed)
+from fees_live import per_side as _fee_per_side
+FUT_COMM = _fee_per_side("lev")
+SPOT_COMM = _fee_per_side("spot")
 
 _G3 = {}
 

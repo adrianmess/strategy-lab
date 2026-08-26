@@ -2467,9 +2467,10 @@ function tdPanel(){
           (d.available!=null?Math.floor(d.available*100)/100:0)+';tdPrev()">max</button></div>'+
       '<div class="mini" style="margin-bottom:5px">LIMIT PRICE <span style="text-transform:none">(optional — blank = market order)</span></div>'+
       '<input id="tdLimPx" type="number" placeholder="market" style="width:100%;margin-bottom:8px">'+
-      '<div class="mini" style="margin-bottom:11px">available for leverage (futures wallet, '+TD.acct+'): <b class="num">'+
+      '<div class="mini" style="margin-bottom:5px">available for leverage (futures wallet, '+TD.acct+'): <b class="num">'+
         amt('$'+(+(d.available||0)).toFixed(2))+'</b> &middot; position &asymp; <b class="num" id="tdNotion">$0</b>'+
         ((+(d.available||0)) < 1 ? ' &middot; <span style="color:var(--accent)">fund it via Transfer on the Overview</span>' : '')+'</div>'+
+      '<div class="mini" id="tdFeeLine" style="margin-bottom:11px"></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
         '<button class="btn" style="border-color:var(--up);color:var(--up);font-weight:700;padding:11px" '+
           'onclick="tdOpen(this,\'long\')">Open Long</button>'+
@@ -2492,13 +2493,14 @@ function tdPanel(){
     el.innerHTML =
       '<div class="mini" style="margin-bottom:5px">BUY — spend USDT (market)</div>'+
       '<div style="display:flex;gap:7px;margin-bottom:5px">'+
-        '<input id="tdBuy" type="number" placeholder="0" style="flex:1">'+
+        '<input id="tdBuy" type="number" placeholder="0" style="flex:1" oninput="tdFeeS()">'+
         '<input id="tdBuyPx" type="number" placeholder="limit px (opt)" style="width:105px">'+
         '<button class="btn sm" onclick="document.getElementById(\'tdBuy\').value='+
-          (d.available!=null?Math.floor(d.available*100)/100:0)+'">max</button></div>'+
-      '<div class="mini" style="margin-bottom:9px">available for spot (spot wallet, '+TD.acct+'): <b class="num">'+
+          (d.available!=null?Math.floor(d.available*100)/100:0)+';tdFeeS()">max</button></div>'+
+      '<div class="mini" style="margin-bottom:4px">available for spot (spot wallet, '+TD.acct+'): <b class="num">'+
         amt('$'+(+(d.available||0)).toFixed(2))+'</b>'+
         ((+(d.available||0)) < 1 ? ' &middot; <span style="color:var(--accent)">fund it via Transfer or Convert on the Overview</span>' : '')+'</div>'+
+      '<div class="mini" id="tdFeeLineS" style="margin-bottom:9px"></div>'+
       '<button class="btn" style="width:100%;border-color:var(--up);color:var(--up);font-weight:700;padding:11px;margin-bottom:14px" '+
         'onclick="tdSpot(this,\'buy\')">Buy '+TD.pair+'</button>'+
       '<div class="mini" style="margin-bottom:5px">SELL — quantity of '+TD.pair+' (market)</div>'+
@@ -2510,7 +2512,19 @@ function tdPanel(){
       '<button class="btn" style="width:100%;border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
         'onclick="tdSpot(this,\'sell\')">Sell '+TD.pair+'</button>'+
       '<div id="tdMsg" style="margin-top:11px"></div>';
+    tdFeeS();
   }
+}
+function tdFmtFee(v){ return parseFloat((100*(v||0)).toFixed(4))+'%'; }
+function tdFeeS(){
+  var fl = document.getElementById('tdFeeLineS');
+  if(!fl) return;
+  var fr = ((TD.fees||{}).spot||{})[TD.pair];
+  if(!fr){ fl.innerHTML = ''; return; }
+  var b = +((document.getElementById('tdBuy')||{}).value||0);
+  fl.innerHTML = 'fee rate ('+TD.pair+' spot, live from MEXC): maker '+tdFmtFee(fr.maker)+
+    ' / taker '+tdFmtFee(fr.taker)+
+    (b>0?(' &middot; buy fee &asymp; <b class="num">$'+(b*(fr.taker||0)).toFixed(4)+'</b>'):'');
 }
 function tdPrev(){
   var m = +((document.getElementById('tdMarg')||{}).value || 0);
@@ -2519,6 +2533,15 @@ function tdPrev(){
   if(n) n.textContent = '$' + (m*l).toLocaleString(undefined,{maximumFractionDigits:0});
   var q = document.getElementById('tdLiq');
   if(q) q.textContent = '-' + (92/Math.max(l,1)).toFixed(1) + '%';
+  var fl = document.getElementById('tdFeeLine');
+  if(fl){
+    var fr = ((TD.fees||{}).fut||{})[TD.pair];
+    fl.innerHTML = fr
+      ? 'fee rate ('+TD.pair+' perp, live from MEXC): maker '+tdFmtFee(fr.maker)+
+        ' / taker '+tdFmtFee(fr.taker)+
+        (m>0?(' &middot; open+close &asymp; <b class="num">$'+(2*m*l*(fr.taker||0)).toFixed(4)+'</b>'):'')
+      : '';
+  }
 }
 function tdMsg(txt, bad){
   var el = document.getElementById('tdMsg');
@@ -2582,6 +2605,7 @@ function tdXferLoad(){
 }
 function tdRefresh(){
   tdInit(); tdRefreshChips(); tdKlines(); tdState(); tdXferLoad();
+  API('fees').then(function(d){ TD.fees = d; tdPrev(); tdFeeS(); }).catch(function(){});
   if(TD.tab==='pos' && TD.posAll) tdAllLoad();
   if(TD.tab==='phist'||TD.tab==='ohist'||TD.tab==='assets') tdHistLoad();
   if(!TD.timer) TD.timer = setInterval(function(){

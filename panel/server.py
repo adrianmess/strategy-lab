@@ -1120,6 +1120,67 @@ def trade_positions_all():
     return jsonify(**out)
 
 
+# ---- live fee rates: MEXC's own numbers, refreshed hourly into
+# adaptive_trader/fees.json — engines, optimizer CLIs and the fcfs hosts read
+# it through research2/fees_live.py, so exchange fee changes propagate
+# everywhere automatically. Futures rates are public (contract detail);
+# spot rates are per-account (signed /api/v3/tradeFee, queried on mexc1).
+_FEES_P = os.path.join(AT, "fees.json")
+
+
+@app.route("/api/fees")
+def fees():
+    try:
+        return jsonify(**json.load(open(_FEES_P)))
+    except Exception:
+        return jsonify(error="no fees.json yet — refreshes hourly",
+                       fut={}, spot={})
+
+
+def _fees_refresh():
+    import requests as _rq
+    while True:
+        doc = dict(at=time.strftime("%Y-%m-%d %H:%M:%S"), fut={}, spot={})
+        try:
+            for pr in _TD_HIST_PAIRS:
+                try:
+                    d = (_rq.get("https://contract.mexc.com/api/v1/contract/"
+                                 "detail", params=dict(symbol=f"{pr}_USDT"),
+                                 timeout=10).json().get("data") or {})
+                    doc["fut"][pr] = dict(
+                        maker=float(d.get("makerFeeRate") or 0),
+                        taker=float(d.get("takerFeeRate") or 0))
+                except Exception:
+                    pass
+            try:
+                if AT not in sys.path:
+                    sys.path.insert(0, AT)
+                from mexc_api import MexcSpotAPI
+                api = MexcSpotAPI(account="mexc1")
+                for pr in _TD_HIST_PAIRS:
+                    try:
+                        r = ((api._signed("GET", "/api/v3/tradeFee",
+                                          {"symbol": f"{pr}USDT"}) or {})
+                             .get("data") or {})
+                        doc["spot"][pr] = dict(
+                            maker=float(r.get("makerCommission") or 0),
+                            taker=float(r.get("takerCommission") or 0))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            if doc["fut"] or doc["spot"]:
+                tmp = _FEES_P + ".tmp"
+                json.dump(doc, open(tmp, "w"), indent=1)
+                os.replace(tmp, _FEES_P)
+        except Exception as e:
+            print(f"fees refresh error: {e}", flush=True)
+        time.sleep(3600)
+
+
+threading.Thread(target=_fees_refresh, daemon=True).start()
+
+
 # ---- TP/SL watcher: panel-side take-profit / stop-loss on MANUAL positions.
 # Rules live in panel/tpsl.json; a 20s thread checks prices and closes at
 # market when a threshold is crossed. One-shot; removed after firing.

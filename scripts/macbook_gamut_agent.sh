@@ -65,6 +65,11 @@ import json
 try: print(json.load(open('$L/optimizer/gamut_limits.json')).get('cores',12))
 except Exception: print(12)")
 
+# live fee rates (mini refreshes hourly from MEXC) so local backtests use them
+rsync -a $BWOPT -e "ssh $SSHOPTS" \
+  "$MINI:strategy-lab/adaptive_trader/fees.json" \
+  "$L/adaptive_trader/" 2>>"$LOG" || true
+
 while read -r DIRN PAIRS; do
   [ -z "$DIRN" ] && continue
   CAMP="${DIRN#gamut_}"
