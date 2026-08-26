@@ -2987,7 +2987,7 @@ function pctForm(btn, okLabel, onOk, withPairs){
             '<input type="checkbox" data-pair="'+pd[0]+'"> '+pd[0].toUpperCase()+
             ' &le;<input type="number" step="0.1" value="'+pd[1]+'" data-pv="'+pd[0]+'" style="width:58px">%</label>';
         }).join('')+
-        '<button class="btn sm" data-r="recall" title="tick all 7 pairs at the backtested vol-scaled depths (the best configuration found: +39.6%/mo vs +37.0%/mo baseline)">use recommended set</button>'+
+        '<button class="btn sm" data-r="recall" title="the full backtested winner: all 7 pairs at their vol-scaled depths AND close at +2% (+39.6%/mo vs +37.0%/mo baseline) — nothing applies until you confirm">use recommended set</button>'+
         '</div>'
       : '');
   var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = okLabel;
@@ -2999,6 +2999,9 @@ function pctForm(btn, okLabel, onOk, withPairs){
   if(rec) rec.onclick = function(ev){
     ev.stopPropagation();
     wrap.querySelectorAll('[data-pair]').forEach(function(cb){ cb.checked = true; });
+    // the researched winner is depths + close at +2% as a package — fill the
+    // close field too (visible here; applies only when you hit confirm)
+    wrap.querySelector('[data-r=close]').value = 2;
   };
   wrap.querySelector('[data-r=open]').focus();
   var undo = function(){ wrap.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
