@@ -20,6 +20,7 @@ Honesty protocol:
 import glob
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -33,10 +34,15 @@ SPLIT = np.datetime64("2026-03-01")
 
 
 @njit(cache=False)
-def first_passage(close, high, low, d_thr, u_thr, horizon, down_first):
+def first_passage(close, high, low, d_arr, u_arr, horizon, down_first):
+    """Barriers are PER-MINUTE arrays — pass constants broadcast for the
+    static version, or vol-scaled arrays (k x sigma60) for the adaptive one
+    so the race means the same thing in calm and wild regimes."""
     n = len(close)
     y = np.full(n, -1.0)
     for i in range(n - 1):
+        d_thr = d_arr[i]
+        u_thr = u_arr[i]
         up_b = close[i] * (1.0 + u_thr)
         dn_b = close[i] * (1.0 - d_thr)
         if down_first == 0:            # race: up u_thr vs down d_thr
@@ -190,8 +196,26 @@ def main():
     print(f"{len(df)} minutes {df['t'].iloc[0]} .. {df['t'].iloc[-1]}")
 
     X, names = build_features(df)
-    y_dn = first_passage(c, h, lo, D_THR, U_THR, HORIZON, 1)
-    y_up = first_passage(c, h, lo, D_THR, U_THR, HORIZON, 0)
+    lc = np.log(c)
+    r1 = np.diff(lc, prepend=lc[0])
+    sig = roll_std(r1, 60)
+    sig = np.where(np.isnan(sig) | (sig <= 0), np.nanmedian(sig), sig)
+    if len(sys.argv) > 1 and sys.argv[1] == "--volscaled":
+        # same MEDIAN barrier as the static run, but scaled per-minute with
+        # realized vol so the race is regime-invariant
+        kd = D_THR / np.median(sig)
+        ku = U_THR / np.median(sig)
+        d_arr = np.clip(kd * sig, 0.002, 0.03)
+        u_arr = np.clip(ku * sig, 0.0012, 0.018)
+        print(f"VOL-SCALED barriers: median dn "
+              f"{100*np.median(d_arr):.2f}% / up {100*np.median(u_arr):.2f}%"
+              f" (5th-95th pct dn {100*np.percentile(d_arr,5):.2f}"
+              f"-{100*np.percentile(d_arr,95):.2f}%)")
+    else:
+        d_arr = np.full(len(c), D_THR)
+        u_arr = np.full(len(c), U_THR)
+    y_dn = first_passage(c, h, lo, d_arr, u_arr, HORIZON, 1)
+    y_up = first_passage(c, h, lo, d_arr, u_arr, HORIZON, 0)
     ok = ~np.isnan(X).any(1)
     tr = ok & (t64 < SPLIT) & (np.arange(len(df)) % 3 == 0)
     te = ok & (t64 >= SPLIT)
