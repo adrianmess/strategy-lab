@@ -20,6 +20,10 @@ printed so bad fits are visible.
 
 Usage:  python3 fcfs_adopt_sim_lev.py            # full variant grid
         python3 fcfs_adopt_sim_lev.py --quick    # baseline + headline rows
+        python3 fcfs_adopt_sim_lev.py --wf       # CAUSAL walk-forward:
+            fcfsx parity (42d folds, roster re-earned each fold from
+            past-only trades, busy carry-over) — the honest frame; validated
+            against the published _fcfs_wf before reading the adoption rows
 """
 import glob
 import json
@@ -97,7 +101,29 @@ def main():
     T0 = min(int(c["et"][0]) for c in comps)
     T1 = max(int(c["xt"][-1]) for c in comps)
 
-    def simulate(cfg):
+    # ---- causal walk-forward folds (fcfsx parity: 42d step, 2-fold look,
+    # roster = components with >=3 past-window trades compounding >1) ----
+    _DAY = 86_400_000_000_000
+    STEP = 42 * _DAY
+    LOOK = 2 * STEP
+
+    def build_folds():
+        folds = []
+        T = max(int(np.datetime64("2025-01-01").astype("datetime64[ns]")
+                    .astype("int64")), T0 + 200 * _DAY)
+        while T < T1 - _DAY:
+            roster = set()
+            for ci, c in enumerate(comps):
+                sel = (c["et"] >= T - LOOK) & (c["xt"] <= T)
+                if int(sel.sum()) >= 3:
+                    g = float(np.prod(1.0 + np.maximum(c["r"][sel], -0.999)))
+                    if g > 1.0:
+                        roster.add(ci)
+            folds.append((T, T + STEP, roster))
+            T += STEP
+        return folds
+
+    def simulate(cfg, folds=None):
         red = cfg.get("red")                    # margin-basis, e.g. -0.05
         red_map = cfg.get("red_map")
         pairs = cfg.get("pairs")
@@ -113,11 +139,26 @@ def main():
         trades = []
         free_since = -1
         n_liq_ad = 0
-        t = T0
+        t = folds[0][0] if folds else T0
+        fi = [0]
 
-        def deepest_shadow(now):
+        def fold_at(now):
+            """(roster, fold_start) for causal WF; (None, None) = no gating."""
+            if folds is None:
+                return None, None
+            i = fi[0]
+            while i < len(folds) and now >= folds[i][1]:
+                i += 1
+            fi[0] = i
+            if i >= len(folds) or now < folds[i][0]:
+                return set(), None          # outside every fold: no entries
+            return folds[i][2], folds[i][0]
+
+        def deepest_shadow(now, roster=None):
             best = None
             for ci, c in enumerate(comps):
+                if roster is not None and ci not in roster:
+                    continue
                 if pairs is not None and c["pair"] not in pairs:
                     continue
                 k = ptr[ci]
@@ -187,6 +228,7 @@ def main():
                     t += NS_MIN
                     continue
             # ---- slot free ----
+            wf_roster, wf_start = fold_at(t)
             best_fresh = None
             for ci, c in enumerate(comps):
                 k = ptr[ci]
@@ -194,11 +236,15 @@ def main():
                 while k < n and c["xt"][k] <= t:
                     k += 1
                 ptr[ci] = k
-                if k < n and free_since <= c["et"][k] <= t:
+                if wf_roster is not None and ci not in wf_roster:
+                    continue
+                lo = free_since if wf_start is None \
+                    else max(free_since, wf_start)
+                if k < n and lo <= c["et"][k] <= t:
                     cand = (c["et"][k], c["xt"][k], ci, k)
                     if best_fresh is None or cand < best_fresh:
                         best_fresh = cand
-            deep = deepest_shadow(t) if adopt_on else None
+            deep = deepest_shadow(t, wf_roster) if adopt_on else None
             if best_fresh is not None and deep is None:
                 et_, xt_, ci, k = best_fresh
                 slot = dict(kind="fresh", ci=ci, k=k, t0=max(et_, t), xt=xt_)
@@ -266,10 +312,25 @@ def main():
         ("vol-scaled x3, close at +10% margin",
          dict(red_map=vol_map3, target=0.10)),
     ]
+    folds = None
     if len(sys.argv) > 1 and sys.argv[1] == "--quick":
         jobs = jobs[:3]
+    elif len(sys.argv) > 1 and sys.argv[1] == "--wf":
+        folds = build_folds()
+        n_active = sum(1 for _, _, r in folds if r)
+        print(f"\nCAUSAL WALK-FORWARD: {len(folds)} folds x 42d "
+              f"({n_active} with a non-empty roster) — published _fcfs_wf "
+              f"is the parity target for the baseline row")
+        jobs = [
+            ("WF BASELINE (fresh signals only)", {}),
+            ("WF adopt: all pairs <=-3% margin, mirror exit (no auto-close)",
+             dict(red=-0.03)),
+            ("WF adopt: all pairs <=-5% margin, mirror exit",
+             dict(red=-0.05)),
+            ("WF adopt: vol-scaled, mirror exit", dict(red_map=vol_map)),
+        ]
     for label, cfg in jobs:
-        s = simulate(cfg)
+        s = simulate(cfg, folds)
         print(f"\n{label}")
         print(f"  {s['n']} trades ({s['n_adopt']} adopted, "
               f"{s['n_liq_ad']} adopted-liq) | {s['monthly']:+.2f}%/mo | "
