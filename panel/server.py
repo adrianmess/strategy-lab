@@ -828,7 +828,13 @@ def _holds_map():
         if p and p.get("symbol"):
             pr = (p.get("symbol") or "").split("_")[0]
             out[(c.get("api_account", "mexc1"), c.get("mode", "lev"),
-                 pr)] = _iname(i)
+                 pr)] = dict(
+                name=_iname(i), adopted=bool(p.get("adopted")),
+                auto=bool(p.get("auto")), comp=p.get("comp"),
+                entry=p.get("entry_price"),
+                ventry_px=p.get("mirror_entry_px"),
+                ventry_t=p.get("mirror_entry_t"),
+                close_pct=p.get("armed_close_pct"))
     return out
 
 
