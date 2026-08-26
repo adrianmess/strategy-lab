@@ -330,6 +330,12 @@ body.masked .amt:hover{filter:none}
     <div class="g2" style="gap:16px">
       <div class="rcard"><h4>Per pair</h4><div id="ppair"><span class="mini">loading…</span></div></div>
       <div class="rcard"><h4>Worker systems</h4><div id="pwork"><span class="mini">loading…</span></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+          <span class="mini" title="bandwidth cap for MacBook↔mini campaign result syncs. Keeps big rsyncs from adding latency to everything else on the network (gaming). 0 = unlimited. The MacBook picks changes up within a minute.">sync cap</span>
+          <input id="syncCap" type="number" step="500" min="0" style="width:90px">
+          <span class="mini">KB/s</span>
+          <button class="btn sm" onclick="saveSyncCap(this)">Save</button>
+        </div>
         <h4 style="margin:20px 0 10px">Failures <span class="tag live" id="pfailN">0</span></h4>
         <div id="pfail"></div></div>
     </div>
@@ -1211,6 +1217,10 @@ function loadProgress(){
         '</tbody></table>'
       : '<span class="mini">none</span>';
   }).catch(function(){});
+  API('sync_limit').then(function(d){
+    var e = document.getElementById('syncCap');
+    if(e && document.activeElement !== e && d.kbps != null) e.value = d.kbps;
+  }).catch(function(){});
   API('gamut/workers').then(function(w){
     document.getElementById('pwork').innerHTML = (w.systems||[]).map(function(s){
       var load = s.load1 != null ? s.load1 : (s.load||0);
@@ -1221,6 +1231,16 @@ function loadProgress(){
         '<div class="bar"><i style="width:'+pct+'%"></i></div></div>'; }).join('')
       || '<span class="mini">no workers registered</span>';
   }).catch(function(){});
+}
+
+function saveSyncCap(btn){
+  var v = parseInt(document.getElementById('syncCap').value, 10);
+  if(isNaN(v) || v < 0){ flash('enter a KB/s value (0 = unlimited)', 'r'); return; }
+  API('sync_limit', {method:'POST', headers:{'Content-Type':'application/json'},
+                     body:JSON.stringify({kbps:v})}).then(function(r){
+    if(r.error) flash(r.error, 'r');
+    else flash('Sync cap set to '+(v ? v+' KB/s' : 'unlimited')+' — the MacBook applies it within a minute.', 'g');
+  });
 }
 
 // ---------------- instances (full control parity) ----------------

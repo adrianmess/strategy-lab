@@ -4517,6 +4517,35 @@ def gamut_start():
                          "up within a minute (MacBook must be awake)"))
 
 
+SYNC_LIMIT_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "sync_limit.json")
+
+
+def _sync_limit():
+    try:
+        return int(json.load(open(SYNC_LIMIT_P)).get("kbps") or 1500)
+    except Exception:
+        return 1500
+
+
+@app.route("/api/sync_limit", methods=["GET", "POST"])
+def sync_limit():
+    """Bandwidth cap (KB/s) for MacBook<->mini campaign rsyncs — keeps big
+    result transfers from stomping the router (gaming latency, 2026-08-25).
+    The MacBook agent picks the value up within a minute."""
+    if request.method == "GET":
+        return jsonify(kbps=_sync_limit())
+    d = request.get_json(force=True)
+    try:
+        k = int(d.get("kbps"))
+    except (TypeError, ValueError):
+        return jsonify(error="need kbps (integer KB/s, 0 = unlimited)"), 400
+    if not (0 <= k <= 1_000_000):
+        return jsonify(error="kbps out of range"), 400
+    json.dump(dict(kbps=k), open(SYNC_LIMIT_P, "w"))
+    return jsonify(ok=True, kbps=k)
+
+
 @app.route("/api/gamut/remote_queue")
 def gamut_remote_queue():
     """Campaigns assigned to a remote box (runner != host) that still have
@@ -4548,7 +4577,7 @@ def gamut_remote_queue():
             out.append(dict(dir=d, name=cfg.get("name"),
                             pairs=cfg.get("pairs"), pending=pend,
                             total=len(plan.get("specs") or [])))
-    return jsonify(queue=out)
+    return jsonify(queue=out, bwlimit=_sync_limit())
 
 
 @app.route("/api/gamut/stop", methods=["POST"])

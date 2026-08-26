@@ -46,6 +46,12 @@ cleanup(){
     fi
   done
 }
+BW=$(echo "$Q" | /usr/bin/python3 -c "
+import json,sys
+try: print(int(json.load(sys.stdin).get('bwlimit') or 1500))
+except Exception: print(1500)")
+echo "{\"kbps\": $BW}" > "$L/optimizer/sync_limit.json"
+BWOPT=""; [ "$BW" -gt 0 ] && BWOPT="--bwlimit=$BW"
 NAMES=$(echo "$Q" | /usr/bin/python3 -c "
 import json,sys
 try: d=json.load(sys.stdin)
@@ -63,11 +69,11 @@ while read -r DIRN PAIRS; do
   [ -z "$DIRN" ] && continue
   CAMP="${DIRN#gamut_}"
   # 1) campaign dir
-  rsync -a --bwlimit=1500 --exclude logs -e "ssh $SSHOPTS" \
+  rsync -a $BWOPT --exclude logs -e "ssh $SSHOPTS" \
     "$MINI:strategy-lab/optimizer/campaigns/$DIRN" "$L/optimizer/campaigns/" 2>>"$LOG"
   # 2) candle data for its pairs; clear wf2 cache when a file changed
   for p in $(echo "$PAIRS" | tr "," " "); do
-    CH=$(rsync -ai --bwlimit=1500 -e "ssh $SSHOPTS" \
+    CH=$(rsync -ai $BWOPT -e "ssh $SSHOPTS" \
       "$MINI:strategy-lab/adaptive_trader/research/data/${p}_*min.parquet" \
       "$L/adaptive_trader/research/data/" 2>>"$LOG" | grep -c "^>f") || true
     if [ "${CH:-0}" -gt 0 ]; then
@@ -76,7 +82,7 @@ while read -r DIRN PAIRS; do
     fi
   done
   # 3) done markers from the mini
-  rsync -a --bwlimit=1500 --ignore-existing \
+  rsync -a $BWOPT --ignore-existing \
     --include="/${CAMP}_*/" --include="/${CAMP}_*/best_config.json" \
     --include="/${CAMP}_*/no_survivor.json" --exclude="*" \
     -e "ssh $SSHOPTS" "$MINI:strategy-lab/optimizer/runs/" \
