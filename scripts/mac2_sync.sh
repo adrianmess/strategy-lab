@@ -22,7 +22,7 @@ R="strategy-lab"
 sync_once() {
   # 1) done-markers from the mini (filter rules, not a remote glob — the
   #    expanded arg list once blew the fd limit at ~280 dirs)
-  rsync -a --ignore-existing \
+  rsync -a --bwlimit=1500 --ignore-existing \
     --include="/${CAMP}_*/" \
     --include="/${CAMP}_*/best_config.json" \
     --include="/${CAMP}_*/no_survivor.json" \
@@ -32,18 +32,18 @@ sync_once() {
   # 2) our completed runs -> mini (only dirs that hold a durable marker)
   for d in "$L"/optimizer/runs/${CAMP}_*/; do
     [ -e "$d/best_config.json" ] || [ -e "$d/no_survivor.json" ] || continue
-    rsync -a --ignore-existing -e "ssh $SSHOPTS" "$d" \
+    rsync -a --bwlimit=1500 --ignore-existing -e "ssh $SSHOPTS" "$d" \
       "$MINI:$R/optimizer/runs/$(basename "$d")/"
   done
   # 3) worker state for the Progress page
   if [ -f "$L/optimizer/campaigns/gamut_$CAMP/worker_state.json" ]; then
-    rsync -a -e "ssh $SSHOPTS" \
+    rsync -a --bwlimit=1500 -e "ssh $SSHOPTS" \
       "$L/optimizer/campaigns/gamut_$CAMP/worker_state.json" \
       "$MINI:$R/optimizer/campaigns/gamut_$CAMP/worker_state_b.json"
   fi
   # 4) backtests merge (additive by name, flock-safe on the mini side)
   if [ -f "$L/dashboard/backtests.js" ]; then
-    rsync -a -e "ssh $SSHOPTS" "$L/dashboard/backtests.js" \
+    rsync -a --bwlimit=1500 -e "ssh $SSHOPTS" "$L/dashboard/backtests.js" \
       "$MINI:/tmp/backtests_macbook.js"
     ssh $SSHOPTS "$MINI" \
       "cd $R && ~/venv/bin/python3 scripts/merge_backtests.py /tmp/backtests_macbook.js" \

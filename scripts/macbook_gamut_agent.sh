@@ -63,11 +63,11 @@ while read -r DIRN PAIRS; do
   [ -z "$DIRN" ] && continue
   CAMP="${DIRN#gamut_}"
   # 1) campaign dir
-  rsync -a --exclude logs -e "ssh $SSHOPTS" \
+  rsync -a --bwlimit=1500 --exclude logs -e "ssh $SSHOPTS" \
     "$MINI:strategy-lab/optimizer/campaigns/$DIRN" "$L/optimizer/campaigns/" 2>>"$LOG"
   # 2) candle data for its pairs; clear wf2 cache when a file changed
   for p in $(echo "$PAIRS" | tr "," " "); do
-    CH=$(rsync -ai -e "ssh $SSHOPTS" \
+    CH=$(rsync -ai --bwlimit=1500 -e "ssh $SSHOPTS" \
       "$MINI:strategy-lab/adaptive_trader/research/data/${p}_*min.parquet" \
       "$L/adaptive_trader/research/data/" 2>>"$LOG" | grep -c "^>f") || true
     if [ "${CH:-0}" -gt 0 ]; then
@@ -76,7 +76,7 @@ while read -r DIRN PAIRS; do
     fi
   done
   # 3) done markers from the mini
-  rsync -a --ignore-existing \
+  rsync -a --bwlimit=1500 --ignore-existing \
     --include="/${CAMP}_*/" --include="/${CAMP}_*/best_config.json" \
     --include="/${CAMP}_*/no_survivor.json" --exclude="*" \
     -e "ssh $SSHOPTS" "$MINI:strategy-lab/optimizer/runs/" \
