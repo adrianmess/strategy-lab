@@ -725,8 +725,10 @@ def klines():
         d = r.get("data") or {}
         t, o, h, lo, c = (d.get(k) or [] for k in
                           ("time", "open", "high", "low", "close"))
+        v = d.get("vol") or []
         rows = [dict(time=int(t[i]), open=float(o[i]), high=float(h[i]),
-                     low=float(lo[i]), close=float(c[i]))
+                     low=float(lo[i]), close=float(c[i]),
+                     vol=(float(v[i]) if i < len(v) else 0.0))
                 for i in range(max(0, len(t) - limit), len(t))]
         return jsonify(rows=rows)
     except Exception as e:
@@ -806,6 +808,30 @@ def _fut_positions(api, marks):
     return pos
 
 
+def _holds_map():
+    """(account, mode, pair) -> instance NAME for every running trader that
+    holds a position right now — lets the Trade page tag each open position
+    as strategy-held (bot) vs manually opened."""
+    out = {}
+    for i, I in instances.items():
+        t = I["trader"]
+        if t["proc"] is None or t["proc"].poll() is not None:
+            continue
+        cfg_name = t["config"] or I.get("cfg") or ""
+        sfile = _state_file_of(cfg_name)
+        try:
+            st = json.load(open(os.path.join(AT, sfile)))
+            c = json.load(open(os.path.join(AT, cfg_name)))
+        except Exception:
+            continue
+        p = st.get("position")
+        if p and p.get("symbol"):
+            pr = (p.get("symbol") or "").split("_")[0]
+            out[(c.get("api_account", "mexc1"), c.get("mode", "lev"),
+                 pr)] = _iname(i)
+    return out
+
+
 @app.route("/api/trade/state")
 def trade_state():
     """Balances + current position/holdings for the Trade page. Any account
@@ -831,6 +857,10 @@ def trade_state():
                 if a.get("currency") == "USDT":
                     out["available"] = float(a.get("availableBalance") or 0)
             out["positions"] = _fut_positions(api, _fut_marks())
+            hm = _holds_map()
+            for p in out["positions"]:
+                p["src"] = hm.get((acct, "lev",
+                                   (p["symbol"] or "").split("_")[0]))
             out["contract_size"] = _contract_size(f"{pair}_USDT")
             try:
                 out["orders"] = [dict(
@@ -862,6 +892,9 @@ def trade_state():
                     holds.append(dict(asset=a_, qty=free, px=px,
                                       value=round(free * px, 2)))
             holds.sort(key=lambda h: -h["value"])
+            hm = _holds_map()
+            for h in holds:
+                h["src"] = hm.get((acct, "spot", h["asset"]))
             out["holdings"] = holds
             out.setdefault("available", 0.0)
             out.setdefault("base_free", 0.0)
@@ -1046,12 +1079,15 @@ def trade_positions_all():
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
     marks = _fut_marks()
+    hm = _holds_map()
     rows = []
     errs = []
     for acct in ("mexc1", "mexc2"):
         try:
             for p in _fut_positions(MexcFuturesAPI(account=acct), marks):
-                p.update(account=acct, market="fut")
+                p.update(account=acct, market="fut",
+                         src=hm.get((acct, "lev",
+                                     (p["symbol"] or "").split("_")[0])))
                 rows.append(p)
         except Exception as e:
             errs.append(f"{acct} fut: {str(e)[:80]}")
@@ -1069,7 +1105,8 @@ def trade_positions_all():
                 if free * px >= 1.0:
                     rows.append(dict(account=acct, market="spot", asset=a_,
                                      qty=free, px=px,
-                                     value=round(free * px, 2)))
+                                     value=round(free * px, 2),
+                                     src=hm.get((acct, "spot", a_))))
         except Exception as e:
             errs.append(f"{acct} spot: {str(e)[:80]}")
     out = dict(rows=rows, errors=errs)
@@ -1266,6 +1303,9 @@ def trade_order():
             elif action == "close":
                 csym = (d.get("symbol") or sym).upper()
                 pct = float(d.get("pct") or 100)
+                usdt = float(d.get("usdt") or 0)      # notional to close
+                lim = (float(d.get("price")) if d.get("price")
+                       not in (None, "") else None)
                 poss = [p for p in (api.open_positions(csym) or [])
                         if float(p.get("holdVol") or 0) > 0]
                 if not poss:
@@ -1273,11 +1313,32 @@ def trade_order():
                                          + csym), 400
                 p0 = poss[0]
                 hv = float(p0.get("holdVol") or 0)
-                if pct >= 100:
+                side = 4 if int(p0.get("positionType") or 1) == 1 else 2
+                if usdt > 0 or lim:
+                    # MEXC-style Close cell: quantity in USDT notional,
+                    # optional limit price (blank = market)
+                    cs = _contract_size(csym)
+                    ref = lim
+                    if not ref:
+                        import requests as _rq
+                        ref = float((_rq.get("https://contract.mexc.com/api/"
+                                             "v1/contract/ticker",
+                                             params=dict(symbol=csym),
+                                             timeout=10).json().get("data")
+                                     or {}).get("lastPrice") or 0)
+                    if not cs or not ref:
+                        return jsonify(error="could not read contract "
+                                             "size/price"), 502
+                    vol = hv if usdt <= 0 else min(
+                        hv, max(1, int(usdt / (ref * cs))))
+                    if lim:
+                        res = api.place_limit(csym, side, vol, lim)
+                    else:
+                        res = api.place_market(csym, side, vol)
+                elif pct >= 100:
                     res = api.close_position(csym)
                 else:
                     vol = max(1, int(hv * pct / 100))
-                    side = 4 if int(p0.get("positionType") or 1) == 1 else 2
                     res = api.place_market(csym, side, vol)
             elif action == "cancel":
                 res = api.cancel_orders([d.get("order_id")])

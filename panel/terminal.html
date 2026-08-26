@@ -122,8 +122,11 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .b4.open .chev{transform:rotate(90deg)}
 .tdgrid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
 @media(max-width:980px){.tdgrid{grid-template-columns:1fr}}
-#tdChart{min-width:0;overflow:hidden}
+#tdChart{min-width:0;overflow:hidden;position:relative}
 #tdIndMACD,#tdIndRSI,#tdIndBB{min-width:0;overflow:hidden}
+.tdlegend{position:absolute;top:7px;left:10px;z-index:5;pointer-events:none;
+ font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:nowrap;
+ text-shadow:0 1px 3px rgba(0,0,0,.8)}
 .tdtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:10px;flex-wrap:wrap}
 .tdtabs button{background:none;border:none;color:var(--dim);font:inherit;font-size:13px;font-weight:600;
  padding:9px 13px;cursor:pointer;border-bottom:2px solid transparent}
@@ -1625,7 +1628,11 @@ var TD = {pair:'BTC', tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
           tab:(localStorage.getItem('tdTab')||'pos'),
           posAll:(localStorage.getItem('tdPosAll')!=='0'),
           ind:JSON.parse(localStorage.getItem('tdInd')||'{}'),
-          rows:[], sub:{}, hcache:{}, allPos:null, allT:0};
+          rows:[], sub:{}, hcache:{}, allPos:null, allT:0,
+          emaData:{}, emaS:null, vol:null, timeIdx:{}, legendEl:null};
+if(!('ema' in TD.ind)) TD.ind.ema = true;   // EMA overlay on by default
+var TD_EMAS = [5, 10, 30, 60];
+var TD_EMA_COLORS = {5:'#f0b90b', 10:'#2ebd85', 30:'#4c8dff', 60:'#8b5cf6'};
 function tdKey(a, m, p2){ return (a||TD.acct)+'|'+(m||TD.mkt)+'|'+(p2||TD.pair); }
 function tdTyping(){
   var a = document.activeElement;
@@ -1641,11 +1648,22 @@ function tdKeepInputs(fn){
     var e = document.getElementById(id);
     if(e && e.value !== '') keep[id] = e.value;
   });
+  var keepCls = {};
+  ['tdcpx','tdcq'].forEach(function(cl){
+    keepCls[cl] = Array.prototype.map.call(
+      document.querySelectorAll('.'+cl), function(e){ return e.value; });
+  });
   fn();
   if(TD.renderKey === tdKey()){
     Object.keys(keep).forEach(function(id){
       var e = document.getElementById(id);
       if(e) e.value = keep[id];
+    });
+    Object.keys(keepCls).forEach(function(cl){
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.'+cl), function(e, i){
+          if(keepCls[cl][i]) e.value = keepCls[cl][i];
+        });
     });
   }
   TD.renderKey = tdKey();
@@ -1675,6 +1693,20 @@ function tdInit(){
     {width:el.clientWidth, height:430}));
   TD.series = TD.chart.addCandlestickSeries({upColor:'#2ebd85',downColor:'#f6465d',
     borderVisible:false, wickUpColor:'#2ebd85', wickDownColor:'#f6465d'});
+  // volume histogram pinned to the bottom fifth of the pane (TradingView-style)
+  TD.vol = TD.chart.addHistogramSeries({priceScaleId:'vol',
+    priceFormat:{type:'volume'}, priceLineVisible:false, lastValueVisible:false});
+  TD.chart.priceScale('vol').applyOptions({scaleMargins:{top:0.82, bottom:0}});
+  // OHLC + EMA legend, tracking the crosshair like TradingView's data line
+  TD.legendEl = document.createElement('div');
+  TD.legendEl.className = 'tdlegend';
+  el.appendChild(TD.legendEl);
+  TD.chart.subscribeCrosshairMove(function(p){
+    if(!TD.rows.length) return;
+    var i = (p && p.time != null && TD.timeIdx[p.time] != null)
+      ? TD.timeIdx[p.time] : TD.rows.length - 1;
+    tdLegendShow(i);
+  });
   TD.chart.timeScale().subscribeVisibleLogicalRangeChange(function(r){ tdSyncRange('main', r); });
   new ResizeObserver(function(){
     if(!el.clientWidth) return;
@@ -1758,7 +1790,56 @@ function tdIndData(){
   }
   return out;
 }
+function tdFmtPx(v){
+  if(v == null || isNaN(v)) return '—';
+  return (+v).toLocaleString(undefined, {maximumFractionDigits: v > 100 ? 1 : 5});
+}
+function tdFmtVol(v){
+  if(!v) return '0';
+  if(v >= 1e9) return (v/1e9).toFixed(2)+'B';
+  if(v >= 1e6) return (v/1e6).toFixed(2)+'M';
+  if(v >= 1e3) return (v/1e3).toFixed(1)+'K';
+  return v.toFixed(0);
+}
+function tdLegendShow(i){
+  var el = TD.legendEl;
+  if(!el) return;
+  var r = TD.rows[i];
+  if(!r){ el.innerHTML = ''; return; }
+  var chg = r.open ? (r.close/r.open - 1) * 100 : 0;
+  var cc = chg >= 0 ? 'var(--up)' : 'var(--down)';
+  var h = '<div><b style="color:var(--fg)">'+TD.pair+'USDT '+
+    (TD.mkt==='fut'?'Perpetual':'')+' &middot; '+TD.tf+' &middot; MEXC</b> '+
+    '<span style="color:'+cc+'">O '+tdFmtPx(r.open)+' H '+tdFmtPx(r.high)+
+    ' L '+tdFmtPx(r.low)+' C '+tdFmtPx(r.close)+' '+
+    (chg>=0?'+':'')+chg.toFixed(2)+'%</span>'+
+    '<span style="color:var(--dim)"> Vol '+tdFmtVol(r.vol||0)+'</span></div>';
+  if(TD.ind.ema) h += '<div>'+TD_EMAS.map(function(n){
+      return '<span style="color:'+TD_EMA_COLORS[n]+'">EMA '+n+' '+
+        tdFmtPx((TD.emaData[n]||[])[i])+'</span>';
+    }).join(' &nbsp;')+'</div>';
+  el.innerHTML = h;
+}
 function tdIndUpdate(){
+  if(TD.ind.ema && TD.rows.length){
+    if(!TD.emaS){
+      TD.emaS = {};
+      TD_EMAS.forEach(function(n){
+        TD.emaS[n] = TD.chart.addLineSeries({color:TD_EMA_COLORS[n],
+          lineWidth:1, priceLineVisible:false, lastValueVisible:true,
+          crosshairMarkerVisible:false});
+      });
+    }
+    TD_EMAS.forEach(function(n){
+      TD.emaS[n].setData(TD.rows.map(function(r, i){
+        return {time:r.time, value:TD.emaData[n][i]};
+      }).slice(n));   // skip the seed-in period
+    });
+  } else if(TD.emaS){
+    TD_EMAS.forEach(function(n){ try{ TD.chart.removeSeries(TD.emaS[n]); }catch(e){} });
+    TD.emaS = null;
+  }
+  tdLegendShow(TD.rows.length - 1);
   var d = tdIndData();
   if(TD.ind.macd && d.macd){
     var o = tdEnsureSub('MACD', function(ch){
@@ -1798,12 +1879,13 @@ function tdRefreshChips(){
   var iw = document.getElementById('tdInds');
   if(iw){
     iw.innerHTML = '';
-    [['macd','MACD'],['rsi','RSI'],['bb','BB %B']].forEach(function(x){
+    [['ema','EMA'],['macd','MACD'],['rsi','RSI'],['bb','BB %B']].forEach(function(x){
       var b = document.createElement('button');
       b.className = 'btn sm'; b.style.borderRadius = '20px';
       if(TD.ind[x[0]]){ b.style.borderColor = 'var(--violet)'; b.style.color = 'var(--violet)'; }
       b.textContent = x[1];
-      b.title = 'toggle ' + x[1] + ' pane under the chart';
+      b.title = x[0]==='ema' ? 'toggle EMA 5/10/30/60 overlay on the chart'
+                             : 'toggle ' + x[1] + ' pane under the chart';
       b.onclick = function(){ tdIndToggle(x[0]); };
       iw.appendChild(b); iw.append(' ');
     });
@@ -1833,8 +1915,18 @@ function tdKlines(){
   API('klines?pair='+TD.pair+'&tf='+TD.tf+'&limit=400').then(function(d){
     if(d.error || !TD.series) return;
     TD.rows = d.rows || [];
+    TD.timeIdx = {};
+    TD.rows.forEach(function(r, i){ TD.timeIdx[r.time] = i; });
+    var c = TD.rows.map(function(r){ return r.close; });
+    TD.emaData = {};
+    TD_EMAS.forEach(function(n){ TD.emaData[n] = tdEma(c, n); });
     TD.series.setData(TD.rows);
+    if(TD.vol) TD.vol.setData(TD.rows.map(function(r){
+      return {time:r.time, value:r.vol||0,
+        color:r.close>=r.open?'rgba(46,189,133,.45)':'rgba(246,70,93,.45)'};
+    }));
     tdIndUpdate();
+    tdLegendShow(TD.rows.length - 1);
     TD.chart.timeScale().fitContent();
     var last = (d.rows || [])[d.rows.length - 1];
     if(last) document.getElementById('tdPx').textContent =
@@ -1916,12 +2008,17 @@ function tdHistLoad(force){
 function tdAcctLabel(a, m){
   return a + ' &middot; ' + (m==='fut'?'Leverage':'Spot');
 }
+function tdSrcTag(src){
+  return src
+    ? '<span class="tag b" title="held by the '+src+' strategy — closing it changes the BOT\'s position">BOT &middot; '+src+'</span>'
+    : '<span class="tag" title="opened manually (Trade page or the exchange app)">Manual</span>';
+}
 function tdTabPosAll(){
   var rows = TD.allPos;
   if(rows == null){ tdAllLoad(); return '<div class="body"><span class="mini">loading all accounts&hellip;</span></div>'; }
   var h = '<div class="body">';
   h += rows.length
-    ? '<table><thead><tr><th>account</th><th>market</th><th>symbol</th><th>side</th><th class="n">size</th>'+
+    ? '<table><thead><tr><th>account</th><th>market</th><th>symbol</th><th>side</th><th>source</th><th class="n">size</th>'+
       '<th class="n">entry</th><th class="n">mark / price</th><th class="n">liq</th><th class="n">margin</th>'+
       '<th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(p){
@@ -1930,6 +2027,7 @@ function tdTabPosAll(){
           return '<tr><td><b>'+p.account+'</b></td><td><span class="tag b">LEV</span></td>'+
             '<td><b>'+p.symbol+'</b></td>'+
             '<td><span class="tag '+(p.side==='long'?'g':'live')+'">'+p.side.toUpperCase()+' '+(p.lev||'?')+'x</span></td>'+
+            '<td>'+tdSrcTag(p.src)+'</td>'+
             '<td class="n">'+p.vol+'</td><td class="n">'+(+p.avg).toPrecision(6)+'</td>'+
             '<td class="n">'+(+p.mark).toPrecision(6)+'</td>'+
             '<td class="n down">'+(p.liq?(+p.liq).toPrecision(6):'&mdash;')+'</td>'+
@@ -1938,7 +2036,11 @@ function tdTabPosAll(){
               (p.upnl_pct!=null?((p.upnl_pct>=0?'+':'')+p.upnl_pct.toFixed(2)+'%'):'&mdash;')+' &middot; '+
               ((p.upnl_usd||0)>=0?'+$':'-$')+Math.abs(p.upnl_usd||0).toFixed(2)+'</td>'+
             '<td class="n '+((p.realised||0)>=0?'up':'down')+'">'+((p.realised||0)>=0?'+$':'-$')+Math.abs(p.realised||0).toFixed(2)+'</td>'+
-            '<td><button class="btn sm danger" onclick="tdCloseSym(this,\''+p.symbol+'\',\''+p.account+'\')">Close</button></td></tr>';
+            '<td style="white-space:nowrap">'+
+              '<button class="btn sm danger" style="border-radius:20px" title="market-close the whole position" onclick="tdCloseSym(this,\''+p.symbol+'\',\''+p.account+'\')">Flash Close</button> '+
+              '<input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
+              '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
+              '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\',\''+p.account+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button></td></tr>';
         }
         return '<tr><td><b>'+p.account+'</b></td><td><span class="tag g">SPOT</span></td>'+
           '<td><b>'+p.asset+'</b></td><td><span class="tag g">HOLD</span></td>'+
@@ -1965,11 +2067,12 @@ function tdTabPosOne(d){
   var h = '<div class="body">';
   if(TD.mkt === 'fut'){
     var ps = d.positions || [];
-    h += ps.length ? '<table><thead><tr><th>symbol</th><th>side</th><th class="n">contracts</th><th class="n">entry</th><th class="n">mark</th><th class="n">liq</th><th class="n">margin</th><th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
+    h += ps.length ? '<table><thead><tr><th>symbol</th><th>side</th><th>source</th><th class="n">contracts</th><th class="n">entry</th><th class="n">mark</th><th class="n">liq</th><th class="n">margin</th><th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
         ps.map(function(p){
           var up = (p.upnl_pct||0) >= 0;
           return '<tr><td><b>'+p.symbol+'</b></td>'+
             '<td><span class="tag '+(p.side==='long'?'g':'live')+'">'+p.side.toUpperCase()+' '+(p.lev||'?')+'x</span></td>'+
+            '<td>'+tdSrcTag(p.src)+'</td>'+
             '<td class="n">'+p.vol+'</td><td class="n">'+(+p.avg).toPrecision(6)+'</td>'+
             '<td class="n">'+(+p.mark).toPrecision(6)+'</td><td class="n down">'+(p.liq?(+p.liq).toPrecision(6):'&mdash;')+'</td>'+
             '<td class="n">$'+(+p.margin).toFixed(2)+'</td>'+
@@ -1977,16 +2080,20 @@ function tdTabPosOne(d){
               (p.upnl_pct!=null?((p.upnl_pct>=0?'+':'')+p.upnl_pct.toFixed(2)+'%'):'&mdash;')+' &middot; '+
               ((p.upnl_usd||0)>=0?'+$':'-$')+Math.abs(p.upnl_usd||0).toFixed(2)+'</td>'+
             '<td class="n '+((p.realised||0)>=0?'up':'down')+'">'+((p.realised||0)>=0?'+$':'-$')+Math.abs(p.realised||0).toFixed(2)+'</td>'+
-            '<td style="white-space:nowrap">'+tpslCell(p.symbol,p.side,p.avg,p.lev,p.vol)+
-              ' <button class="btn sm danger" onclick="tdCloseSym(this,\''+p.symbol+'\')">Close</button></td></tr>';
+            '<td style="white-space:nowrap">'+
+              '<button class="btn sm danger" style="border-radius:20px" title="market-close the whole position" onclick="tdCloseSym(this,\''+p.symbol+'\')">Flash Close</button> '+
+              tpslCell(p.symbol,p.side,p.avg,p.lev,p.vol)+
+              ' <input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
+              '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
+              '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button></td></tr>';
         }).join('')+'</tbody></table>'
       : '<span class="mini">no open futures positions on '+TD.acct+'</span>';
   } else {
     var hs = d.holdings || [];
-    h += hs.length ? '<table><thead><tr><th>asset</th><th class="n">quantity</th><th class="n">price</th><th class="n">value</th><th></th></tr></thead><tbody>'+
+    h += hs.length ? '<table><thead><tr><th>asset</th><th>source</th><th class="n">quantity</th><th class="n">price</th><th class="n">value</th><th></th></tr></thead><tbody>'+
         hs.map(function(x){
           var sym = x.asset+'_USDT';
-          return '<tr><td><b>'+x.asset+'</b></td><td class="n">'+amt(String(x.qty))+'</td>'+
+          return '<tr><td><b>'+x.asset+'</b></td><td>'+tdSrcTag(x.src)+'</td><td class="n">'+amt(String(x.qty))+'</td>'+
             '<td class="n">'+(x.px?(+x.px).toPrecision(6):'&mdash;')+'</td>'+
             '<td class="n">'+amt('$'+(+x.value).toFixed(2))+'</td>'+
             '<td style="white-space:nowrap">'+tpslCell(sym,'long',x.px,1,x.qty)+
@@ -2143,6 +2250,29 @@ function tdCloseSym(btn, sym, acct){
     API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({market:'fut', account:acct, pair:sym.split('_')[0], action:'close', symbol:sym, pct:100, confirm:'TRADE'})})
       .then(function(r){ if(r.error){flash(r.error,'r');tdMsg(r.error,true);} else {flash('Closed '+sym+'.','g');tdMsg('Closed '+sym+'.');} tdState(); tdAllLoad(true); });
+  });
+}
+function tdCloseAdv(btn, sym, acct){
+  // MEXC-style Close cell: optional price (blank = market) + optional
+  // quantity in USDT notional (blank = whole position)
+  acct = acct || TD.acct;
+  var td = btn.closest('td');
+  var px = (td.querySelector('.tdcpx')||{}).value || '';
+  var q = (td.querySelector('.tdcq')||{}).value || '';
+  px = px.trim(); q = q.trim();
+  var what = (q?('$'+q+' of '):'ALL of ')+sym+' ('+acct+')'+(px?(' @ '+px):' — market');
+  armConfirm(btn, 'Confirm: CLOSE '+what, function(){
+    var body = {market:'fut', account:acct, pair:sym.split('_')[0],
+                action:'close', symbol:sym, confirm:'TRADE'};
+    if(px) body.price = px;
+    if(q) body.usdt = q; else body.pct = 100;
+    API('trade/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)})
+      .then(function(r){
+        if(r.error){ flash(r.error,'r'); tdMsg(r.error,true); }
+        else { var m = px?'Close order placed on '+sym+' @ '+px+'.':'Closed '+(q?('$'+q+' of '):'')+sym+'.';
+               flash(m,'g'); tdMsg(m); }
+        tdState(); tdAllLoad(true); });
   });
 }
 function tdSellAsset(btn, asset, qty, acct){
