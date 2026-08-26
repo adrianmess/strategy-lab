@@ -2090,7 +2090,21 @@ function tdSrcTag(src){
       'box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)" title="'+t+'">SHADOW '+
       (src.auto?'AUTO':'ADOPTED')+' &middot; '+src.name+'</span>';
   }
+  if(src.late_join)
+    return '<span class="tag" style="background:rgba(245,181,68,.13);color:var(--warn);'+
+      'box-shadow:inset 0 0 0 1px rgba(245,181,68,.45)" title="picked up from an ALREADY-OPEN shadow '+
+      'via unthresholded late-join'+(src.ventry_t?(' — virtual entry '+src.ventry_t+
+      (src.ventry_px?(' @ '+src.ventry_px):'')):'')+'">SHADOW LATE-JOIN &middot; '+src.name+'</span>';
   return '<span class="tag b" title="held by the '+src.name+' strategy — closing it changes the BOT\'s position">BOT &middot; '+src.name+'</span>';
+}
+function tdIsLateJoin(p){
+  // shadow pickup without the adopted flag: recorded by the new runner, or
+  // inferred — virtual entry (UTC bar label) >5min before the real open
+  if(p.late_join) return true;
+  if(p.adopted || !p.mirror_entry_t || !p.opened_ms) return false;
+  var m = String(p.mirror_entry_t).match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if(!m) return false;
+  return p.opened_ms - Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5]) > 300000;
 }
 function tdTabPosAll(){
   var rows = TD.allPos;
@@ -2297,6 +2311,9 @@ function renderTdBots(){
       '<td>'+(p.adopted
         ? '<span class="tag" style="background:rgba(139,92,246,.14);color:var(--violet);box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)">'+
           (p.auto?'SHADOW AUTO-ADOPTED':'SHADOW ADOPTED')+'</span>'
+        : tdIsLateJoin(p)
+        ? '<span class="tag" style="background:rgba(245,181,68,.13);color:var(--warn);box-shadow:inset 0 0 0 1px rgba(245,181,68,.45)" '+
+          'title="picked up from an already-open shadow (virtual entry '+(p.mirror_entry_t||'?')+') via late-join">SHADOW LATE-JOIN</span>'
         : '<span class="tag b">BOT SIGNAL</span>')+'</td>'+
       '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
       '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+

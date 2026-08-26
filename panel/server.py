@@ -834,8 +834,28 @@ def _holds_map():
                 entry=p.get("entry_price"),
                 ventry_px=p.get("mirror_entry_px"),
                 ventry_t=p.get("mirror_entry_t"),
+                late_join=_pos_late_join(p),
                 close_pct=p.get("armed_close_pct"))
     return out
+
+
+def _pos_late_join(p):
+    """True when the position joined an ALREADY-OPEN virtual trade via
+    late-join. New runner code records it directly; for positions opened by
+    older code, infer it: the mirror entry (a UTC bar label) sitting >5min
+    before the real open means the shadow pre-existed the position."""
+    if p.get("late_join"):
+        return True
+    if p.get("adopted") or not p.get("mirror_entry_t") \
+            or not p.get("opened_ms"):
+        return False
+    try:
+        import calendar
+        mt = calendar.timegm(time.strptime(p["mirror_entry_t"],
+                                           "%Y-%m-%d %H:%M"))
+        return p["opened_ms"] / 1000 - mt > 300
+    except Exception:
+        return False
 
 
 @app.route("/api/trade/state")

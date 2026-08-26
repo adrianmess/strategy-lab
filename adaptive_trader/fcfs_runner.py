@@ -293,7 +293,9 @@ def main_fcfs(cfg, live):
         save(); tell_flat()
 
     # arbitration: same-bar ties resolved by component order (backtest rule)
-    pending_opens = []          # [(bar_t, comp_i, dir, lev, px, group_key)]
+    pending_opens = []   # [(bar_t, comp_i, dir, lev, px, group_key, src)]
+    #                       src: "fresh" | "late_join" — recorded on the
+    #                       position so the panel can mark shadow pickups
     pending_deadline = 0.0
 
     # ---- SHADOW positions: what each component WOULD be holding ----------
@@ -575,7 +577,7 @@ def main_fcfs(cfg, live):
             pending_opens = []
             return
         pending_opens.sort(key=lambda x: (x[0], x[1]))   # (bar time, comp idx)
-        bar_t, i, d, lev, px, gkey = pending_opens[0]
+        bar_t, i, d, lev, px, gkey, osrc = pending_opens[0]
         pending_opens = []
         c = comps[i]
         if mode != "lev":
@@ -599,10 +601,12 @@ def main_fcfs(cfg, live):
                 symbol=c["pair"], comp=i, dir=d, lev=lev, qty=qty,
                 entry_price=px, group=gkey,
                 mirror_entry_t=None,   # filled below from the bar msg
+                late_join=(osrc == "late_join"),
                 opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
                 opened_ms=int(time.time() * 1000))
-            log.info("OPEN %s dir=%+d lev=%.1f qty=%s px=%.6g (signal bar %s)",
-                     comp_label(i), d, lev, qty, px, bar_t)
+            log.info("OPEN %s dir=%+d lev=%.1f qty=%s px=%.6g "
+                     "(signal bar %s, %s)",
+                     comp_label(i), d, lev, qty, px, bar_t, osrc)
             notify("position_opened", account="fcfs",
                    config=os.path.basename(cfg.get("_path", "?")),
                    symbol=c["pair"], side=("LONG" if d > 0 else "SHORT"),
@@ -664,7 +668,8 @@ def main_fcfs(cfg, live):
                                 pending_opens.append(
                                     (bt, ci, int(c.get("dir") or 1),
                                      float(c.get("lev") or 1.0),
-                                     float(msg.get("px") or 0), key))
+                                     float(msg.get("px") or 0), key,
+                                     "fresh"))
                                 continue
                             # With auto-adopt enabled, mid-trade joins are
                             # governed ONLY by its per-pair thresholds: the
@@ -727,7 +732,7 @@ def main_fcfs(cfg, live):
                                 # fresh signals in the same arbitration window
                                 pending_opens.append(
                                     (lbl, ci, d, float(c.get("lev") or 1.0),
-                                     px, key))
+                                     px, key, "late_join"))
                                 log.info("LATE-JOIN candidate %s: virtual "
                                          "entry %s @%.6g, now %.6g (red)",
                                          comp_label(ci), lbl, ep, px)
