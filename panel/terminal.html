@@ -1925,6 +1925,16 @@ function tdRefreshChips(){
 function tdKlines(){
   API('klines?pair='+TD.pair+'&tf='+TD.tf+'&limit=400').then(function(d){
     if(d.error || !TD.series) return;
+    // keep the user's pan/zoom across data refreshes: only auto-fit when
+    // the pair/timeframe actually changed; otherwise restore the view (or
+    // keep following the live edge if that's where they were)
+    var key = TD.pair+'|'+TD.tf;
+    var fresh = TD.klKey !== key;
+    var lr = null, atEdge = true;
+    if(!fresh && TD.chart){
+      lr = TD.chart.timeScale().getVisibleLogicalRange();
+      if(lr && TD.rows.length) atEdge = lr.to >= TD.rows.length - 2;
+    }
     TD.rows = d.rows || [];
     TD.timeIdx = {};
     TD.rows.forEach(function(r, i){ TD.timeIdx[r.time] = i; });
@@ -1938,7 +1948,9 @@ function tdKlines(){
     }));
     tdIndUpdate();
     tdLegendShow(TD.rows.length - 1);
-    TD.chart.timeScale().fitContent();
+    if(fresh){ TD.klKey = key; TD.chart.timeScale().fitContent(); }
+    else if(lr && !atEdge) TD.chart.timeScale().setVisibleLogicalRange(lr);
+    else if(lr) TD.chart.timeScale().scrollToRealTime();
     var last = (d.rows || [])[d.rows.length - 1];
     if(last) document.getElementById('tdPx').textContent =
       TD.pair + ' ' + last.close.toLocaleString(undefined, {maximumFractionDigits: last.close > 100 ? 1 : 5});
