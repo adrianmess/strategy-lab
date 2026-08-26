@@ -32,12 +32,27 @@ log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 
 Q=$(ssh $SSHOPTS "$MINI" "curl -s -m 20 http://127.0.0.1:8800/api/gamut/remote_queue" 2>/dev/null) || exit 0
 echo "$Q" | grep -q '"queue"' || exit 0
+cleanup(){
+  # stop sync loops whose campaign is no longer queued (runs even when the
+  # queue is EMPTY — the old flow exited first and loops ran forever,
+  # rsyncing 30k run dirs through the router every 5 minutes)
+  for pid in $(pgrep -f "mac2_sync.sh" 2>/dev/null); do
+    camp=$(ps -o command= -p "$pid" | awk "{print \$NF}")
+    echo "$NAMES" | grep -q "gamut_${camp}" && continue
+    if ! pgrep -f "gamut_worker.py --plan.*gamut_${camp}" >/dev/null; then
+      bash "$L/scripts/mac2_sync.sh" "$camp" --once >> "$LOG" 2>&1
+      kill "$pid" 2>/dev/null
+      log "$camp: complete — final sync done, sync loop stopped"
+    fi
+  done
+}
 NAMES=$(echo "$Q" | /usr/bin/python3 -c "
 import json,sys
 try: d=json.load(sys.stdin)
 except Exception: sys.exit()
 for c in d.get('queue',[]): print(c['dir'], ','.join(c.get('pairs') or []))")
-[ -z "$NAMES" ] && exit 0
+[ -z "$NAMES" ] && { cleanup; exit 0; }
+cleanup
 
 CORES=$(/usr/bin/python3 -c "
 import json
@@ -80,15 +95,4 @@ while read -r DIRN PAIRS; do
   fi
 done <<< "$NAMES"
 
-# idle cleanup: stop sync loops for campaigns no longer in the queue
-for pid in $(pgrep -f "mac2_sync.sh" 2>/dev/null); do
-  camp=$(ps -o command= -p "$pid" | awk "{print \$NF}")
-  echo "$NAMES" | grep -q "gamut_${camp} " && continue
-  echo "$NAMES" | grep -q "gamut_${camp}$" && continue
-  if ! pgrep -f "gamut_worker.py --plan.*gamut_${camp}" >/dev/null; then
-    bash "$L/scripts/mac2_sync.sh" "$camp" --once >> "$LOG" 2>&1
-    kill "$pid" 2>/dev/null
-    log "$camp: complete — final sync done, sync loop stopped"
-  fi
-done
 exit 0
