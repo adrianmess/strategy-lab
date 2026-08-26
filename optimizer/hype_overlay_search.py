@@ -133,6 +133,37 @@ def _pair_block(pair):
         ("at_4h_high", dhi > -0.001), ("off_4h_high>1%", dhi < -0.01),
     ]
     gnames = [n for n, _ in conds]
+    # ---- funding-rate conditions (MEXC funding history; settles are a
+    # step function over the minutes; percentiles over the trailing 90
+    # settles ~ 30d) ----
+    try:
+        rows = json.load(open(os.path.join(DATA, f"funding_{pair}.json")))
+        fts = np.array([r[0] for r in rows], dtype=np.int64) * 1_000_000
+        fvs = np.array([float(r[1]) for r in rows])
+        n = len(fvs)
+        p90 = np.full(n, np.nan)
+        p10 = np.full(n, np.nan)
+        pa90 = np.full(n, np.nan)
+        for i in range(20, n):
+            w = fvs[max(0, i - 90):i]
+            p90[i] = np.percentile(w, 90)
+            p10[i] = np.percentile(w, 10)
+            pa90[i] = np.percentile(np.abs(w), 90)
+        idx = np.searchsorted(fts, ts, side="right") - 1
+        ok = idx >= 0
+        ii = np.clip(idx, 0, n - 1)
+        fr = np.where(ok, fvs[ii], np.nan)
+        prev = np.where(idx >= 1, fvs[np.clip(idx - 1, 0, n - 1)], np.nan)
+        p90m, p10m, pa90m = p90[ii], p10[ii], pa90[ii]
+        conds += [
+            ("fund>p90", fr > p90m), ("fund<p10", fr < p10m),
+            ("fund>0", fr > 0), ("fund<0", fr < 0),
+            ("fund_rising", fr > prev),
+            ("fund_extreme", np.abs(fr) > pa90m),
+        ]
+    except Exception as e:
+        print(f"  ({pair}: no funding conds — {e})")
+    gnames = [nm for nm, _ in conds]
     G = np.column_stack([np.where(np.isnan(v.astype(np.float64)), 0,
                                   v).astype(np.uint8)
                          if v.dtype != np.bool_ else v.astype(np.uint8)
@@ -351,6 +382,19 @@ def main():
               f"cells | beat hold on TEST: {int((f_te > b_te).sum())} "
               f"({100*(f_te > b_te).mean():.0f}%) | median test "
               f"x{np.median(f_te):.2f} vs hold x{b_te:.2f}")
+
+    fidx = {i for i, n in enumerate(gnames) if n.startswith("fund")}
+    if fidx:
+        fu = np.array([r[1] for r in res
+                       if r[4] in fidx or r[5] in fidx])
+        nf = np.array([r[1] for r in res
+                       if r[4] not in fidx and r[5] not in fidx
+                       and (r[4] >= 0 or r[5] >= 0)])
+        if len(fu) and len(nf):
+            print(f"\nFUNDING-gated cells: {len(fu)} | beat hold on TEST: "
+                  f"{100*(fu > b_te).mean():.1f}% | median x{np.median(fu):.2f}")
+            print(f"price-only  cells  : {len(nf)} | beat hold on TEST: "
+                  f"{100*(nf > b_te).mean():.1f}% | median x{np.median(nf):.2f}")
 
     print("\nTOP 10 BY TEST (hindsight — for context only):")
     for mt, me, cy, tp, g1, g2, sl, rk, rp in \
