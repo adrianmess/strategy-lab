@@ -769,6 +769,43 @@ def _trader_holds(pair):
     return out
 
 
+def _fut_marks():
+    """lastPrice for every futures symbol in one public call."""
+    import requests as _rq
+    marks = {}
+    try:
+        for t in (_rq.get("https://contract.mexc.com/api/v1/contract/ticker",
+                          timeout=10).json().get("data") or []):
+            marks[t.get("symbol")] = float(t.get("lastPrice") or 0)
+    except Exception:
+        pass
+    return marks
+
+
+def _fut_positions(api, marks):
+    """Map raw open_positions() to the Trade page's position rows."""
+    pos = []
+    for p in (api.open_positions() or []):
+        hv = float(p.get("holdVol") or 0)
+        if hv <= 0:
+            continue
+        sym = p.get("symbol")
+        d_ = 1 if int(p.get("positionType") or 1) == 1 else -1
+        avg = float(p.get("holdAvgPrice") or 0)
+        mark = marks.get(sym) or avg
+        cs = _contract_size(sym)
+        margin = float(p.get("im") or p.get("oim") or 0)
+        upnl = (mark - avg) * hv * cs * d_
+        pos.append(dict(
+            symbol=sym, side=("long" if d_ > 0 else "short"),
+            vol=hv, avg=avg, mark=mark, lev=p.get("leverage"),
+            liq=float(p.get("liquidatePrice") or 0), margin=margin,
+            upnl_usd=round(upnl, 4),
+            upnl_pct=round(100 * upnl / margin, 2) if margin else None,
+            realised=float(p.get("realised") or 0)))
+    return pos
+
+
 @app.route("/api/trade/state")
 def trade_state():
     """Balances + current position/holdings for the Trade page. Any account
@@ -793,36 +830,7 @@ def trade_state():
             for a in (api.assets() or []):
                 if a.get("currency") == "USDT":
                     out["available"] = float(a.get("availableBalance") or 0)
-            # mark prices for EVERY symbol in one call
-            import requests as _rq
-            marks = {}
-            try:
-                for t in (_rq.get("https://contract.mexc.com/api/v1/"
-                                  "contract/ticker", timeout=10)
-                          .json().get("data") or []):
-                    marks[t.get("symbol")] = float(t.get("lastPrice") or 0)
-            except Exception:
-                pass
-            pos = []
-            for p in (api.open_positions() or []):     # ALL symbols
-                hv = float(p.get("holdVol") or 0)
-                if hv <= 0:
-                    continue
-                sym = p.get("symbol")
-                d_ = 1 if int(p.get("positionType") or 1) == 1 else -1
-                avg = float(p.get("holdAvgPrice") or 0)
-                mark = marks.get(sym) or avg
-                cs = _contract_size(sym)
-                margin = float(p.get("im") or p.get("oim") or 0)
-                upnl = (mark - avg) * hv * cs * d_
-                pos.append(dict(
-                    symbol=sym, side=("long" if d_ > 0 else "short"),
-                    vol=hv, avg=avg, mark=mark, lev=p.get("leverage"),
-                    liq=float(p.get("liquidatePrice") or 0), margin=margin,
-                    upnl_usd=round(upnl, 4),
-                    upnl_pct=round(100 * upnl / margin, 2) if margin else None,
-                    realised=float(p.get("realised") or 0)))
-            out["positions"] = pos
+            out["positions"] = _fut_positions(api, _fut_marks())
             out["contract_size"] = _contract_size(f"{pair}_USDT")
             try:
                 out["orders"] = [dict(
@@ -870,6 +878,202 @@ def trade_state():
                        and r.get("market") == market]
     except Exception as e:
         out["error"] = str(e)[:250]
+    return jsonify(**out)
+
+
+_TH_CACHE = {}    # (acct, market, tab) -> (ts, payload)
+_TPA_CACHE = {}   # "all" -> (ts, payload)
+_TD_HIST_PAIRS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "SUI", "HYPE", "LINK"]
+_FUT_SIDES = {1: "Buy Long", 2: "Close Short", 3: "Sell Short",
+              4: "Close Long"}
+_FUT_OSTATE = {1: "Uninformed", 2: "Uncompleted", 3: "Completed",
+               4: "Cancelled", 5: "Invalid"}
+
+
+def _aslist(d):
+    if isinstance(d, dict):
+        return d.get("resultList") or d.get("list") or d.get("orders") or []
+    return d or []
+
+
+@app.route("/api/trade/history")
+def trade_history():
+    """Data for the Trade page's MEXC-style tabs: Position History, Order &
+    Trade History, and Assets — per account x market. Cached 30s."""
+    market = request.args.get("market") or "fut"
+    acct = request.args.get("account") or "mexc1"
+    tab = request.args.get("tab") or "phist"
+    if acct not in ("mexc1", "mexc2"):
+        return jsonify(error="account must be mexc1|mexc2"), 400
+    key = (acct, market, tab)
+    now = time.time()
+    c = _TH_CACHE.get(key)
+    if c and now - c[0] < 30:
+        return jsonify(**c[1])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    out = dict(account=acct, market=market, tab=tab, rows=[])
+    try:
+        if market == "fut":
+            api = MexcFuturesAPI(account=acct)
+            if tab == "phist":
+                for p in _aslist(api.history_positions(page_size=40)):
+                    ov = float(p.get("openAvgPrice") or 0)
+                    cv = float(p.get("closeAvgPrice") or 0)
+                    vol = float(p.get("closeVol") or 0)
+                    cs = _contract_size(p.get("symbol")) or 0
+                    d_ = 1 if int(p.get("positionType") or 1) == 1 else -1
+                    real = float(p.get("realised") or 0)
+                    lev = float(p.get("leverage") or 1)
+                    marg = (ov * vol * cs / lev) if lev else 0
+                    out["rows"].append(dict(
+                        symbol=p.get("symbol"),
+                        open_t=int(p.get("createTime") or 0),
+                        close_t=int(p.get("updateTime") or 0),
+                        mode=("Isolated" if int(p.get("openType") or 1) == 1
+                              else "Cross"),
+                        entry=ov, close=cv,
+                        liq=float(p.get("liquidatePrice") or 0) or None,
+                        side=("long" if d_ > 0 else "short"), lev=lev,
+                        qty=round(cv * vol * cs, 4), realised=real,
+                        pct=(round(100 * real / marg, 2) if marg else None),
+                        state=("All Closed"
+                               if float(p.get("holdVol") or 0) <= 0
+                               else "Partly Closed")))
+            elif tab == "ohist":
+                for o in _aslist(api.history_orders(page_size=40)):
+                    vol = float(o.get("vol") or 0)
+                    dv = float(o.get("dealVol") or 0)
+                    cs = _contract_size(o.get("symbol")) or 0
+                    px = float(o.get("dealAvgPrice") or o.get("price") or 0)
+                    ot = int(o.get("orderType") or o.get("type") or 5)
+                    out["rows"].append(dict(
+                        symbol=o.get("symbol"),
+                        t=int(o.get("createTime") or 0),
+                        side=_FUT_SIDES.get(int(o.get("side") or 0), "?"),
+                        lev=o.get("leverage"),
+                        otype=("Limit" if ot == 1 else "Market"),
+                        amount=round(vol * cs * px, 4),
+                        filled=round(dv * cs * px, 4),
+                        fill_pct=(round(100 * dv / vol, 1) if vol else 0),
+                        price=px, pnl=float(o.get("profit") or 0),
+                        fee=-abs(float(o.get("takerFee") or 0) +
+                                 float(o.get("makerFee") or 0)),
+                        state=_FUT_OSTATE.get(int(o.get("state") or 0), "?")))
+            else:                                    # assets
+                for a in (api.assets() or []):
+                    if not any(float(a.get(k) or 0) for k in
+                               ("equity", "cashBalance", "availableBalance",
+                                "positionMargin", "frozenBalance")):
+                        continue                     # hide empty wallets
+                    out["rows"].append(dict(
+                        cur=a.get("currency"),
+                        equity=float(a.get("equity") or 0),
+                        wallet=float(a.get("cashBalance") or 0),
+                        upnl=float(a.get("unrealized") or 0),
+                        margin=float(a.get("positionMargin") or 0),
+                        omargin=float(a.get("frozenBalance") or 0),
+                        avail=float(a.get("availableBalance") or 0),
+                        bonus=float(a.get("bonus") or 0)))
+        else:
+            api = MexcSpotAPI(account=acct)
+            if tab == "ohist":
+                rows = []
+                for pr in _TD_HIST_PAIRS:
+                    try:
+                        for o in (api.all_orders(f"{pr}_USDT", limit=8)
+                                  or []):
+                            q = float(o.get("origQty") or 0)
+                            dq = float(o.get("executedQty") or 0)
+                            px = float(o.get("price") or 0)
+                            cq = float(o.get("cummulativeQuoteQty") or 0)
+                            rows.append(dict(
+                                symbol=f"{pr}USDT",
+                                t=int(o.get("time") or 0),
+                                side=(o.get("side") or "").title(),
+                                otype=(o.get("type") or "").title(),
+                                amount=round(cq or q * px, 4),
+                                filled=round(cq, 4),
+                                fill_pct=(100.0 if (o.get("status")
+                                                   == "FILLED")
+                                          else round(100 * dq / q, 1)
+                                          if q else 0),
+                                price=(round(cq / dq, 6) if dq else px),
+                                pnl=None, fee=None, lev=None,
+                                state=(o.get("status") or "").title()
+                                .replace("_", " ")))
+                    except Exception:
+                        continue
+                rows.sort(key=lambda r: -r["t"])
+                out["rows"] = rows[:40]
+            elif tab == "assets":
+                for b in api.account_info().get("balances", []):
+                    free = float(b.get("free") or 0)
+                    lock = float(b.get("locked") or 0)
+                    if free + lock <= 0:
+                        continue
+                    a_ = b.get("asset")
+                    if a_ in ("USDT", "USDC", "USD1"):
+                        px = 1.0
+                    else:
+                        try:
+                            px = float(api.ticker_price(f"{a_}_USDT") or 0)
+                        except Exception:
+                            px = 0.0
+                    out["rows"].append(dict(
+                        cur=a_, wallet=free + lock, avail=free, omargin=lock,
+                        equity=round((free + lock) * px, 4),
+                        upnl=None, margin=None, bonus=None))
+            else:
+                out["note"] = ("Position history is a futures concept — "
+                               "spot fills are in Order & Trade History")
+    except Exception as e:
+        out["error"] = str(e)[:250]
+    _TH_CACHE[key] = (now, out)
+    return jsonify(**out)
+
+
+@app.route("/api/trade/positions_all")
+def trade_positions_all():
+    """Open futures positions + spot holdings across BOTH accounts — the
+    Trade page's 'All accounts' positions view. Cached 15s."""
+    now = time.time()
+    c = _TPA_CACHE.get("all")
+    if c and now - c[0] < 15:
+        return jsonify(**c[1])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    marks = _fut_marks()
+    rows = []
+    errs = []
+    for acct in ("mexc1", "mexc2"):
+        try:
+            for p in _fut_positions(MexcFuturesAPI(account=acct), marks):
+                p.update(account=acct, market="fut")
+                rows.append(p)
+        except Exception as e:
+            errs.append(f"{acct} fut: {str(e)[:80]}")
+        try:
+            api = MexcSpotAPI(account=acct)
+            for b in api.account_info().get("balances", []):
+                a_ = b.get("asset")
+                free = float(b.get("free") or 0)
+                if a_ in ("USDT", "USDC", "USD1") or free <= 0:
+                    continue
+                try:
+                    px = float(api.ticker_price(f"{a_}_USDT") or 0)
+                except Exception:
+                    px = 0.0
+                if free * px >= 1.0:
+                    rows.append(dict(account=acct, market="spot", asset=a_,
+                                     qty=free, px=px,
+                                     value=round(free * px, 2)))
+        except Exception as e:
+            errs.append(f"{acct} spot: {str(e)[:80]}")
+    out = dict(rows=rows, errors=errs)
+    _TPA_CACHE["all"] = (now, out)
     return jsonify(**out)
 
 

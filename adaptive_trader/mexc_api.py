@@ -173,6 +173,19 @@ class MexcFuturesAPI:
                          {"symbol": symbol, "page_num": 1,
                           "page_size": int(page_size)}) or []
 
+    def history_positions(self, symbol=None, page_size=50):
+        """Closed futures positions, newest first (MEXC 'Position History')."""
+        return self._get("/api/v1/private/position/list/history_positions",
+                         {"symbol": symbol, "page_num": 1,
+                          "page_size": int(page_size)}) or []
+
+    def history_orders(self, symbol=None, page_size=50):
+        """Historical futures orders — filled/cancelled, newest first
+        (MEXC 'Order & Trade History')."""
+        return self._get("/api/v1/private/order/list/history_orders",
+                         {"symbol": symbol, "page_num": 1,
+                          "page_size": int(page_size)}) or []
+
     # ---------------- trading ----------------
     def place_market(self, symbol, side, vol, leverage=None, price=None,
                      open_type=ISOLATED, external_oid=None):
@@ -433,6 +446,12 @@ class MexcSpotAPI:
     def my_trades(self, symbol, limit=20):
         """Recent fills on a spot symbol (newest last per API ordering)."""
         return self._signed("GET", "/api/v3/myTrades",
+                            {"symbol": self.spot_symbol(symbol),
+                             "limit": int(limit)})
+
+    def all_orders(self, symbol, limit=20):
+        """Order history on a spot symbol (filled + cancelled)."""
+        return self._signed("GET", "/api/v3/allOrders",
                             {"symbol": self.spot_symbol(symbol),
                              "limit": int(limit)})
 
