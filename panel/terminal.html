@@ -2221,55 +2221,31 @@ function renderTdBots(){
     var s = STATUS[x.id] || {};
     if(!s.running) return;
     if(!TD.posAll && !(s.api_account === TD.acct && s.mode === wm)) return;
-    var p = s.position, px = s.price, sh = s.shadow || [];
+    var p = s.position, px = s.price;
+    if(!p) return;   // only REAL bot-opened trades here — no virtual-only rows
     var inner = '';
-    if(p){
-      var dir = (p.dir||1) > 0 ? 1 : -1;
-      var mult = s.mode === 'lev' ? (p.lev||1) : 1;
-      var pct = (px && p.entry_price)
-        ? (px/p.entry_price - 1) * dir * 100 * mult : null;
-      inner += '<table style="margin-bottom:9px"><thead><tr>'+
-        '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
-        '<th class="n">virtual entry</th><th class="n">market entry</th>'+
-        '<th class="n">now</th><th class="n">uPnL</th><th class="n">auto-close</th></tr></thead><tbody>'+
-        '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
-        '<td><span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
-          ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span></td>'+
-        '<td>'+(p.adopted
-          ? '<span class="tag" style="background:rgba(139,92,246,.14);color:var(--violet);box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)">'+
-            (p.auto?'SHADOW AUTO-ADOPTED':'SHADOW ADOPTED')+'</span>'
-          : '<span class="tag b">BOT SIGNAL</span>')+'</td>'+
-        '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
-        '<td class="n mini">'+(p.adopted && p.mirror_entry_t
-          ? p.mirror_entry_t+(p.mirror_entry_px?(' @ '+(+p.mirror_entry_px).toPrecision(6)):'')
-          : '&mdash;')+'</td>'+
-        '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+
-        '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
-        '<td class="n" style="font-weight:700;color:var(--'+((pct||0)>=0?'up':'down')+')">'+
-          (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
-        '<td class="n">'+(p.armed_close_pct!=null?('&ge; +'+p.armed_close_pct+'%'):'&mdash;')+'</td>'+
-        '</tr></tbody></table>';
-    } else {
-      inner += '<div class="mini" style="margin-bottom:8px">flat — no real position; the slot is free</div>';
-    }
-    inner += sh.length
-      ? '<table><thead><tr><th>component</th><th>side</th><th class="n">virtual entry</th>'+
-        '<th class="n">entry px</th><th class="n">virtual uPnL</th><th>status</th></tr></thead><tbody>'+
-        sh.slice().sort(function(a,b){ return (a.pct==null?9e9:a.pct)-(b.pct==null?9e9:b.pct); })
-          .map(function(r){
-          return '<tr'+(r.skipped?' style="opacity:.55"':'')+'>'+
-            '<td>'+(r.label||('#'+r.comp))+'</td>'+
-            '<td><span class="tag '+(r.dir>0?'g':'live')+'">'+(r.dir>0?'LONG':'SHORT')+
-              (r.lev>1?(' '+(+r.lev).toFixed(0)+'x'):'')+'</span></td>'+
-            '<td class="n mini">'+(r.entry_t||'')+'</td>'+
-            '<td class="n">'+(r.entry_px?(+r.entry_px).toPrecision(6):'&mdash;')+'</td>'+
-            '<td class="n" style="font-weight:600;color:var(--'+((r.pct||0)>=0?'up':'down')+')">'+
-              (r.pct==null?'&mdash;':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
-            '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+
-              (p ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+x.id+'\','+r.comp+
-                ',\''+String(r.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+'</td></tr>';
-        }).join('')+'</tbody></table>'
-      : '<span class="mini">no virtual (shadow) trades right now</span>';
+    var dir = (p.dir||1) > 0 ? 1 : -1;
+    var mult = s.mode === 'lev' ? (p.lev||1) : 1;
+    var pct = (px && p.entry_price)
+      ? (px/p.entry_price - 1) * dir * 100 * mult : null;
+    inner += '<table><thead><tr>'+
+      '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
+      '<th class="n">market entry</th>'+
+      '<th class="n">now</th><th class="n">uPnL</th><th class="n">auto-close</th></tr></thead><tbody>'+
+      '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
+      '<td><span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
+        ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span></td>'+
+      '<td>'+(p.adopted
+        ? '<span class="tag" style="background:rgba(139,92,246,.14);color:var(--violet);box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)">'+
+          (p.auto?'SHADOW AUTO-ADOPTED':'SHADOW ADOPTED')+'</span>'
+        : '<span class="tag b">BOT SIGNAL</span>')+'</td>'+
+      '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
+      '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+
+      '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
+      '<td class="n" style="font-weight:700;color:var(--'+((pct||0)>=0?'up':'down')+')">'+
+        (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
+      '<td class="n">'+(p.armed_close_pct!=null?('&ge; +'+p.armed_close_pct+'%'):'&mdash;')+'</td>'+
+      '</tr></tbody></table>';
     h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px">'+
       '<div style="margin-bottom:7px"><b>'+(x.name||x.id)+'</b> <span class="mini">'+
       s.api_account+' &middot; '+(s.mode==='lev'?'Leverage':'Spot')+
@@ -2277,7 +2253,7 @@ function renderTdBots(){
       '</span></div>'+inner+'</div>';
   });
   el.innerHTML = h
-    ? '<div class="card"><h3>Bot &amp; shadow positions <span class="mini">the strategies\' real trades + their virtual (simulated) ones'+
+    ? '<div class="card"><h3>Bot positions <span class="mini">real trades opened by the strategies, incl. adopted shadows'+
       (TD.posAll?'':' — '+tdAcctLabel(TD.acct, TD.mkt))+'</span></h3><div class="body">'+h+'</div></div>'
     : '';
 }
