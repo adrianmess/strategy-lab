@@ -1811,6 +1811,75 @@ def _armed_rules(cfg_name):
     return _armed_doc(cfg_name)["rules"]
 
 
+_ADOPT_REC_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "adopt_recommended.json")
+# built-in seeds: the two researched configurations. Anything saved via the
+# panel (adopt_recommended.json) overrides these; configs with no entry have
+# NO recommended set until one is saved from the auto-adopt form.
+_ADOPT_REC_SEED = {
+    "config_fcfs_All_pairs_SPOT_1m3m_4Dmax_multistrat.json": dict(
+        adopt_pct=-3.0, close_pct=2.0,
+        pairs={"hype": -3.0, "sui": -3.6, "doge": -4.5, "sol": -4.6,
+               "eth": -5.0, "xrp": -5.3, "btc": -6.6},
+        note="2026-08-25 adopt-sim: vol-scaled depths + close +2 "
+             "(x83.5k vs x44k baseline, dd unchanged)"),
+    "config_fcfs_All_pairs_LEV_1m3m_multistrat.json": dict(
+        adopt_pct=-3.0, pairs={},
+        note="2026-08-26 lev adopt-sim (full + walk-forward): flat -3% "
+             "margin, ALL pairs, mirror exit — no auto-close; per-pair "
+             "depths added only overfit-scale gains"),
+}
+
+
+def _adopt_rec_all():
+    doc = dict(_ADOPT_REC_SEED)
+    try:
+        doc.update(json.load(open(_ADOPT_REC_P)))
+    except Exception:
+        pass
+    return doc
+
+
+@app.route("/api/adopt_rec", methods=["GET", "POST"])
+def adopt_rec():
+    """Recommended auto-adopt preset, tied to the instance's CONFIG (the
+    strategy). GET returns the preset (or null for unresearched configs);
+    POST saves/overwrites one from the form ('save as recommended')."""
+    i, I = _inst()
+    cfg_name = I["trader"]["config"] or I["cfg"] or "config.json"
+    if request.method == "GET":
+        return jsonify(config=cfg_name, rec=_adopt_rec_all().get(cfg_name))
+    d = request.get_json(force=True)
+    try:
+        saved = json.load(open(_ADOPT_REC_P))
+    except Exception:
+        saved = {}
+    rec = d.get("rec")
+    if not rec:
+        saved.pop(cfg_name, None)
+        note = f"recommended set removed for {cfg_name}"
+    else:
+        out = dict(at=time.strftime("%Y-%m-%d %H:%M"))
+        try:
+            out["adopt_pct"] = float(rec["adopt_pct"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify(error="need a numeric adopt_pct"), 400
+        if rec.get("close_pct") not in (None, ""):
+            out["close_pct"] = float(rec["close_pct"])
+        prs = {}
+        for k, v in (rec.get("pairs") or {}).items():
+            k = str(k).strip().lower().split("_")[0]
+            if k:
+                prs[k] = None if v in (None, "") else float(v)
+        out["pairs"] = prs
+        saved[cfg_name] = out
+        note = f"recommended set saved for {cfg_name}"
+    tmp = _ADOPT_REC_P + ".tmp"
+    json.dump(saved, open(tmp, "w"), indent=1)
+    os.replace(tmp, _ADOPT_REC_P)
+    return jsonify(ok=True, rec=_adopt_rec_all().get(cfg_name), note=note)
+
+
 @app.route("/api/shadow_arm", methods=["GET", "POST"])
 def shadow_arm():
     """Per-shadow automation rules, evaluated by the RUNNER every cycle:

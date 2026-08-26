@@ -2959,18 +2959,21 @@ function armCell(id, comp, entryT, armed){
   }
   return ' <button class="btn sm" onclick="openArmForm(this,\''+id+'\','+comp+',\''+e+'\')">Arm</button>';
 }
-function pctForm(btn, okLabel, onOk, withPairs){
-  // inline "adopt when ≤ [spinner]% / close when ≥ [spinner]%" form: number
-  // inputs with up/down arrows and the comparators spelled out — nothing to
-  // guess. close is optional (blank = let the strategy close it).
+var PCT_PAIRS = ['hype','sui','doge','sol','eth','xrp','btc'];
+function pctForm(btn, okLabel, onOk, withPairs, rec, inst){
+  // inline "adopt when ≤ [spinner]% / close when ≥ [spinner]%" form. The
+  // recommended set is PER CONFIG (strategy): `rec` comes from
+  // /api/adopt_rec — null for unresearched configs, in which case there is
+  // no "use recommended" button and the pair depths start blank. "save as
+  // recommended" stores the current form values for this config.
   if(!btn || btn._armed) return;
   btn._armed = true; ARMED++;
   var wrap = document.createElement('span');
   wrap.style.cssText = 'display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap';
-  // vol-scaled depths from the 2026-08-25 backtest sweep — the config that
-  // made x83.5k vs x44k baseline at unchanged drawdown
-  var PAIR_DEFS = [['hype',-3],['sui',-3.6],['doge',-4.5],['sol',-4.6],
-                   ['eth',-5],['xrp',-5.3],['btc',-6.6]];
+  var names = PCT_PAIRS.slice();
+  Object.keys((rec && rec.pairs) || {}).forEach(function(p){
+    if(names.indexOf(p) < 0) names.push(p);
+  });
   wrap.innerHTML =
     '<span class="mini">open when unreal <b>&le;</b></span>'+
     '<input data-r="open" type="number" step="0.5" value="-3" style="width:64px" '+
@@ -2981,13 +2984,21 @@ function pctForm(btn, okLabel, onOk, withPairs){
     '<span class="mini">%</span>'+
     (withPairs
       ? '<div style="flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:5px">'+
-        '<span class="mini" title="tick a pair to include it, with its own depth (prefilled with the backtested vol-scaled value). None ticked = every pair at the main threshold.">pairs:</span>'+
-        PAIR_DEFS.map(function(pd){
+        '<span class="mini" title="tick a pair to include it; give it its own depth or leave the depth blank to use the main threshold. None ticked = every pair at the main threshold.">pairs:</span>'+
+        names.map(function(p){
+          var v = (rec && rec.pairs && rec.pairs[p] != null) ? rec.pairs[p] : '';
           return '<label class="mini" style="display:inline-flex;gap:3px;align-items:center;cursor:pointer">'+
-            '<input type="checkbox" data-pair="'+pd[0]+'"> '+pd[0].toUpperCase()+
-            ' &le;<input type="number" step="0.1" value="'+pd[1]+'" data-pv="'+pd[0]+'" style="width:58px">%</label>';
+            '<input type="checkbox" data-pair="'+p+'"> '+p.toUpperCase()+
+            ' &le;<input type="number" step="0.1" value="'+v+'" placeholder="main" data-pv="'+p+'" style="width:58px">%</label>';
         }).join('')+
-        '<button class="btn sm" data-r="recall" title="the full backtested winner: all 7 pairs at their vol-scaled depths AND close at +2% (+39.6%/mo vs +37.0%/mo baseline) — nothing applies until you confirm">use recommended set</button>'+
+        (rec
+          ? '<button class="btn sm" data-r="recall" title="'+
+            ((rec.note||'the saved recommended configuration for this strategy').replace(/"/g,'&quot;'))+
+            ' — fills the form; nothing applies until you confirm">use recommended set</button>'
+          : '<span class="mini" style="opacity:.7">no recommended set for this config yet</span>')+
+        (inst != null
+          ? ' <button class="btn sm" data-r="saverec" title="store the CURRENT form values as this config\'s recommended set (preset only — arms nothing)">save as recommended</button>'
+          : '')+
         '</div>'
       : '');
   var ok = document.createElement('button'); ok.className = 'btn sm danger'; ok.textContent = okLabel;
@@ -2995,35 +3006,57 @@ function pctForm(btn, okLabel, onOk, withPairs){
   btn.style.display = 'none';
   btn.parentNode.insertBefore(wrap, btn);
   wrap.appendChild(ok); wrap.appendChild(no);
-  var rec = wrap.querySelector('[data-r=recall]');
-  if(rec) rec.onclick = function(ev){
+  function readForm(){
+    var ap = parseFloat(wrap.querySelector('[data-r=open]').value);
+    var cv = wrap.querySelector('[data-r=close]').value.trim();
+    var pairs = {};
+    wrap.querySelectorAll('[data-pair]').forEach(function(cb){
+      if(!cb.checked) return;
+      var v = wrap.querySelector('[data-pv="'+cb.getAttribute('data-pair')+'"]').value.trim();
+      pairs[cb.getAttribute('data-pair')] = v === '' ? null : parseFloat(v);
+    });
+    return {ap:ap, cp:(cv === '' ? null : parseFloat(cv)), pairs:pairs};
+  }
+  var rc = wrap.querySelector('[data-r=recall]');
+  if(rc) rc.onclick = function(ev){
     ev.stopPropagation();
-    wrap.querySelectorAll('[data-pair]').forEach(function(cb){ cb.checked = true; });
-    // the researched winner is depths + close at +2% as a package — fill the
-    // close field too (visible here; applies only when you hit confirm)
-    wrap.querySelector('[data-r=close]').value = 2;
+    wrap.querySelector('[data-r=open]').value = rec.adopt_pct;
+    wrap.querySelector('[data-r=close]').value = rec.close_pct != null ? rec.close_pct : '';
+    wrap.querySelectorAll('[data-pair]').forEach(function(cb){
+      var p = cb.getAttribute('data-pair');
+      var has = rec.pairs && Object.prototype.hasOwnProperty.call(rec.pairs, p);
+      cb.checked = !!has;
+      wrap.querySelector('[data-pv="'+p+'"]').value =
+        (has && rec.pairs[p] != null) ? rec.pairs[p] : '';
+    });
+  };
+  var sv = wrap.querySelector('[data-r=saverec]');
+  if(sv) sv.onclick = function(ev){
+    ev.stopPropagation();
+    var f = readForm();
+    if(isNaN(f.ap)){ flash('set the open threshold first (e.g. -3)', 'r'); return; }
+    API('adopt_rec', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({instance:inst, rec:{adopt_pct:f.ap, close_pct:f.cp, pairs:f.pairs}})})
+      .then(function(r){
+        if(r.error){ flash(r.error, 'r'); return; }
+        rec = r.rec; flash(r.note || 'Recommended set saved.', 'g');
+      });
   };
   wrap.querySelector('[data-r=open]').focus();
   var undo = function(){ wrap.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
   no.onclick = function(ev){ ev.stopPropagation(); undo(); };
   ok.onclick = function(ev){
     ev.stopPropagation();
-    var ap = parseFloat(wrap.querySelector('[data-r=open]').value);
-    if(isNaN(ap)){ flash('the open threshold is required (e.g. -3)', 'r'); return; }
-    var cv = wrap.querySelector('[data-r=close]').value.trim();
-    var cp = cv === '' ? null : parseFloat(cv);
+    var f = readForm();
+    if(isNaN(f.ap)){ flash('the open threshold is required (e.g. -3)', 'r'); return; }
     var pr = '';
     if(withPairs){
-      var parts = [];
-      wrap.querySelectorAll('[data-pair]').forEach(function(cb){
-        if(!cb.checked) return;
-        var v = wrap.querySelector('[data-pv="'+cb.getAttribute('data-pair')+'"]').value;
-        parts.push(cb.getAttribute('data-pair')+':'+v);
-      });
-      pr = parts.join(', ');
+      pr = Object.keys(f.pairs).map(function(p){
+        return f.pairs[p] == null ? p : p+':'+f.pairs[p];
+      }).join(', ');
     }
     undo();
-    onOk(ap, cp, pr);
+    onOk(f.ap, f.cp, pr);
   };
 }
 function openArmForm(btn, i, comp, entryT){
@@ -3037,7 +3070,7 @@ function openArmForm(btn, i, comp, entryT){
   });
 }
 function openAutoForm(btn, i){
-  pctForm(btn, 'Enable auto', function(ap, cp, pr){
+  var cb = function(ap, cp, pr){
     API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
                        body:JSON.stringify({instance:i, confirm:'ARM',
                                             auto:{enabled:true, adopt_pct:ap, close_pct:cp,
@@ -3045,7 +3078,11 @@ function openAutoForm(btn, i){
       .then(function(r){
         if(r.error) flash(r.error, 'r'); else flash(r.note || 'Auto-adopt enabled.', 'g');
         loadStatus(); });
-  }, true);
+  };
+  // recommended set is per CONFIG (strategy) — fetch before building the form
+  API('adopt_rec?instance='+i)
+    .then(function(rd){ pctForm(btn, 'Enable auto', cb, true, (rd||{}).rec, i); })
+    .catch(function(){ pctForm(btn, 'Enable auto', cb, true, null, i); });
 }
 function autoOff(i){
   API('shadow_arm', {method:'POST', headers:{'Content-Type':'application/json'},
