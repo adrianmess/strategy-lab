@@ -230,6 +230,8 @@ body.masked .amt:hover{filter:none}
           <span id="tdTfs"></span>
           <span style="width:12px"></span>
           <span id="tdInds"></span>
+          <span style="width:12px"></span>
+          <select id="tdTzSel" onchange="tdSetTz(this.value)" title="chart time zone" style="font-size:11px"></select>
           <span class="mini" style="margin-left:auto">TradingView lightweight-charts &middot; MEXC klines via the panel</span>
         </div>
         <div class="tdgrid">
@@ -1641,6 +1643,47 @@ var TD = {pair:'BTC', tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
 if(!('ema' in TD.ind)) TD.ind.ema = true;   // EMA overlay on by default
 var TD_EMAS = [5, 10, 30, 60];
 var TD_EMA_COLORS = {5:'#f0b90b', 10:'#2ebd85', 30:'#4c8dff', 60:'#8b5cf6'};
+// ---- chart time zone (lightweight-charts renders raw epochs as UTC, so we
+// shift each bar into the chosen zone, DST-aware, like TradingView's picker)
+TD.tz = localStorage.getItem('tdTz') || 'America/Los_Angeles';
+var TD_TZS = [['UTC','UTC'],
+  ['America/Los_Angeles','Los Angeles'], ['America/Denver','Denver'],
+  ['America/Chicago','Chicago'], ['America/New_York','New York'],
+  ['Europe/London','London'], ['Europe/Berlin','Berlin'],
+  ['Europe/Moscow','Moscow'], ['Asia/Dubai','Dubai'],
+  ['Asia/Kolkata','Kolkata'], ['Asia/Singapore','Singapore'],
+  ['Asia/Shanghai','Shanghai'], ['Asia/Tokyo','Tokyo'],
+  ['Australia/Sydney','Sydney']];
+var _tzCache = {};
+function tdTzOffSec(ts, tz){
+  tz = tz || TD.tz;
+  if(tz === 'UTC') return 0;
+  var k = tz + '|' + Math.floor(ts/3600);
+  if(_tzCache[k] != null) return _tzCache[k];
+  var d = new Date(ts*1000);
+  var v = (new Date(d.toLocaleString('en-US',{timeZone:tz})) -
+           new Date(d.toLocaleString('en-US',{timeZone:'UTC'})))/1000;
+  _tzCache[k] = v;
+  return v;
+}
+function tdTzFill(){
+  var s = document.getElementById('tdTzSel');
+  if(!s || s.options.length) return;
+  var now = Math.floor(Date.now()/1000);
+  TD_TZS.forEach(function(z){
+    var off = tdTzOffSec(now, z[0])/3600;
+    var o = document.createElement('option');
+    o.value = z[0];
+    o.textContent = '(UTC'+(off>=0?'+':'')+(off%1?off.toFixed(1):off)+') '+z[1];
+    if(z[0] === TD.tz) o.selected = true;
+    s.appendChild(o);
+  });
+}
+function tdSetTz(v){
+  TD.tz = v;
+  localStorage.setItem('tdTz', v);
+  tdKlines();
+}
 function tdKey(a, m, p2){ return (a||TD.acct)+'|'+(m||TD.mkt)+'|'+(p2||TD.pair); }
 function tdTyping(){
   var a = document.activeElement;
@@ -1932,7 +1975,14 @@ function tdKlines(){
       lr = TD.chart.timeScale().getVisibleLogicalRange();
       if(lr && TD.rows.length) atEdge = lr.to >= TD.rows.length - 2;
     }
-    TD.rows = d.rows || [];
+    var prevT = -Infinity;
+    TD.rows = (d.rows || []).map(function(r){
+      var t = r.time + tdTzOffSec(r.time);      // display in TD.tz
+      if(t <= prevT) t = prevT + 1;             // DST fold guard
+      prevT = t;
+      return {time:t, open:r.open, high:r.high, low:r.low, close:r.close,
+              vol:r.vol};
+    });
     TD.timeIdx = {};
     TD.rows.forEach(function(r, i){ TD.timeIdx[r.time] = i; });
     var c = TD.rows.map(function(r){ return r.close; });
@@ -2604,7 +2654,7 @@ function tdXferLoad(){
     '<button class="btn sm" onclick="openTransfer(TD.acct)">Convert</button></div>';
 }
 function tdRefresh(){
-  tdInit(); tdRefreshChips(); tdKlines(); tdState(); tdXferLoad();
+  tdInit(); tdTzFill(); tdRefreshChips(); tdKlines(); tdState(); tdXferLoad();
   API('fees').then(function(d){ TD.fees = d; tdPrev(); tdFeeS(); }).catch(function(){});
   if(TD.tab==='pos' && TD.posAll) tdAllLoad();
   if(TD.tab==='phist'||TD.tab==='ohist'||TD.tab==='assets') tdHistLoad();
