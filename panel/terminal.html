@@ -405,6 +405,16 @@ body.masked .amt:hover{filter:none}
   </div>
 </div>
 
+<div class="modal" id="tpm" onclick="if(event.target===this)closeTpsl()">
+  <div class="mbox" style="border-color:rgba(76,141,255,.5)">
+    <header style="color:var(--fg);display:flex;justify-content:space-between;align-items:center">
+      <span>TP/SL Settings <span class="mini" id="tpTitle" style="display:block;margin-top:3px"></span></span>
+      <span style="cursor:pointer;color:var(--dim);font-weight:400" onclick="closeTpsl()">&#10005;</span>
+    </header>
+    <div class="mb" id="tpb"></div>
+  </div>
+</div>
+
 <div class="modal" id="dustm" onclick="if(event.target===this)closeDust()">
   <div class="mbox" style="border-color:rgba(240,185,11,.5)">
     <header style="color:var(--accent);display:flex;justify-content:space-between;align-items:center">
@@ -2038,6 +2048,8 @@ function tdTabPosAll(){
             '<td class="n '+((p.realised||0)>=0?'up':'down')+'">'+((p.realised||0)>=0?'+$':'-$')+Math.abs(p.realised||0).toFixed(2)+'</td>'+
             '<td style="white-space:nowrap">'+
               '<button class="btn sm danger" style="border-radius:20px" title="market-close the whole position" onclick="tdCloseSym(this,\''+p.symbol+'\',\''+p.account+'\')">Flash Close</button> '+
+              '<button class="btn sm" style="color:var(--blue);border-color:rgba(76,141,255,.6);border-radius:20px" '+
+                'onclick="openTpslModal(\''+p.symbol+'\',\''+p.side+'\','+(p.avg||0)+','+(p.lev||1)+','+(p.vol||0)+','+(p.mark||0)+','+(p.liq||0)+',\''+p.account+'\',\'fut\')">&#8853; Add</button> '+
               '<input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
               '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
               '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\',\''+p.account+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button></td></tr>';
@@ -2057,12 +2069,14 @@ function tdTabPosAll(){
 }
 function tdTabPosOne(d){
   var rules = d.tpsl || [];
-  function tpslCell(sym, side, entry, lev, qty){
+  function tpslCell(sym, side, entry, lev, qty, mark, liq){
     var r = rules.find(function(x){ return x.symbol === sym; });
     if(r) return '<span class="tag b" title="panel checks every ~20s; closes at market when crossed">TP/SL'+
-      (r.tp_pct!=null?(' &ge;+'+r.tp_pct+'%'):'')+(r.sl_pct!=null?(' &le;'+r.sl_pct+'%'):'')+'</span>'+
+      (r.tp_pct!=null?(' &ge;+'+r.tp_pct+'%'):'')+(r.sl_pct!=null?(' &le;'+r.sl_pct+'%'):'')+
+      (r.close_pct!=null?(' &middot; '+r.close_pct+'%'):'')+'</span>'+
       '<button class="btn sm" title="remove rule" onclick="tpslRemove(this,\''+sym+'\')">&#10005;</button>';
-    return '<button class="btn sm" onclick="openTpsl(this,\''+sym+'\',\''+side+'\','+entry+','+(lev||1)+','+(qty||0)+')">TP/SL</button>';
+    return '<button class="btn sm" style="color:var(--blue);border-color:rgba(76,141,255,.6);border-radius:20px" '+
+      'onclick="openTpslModal(\''+sym+'\',\''+side+'\','+(entry||0)+','+(lev||1)+','+(qty||0)+','+(mark||0)+','+(liq||0)+')">&#8853; Add</button>';
   }
   var h = '<div class="body">';
   if(TD.mkt === 'fut'){
@@ -2082,7 +2096,7 @@ function tdTabPosOne(d){
             '<td class="n '+((p.realised||0)>=0?'up':'down')+'">'+((p.realised||0)>=0?'+$':'-$')+Math.abs(p.realised||0).toFixed(2)+'</td>'+
             '<td style="white-space:nowrap">'+
               '<button class="btn sm danger" style="border-radius:20px" title="market-close the whole position" onclick="tdCloseSym(this,\''+p.symbol+'\')">Flash Close</button> '+
-              tpslCell(p.symbol,p.side,p.avg,p.lev,p.vol)+
+              tpslCell(p.symbol,p.side,p.avg,p.lev,p.vol,p.mark,p.liq)+
               ' <input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
               '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
               '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button></td></tr>';
@@ -2096,7 +2110,7 @@ function tdTabPosOne(d){
           return '<tr><td><b>'+x.asset+'</b></td><td>'+tdSrcTag(x.src)+'</td><td class="n">'+amt(String(x.qty))+'</td>'+
             '<td class="n">'+(x.px?(+x.px).toPrecision(6):'&mdash;')+'</td>'+
             '<td class="n">'+amt('$'+(+x.value).toFixed(2))+'</td>'+
-            '<td style="white-space:nowrap">'+tpslCell(sym,'long',x.px,1,x.qty)+
+            '<td style="white-space:nowrap">'+tpslCell(sym,'long',x.px,1,x.qty,x.px,0)+
               ' <button class="btn sm danger" onclick="tdSellAsset(this,\''+x.asset+'\','+x.qty+')">Sell all</button></td></tr>';
         }).join('')+'</tbody></table>'+
         '<div class="mini" style="margin-top:6px">spot has no cost-basis from the exchange, so TP/SL here measures from the price at the moment you arm it</div>'
@@ -2213,31 +2227,100 @@ function renderTdPos(){
   else h += tdTabHist();
   el.innerHTML = h+'</div>';
 }
-function openTpsl(btn, sym, side, entry, lev, qty){
-  if(!btn || btn._armed) return;
-  btn._armed = true; ARMED++;
-  var w = document.createElement('span');
-  w.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
-  w.innerHTML = '<span class="mini">tp&ge;</span><input type="number" step="0.5" style="width:58px" placeholder="%" title="close when PnL% reaches this or higher">'+
-    '<span class="mini">sl&le;</span><input type="number" step="0.5" style="width:58px" placeholder="%" title="close when PnL% falls to this or lower (negative)">';
-  var ok = document.createElement('button'); ok.className='btn sm danger'; ok.textContent='Arm';
-  var no = document.createElement('button'); no.className='btn sm'; no.textContent='&#10005;'; no.innerHTML='&#10005;';
-  btn.style.display = 'none';
-  btn.parentNode.insertBefore(w, btn); w.appendChild(ok); w.appendChild(no);
-  var undo = function(){ w.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
-  no.onclick = function(e){ e.stopPropagation(); undo(); };
-  ok.onclick = function(e){
-    e.stopPropagation();
-    var ins = w.querySelectorAll('input');
-    var tp = ins[0].value.trim()===''?null:parseFloat(ins[0].value);
-    var sl = ins[1].value.trim()===''?null:parseFloat(ins[1].value);
-    if(tp==null && sl==null){ flash('set tp and/or sl', 'r'); return; }
-    undo();
-    API('tpsl', {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym, side:side,
-                           entry:entry, lev:lev, qty:qty, tp_pct:tp, sl_pct:sl, confirm:'ARM'})})
-      .then(function(r){ if(r.error) flash(r.error,'r'); else flash(r.note||'Armed.','g'); tdState(); });
-  };
+// ---- TP/SL Settings modal (MEXC-style: trigger price <-> ROE%, entire or
+// partial position). Rules are still watched panel-side every ~20s.
+var TPM = null;
+function openTpslModal(sym, side, entry, lev, qty, mark, liq, acct, mkt){
+  TPM = {sym:sym, side:side, entry:+entry||0, lev:+lev||1, qty:+qty||0,
+         mark:+mark||+entry||0, liq:+liq||0,
+         acct:acct||TD.acct, mkt:mkt||TD.mkt, scope:'entire', closePct:50};
+  document.getElementById('tpTitle').innerHTML =
+    sym.replace('_','')+' '+(TPM.mkt==='fut'?'Perpetual':'Spot')+' '+
+    '<b style="color:var(--'+(side==='long'?'up':'down')+')">'+
+    (side==='long'?'Long':'Short')+(TPM.mkt==='fut'?(' '+TPM.lev+'X'):'')+'</b>'+
+    ' &middot; '+TPM.acct;
+  tpRender();
+  document.getElementById('tpm').classList.add('on');
+}
+function closeTpsl(){ document.getElementById('tpm').classList.remove('on'); TPM = null; }
+function tpScope(s){
+  if(!TPM) return;
+  var keep = ['tpPx','tpRoe','slPx','slRoe'].map(function(id){
+    return (document.getElementById(id)||{}).value || ''; });
+  TPM.scope = s; tpRender();
+  ['tpPx','tpRoe','slPx','slRoe'].forEach(function(id, i){
+    var e = document.getElementById(id); if(e) e.value = keep[i]; });
+}
+function tpBlock(k, title){
+  return '<div style="margin-bottom:13px"><div style="font-weight:700;margin-bottom:7px">'+title+'</div>'+
+    '<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:8px">'+
+    '<div style="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:2px 10px">'+
+      '<input id="'+k+'Px" type="number" placeholder="Trigger Price" style="flex:1;border:none;background:none;outline:none" oninput="tpLink(\''+k+'\',\'px\')">'+
+      '<span class="mini">USDT &middot; Last</span></div>'+
+    '<div style="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:2px 10px">'+
+      '<input id="'+k+'Roe" type="number" placeholder="%" style="flex:1;border:none;background:none;outline:none" oninput="tpLink(\''+k+'\',\'roe\')">'+
+      '<span class="mini">% '+(TPM.mkt==='fut'?'ROE':'')+'</span></div></div></div>';
+}
+function tpRender(){
+  var t = TPM; if(!t) return;
+  function info(lbl, v, col){ return '<div><div class="mini">'+lbl+'</div>'+
+    '<div class="num" style="font-size:15px;font-weight:700'+(col?';color:'+col:'')+'">'+v+'</div></div>'; }
+  document.getElementById('tpb').innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">'+
+      info('Avg Entry Price', tdFmtPx(t.entry))+
+      info('Last', tdFmtPx(t.mark))+
+      info('Est. Liq Price', t.liq?tdFmtPx(t.liq):'&mdash;', 'var(--warn)')+'</div>'+
+    '<div class="tdtabs" style="margin-bottom:12px">'+
+      '<button class="'+(t.scope==='entire'?'on':'')+'" onclick="tpScope(\'entire\')">Entire Position</button>'+
+      '<button class="'+(t.scope==='partial'?'on':'')+'" onclick="tpScope(\'partial\')">Partial Position</button></div>'+
+    (t.scope==='partial'
+      ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><span class="mini">CLOSE</span>'+
+        '<input id="tpPart" type="number" min="1" max="99" value="'+t.closePct+'" style="width:70px" '+
+          'oninput="TPM.closePct=+this.value||50">'+
+        '<span class="mini">% of the position when triggered</span></div>'
+      : '')+
+    tpBlock('tp','Take-profit Settings')+
+    tpBlock('sl','Stop-loss Settings')+
+    '<div class="mini" style="margin:2px 0 12px">'+
+      (t.mkt==='fut'
+        ? 'ROE % is margin-basis (price move &times; '+t.lev+'x) — the same % as the uPnL column. Checked every ~20s; closes at market when crossed.'
+        : '% is the plain price move from the price shown. Checked every ~20s; sells at market when crossed.')+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+      '<button class="btn" style="padding:11px;border-radius:22px" onclick="closeTpsl()">Cancel</button>'+
+      '<button class="btn" style="padding:11px;border-radius:22px;background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700" '+
+        'onclick="tpConfirm(this)">Confirm</button></div>';
+}
+function tpLink(k, src){
+  var t = TPM; if(!t || !t.entry) return;
+  var dir = t.side==='long' ? 1 : -1;
+  var lev = t.mkt==='fut' ? t.lev : 1;
+  var pxE = document.getElementById(k+'Px'), roeE = document.getElementById(k+'Roe');
+  if(src === 'px'){
+    var px = parseFloat(pxE.value);
+    roeE.value = isNaN(px) ? '' : ((px/t.entry - 1)*100*lev*dir).toFixed(2);
+  } else {
+    var roe = parseFloat(roeE.value);
+    pxE.value = isNaN(roe) ? '' : (t.entry*(1 + roe/(100*lev*dir))).toFixed(t.entry>100?1:6);
+  }
+}
+function tpConfirm(btn){
+  var t = TPM; if(!t) return;
+  var tp = parseFloat((document.getElementById('tpRoe')||{}).value);
+  var sl = parseFloat((document.getElementById('slRoe')||{}).value);
+  if(isNaN(tp) && isNaN(sl)){ flash('set a take-profit and/or a stop-loss first', 'r'); return; }
+  btn.disabled = true;
+  var body = {account:t.acct, market:t.mkt, symbol:t.sym, side:t.side, entry:t.entry,
+              lev:t.lev, qty:t.qty, confirm:'ARM'};
+  if(!isNaN(tp)) body.tp_pct = tp;
+  if(!isNaN(sl)) body.sl_pct = sl;
+  if(t.scope === 'partial') body.close_pct = Math.min(99, Math.max(1, t.closePct||50));
+  API('tpsl', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)})
+    .then(function(r){
+      btn.disabled = false;
+      if(r.error){ flash(r.error, 'r'); return; }
+      flash(r.note||'TP/SL armed.', 'g'); closeTpsl(); tdState(); tdAllLoad(true);
+    });
 }
 function tpslRemove(btn, sym){
   API('tpsl', {method:'POST', headers:{'Content-Type':'application/json'},

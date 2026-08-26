@@ -1162,6 +1162,9 @@ def tpsl():
             rule["tp_pct"] = float(tp)
         if sl not in (None, ""):
             rule["sl_pct"] = float(sl)
+        cp = d.get("close_pct")
+        if cp not in (None, ""):        # Partial Position tab: close only X%
+            rule["close_pct"] = min(100.0, max(1.0, float(cp)))
         if not rule["entry"]:
             return jsonify(error="missing entry price"), 400
         rules.append(rule)
@@ -1177,16 +1180,26 @@ def _tpsl_fire(rule, why, px):
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
     acct = rule["account"]
     sym = rule["symbol"]
+    cp = float(rule.get("close_pct") or 100)
     if rule["market"] == "fut":
-        MexcFuturesAPI(account=acct).close_position(sym)
+        api = MexcFuturesAPI(account=acct)
+        if cp >= 100:
+            api.close_position(sym)
+        else:
+            for p in (api.open_positions(sym) or []):
+                hv = float(p.get("holdVol") or 0)
+                if hv <= 0:
+                    continue
+                side = 4 if int(p.get("positionType") or 1) == 1 else 2
+                api.place_market(sym, side, max(1, int(hv * cp / 100)))
     else:
         api = MexcSpotAPI(account=acct)
         qty = rule.get("qty") or api.balance(sym.split("_")[0])
-        q, _sc = api.floor_qty(sym, qty)
+        q, _sc = api.floor_qty(sym, float(qty) * cp / 100)
         if q > 0:
             api.market_sell(sym, q)
     print(f"TPSL FIRED {acct} {rule['market']} {sym}: {why} at {px} "
-          f"(entry {rule['entry']})", flush=True)
+          f"(entry {rule['entry']}, close {cp:.0f}%)", flush=True)
     try:
         subprocess.run([os.path.expanduser("~/.hermes/hermes"), "send",
                         "-t", "whatsapp", f"TP/SL {why}: closed {sym} "
