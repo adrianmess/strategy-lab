@@ -3055,6 +3055,16 @@ function pctForm(btn, okLabel, onOk, withPairs, recs, inst){
       .then(function(r){
         if(r.error){ flash(r.error, 'r'); return; }
         SAV = r.saved; flash(r.note || 'Saved set stored.', 'g');
+        if(SAV && !wrap.querySelector('[data-r=usesav]')){
+          var b = document.createElement('button');
+          b.className = 'btn sm';
+          b.setAttribute('data-r', 'usesav');
+          b.textContent = 'saved set';
+          b.title = 'your saved set for this config — fills the form; nothing applies until you confirm';
+          b.onclick = function(ev2){ ev2.stopPropagation(); fillFrom(SAV); };
+          sv.parentNode.insertBefore(b, sv);
+          sv.parentNode.insertBefore(document.createTextNode(' '), sv);
+        }
       });
   };
   wrap.querySelector('[data-r=open]').focus();
