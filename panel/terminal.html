@@ -2036,6 +2036,7 @@ function tdSrcTag(src){
 function tdTabPosAll(){
   var rows = TD.allPos;
   if(rows == null){ tdAllLoad(); return '<div class="body"><span class="mini">loading all accounts&hellip;</span></div>'; }
+  rows = rows.filter(function(p){ return !p.src; });   // bot/shadow rows live below
   var h = '<div class="body">';
   h += rows.length
     ? '<table><thead><tr><th>account</th><th>market</th><th>symbol</th><th>side</th><th>source</th><th class="n">size</th>'+
@@ -2074,7 +2075,7 @@ function tdTabPosAll(){
     : '<span class="mini">no open positions or holdings on either account</span>';
   if(TD.allErrs && TD.allErrs.length)
     h += '<div class="mini down" style="margin-top:5px">'+TD.allErrs.join(' &middot; ')+'</div>';
-  h += '<div class="mini" style="margin-top:6px">futures positions + spot holdings &ge;$1, both accounts &middot; refreshes ~15s</div></div>';
+  h += '<div class="mini" style="margin-top:6px">manually opened only — futures positions + spot holdings &ge;$1, both accounts &middot; strategy trades are in Bot &amp; shadow below &middot; refreshes ~15s</div></div>';
   return h;
 }
 function tdTabPosOne(d){
@@ -2090,7 +2091,8 @@ function tdTabPosOne(d){
   }
   var h = '<div class="body">';
   if(TD.mkt === 'fut'){
-    var ps = d.positions || [];
+    // strategy-held (bot/shadow) positions live in the Bot & shadow section
+    var ps = (d.positions || []).filter(function(p){ return !p.src; });
     h += ps.length ? '<table><thead><tr><th>symbol</th><th>side</th><th>source</th><th class="n">contracts</th><th class="n">entry</th><th class="n">mark</th><th class="n">liq</th><th class="n">margin</th><th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
         ps.map(function(p){
           var up = (p.upnl_pct||0) >= 0;
@@ -2113,7 +2115,7 @@ function tdTabPosOne(d){
         }).join('')+'</tbody></table>'
       : '<span class="mini">no open futures positions on '+TD.acct+'</span>';
   } else {
-    var hs = d.holdings || [];
+    var hs = (d.holdings || []).filter(function(x){ return !x.src; });
     h += hs.length ? '<table><thead><tr><th>asset</th><th>source</th><th class="n">quantity</th><th class="n">price</th><th class="n">value</th><th></th></tr></thead><tbody>'+
         hs.map(function(x){
           var sym = x.asset+'_USDT';
@@ -2226,23 +2228,27 @@ function renderTdBots(){
       var mult = s.mode === 'lev' ? (p.lev||1) : 1;
       var pct = (px && p.entry_price)
         ? (px/p.entry_price - 1) * dir * 100 * mult : null;
-      inner += '<div style="margin-bottom:8px"><b>'+(p.symbol||'')+'</b> '+
-        '<span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
-          ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span> '+
-        (p.adopted
+      inner += '<table style="margin-bottom:9px"><thead><tr>'+
+        '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
+        '<th class="n">virtual entry</th><th class="n">market entry</th>'+
+        '<th class="n">now</th><th class="n">uPnL</th><th class="n">auto-close</th></tr></thead><tbody>'+
+        '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
+        '<td><span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
+          ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span></td>'+
+        '<td>'+(p.adopted
           ? '<span class="tag" style="background:rgba(139,92,246,.14);color:var(--violet);box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)">'+
             (p.auto?'SHADOW AUTO-ADOPTED':'SHADOW ADOPTED')+'</span>'
-          : '<span class="tag b">BOT SIGNAL</span>')+
-        ' <span class="num">entry '+(+p.entry_price).toPrecision(6)+'</span>'+
-        (px?(' &middot; <span class="num">now '+(+px).toPrecision(6)+'</span>'):'')+
-        (pct!=null?(' &middot; <b class="num" style="color:var(--'+(pct>=0?'up':'down')+')">'+
-          (pct>=0?'+':'')+pct.toFixed(2)+'%</b>'):'')+
-        (p.adopted && p.mirror_entry_t
-          ? '<div class="mini" style="margin-top:3px">virtual entry '+p.mirror_entry_t+
-            (p.mirror_entry_px?(' @ '+(+p.mirror_entry_px).toPrecision(6)):'')+
-            ' &middot; joined for real @ '+(+p.entry_price).toPrecision(6)+
-            (p.armed_close_pct!=null?(' &middot; auto-closes &ge; +'+p.armed_close_pct+'%'):'')+'</div>'
-          : '')+'</div>';
+          : '<span class="tag b">BOT SIGNAL</span>')+'</td>'+
+        '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
+        '<td class="n mini">'+(p.adopted && p.mirror_entry_t
+          ? p.mirror_entry_t+(p.mirror_entry_px?(' @ '+(+p.mirror_entry_px).toPrecision(6)):'')
+          : '&mdash;')+'</td>'+
+        '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+
+        '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
+        '<td class="n" style="font-weight:700;color:var(--'+((pct||0)>=0?'up':'down')+')">'+
+          (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
+        '<td class="n">'+(p.armed_close_pct!=null?('&ge; +'+p.armed_close_pct+'%'):'&mdash;')+'</td>'+
+        '</tr></tbody></table>';
     } else {
       inner += '<div class="mini" style="margin-bottom:8px">flat — no real position; the slot is free</div>';
     }
@@ -2280,8 +2286,9 @@ function renderTdPos(){
   var d = TD.state || {};
   var el = document.getElementById('tdPos');
   if(!el) return;
-  var nPos = TD.posAll ? (TD.allPos ? TD.allPos.length : null)
-           : (TD.mkt==='fut' ? (d.positions||[]).length : (d.holdings||[]).length);
+  function nosrc(a){ return (a||[]).filter(function(r){ return !r.src; }).length; }
+  var nPos = TD.posAll ? (TD.allPos ? nosrc(TD.allPos) : null)
+           : (TD.mkt==='fut' ? nosrc(d.positions) : nosrc(d.holdings));
   var nOrd = (d.orders||[]).length;
   var tabs = [
     ['pos', 'Positions'+(nPos!=null?('('+nPos+')'):'')],
