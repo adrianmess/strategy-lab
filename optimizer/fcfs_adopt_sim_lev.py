@@ -329,6 +329,44 @@ def main():
              dict(red=-0.05)),
             ("WF adopt: vol-scaled, mirror exit", dict(red_map=vol_map)),
         ]
+    if len(sys.argv) > 1 and sys.argv[1] == "--sweep":
+        # per-pair threshold search (CAUSAL WF frame): does a pair-specific
+        # map beat the best flat threshold, like it did on spot?
+        folds = build_folds()
+        print(f"\nPER-PAIR SWEEP, causal WF frame ({len(folds)} folds)")
+        flats = [-0.01, -0.02, -0.03, -0.05]
+        best_flat, best_m = None, -1e9
+        for fv in flats:
+            s = simulate(dict(red=fv), folds)
+            print(f"  flat {100*fv:+.0f}%: {s['monthly']:+.2f}%/mo "
+                  f"({s['n_adopt']} adopted, dd {s['dd']:.1f}%)", flush=True)
+            if s["monthly"] > best_m:
+                best_flat, best_m = fv, s["monthly"]
+        print(f"  -> best flat: {100*best_flat:+.0f}% at {best_m:+.2f}%/mo")
+        pairs_all = sorted(vols)
+        cand_vals = [-0.01, -0.02, -0.03, -0.05, -0.08, -0.12]
+        pmap = {p: best_flat for p in pairs_all}
+        for p in pairs_all:
+            rows = []
+            for v in cand_vals:
+                m = dict(pmap)
+                m[p] = v
+                s = simulate(dict(red_map=m), folds)
+                rows.append((s["monthly"], v))
+            rows.sort(reverse=True)
+            pmap[p] = rows[0][1]
+            print(f"  {p}: best {100*rows[0][1]:+.0f}% "
+                  f"({rows[0][0]:+.2f}%/mo) | "
+                  + " ".join(f"{100*v:+.0f}%:{m:+.0f}" for m, v in
+                             sorted(rows, key=lambda x: x[1])), flush=True)
+        s = simulate(dict(red_map=pmap), folds)
+        print(f"\n  COMPOSED per-pair map "
+              f"{ {k: round(100*v) for k, v in pmap.items()} }: "
+              f"{s['monthly']:+.2f}%/mo ({s['n_adopt']} adopted, "
+              f"{s['n_liq_ad']} adopted-liq, dd {s['dd']:.1f}%) "
+              f"vs best flat {best_m:+.2f}%/mo", flush=True)
+        return
+
     for label, cfg in jobs:
         s = simulate(cfg, folds)
         print(f"\n{label}")
