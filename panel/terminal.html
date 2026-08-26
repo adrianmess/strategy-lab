@@ -2960,19 +2960,25 @@ function armCell(id, comp, entryT, armed){
   return ' <button class="btn sm" onclick="openArmForm(this,\''+id+'\','+comp+',\''+e+'\')">Arm</button>';
 }
 var PCT_PAIRS = ['hype','sui','doge','sol','eth','xrp','btc'];
-function pctForm(btn, okLabel, onOk, withPairs, rec, inst){
-  // inline "adopt when ≤ [spinner]% / close when ≥ [spinner]%" form. The
-  // recommended set is PER CONFIG (strategy): `rec` comes from
-  // /api/adopt_rec — null for unresearched configs, in which case there is
-  // no "use recommended" button and the pair depths start blank. "save as
-  // recommended" stores the current form values for this config.
+function pctForm(btn, okLabel, onOk, withPairs, recs, inst){
+  // inline "adopt when ≤ [spinner]% / close when ≥ [spinner]%" form. Presets
+  // are PER CONFIG (strategy), two tiers from /api/adopt_rec:
+  //   default — the researched best for this config (built into the panel;
+  //             always there to come back to)
+  //   saved   — your own custom set, stored via the "save" button
+  // A brand-new config has neither: no preset buttons, blank depths.
   if(!btn || btn._armed) return;
   btn._armed = true; ARMED++;
+  var DEF = (recs || {}).default || null;
+  var SAV = (recs || {}).saved || null;
+  var pre = SAV || DEF;                    // prefill pair depths from these
   var wrap = document.createElement('span');
   wrap.style.cssText = 'display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap';
   var names = PCT_PAIRS.slice();
-  Object.keys((rec && rec.pairs) || {}).forEach(function(p){
-    if(names.indexOf(p) < 0) names.push(p);
+  [DEF, SAV].forEach(function(r){
+    Object.keys((r && r.pairs) || {}).forEach(function(p){
+      if(names.indexOf(p) < 0) names.push(p);
+    });
   });
   wrap.innerHTML =
     '<span class="mini">open when unreal <b>&le;</b></span>'+
@@ -2986,18 +2992,25 @@ function pctForm(btn, okLabel, onOk, withPairs, rec, inst){
       ? '<div style="flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:5px">'+
         '<span class="mini" title="tick a pair to include it; give it its own depth or leave the depth blank to use the main threshold. None ticked = every pair at the main threshold.">pairs:</span>'+
         names.map(function(p){
-          var v = (rec && rec.pairs && rec.pairs[p] != null) ? rec.pairs[p] : '';
+          var v = (pre && pre.pairs && pre.pairs[p] != null) ? pre.pairs[p] : '';
           return '<label class="mini" style="display:inline-flex;gap:3px;align-items:center;cursor:pointer">'+
             '<input type="checkbox" data-pair="'+p+'"> '+p.toUpperCase()+
             ' &le;<input type="number" step="0.1" value="'+v+'" placeholder="main" data-pv="'+p+'" style="width:58px">%</label>';
         }).join('')+
-        (rec
-          ? '<button class="btn sm" data-r="recall" title="'+
-            ((rec.note||'the saved recommended configuration for this strategy').replace(/"/g,'&quot;'))+
-            ' — fills the form; nothing applies until you confirm">use recommended set</button>'
-          : '<span class="mini" style="opacity:.7">no recommended set for this config yet</span>')+
+        (DEF
+          ? '<button class="btn sm" data-r="usedef" style="border-color:var(--blue);color:var(--blue)" title="'+
+            ((DEF.note||'the researched best configuration for this strategy').replace(/"/g,'&quot;'))+
+            ' — fills the form; nothing applies until you confirm">default</button>'
+          : '')+
+        (SAV
+          ? '<button class="btn sm" data-r="usesav" title="your saved set for this config'+
+            (SAV.at?(' ('+SAV.at+')'):'')+' — fills the form; nothing applies until you confirm">saved set</button>'
+          : '')+
+        (!DEF && !SAV
+          ? '<span class="mini" style="opacity:.7">no default or saved set for this config yet</span>'
+          : '')+
         (inst != null
-          ? ' <button class="btn sm" data-r="saverec" title="store the CURRENT form values as this config\'s recommended set (preset only — arms nothing)">save as recommended</button>'
+          ? ' <button class="btn sm" data-r="saverec" title="store the CURRENT form values as this config\'s saved set (preset only — arms nothing; the default stays available)">save</button>'
           : '')+
         '</div>'
       : '');
@@ -3017,19 +3030,21 @@ function pctForm(btn, okLabel, onOk, withPairs, rec, inst){
     });
     return {ap:ap, cp:(cv === '' ? null : parseFloat(cv)), pairs:pairs};
   }
-  var rc = wrap.querySelector('[data-r=recall]');
-  if(rc) rc.onclick = function(ev){
-    ev.stopPropagation();
-    wrap.querySelector('[data-r=open]').value = rec.adopt_pct;
-    wrap.querySelector('[data-r=close]').value = rec.close_pct != null ? rec.close_pct : '';
+  function fillFrom(r){
+    wrap.querySelector('[data-r=open]').value = r.adopt_pct;
+    wrap.querySelector('[data-r=close]').value = r.close_pct != null ? r.close_pct : '';
     wrap.querySelectorAll('[data-pair]').forEach(function(cb){
       var p = cb.getAttribute('data-pair');
-      var has = rec.pairs && Object.prototype.hasOwnProperty.call(rec.pairs, p);
+      var has = r.pairs && Object.prototype.hasOwnProperty.call(r.pairs, p);
       cb.checked = !!has;
       wrap.querySelector('[data-pv="'+p+'"]').value =
-        (has && rec.pairs[p] != null) ? rec.pairs[p] : '';
+        (has && r.pairs[p] != null) ? r.pairs[p] : '';
     });
-  };
+  }
+  var bd = wrap.querySelector('[data-r=usedef]');
+  if(bd) bd.onclick = function(ev){ ev.stopPropagation(); fillFrom(DEF); };
+  var bs = wrap.querySelector('[data-r=usesav]');
+  if(bs) bs.onclick = function(ev){ ev.stopPropagation(); fillFrom(SAV); };
   var sv = wrap.querySelector('[data-r=saverec]');
   if(sv) sv.onclick = function(ev){
     ev.stopPropagation();
@@ -3039,7 +3054,7 @@ function pctForm(btn, okLabel, onOk, withPairs, rec, inst){
       body:JSON.stringify({instance:inst, rec:{adopt_pct:f.ap, close_pct:f.cp, pairs:f.pairs}})})
       .then(function(r){
         if(r.error){ flash(r.error, 'r'); return; }
-        rec = r.rec; flash(r.note || 'Recommended set saved.', 'g');
+        SAV = r.saved; flash(r.note || 'Saved set stored.', 'g');
       });
   };
   wrap.querySelector('[data-r=open]').focus();
@@ -3079,9 +3094,9 @@ function openAutoForm(btn, i){
         if(r.error) flash(r.error, 'r'); else flash(r.note || 'Auto-adopt enabled.', 'g');
         loadStatus(); });
   };
-  // recommended set is per CONFIG (strategy) — fetch before building the form
+  // presets are per CONFIG (strategy) — fetch default+saved before building
   API('adopt_rec?instance='+i)
-    .then(function(rd){ pctForm(btn, 'Enable auto', cb, true, (rd||{}).rec, i); })
+    .then(function(rd){ pctForm(btn, 'Enable auto', cb, true, rd || {}, i); })
     .catch(function(){ pctForm(btn, 'Enable auto', cb, true, null, i); });
 }
 function autoOff(i){

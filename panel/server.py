@@ -1848,7 +1848,15 @@ def adopt_rec():
     i, I = _inst()
     cfg_name = I["trader"]["config"] or I["cfg"] or "config.json"
     if request.method == "GET":
-        return jsonify(config=cfg_name, rec=_adopt_rec_all().get(cfg_name))
+        try:
+            saved = json.load(open(_ADOPT_REC_P)).get(cfg_name)
+        except Exception:
+            saved = None
+        return jsonify(config=cfg_name,
+                       default=_ADOPT_REC_SEED.get(cfg_name),
+                       saved=saved,
+                       # legacy field: saved wins, else the default
+                       rec=saved or _ADOPT_REC_SEED.get(cfg_name))
     d = request.get_json(force=True)
     try:
         saved = json.load(open(_ADOPT_REC_P))
@@ -1873,11 +1881,12 @@ def adopt_rec():
                 prs[k] = None if v in (None, "") else float(v)
         out["pairs"] = prs
         saved[cfg_name] = out
-        note = f"recommended set saved for {cfg_name}"
+        note = f"saved set stored for {cfg_name}"
     tmp = _ADOPT_REC_P + ".tmp"
     json.dump(saved, open(tmp, "w"), indent=1)
     os.replace(tmp, _ADOPT_REC_P)
-    return jsonify(ok=True, rec=_adopt_rec_all().get(cfg_name), note=note)
+    return jsonify(ok=True, saved=saved.get(cfg_name),
+                   default=_ADOPT_REC_SEED.get(cfg_name), note=note)
 
 
 @app.route("/api/shadow_arm", methods=["GET", "POST"])
