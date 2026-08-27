@@ -1175,12 +1175,75 @@ def _positions_all_compute():
                 tpsl=_tpsl_rules())
 
 
+_MANUAL_PREV = {"out": None}
+
+
+def _manual_close_alert(prev, cur):
+    """WhatsApp alert when a MANUALLY opened position disappears between two
+    warm snapshots (bot-held rows announce themselves via the trader's own
+    notifications). A leg that errored in either snapshot is skipped, so an
+    API hiccup never fakes a close."""
+    if prev is None:
+        return
+    errtxt = " ".join((prev.get("errors") or []) + (cur.get("errors") or []))
+
+    def keys(o):
+        ks = {}
+        for r in o.get("rows") or []:
+            if r.get("src"):
+                continue                      # bot-held: not ours
+            if r.get("market") == "fut":
+                ks[(r["account"], "fut", r["symbol"])] = r
+            else:
+                ks[(r["account"], "spot", r["asset"])] = r
+        return ks
+    cur_k = keys(cur)
+    for k, r in keys(prev).items():
+        if k in cur_k:
+            continue
+        acct, mkt, name = k
+        if f"{acct} {mkt}" in errtxt:
+            continue
+        if mkt == "fut":
+            detail = ""
+            try:
+                if AT not in sys.path:
+                    sys.path.insert(0, AT)
+                from mexc_api import MexcFuturesAPI
+                hp = _aslist(MexcFuturesAPI(account=acct)
+                             .history_positions(symbol=name, page_size=1))
+                if hp:
+                    real = float(hp[0].get("realised") or 0)
+                    detail = f" — realized {real:+.2f} USDT"
+            except Exception:
+                pass
+            msg = (f"Manual position closed: {name} "
+                   f"{(r.get('side') or '').upper()} {r.get('lev') or ''}x "
+                   f"({acct} futures){detail}")
+        else:
+            msg = (f"Manual holding closed: {name} sold "
+                   f"({acct} spot, was ~${r.get('value')})")
+        print(f"MANUAL CLOSE ALERT: {msg}", flush=True)
+        try:
+            subprocess.run([os.path.expanduser("~/.hermes/hermes"), "send",
+                            "-t", "whatsapp", msg], timeout=20)
+        except Exception:
+            pass
+
+
 def _positions_all_warm():
-    """Keep _TPA_CACHE warm so the page never waits on exchange calls."""
+    """Keep _TPA_CACHE warm so the page never waits on exchange calls; the
+    snapshot diff doubles as the manual-close alerter."""
     time.sleep(20)                        # let the panel finish booting
     while True:
         try:
-            _TPA_CACHE["all"] = (time.time(), _positions_all_compute())
+            cur = _positions_all_compute()
+            _TPA_CACHE["all"] = (time.time(), cur)
+            try:
+                _manual_close_alert(_MANUAL_PREV["out"], cur)
+            except Exception as e:
+                print(f"manual close alert error: {e}", flush=True)
+            _MANUAL_PREV["out"] = cur
         except Exception as e:
             print(f"positions_all warm error: {e}", flush=True)
         time.sleep(12)
