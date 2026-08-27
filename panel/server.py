@@ -1171,7 +1171,8 @@ def _positions_all_compute():
             rows.extend(legs[(acct, "spot")].result())
         except Exception as e:
             errs.append(f"{acct} spot: {str(e)[:80]}")
-    return dict(rows=rows, errors=errs, xfer=_xfer_rules())
+    return dict(rows=rows, errors=errs, xfer=_xfer_rules(),
+                tpsl=_tpsl_rules())
 
 
 def _positions_all_warm():

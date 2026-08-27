@@ -1664,12 +1664,14 @@ try{
     TD.cache = _snap.cache || {};
     TD.allPos = _snap.allPos || null;
     TD.allXfer = _snap.allXfer || [];
+    TD.allTpsl = _snap.allTpsl || [];
   }
 }catch(e){}
 function tdSnapSave(){
   try{
     localStorage.setItem('tdSnap', JSON.stringify(
-      {cache:TD.cache, allPos:TD.allPos, allXfer:TD.allXfer, at:Date.now()}));
+      {cache:TD.cache, allPos:TD.allPos, allXfer:TD.allXfer,
+       allTpsl:TD.allTpsl, at:Date.now()}));
   }catch(e){}
 }
 // ---- chart time zone (lightweight-charts renders raw epochs as UTC, so we
@@ -2091,7 +2093,7 @@ function tdPosScope(all){
 function tdAllLoad(force){
   if(!force && TD.allPos && Date.now()-TD.allT < 15000) return;
   API('trade/positions_all').then(function(d){
-    if(d && d.rows){ TD.allPos = d.rows; TD.allErrs = d.errors||[]; TD.allXfer = d.xfer||[]; TD.allT = Date.now(); tdSnapSave();
+    if(d && d.rows){ TD.allPos = d.rows; TD.allErrs = d.errors||[]; TD.allXfer = d.xfer||[]; TD.allTpsl = d.tpsl||[]; TD.allT = Date.now(); tdSnapSave();
       if(TD.tab==='pos' && TD.posAll && !ARMED && !tdTyping()) renderTdPos(); }
   });
 }
@@ -2169,9 +2171,8 @@ function tdTabPosAll(){
               ((p.upnl_usd||0)>=0?'+$':'-$')+Math.abs(p.upnl_usd||0).toFixed(2)+'</td>'+
             '<td class="n '+((p.realised||0)>=0?'up':'down')+'">'+((p.realised||0)>=0?'+$':'-$')+Math.abs(p.realised||0).toFixed(2)+'</td>'+
             '<td style="white-space:nowrap">'+
-              '<button class="btn sm danger" style="border-radius:20px" title="market-close the whole position" onclick="tdCloseSym(this,\''+p.symbol+'\',\''+p.account+'\')">Flash Close</button> '+
-              '<button class="btn sm" style="color:var(--blue);border-color:rgba(76,141,255,.6);border-radius:20px" '+
-                'onclick="openTpslModal(\''+p.symbol+'\',\''+p.side+'\','+(p.avg||0)+','+(p.lev||1)+','+(p.vol||0)+','+(p.mark||0)+','+(p.liq||0)+',\''+p.account+'\',\'fut\')">&#8853; Add</button> '+
+              '<button class="btn sm danger" style="border-radius:20px" title="market-close the whole position" onclick="tdCloseSym(this,\''+p.symbol+'\',\''+p.account+'\')">Flash Close</button>'+
+              tpslCellAll(p.account, 'fut', p.symbol, p.side, p.avg, p.lev, p.vol, p.mark, p.liq)+' '+
               '<input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
               '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
               '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\',\''+p.account+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button>'+
@@ -2183,6 +2184,7 @@ function tdTabPosAll(){
           '<td class="n">'+(p.px?(+p.px).toPrecision(6):'&mdash;')+'</td><td class="n">&mdash;</td>'+
           '<td class="n">$'+(+p.value).toFixed(2)+'</td><td class="n">&mdash;</td><td class="n">&mdash;</td>'+
           '<td style="white-space:nowrap"><button class="btn sm danger" onclick="tdSellAsset(this,\''+p.asset+'\','+p.qty+',\''+p.account+'\')">Sell all</button>'+
+          tpslCellAll(p.account, 'spot', p.asset+'_USDT', 'long', p.px, 1, p.qty, p.px, 0)+
           xferCellAll(p.account, 'spot', p.asset+'_USDT')+'</td></tr>';
       }).join('')+'</tbody></table>'
     : '<span class="mini">no open positions or holdings on either account</span>';
@@ -2205,10 +2207,7 @@ function tdTabPosOne(d){
   var rules = d.tpsl || [];
   function tpslCell(sym, side, entry, lev, qty, mark, liq){
     var r = rules.find(function(x){ return x.symbol === sym; });
-    if(r) return '<span class="tag b" title="panel checks every ~20s; closes at market when crossed">TP/SL'+
-      (r.tp_pct!=null?(' &ge;+'+r.tp_pct+'%'):'')+(r.sl_pct!=null?(' &le;'+r.sl_pct+'%'):'')+
-      (r.close_pct!=null?(' &middot; '+r.close_pct+'%'):'')+'</span>'+
-      '<button class="btn sm" title="remove rule" onclick="tpslRemove(this,\''+sym+'\')">&#10005;</button>';
+    if(r) return tpslTag(r, TD.acct, TD.mkt);
     return '<button class="btn sm" style="color:var(--blue);border-color:rgba(76,141,255,.6);border-radius:20px" '+
       'onclick="openTpslModal(\''+sym+'\',\''+side+'\','+(entry||0)+','+(lev||1)+','+(qty||0)+','+(mark||0)+','+(liq||0)+')">&#8853; Add</button>';
   }
@@ -2512,10 +2511,10 @@ function tpConfirm(btn){
       flash(r.note||'TP/SL armed.', 'g'); closeTpsl(); tdState(); tdAllLoad(true);
     });
 }
-function tpslRemove(btn, sym){
+function tpslRemove(btn, sym, acct, mkt){
   API('tpsl', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym, remove:true})})
-    .then(function(r){ if(r.error) flash(r.error,'r'); else flash('TP/SL removed.','g'); tdState(); });
+    body:JSON.stringify({account:(acct||TD.acct), market:(mkt||TD.mkt), symbol:sym, remove:true})})
+    .then(function(r){ if(r.error) flash(r.error,'r'); else flash('TP/SL removed.','g'); tdState(); tdAllLoad(true); });
 }
 function tdCloseSym(btn, sym, acct){
   acct = acct || TD.acct;
@@ -2524,6 +2523,42 @@ function tdCloseSym(btn, sym, acct){
       body:JSON.stringify({market:'fut', account:acct, pair:sym.split('_')[0], action:'close', symbol:sym, pct:100, confirm:'TRADE'})})
       .then(function(r){ if(r.error){flash(r.error,'r');tdMsg(r.error,true);} else {flash('Closed '+sym+'.','g');tdMsg('Closed '+sym+'.');} tdState(); tdAllLoad(true); });
   });
+}
+function tpslTag(r, acct, mkt){
+  // full detail of an armed panel TP/SL rule: percent AND the computed
+  // trigger price (margin-basis at leverage for futures, price move for
+  // spot), plus the partial-close fraction when set
+  var d = (r.side || 'long') === 'long' ? 1 : -1;
+  var lev = (r.market === 'fut') ? (+r.lev || 1) : 1;
+  function px(pct){
+    if(r.entry == null || pct == null) return null;
+    return (+r.entry) * (1 + (pct / 100 / lev) * d);
+  }
+  var parts = [];
+  if(r.tp_pct != null){
+    var tpx = px(r.tp_pct);
+    parts.push('<span style="color:var(--up)">TP '+(r.tp_pct>=0?'+':'')+r.tp_pct+'%'+
+      (tpx?(' @'+(+tpx).toPrecision(6)):'')+'</span>');
+  }
+  if(r.sl_pct != null){
+    var spx = px(r.sl_pct);
+    parts.push('<span style="color:var(--down)">SL '+r.sl_pct+'%'+
+      (spx?(' @'+(+spx).toPrecision(6)):'')+'</span>');
+  }
+  if(r.close_pct != null) parts.push(r.close_pct+'% of pos');
+  return ' <span class="tag b" title="panel rule armed '+(r.at||'')+' — entry basis '+
+    (r.entry!=null?(+r.entry).toPrecision(6):'?')+
+    (r.market==='fut'?(', '+lev+'x margin-basis %'):', price-move %')+
+    '; checked every ~20s, closes at market when crossed">'+parts.join(' &middot; ')+'</span>'+
+    '<button class="btn sm" title="remove TP/SL rule" onclick="tpslRemove(this,\''+r.symbol+'\',\''+
+    (acct||'')+'\',\''+(mkt||'')+'\')">&#10005;</button>';
+}
+function tpslCellAll(acct, mkt, sym, side, entry, lev, qty, mark, liq){
+  var r = (TD.allTpsl||[]).find(function(x){
+    return x.account === acct && x.market === mkt && x.symbol === sym; });
+  if(r) return tpslTag(r, acct, mkt);
+  return ' <button class="btn sm" style="color:var(--blue);border-color:rgba(76,141,255,.6);border-radius:20px" '+
+    'onclick="openTpslModal(\''+sym+'\',\''+side+'\','+(entry||0)+','+(lev||1)+','+(qty||0)+','+(mark||0)+','+(liq||0)+',\''+acct+'\',\''+mkt+'\')">&#8853; Add</button>';
 }
 function xferCellAll(acct, mkt, sym){
   // on-close transfer control for the ALL-ACCOUNTS rows (rules come with
