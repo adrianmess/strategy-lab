@@ -285,7 +285,8 @@ def _core_macdx(t_ms, o, h, l, c, macd, sig, hist, dropL, incS,
                 if c[i] <= entry_px * (1 - tgt):
                     pend_close = 1
 
-    return out[:nt], eq, liquidated, pos, entry_px, qty, entry_i, cur_lev
+    return (out[:nt], eq, liquidated, pos, entry_px, qty, entry_i, cur_lev,
+            sl_price, entry_tm)
 
 
 def run_macdx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
@@ -312,7 +313,7 @@ def run_macdx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
             macd = pre["macd_stack"][vm, ar]
             sig = pre["sig_stack"][vm, ar]
             hist = pre["hist_stack"][vm, ar]
-    arr, eq, liq, pos, epx, qty, ei, clev = _core_macdx(
+    arr, eq, liq, pos, epx, qty, ei, clev, slp, etm = _core_macdx(
         pre["t_ms"], pre["o"], pre["h"], pre["l"], pre["c"],
         macd, sig, hist, pre["dropL"], pre["incS"],
         np.asarray(regime, dtype=np.int32), np.asarray(P, dtype=np.float64),
@@ -332,6 +333,30 @@ def run_macdx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
         open_pos = dict(dir=int(pos), entry=float(epx), qty=float(qty),
                         lev=float(clev), entry_t=str(t[int(ei)])[:16],
                         entry_idx=int(ei))
+        # projected close — replicates the core's per-bar exit branch at the
+        # LAST bar (target decays after P hours; SL is the entry bracket)
+        try:
+            r_now = int(np.asarray(regime, dtype=np.int64)[-1])
+            tm_now = float(pre["t_ms"][-1])
+            Pm = np.asarray(P, dtype=np.float64)
+            if pos > 0:
+                tgt = Pm[r_now, 0]
+                if tm_now >= etm + Pm[r_now, 13] * 3600000.0:
+                    tgt = Pm[r_now, 11]
+                elif tm_now >= etm + Pm[r_now, 12] * 3600000.0:
+                    tgt = Pm[r_now, 10]
+                tp = float(epx) * (1 + tgt)
+            else:
+                tgt = Pm[r_now, 1]
+                if tm_now >= etm + Pm[r_now, 19] * 3600000.0:
+                    tgt = Pm[r_now, 17]
+                elif tm_now >= etm + Pm[r_now, 18] * 3600000.0:
+                    tgt = Pm[r_now, 16]
+                tp = float(epx) * (1 - tgt)
+            open_pos["exit_proj"] = dict(tp=float(tp), sl=float(slp),
+                                         kind="target")
+        except Exception:
+            pass
     if return_open:
         return tr, float(eq), bool(liq), open_pos
     return tr, float(eq), bool(liq)

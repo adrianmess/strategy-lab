@@ -160,6 +160,9 @@ def main():
                             # position opened while it was down — red only
                             entry_px=(float(x3["close"].iloc[ei])
                                       if 0 <= ei < len(x3) else None),
+                            # engine's own projected close (TP/SL levels)
+                            exit_proj=(op.get("exit_proj")
+                                       if op is not None else None),
                             last_exit=last_exit, last_reason=last_reason))
                     emit(dict(e="bar", t=_ts16(newest),
                               px=float(closed["close"].iloc[-1]), comps=out))

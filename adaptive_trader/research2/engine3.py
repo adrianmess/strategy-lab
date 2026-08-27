@@ -356,10 +356,11 @@ def _core3(t_ms, o, h, l, c,
                 if c[i] <= entry_price * (1 - pt):
                     pend_exit = 0
 
-    open_pos = np.zeros(6)
+    open_pos = np.zeros(8)
     if pos != 0:
         open_pos[0] = pos; open_pos[1] = entry_idx; open_pos[2] = entry_price
         open_pos[3] = qty; open_pos[4] = lev_used; open_pos[5] = 1.0
+        open_pos[6] = sys_; open_pos[7] = slPrice   # for exit projection
     return trades[:nt], equity, liquidated, open_pos
 
 
@@ -395,6 +396,28 @@ def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
             op = dict(dir=int(_op[0]), entry_idx=int(_op[1]), entry=float(_op[2]),
                       qty=float(_op[3]), lev=float(_op[4]),
                       entry_t=str(pre["t"][int(_op[1])]))
+            # projected close — replicates the core's per-bar exit branch at
+            # the LAST bar: base target decays to apt1/apt2 after dur1/dur2
+            # minutes; columns b..b+4 per (side, system)
+            try:
+                r_now = int(regime[-1])
+                d = int(_op[0])
+                sysx = int(_op[6])
+                el = float((pre["t"][-1] - pre["t"][int(_op[1])])
+                           / np.timedelta64(1, "m"))
+                b = (8 if sysx == 0 else 18) if d > 0 else \
+                    (13 if sysx == 0 else 23)
+                pt = P[r_now, b]
+                if el >= P[r_now, b + 4]:
+                    pt = P[r_now, b + 2]
+                elif el >= P[r_now, b + 3]:
+                    pt = P[r_now, b + 1]
+                tp = float(_op[2]) * (1 + pt if d > 0 else 1 - pt)
+                op["exit_proj"] = dict(
+                    tp=float(tp),
+                    sl=(float(_op[7]) if use_sl else None), kind="target")
+            except Exception:
+                pass
         return df, eq, bool(liq), op
     return df, eq, bool(liq)
 

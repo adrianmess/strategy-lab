@@ -326,6 +326,7 @@ def main_fcfs(cfg, live):
                              dir=d, lev=lv, entry_t=lbl,
                              entry_px=float(ep), px=px,
                              pct=round(pct, 3) if pct is not None else None,
+                             exit_proj=c.get("exit_proj"),
                              skipped=(sk.get(str(ci)) == lbl)))
         shadow_by_key[key] = rows
         flat = [r for rs in shadow_by_key.values() for r in rs]
@@ -749,6 +750,11 @@ def main_fcfs(cfg, live):
                         # position open: watch ONLY the owning component
                         if key == pos["group"] and pos["comp"] in cbyi:
                             me = cbyi[pos["comp"]]
+                            # engine's projected close for OUR position —
+                            # refreshed every bar; persisted by the regular
+                            # shadow/save cadence
+                            if me.get("exit_proj") is not None:
+                                pos["exit_proj"] = me.get("exit_proj")
                             # backfill the virtual entry price for positions
                             # opened before it was recorded (late-joins under
                             # the old code): powers the "virtual: ±x%" line

@@ -201,10 +201,11 @@ def _scalp_core(o, h, l, c, rsi, cvdUp, cvdDn, aboveCvd, belowCvd,
             pend_sl = c[i] * (1 + P[r, 2])
             pend_lev = P[r, 5]
 
-    open_pos = np.zeros(6)
+    open_pos = np.zeros(8)
     if pos != 0:
         open_pos[0] = pos; open_pos[1] = entry_idx; open_pos[2] = entry_price
         open_pos[3] = qty; open_pos[4] = lev_used; open_pos[5] = 1.0
+        open_pos[6] = tp_price; open_pos[7] = sl_price   # live bracket
     return trades[:nt], equity, liquidated, open_pos
 
 
@@ -235,6 +236,16 @@ def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
             op = dict(dir=int(_op[0]), entry_idx=int(_op[1]), entry=float(_op[2]),
                       qty=float(_op[3]), lev=float(_op[4]),
                       entry_t=str(pre["t"][int(_op[1])]))
+            # projected close: the engine's own live bracket (SL only shown
+            # when the CURRENT regime row has it enabled — same check the
+            # core makes each bar)
+            try:
+                sl_on = P[int(regime[-1]), 10] > 0
+                op["exit_proj"] = dict(
+                    tp=float(_op[6]),
+                    sl=(float(_op[7]) if sl_on else None), kind="bracket")
+            except Exception:
+                pass
         return df, eq, bool(liq), op
     return df, eq, bool(liq)
 

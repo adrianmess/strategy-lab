@@ -1339,6 +1339,7 @@ function renderCards(){
           '<span>qty <b class="num">'+amt(p.qty)+'</b></span>'+
           (p.tp_price?'<span>target <b class="num">'+(+p.tp_price).toPrecision(6)+'</b>'+
             (p.tp_order_id?' &#9875;':'')+'</span>':'')+
+          (p.exit_proj?'<span>proj. close '+projFmt(p.exit_proj)+'</span>':'')+
           '<span>via <b>'+(p.group||'')+'</b></span></div>'+
         '<div style="margin-top:9px;display:flex;gap:7px;flex-wrap:wrap;align-items:center">'+
           (s.override
@@ -1589,7 +1590,7 @@ function toggleShadows(){
 }
 function shadowTable(rows){
   return '<table style="margin-top:9px"><thead><tr><th>Instance</th><th>Component</th><th>Side</th>'+
-    '<th class="n">Virtual entry</th><th class="n">Entry px</th><th class="n">Unreal %</th><th></th></tr></thead><tbody>'+
+    '<th class="n">Virtual entry</th><th class="n">Entry px</th><th class="n">Unreal %</th><th class="n">Proj. close</th><th></th></tr></thead><tbody>'+
     rows.map(function(o){
       var r = o.r;
       return '<tr'+(r.skipped?' style="opacity:.55"':'')+'><td>'+o.inst+'</td>'+
@@ -1600,6 +1601,7 @@ function shadowTable(rows){
         '<td class="n">'+(r.entry_px?(+r.entry_px).toPrecision(6):'—')+'</td>'+
         '<td class="n '+(r.pct==null?'dim':cls(r.pct))+'" style="font-weight:600">'+
           (r.pct==null?'—':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
+        '<td class="n">'+projFmt(r.exit_proj)+'</td>'+
         '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+
           (o.held ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+o.id+'\','+r.comp+
                          ',\''+String(r.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
@@ -2078,6 +2080,15 @@ function tdHistLoad(force){
 function tdAcctLabel(a, m){
   return a + ' &middot; ' + (m==='fut'?'Leverage':'Spot');
 }
+function projFmt(ep){
+  // engine-published projected close: TP green, SL red (SL absent when the
+  // current regime runs stopless)
+  if(!ep || (ep.tp == null && ep.sl == null)) return '<span class="dim">&mdash;</span>';
+  var h = [];
+  if(ep.tp != null) h.push('<span style="color:var(--up)" title="engine profit-target price (decays with hold time / regime)">TP '+(+ep.tp).toPrecision(6)+'</span>');
+  if(ep.sl != null) h.push('<span style="color:var(--down)" title="engine stop level">SL '+(+ep.sl).toPrecision(6)+'</span>');
+  return h.join(' &middot; ');
+}
 function tdSrcTag(src){
   if(!src) return '<span class="tag" title="opened manually (Trade page or the exchange app)">Manual</span>';
   if(typeof src === 'string') src = {name:src};
@@ -2316,7 +2327,7 @@ function renderTdBots(){
     inner += '<table><thead><tr>'+
       '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
       '<th class="n">market entry</th>'+
-      '<th class="n">now</th><th class="n">uPnL</th><th class="n">auto-close</th></tr></thead><tbody>'+
+      '<th class="n">now</th><th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
       '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
       '<td><span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
         ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span></td>'+
@@ -2332,6 +2343,7 @@ function renderTdBots(){
       '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
       '<td class="n" style="font-weight:700;color:var(--'+((pct||0)>=0?'up':'down')+')">'+
         (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
+      '<td class="n">'+projFmt(p.exit_proj)+'</td>'+
       '<td class="n">'+(p.armed_close_pct!=null?('&ge; +'+p.armed_close_pct+'%'):'&mdash;')+'</td>'+
       '</tr></tbody></table>';
     h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px">'+
