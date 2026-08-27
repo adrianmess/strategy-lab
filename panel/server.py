@@ -1145,7 +1145,7 @@ def trade_positions_all():
                                      src=hm.get((acct, "spot", a_))))
         except Exception as e:
             errs.append(f"{acct} spot: {str(e)[:80]}")
-    out = dict(rows=rows, errors=errs)
+    out = dict(rows=rows, errors=errs, xfer=_xfer_rules())
     _TPA_CACHE["all"] = (now, out)
     return jsonify(**out)
 

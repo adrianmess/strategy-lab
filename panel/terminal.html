@@ -2059,7 +2059,7 @@ function tdPosScope(all){
 function tdAllLoad(force){
   if(!force && TD.allPos && Date.now()-TD.allT < 15000) return;
   API('trade/positions_all').then(function(d){
-    if(d && d.rows){ TD.allPos = d.rows; TD.allErrs = d.errors||[]; TD.allT = Date.now();
+    if(d && d.rows){ TD.allPos = d.rows; TD.allErrs = d.errors||[]; TD.allXfer = d.xfer||[]; TD.allT = Date.now();
       if(TD.tab==='pos' && TD.posAll && !ARMED && !tdTyping()) renderTdPos(); }
   });
 }
@@ -2142,14 +2142,16 @@ function tdTabPosAll(){
                 'onclick="openTpslModal(\''+p.symbol+'\',\''+p.side+'\','+(p.avg||0)+','+(p.lev||1)+','+(p.vol||0)+','+(p.mark||0)+','+(p.liq||0)+',\''+p.account+'\',\'fut\')">&#8853; Add</button> '+
               '<input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
               '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
-              '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\',\''+p.account+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button></td></tr>';
+              '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\',\''+p.account+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button>'+
+              xferCellAll(p.account, 'fut', p.symbol)+'</td></tr>';
         }
         return '<tr><td><b>'+p.account+'</b></td><td><span class="tag g">SPOT</span></td>'+
           '<td><b>'+p.asset+'</b></td><td><span class="tag g">HOLD</span></td>'+
           '<td class="n">'+amt(String(p.qty))+'</td><td class="n">&mdash;</td>'+
           '<td class="n">'+(p.px?(+p.px).toPrecision(6):'&mdash;')+'</td><td class="n">&mdash;</td>'+
           '<td class="n">$'+(+p.value).toFixed(2)+'</td><td class="n">&mdash;</td><td class="n">&mdash;</td>'+
-          '<td><button class="btn sm danger" onclick="tdSellAsset(this,\''+p.asset+'\','+p.qty+',\''+p.account+'\')">Sell all</button></td></tr>';
+          '<td style="white-space:nowrap"><button class="btn sm danger" onclick="tdSellAsset(this,\''+p.asset+'\','+p.qty+',\''+p.account+'\')">Sell all</button>'+
+          xferCellAll(p.account, 'spot', p.asset+'_USDT')+'</td></tr>';
       }).join('')+'</tbody></table>'
     : '<span class="mini">no open positions or holdings on either account</span>';
   if(TD.allErrs && TD.allErrs.length)
@@ -2491,14 +2493,28 @@ function tdCloseSym(btn, sym, acct){
       .then(function(r){ if(r.error){flash(r.error,'r');tdMsg(r.error,true);} else {flash('Closed '+sym+'.','g');tdMsg('Closed '+sym+'.');} tdState(); tdAllLoad(true); });
   });
 }
-function openXfer(btn, sym){
+function xferCellAll(acct, mkt, sym){
+  // on-close transfer control for the ALL-ACCOUNTS rows (rules come with
+  // /api/trade/positions_all; per-account view has its own copy)
+  var r = (TD.allXfer||[]).find(function(x){
+    return x.account === acct && x.market === mkt && x.symbol === sym; });
+  if(r) return ' <span class="tag b" title="armed '+(r.at||'')+' — USDT moves between this account\'s own wallets when the position closes">&#8646; on close: '+
+    (r.direction==='fut2spot'?'fut&rarr;spot':'spot&rarr;fut')+' '+
+    (r.amount!=null?('$'+r.amount):'max')+'</span>'+
+    '<button class="btn sm" title="remove transfer rule" onclick="xferRemove(this,\''+sym+'\',\''+acct+'\',\''+mkt+'\')">&#10005;</button>';
+  return ' <button class="btn sm" title="automatically transfer USDT between this account\'s spot and futures wallets when THIS position closes" '+
+    'onclick="openXfer(this,\''+sym+'\',\''+acct+'\',\''+mkt+'\')">&#8646; on close</button>';
+}
+function openXfer(btn, sym, acct, mkt){
   // per-position on-close transfer: direction + optional USDT amount
   // (blank = everything available when it fires)
   if(!btn || btn._armed) return;
+  acct = acct || TD.acct;
+  mkt = mkt || TD.mkt;
   btn._armed = true; ARMED++;
   var w = document.createElement('span');
   w.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
-  var def = TD.mkt === 'fut' ? 'fut2spot' : 'spot2fut';
+  var def = mkt === 'fut' ? 'fut2spot' : 'spot2fut';
   w.innerHTML = '<select class="xfDir" title="which way to move USDT when this position closes">'+
     '<option value="fut2spot"'+(def==='fut2spot'?' selected':'')+'>fut&rarr;spot</option>'+
     '<option value="spot2fut"'+(def==='spot2fut'?' selected':'')+'>spot&rarr;fut</option></select>'+
@@ -2516,16 +2532,16 @@ function openXfer(btn, sym){
     var amt = w.querySelector('.xfAmt').value.trim();
     undo();
     API('xfer_rule', {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym,
+      body:JSON.stringify({account:acct, market:mkt, symbol:sym,
                            direction:dir, amount:(amt===''?null:parseFloat(amt)),
                            confirm:'ARM'})})
-      .then(function(r){ if(r.error) flash(r.error,'r'); else flash(r.note||'Armed.','g'); tdState(); });
+      .then(function(r){ if(r.error) flash(r.error,'r'); else flash(r.note||'Armed.','g'); tdState(); tdAllLoad(true); });
   };
 }
-function xferRemove(btn, sym){
+function xferRemove(btn, sym, acct, mkt){
   API('xfer_rule', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym, remove:true})})
-    .then(function(r){ if(r.error) flash(r.error,'r'); else flash('Transfer rule removed.','g'); tdState(); });
+    body:JSON.stringify({account:(acct||TD.acct), market:(mkt||TD.mkt), symbol:sym, remove:true})})
+    .then(function(r){ if(r.error) flash(r.error,'r'); else flash('Transfer rule removed.','g'); tdState(); tdAllLoad(true); });
 }
 function tdCloseAdv(btn, sym, acct){
   // MEXC-style Close cell: optional price (blank = market) + optional
