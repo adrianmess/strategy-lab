@@ -916,27 +916,22 @@ function renderAccounts(){
       // mode was unknown, so it fell to the futures branch and showed its
       // 0.43 USDC dust instead of the ~$680 of spot it trades.
       var mode = (STATUS[id0] || {}).mode || (PERF[id0] || {}).mode;
-      var eq = 0, sub = '';
-      // pick the wallet this account actually TRADES. mexc2 carries a 0.43
-      // USDC futures dust balance next to ~$680 of spot — keying off "does a
-      // futures wallet exist" showed the dust and hid the real money.
-      var futEq = (a.futures||[]).length ? (+a.futures[0].equity || 0) : 0;
+      // the FULL account total: spot + futures wallets combined. (This used
+      // to pick one wallet — an old fix for mexc2's USDC-dust days — which
+      // hid the futures money once both wallets were funded.)
+      var futEq = 0, futMargin = 0;
+      (a.futures||[]).forEach(function(f){
+        if(['USDT','USDC','USD1'].indexOf(f.currency) >= 0){
+          futEq += (+f.equity || 0);
+          futMargin += (+f.position_margin || 0);
+        }
+      });
       var spotEq = 0;
       (a.spot||[]).forEach(function(s){
         spotEq += (s.usdt_value != null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0); });
-      // if the mode is still unknown, fall back to whichever wallet actually
-      // holds the money rather than guessing
-      var useFut = (mode === 'spot') ? false
-                 : (mode === 'lev' ? true : futEq >= spotEq);
-      if(useFut && (a.futures||[]).length){
-        var f = a.futures[0];
-        eq = futEq;
-        sub = 'available '+(+f.available||0).toFixed(2)+' / margin '+(+f.position_margin||0).toFixed(2);
-      } else {
-        eq = spotEq;
-        sub = (a.spot||[]).map(function(s){ return (+s.free).toFixed(s.asset==='USDT'?2:4)+' '+s.asset; })
-                .slice(0,4).join(' / ');
-      }
+      var eq = spotEq + futEq;
+      var sub = 'spot $'+spotEq.toFixed(2)+' &middot; futures $'+futEq.toFixed(2)+
+        (futMargin > 0.005 ? ' (margin '+futMargin.toFixed(2)+')' : '');
       EQ[a.account] = eq;
       EQ.total += eq;
       return '<div style="'+(ix?'border-top:1px solid var(--line);padding-top:13px;margin-top:13px':'')+'">'+
