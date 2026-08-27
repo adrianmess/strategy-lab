@@ -85,6 +85,90 @@ def main():
                 pass
     threading.Thread(target=read_stdin, daemon=True).start()
 
+    # ---- WebSocket wake-up (latency option 2): the exchange pushes a kline
+    # update the moment a NEW candle starts — which means the previous one
+    # just closed and is queryable. The socket is a TRIGGER ONLY: on wake we
+    # run the exact same REST update as always, so the engine's data stays
+    # byte-identical to the polling path and a dead socket silently degrades
+    # to bar-aligned polling. The CONTRACT stream is used for both modes
+    # (spot's v3 stream is protobuf; candle boundaries are the same clock,
+    # and REST remains the source of truth either way).
+    ws_wake = threading.Event()
+
+    def ws_thread():
+        try:
+            import websocket
+        except Exception:
+            emit(dict(e="log", msg="websocket-client missing — WS trigger "
+                                   "off, bar-aligned polling only"))
+            return
+        last_start = 0
+        while True:
+            try:
+                ws = websocket.create_connection(
+                    "wss://contract.mexc.com/edge", timeout=15)
+                ws.send(json.dumps(dict(method="sub.kline",
+                                        param=dict(symbol=symbol,
+                                                   interval=f"Min{tf_min}"))))
+                ws.settimeout(15)
+                while True:
+                    try:
+                        msg = ws.recv()
+                    except websocket.WebSocketTimeoutException:
+                        ws.send(json.dumps(dict(method="ping")))
+                        continue
+                    if not msg:
+                        break
+                    try:
+                        d = json.loads(msg)
+                    except Exception:
+                        continue
+                    dd = d.get("data") if isinstance(d, dict) else None
+                    t0 = int((dd or {}).get("t") or 0)   # bar START (s)
+                    if t0 > last_start:
+                        if last_start:       # new candle => previous closed
+                            ws_wake.set()
+                        last_start = t0
+            except Exception:
+                pass
+            import random as _rnd
+            time.sleep(5 + _rnd.uniform(0, 10))          # reconnect backoff
+    threading.Thread(target=ws_thread, daemon=True).start()
+
+    # ---- pacing (latency option 1): a new CLOSED bar can only appear just
+    # after a boundary, so poll densely there (jittered per host so the
+    # fleet doesn't burst one IP into MEXC's 510 limit) and nap mid-bar,
+    # waking every `poll` seconds anyway so the px heartbeat that feeds the
+    # runner's protective checks keeps its old freshness.
+    import math
+    import random as _rnd2
+    tf_s = tf_min * 60
+    jit = _rnd2.uniform(0.0, 1.2)
+    LADDER = [0.6 + jit, 1.6 + jit, 3.0 + jit, 5.5 + jit, 9.0 + jit]
+
+    def paced_wait(last_lbl):
+        now = time.time()
+        B = math.floor(now / tf_s) * tf_s     # most recent boundary
+        have = False
+        if last_lbl is not None:
+            try:
+                have = (last_lbl.value / 1e9) >= B - tf_s
+            except Exception:
+                have = False
+        if have:                              # up to date: nap to boundary,
+            target = min(B + tf_s + LADDER[0],   # px heartbeat mid-bar
+                         now + poll)
+        else:                                 # closed bar due: retry ladder
+            for off in LADDER:
+                if now - B < off:
+                    target = B + off
+                    break
+            else:
+                target = now + poll           # exchange late — old cadence
+        w = max(0.1, target - now)
+        if ws_wake.wait(timeout=w):           # WS says "bar rolled" — go now
+            ws_wake.clear()
+
     # error-noise control: a network outage makes EVERY poll fail, which
     # used to emit one line per host per poll (~60/min for the fleet) and
     # buried everything else. Log the first failure of a kind, then only
@@ -166,7 +250,7 @@ def main():
                             last_exit=last_exit, last_reason=last_reason))
                     emit(dict(e="bar", t=_ts16(newest),
                               px=float(closed["close"].iloc[-1]), comps=out))
-            time.sleep(poll)
+            paced_wait(last_closed)
         except Exception as ex:
             import random
             kind = classify(ex)
