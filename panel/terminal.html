@@ -796,6 +796,11 @@ function setDailyScope(v){
 function dailyEquity(){
   return DSCOPE ? (EQ[DSCOPE] || 0) : (EQ.total || 0);
 }
+var FLOWS = [];   // deposits/withdrawals from /api/flows — capital, not P&L
+function loadFlows(){
+  API('flows').then(function(d){ FLOWS = (d && d.flows) || []; renderDaily(); })
+    .catch(function(){});
+}
 function dailySeries(days){
   days = days || 30;
   var byDay = {};
@@ -806,17 +811,27 @@ function dailySeries(days){
     var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
     byDay[k] = (byDay[k] || 0) + e.pnl;
   });
+  // capital flows by day: deposits (+) and withdrawals (−) move the balance
+  // without being profit — subtracted from the reconstructed day openings
+  var flowByDay = {};
+  FLOWS.filter(function(f){
+    return !DSCOPE || f.account === DSCOPE;
+  }).forEach(function(f){
+    var d = new Date(f.t);
+    var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+    flowByDay[k] = (flowByDay[k] || 0) + f.usdt;
+  });
   var out = [], now = new Date();
   for(var i = days - 1; i >= 0; i--){
     var d = new Date(now);
     d.setDate(d.getDate() - i);
     var k = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
-    out.push({date: d, key: k, pnl: byDay[k] || 0});
+    out.push({date: d, key: k, pnl: byDay[k] || 0, flow: flowByDay[k] || 0});
   }
   var running = dailyEquity();
   for(var j = out.length - 1; j >= 0; j--){
     out[j].end = running;
-    out[j].start = running - out[j].pnl;
+    out[j].start = running - out[j].pnl - out[j].flow;
     out[j].pct = out[j].start > 0 ? 100 * out[j].pnl / out[j].start : null;
     running = out[j].start;
   }
@@ -895,7 +910,8 @@ function renderDaily(){
     '<div class="rowsb mini" style="margin-top:6px">'+
       '<span>' + d[0].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span>'+
       '<span>' + (DSCOPE ? (DSCOPE + ' only · on its own balance of $' +
-        dailyEquity().toFixed(2)) : 'both accounts combined') + '</span>'+
+        dailyEquity().toFixed(2)) : 'both accounts combined') +
+        ' · deposits/withdrawals excluded from P&amp;L</span>'+
       '<span>' + d[d.length-1].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span></div>';
 }
 
@@ -3385,10 +3401,11 @@ for(var i=0;i<btns.length;i++){
 })();
 syncSoundBtn(); syncToggles();
 applyTheme(localStorage.getItem('slTheme') || 'dark');
-loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust();
+loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust(); loadFlows();
 setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
 setInterval(loadDust, 300000);
+setInterval(loadFlows, 300000);
 setInterval(loadTicker, 15000);
 setInterval(loadStatus, 20000);
 setInterval(function(){ loadOptimize(); loadProgress(); }, 90000);

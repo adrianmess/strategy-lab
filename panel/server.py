@@ -2997,6 +2997,66 @@ def api_rtr_saved():
     return jsonify(ok=True, saved=sorted(b))
 
 
+_FLOWS_CACHE = {}
+
+
+@app.route("/api/flows")
+def api_flows():
+    """External capital flows per account (credited deposits, successful
+    withdrawals), valued in USDT. The daily P&L view subtracts these when it
+    reconstructs day-opening balances, so money moving in or out of an
+    account never shows up as profit or loss."""
+    now = time.time()
+    c = _FLOWS_CACHE.get("all")
+    if c and now - c[0] < 300:
+        return jsonify(**c[1])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    out = dict(flows=[])
+
+    def usdt_value(api, coin, amt):
+        if coin in ("USDT", "USDC", "USD1", "TUSD", "DAI"):
+            return amt
+        try:
+            return amt * float(api.ticker_price(f"{coin}_USDT") or 0)
+        except Exception:
+            return 0.0
+
+    for acct in ("mexc1", "mexc2"):
+        try:
+            api = MexcSpotAPI(account=acct)
+            for d in (api.deposit_history(limit=100) or []):
+                if int(d.get("status") or 0) not in (5, 9):
+                    continue                      # only CREDITED money
+                coin = (d.get("coin") or "").split("-")[0].upper()
+                v = usdt_value(api, coin, float(d.get("amount") or 0))
+                if v:
+                    out["flows"].append(dict(
+                        account=acct, t=int(d.get("insertTime") or 0),
+                        usdt=round(v, 2), coin=coin, kind="deposit"))
+            try:
+                for w in (api.withdraw_history(limit=100) or []):
+                    if int(w.get("status") or 0) != 7:   # 7 = success
+                        continue
+                    coin = (w.get("coin") or "").split("-")[0].upper()
+                    v = usdt_value(api, coin, float(w.get("amount") or 0))
+                    if v:
+                        out["flows"].append(dict(
+                            account=acct,
+                            t=int(w.get("applyTime")
+                                  if str(w.get("applyTime") or "").isdigit()
+                                  else (w.get("updateTime") or 0)),
+                            usdt=-round(v, 2), coin=coin, kind="withdrawal"))
+            except Exception:
+                pass                              # key may lack permission
+        except Exception as e:
+            out.setdefault("errors", []).append(f"{acct}: {str(e)[:80]}")
+    out["flows"].sort(key=lambda f: f["t"])
+    _FLOWS_CACHE["all"] = (now, out)
+    return jsonify(**out)
+
+
 @app.route("/api/performance")
 def api_performance():
     """Realized P&L for ONE instance's exchange account over 24h / 7d / 30d,
