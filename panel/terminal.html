@@ -2182,6 +2182,7 @@ function tdTabPosAll(){
         }
         return '<tr><td><b>'+p.account+'</b></td><td><span class="tag g">SPOT</span></td>'+
           '<td><b>'+p.asset+'</b></td><td><span class="tag g">HOLD</span></td>'+
+          '<td>'+tdSrcTag(p.src)+'</td>'+
           '<td class="n">'+amt(String(p.qty))+'</td><td class="n">&mdash;</td>'+
           '<td class="n">'+(p.px?(+p.px).toPrecision(6):'&mdash;')+'</td><td class="n">&mdash;</td>'+
           '<td class="n">$'+(+p.value).toFixed(2)+'</td><td class="n">&mdash;</td><td class="n">&mdash;</td>'+
