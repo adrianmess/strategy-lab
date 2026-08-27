@@ -127,6 +127,8 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
 .tdlegend{position:absolute;top:7px;left:10px;z-index:5;pointer-events:none;
  font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:nowrap;
  text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.tfit td,.tfit th{white-space:nowrap}
+.tfit th:last-child,.tfit td:last-child{width:100%}
 .tdtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:10px;flex-wrap:wrap}
 .tdtabs button{background:none;border:none;color:var(--dim);font:inherit;font-size:13px;font-weight:600;
  padding:9px 13px;cursor:pointer;border-bottom:2px solid transparent}
@@ -2152,7 +2154,7 @@ function tdTabPosAll(){
   rows = rows.filter(function(p){ return !p.src; });   // bot/shadow rows live below
   var h = '<div class="body">';
   h += rows.length
-    ? '<table><thead><tr><th>account</th><th>market</th><th>symbol</th><th>side</th><th>source</th><th class="n">size</th>'+
+    ? '<table class="tfit"><thead><tr><th>account</th><th>market</th><th>symbol</th><th>side</th><th>source</th><th class="n">size</th>'+
       '<th class="n">entry</th><th class="n">mark / price</th><th class="n">liq</th><th class="n">margin</th>'+
       '<th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(p){
@@ -2215,7 +2217,7 @@ function tdTabPosOne(d){
   if(TD.mkt === 'fut'){
     // strategy-held (bot/shadow) positions live in the Bot & shadow section
     var ps = (d.positions || []).filter(function(p){ return !p.src; });
-    h += ps.length ? '<table><thead><tr><th>symbol</th><th>side</th><th>source</th><th class="n">contracts</th><th class="n">entry</th><th class="n">mark</th><th class="n">liq</th><th class="n">margin</th><th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
+    h += ps.length ? '<table class="tfit"><thead><tr><th>symbol</th><th>side</th><th>source</th><th class="n">contracts</th><th class="n">entry</th><th class="n">mark</th><th class="n">liq</th><th class="n">margin</th><th class="n">uPnL</th><th class="n">realized</th><th></th></tr></thead><tbody>'+
         ps.map(function(p){
           var up = (p.upnl_pct||0) >= 0;
           return '<tr><td><b>'+p.symbol+'</b></td>'+
@@ -2239,7 +2241,7 @@ function tdTabPosOne(d){
       : '<span class="mini">no open futures positions on '+TD.acct+'</span>';
   } else {
     var hs = (d.holdings || []).filter(function(x){ return !x.src; });
-    h += hs.length ? '<table><thead><tr><th>asset</th><th>source</th><th class="n">quantity</th><th class="n">price</th><th class="n">value</th><th></th></tr></thead><tbody>'+
+    h += hs.length ? '<table class="tfit"><thead><tr><th>asset</th><th>source</th><th class="n">quantity</th><th class="n">price</th><th class="n">value</th><th></th></tr></thead><tbody>'+
         hs.map(function(x){
           var sym = x.asset+'_USDT';
           return '<tr><td><b>'+x.asset+'</b></td><td>'+tdSrcTag(x.src)+'</td><td class="n">'+amt(String(x.qty))+'</td>'+
@@ -2258,7 +2260,7 @@ function tdTabOrders(d){
   var os = d.orders || [];
   var FSIDE = {1:'open long',2:'close short',3:'open short',4:'close long'};
   return '<div class="body">'+
-    (os.length ? '<table><thead><tr><th>symbol</th><th>side</th><th class="n">price</th><th class="n">qty</th><th class="n">filled</th><th></th></tr></thead><tbody>'+
+    (os.length ? '<table class="tfit"><thead><tr><th>symbol</th><th>side</th><th class="n">price</th><th class="n">qty</th><th class="n">filled</th><th></th></tr></thead><tbody>'+
       os.map(function(o){
         var sd = TD.mkt==='fut' ? (FSIDE[o.side]||o.side) : String(o.side||'').toLowerCase();
         return '<tr><td><b>'+o.symbol+'</b></td><td>'+sd+'</td>'+
@@ -2352,7 +2354,7 @@ function renderTdBots(){
     var mult = s.mode === 'lev' ? (p.lev||1) : 1;
     var pct = (px && p.entry_price)
       ? (px/p.entry_price - 1) * dir * 100 * mult : null;
-    inner += '<table><thead><tr>'+
+    inner += '<table class="tfit"><thead><tr>'+
       '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
       '<th class="n">market entry</th>'+
       '<th class="n">now</th><th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
