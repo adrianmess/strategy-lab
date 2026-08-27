@@ -693,7 +693,14 @@ def trader_start():
     log = os.path.join(JOBS_DIR, "trader_stdout.log" if i == "1"
                        else f"trader_stdout_i{i}.log")
     with open(log, "a") as lf:
+        # start_new_session detaches the trader from the panel's launchd job
+        # (com.strategylab.panel): the watchdog's `launchctl remove` before a
+        # re-submit reaps leftover processes still in the job's session, and
+        # on 2026-08-26 that silently killed both traders during a routine
+        # panel restart. setsid puts the trader in its own session, so panel
+        # restarts are truly safe again.
         proc = subprocess.Popen(cmd, cwd=AT, stdout=lf, stderr=subprocess.STDOUT,
+                                start_new_session=True,
                                 env={**os.environ, "TRADER_CONFIG": cfg_name})
     t.update(proc=proc, config=cfg_name, live=live,
              started=time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -933,6 +940,9 @@ def trade_state():
             except Exception as oe:
                 out["orders_err"] = str(oe)[:120]
         out["tpsl"] = [r for r in _tpsl_rules()
+                       if r.get("account") == acct
+                       and r.get("market") == market]
+        out["xfer"] = [r for r in _xfer_rules()
                        if r.get("account") == acct
                        and r.get("market") == market]
     except Exception as e:
@@ -1341,6 +1351,144 @@ def _tpsl_watch():
 
 
 threading.Thread(target=_tpsl_watch, daemon=True).start()
+
+
+# ---- on-close transfer rules: "when THIS position closes, move USDT
+# between this account's own wallets" (spot<->futures; never a withdrawal).
+# Armed per position row on the Trade page; a 30s thread watches for the
+# position to disappear, then transfers the chosen amount (blank = max
+# available) and removes the rule. One-shot.
+XFERR_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "xfer_rules.json")
+
+
+def _xfer_rules():
+    try:
+        return json.load(open(XFERR_P)).get("rules") or []
+    except Exception:
+        return []
+
+
+def _xfer_write(rules):
+    tmp = XFERR_P + ".tmp"
+    json.dump(dict(rules=rules), open(tmp, "w"), indent=1)
+    os.replace(tmp, XFERR_P)
+
+
+@app.route("/api/xfer_rule", methods=["POST"])
+def xfer_rule():
+    """Arm/remove an on-close transfer for one position. amount blank = max
+    available at fire time. Requires confirm='ARM'."""
+    d = request.get_json(force=True)
+    key = (d.get("account"), d.get("market"),
+           (d.get("symbol") or "").upper())
+    if not all(key) or key[0] not in ("mexc1", "mexc2") \
+            or key[1] not in ("fut", "spot"):
+        return jsonify(error="need account, market (fut|spot), symbol"), 400
+    rules = [r for r in _xfer_rules()
+             if (r.get("account"), r.get("market"),
+                 r.get("symbol")) != key]
+    if not d.get("remove"):
+        if d.get("confirm") != "ARM":
+            return jsonify(error="requires confirm='ARM'"), 400
+        direction = d.get("direction")
+        if direction not in ("fut2spot", "spot2fut"):
+            return jsonify(error="direction must be fut2spot|spot2fut"), 400
+        rule = dict(account=key[0], market=key[1], symbol=key[2],
+                    direction=direction,
+                    at=time.strftime("%Y-%m-%d %H:%M"))
+        amt = d.get("amount")
+        if amt not in (None, ""):
+            try:
+                a = float(amt)
+                if not (0 < a <= 1_000_000):
+                    raise ValueError
+            except (TypeError, ValueError):
+                return jsonify(error="amount must be a positive number, or "
+                                     "blank for max"), 400
+            rule["amount"] = a
+        rules.append(rule)
+    _xfer_write(rules)
+    return jsonify(ok=True, rules=rules,
+                   note=("transfer rule removed" if d.get("remove") else
+                         "armed — USDT moves automatically when the "
+                         "position closes (checked every ~30s)"))
+
+
+def _xfer_fire(rule):
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    import math as _m
+    acct = rule["account"]
+    spot = MexcSpotAPI(account=acct)
+    if rule["direction"] == "fut2spot":
+        avail = 0.0
+        for a in (MexcFuturesAPI(account=acct).assets() or []):
+            if a.get("currency") == "USDT":
+                avail = float(a.get("availableBalance") or 0)
+        frm, to = "FUTURES", "SPOT"
+    else:
+        avail = float(spot.balance("USDT") or 0)
+        frm, to = "SPOT", "FUTURES"
+    amt = _m.floor(min(float(rule.get("amount") or avail), avail) * 100) / 100
+    if amt < 1:
+        print(f"XFER RULE {acct} {rule['symbol']}: nothing to move "
+              f"({frm} avail {avail:.2f})", flush=True)
+        return
+    spot.universal_transfer("USDT", amt, frm, to)
+    print(f"XFER RULE FIRED {acct} {rule['symbol']}: {amt} USDT "
+          f"{frm}->{to} (position closed)", flush=True)
+    try:
+        subprocess.run([os.path.expanduser("~/.hermes/hermes"), "send",
+                        "-t", "whatsapp",
+                        f"Auto-transfer: {rule['symbol']} ({acct}) closed — "
+                        f"moved {amt} USDT {frm}->{to}"], timeout=20)
+    except Exception:
+        pass
+
+
+def _xfer_watch():
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    while True:
+        time.sleep(30)
+        rules = _xfer_rules()
+        if not rules:
+            continue
+        from mexc_api import MexcSpotAPI, MexcFuturesAPI
+        keep = []
+        changed = False
+        for r in rules:
+            try:
+                if r["market"] == "fut":
+                    api = MexcFuturesAPI(account=r["account"])
+                    closed = not any(
+                        float(p.get("holdVol") or 0) > 0
+                        and p.get("symbol") == r["symbol"]
+                        for p in (api.open_positions(r["symbol"]) or []))
+                else:
+                    base = r["symbol"].split("_")[0]
+                    api = MexcSpotAPI(account=r["account"])
+                    qty = float(api.balance(base) or 0)
+                    try:
+                        px = float(api.ticker_price(f"{base}_USDT") or 0)
+                    except Exception:
+                        px = 0.0
+                    closed = qty * px < 1.0
+                if closed:
+                    _xfer_fire(r)
+                    changed = True
+                else:
+                    keep.append(r)
+            except Exception as e:
+                print(f"xfer watch error {r.get('symbol')}: {e}", flush=True)
+                keep.append(r)
+        if changed:
+            _xfer_write(keep)
+
+
+threading.Thread(target=_xfer_watch, daemon=True).start()
 
 
 @app.route("/api/trade/order", methods=["POST"])

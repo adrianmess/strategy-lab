@@ -2152,6 +2152,16 @@ function tdTabPosAll(){
   return h;
 }
 function tdTabPosOne(d){
+  var xrules = d.xfer || [];
+  function xferCell(sym){
+    var r = xrules.find(function(x){ return x.symbol === sym; });
+    if(r) return ' <span class="tag b" title="armed '+(r.at||'')+' — checked every ~30s; USDT moves between this account\'s own wallets, never off MEXC">&#8646; on close: '+
+      (r.direction==='fut2spot'?'fut&rarr;spot':'spot&rarr;fut')+' '+
+      (r.amount!=null?('$'+r.amount):'max')+'</span>'+
+      '<button class="btn sm" title="remove transfer rule" onclick="xferRemove(this,\''+sym+'\')">&#10005;</button>';
+    return ' <button class="btn sm" title="automatically transfer USDT between this account\'s spot and futures wallets when THIS position closes" '+
+      'onclick="openXfer(this,\''+sym+'\')">&#8646; on close</button>';
+  }
   var rules = d.tpsl || [];
   function tpslCell(sym, side, entry, lev, qty, mark, liq){
     var r = rules.find(function(x){ return x.symbol === sym; });
@@ -2184,7 +2194,8 @@ function tdTabPosOne(d){
               tpslCell(p.symbol,p.side,p.avg,p.lev,p.vol,p.mark,p.liq)+
               ' <input class="tdcpx" type="number" placeholder="Market" title="close price — blank = market order" style="width:78px"> '+
               '<input class="tdcq" type="number" placeholder="USDT" title="quantity to close in USDT — blank = all" style="width:68px"> '+
-              '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button></td></tr>';
+              '<button class="btn sm danger" style="border-radius:20px" onclick="tdCloseAdv(this,\''+p.symbol+'\')">Close '+(p.side==='long'?'Long':'Short')+'</button>'+
+              xferCell(p.symbol)+'</td></tr>';
         }).join('')+'</tbody></table>'
       : '<span class="mini">no open futures positions on '+TD.acct+'</span>';
   } else {
@@ -2196,7 +2207,8 @@ function tdTabPosOne(d){
             '<td class="n">'+(x.px?(+x.px).toPrecision(6):'&mdash;')+'</td>'+
             '<td class="n">'+amt('$'+(+x.value).toFixed(2))+'</td>'+
             '<td style="white-space:nowrap">'+tpslCell(sym,'long',x.px,1,x.qty,x.px,0)+
-              ' <button class="btn sm danger" onclick="tdSellAsset(this,\''+x.asset+'\','+x.qty+')">Sell all</button></td></tr>';
+              ' <button class="btn sm danger" onclick="tdSellAsset(this,\''+x.asset+'\','+x.qty+')">Sell all</button>'+
+              xferCell(sym)+'</td></tr>';
         }).join('')+'</tbody></table>'+
         '<div class="mini" style="margin-top:6px">spot has no cost-basis from the exchange, so TP/SL here measures from the price at the moment you arm it</div>'
       : '<span class="mini">no spot holdings &ge;$1 on '+TD.acct+'</span>';
@@ -2471,6 +2483,42 @@ function tdCloseSym(btn, sym, acct){
       body:JSON.stringify({market:'fut', account:acct, pair:sym.split('_')[0], action:'close', symbol:sym, pct:100, confirm:'TRADE'})})
       .then(function(r){ if(r.error){flash(r.error,'r');tdMsg(r.error,true);} else {flash('Closed '+sym+'.','g');tdMsg('Closed '+sym+'.');} tdState(); tdAllLoad(true); });
   });
+}
+function openXfer(btn, sym){
+  // per-position on-close transfer: direction + optional USDT amount
+  // (blank = everything available when it fires)
+  if(!btn || btn._armed) return;
+  btn._armed = true; ARMED++;
+  var w = document.createElement('span');
+  w.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
+  var def = TD.mkt === 'fut' ? 'fut2spot' : 'spot2fut';
+  w.innerHTML = '<select class="xfDir" title="which way to move USDT when this position closes">'+
+    '<option value="fut2spot"'+(def==='fut2spot'?' selected':'')+'>fut&rarr;spot</option>'+
+    '<option value="spot2fut"'+(def==='spot2fut'?' selected':'')+'>spot&rarr;fut</option></select>'+
+    '<input type="number" class="xfAmt" placeholder="max" min="1" '+
+      'title="USDT amount — leave blank to move everything available at fire time" style="width:72px">';
+  var ok = document.createElement('button'); ok.className='btn sm danger'; ok.textContent='Arm';
+  var no = document.createElement('button'); no.className='btn sm'; no.innerHTML='&#10005;';
+  btn.style.display = 'none';
+  btn.parentNode.insertBefore(w, btn); w.appendChild(ok); w.appendChild(no);
+  var undo = function(){ w.remove(); btn.style.display=''; btn._armed=false; ARMED=Math.max(0,ARMED-1); };
+  no.onclick = function(e){ e.stopPropagation(); undo(); };
+  ok.onclick = function(e){
+    e.stopPropagation();
+    var dir = w.querySelector('.xfDir').value;
+    var amt = w.querySelector('.xfAmt').value.trim();
+    undo();
+    API('xfer_rule', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym,
+                           direction:dir, amount:(amt===''?null:parseFloat(amt)),
+                           confirm:'ARM'})})
+      .then(function(r){ if(r.error) flash(r.error,'r'); else flash(r.note||'Armed.','g'); tdState(); });
+  };
+}
+function xferRemove(btn, sym){
+  API('xfer_rule', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({account:TD.acct, market:TD.mkt, symbol:sym, remove:true})})
+    .then(function(r){ if(r.error) flash(r.error,'r'); else flash('Transfer rule removed.','g'); tdState(); });
 }
 function tdCloseAdv(btn, sym, acct){
   // MEXC-style Close cell: optional price (blank = market) + optional
