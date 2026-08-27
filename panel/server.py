@@ -791,10 +791,10 @@ def _fut_marks():
     return marks
 
 
-def _fut_positions(api, marks):
-    """Map raw open_positions() to the Trade page's position rows."""
+def _fut_positions(raw, marks):
+    """Map raw open_positions rows to the Trade page's position rows."""
     pos = []
-    for p in (api.open_positions() or []):
+    for p in (raw or []):
         hv = float(p.get("holdVol") or 0)
         if hv <= 0:
             continue
@@ -886,10 +886,19 @@ def trade_state():
         if market == "fut":
             api = MexcFuturesAPI(account=acct)
             out["account"] = acct
-            for a in (api.assets() or []):
+            # the four exchange reads are independent — run them in
+            # parallel so the page waits one proxy round-trip, not four
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(4) as ex:
+                f_assets = ex.submit(api.assets)
+                f_marks = ex.submit(_fut_marks)
+                f_raw = ex.submit(api.open_positions)
+                f_orders = ex.submit(lambda: api.open_orders() or [])
+            for a in (f_assets.result() or []):
                 if a.get("currency") == "USDT":
                     out["available"] = float(a.get("availableBalance") or 0)
-            out["positions"] = _fut_positions(api, _fut_marks())
+            out["positions"] = _fut_positions(f_raw.result(),
+                                              f_marks.result())
             hm = _holds_map()
             for p in out["positions"]:
                 p["src"] = hm.get((acct, "lev",
@@ -900,14 +909,18 @@ def trade_state():
                     id=o.get("orderId"), symbol=o.get("symbol"),
                     side=int(o.get("side") or 0), price=o.get("price"),
                     vol=o.get("vol"), dealt=o.get("dealVol"))
-                    for o in (api.open_orders() or [])]
+                    for o in f_orders.result()]
             except Exception as oe:
                 out["orders_err"] = str(oe)[:120]
         else:
             api = MexcSpotAPI(account=acct)
             out["account"] = acct
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(2) as ex:
+                f_acct = ex.submit(api.account_info)
+                f_sorders = ex.submit(lambda: api.open_orders() or [])
             holds = []
-            for b in api.account_info().get("balances", []):
+            for b in f_acct.result().get("balances", []):
                 a_ = b.get("asset")
                 free = float(b.get("free") or 0)
                 if a_ == "USDT":
@@ -936,7 +949,7 @@ def trade_state():
                     id=o.get("orderId"), symbol=o.get("symbol"),
                     side=o.get("side"), price=o.get("price"),
                     vol=o.get("origQty"), dealt=o.get("executedQty"))
-                    for o in (api.open_orders() or [])]
+                    for o in f_sorders.result()]
             except Exception as oe:
                 out["orders_err"] = str(oe)[:120]
         out["tpsl"] = [r for r in _tpsl_rules()
@@ -1103,24 +1116,51 @@ def trade_history():
     return jsonify(**out)
 
 
-@app.route("/api/trade/positions_all")
-def trade_positions_all():
-    """Open futures positions + spot holdings across BOTH accounts — the
-    Trade page's 'All accounts' positions view. Cached 15s."""
-    now = time.time()
-    c = _TPA_CACHE.get("all")
-    if c and now - c[0] < 15:
-        return jsonify(**c[1])
+def _positions_all_compute():
+    """Open futures positions + spot holdings across BOTH accounts. The four
+    exchange legs run in parallel; a background warmer keeps the cache fresh
+    so the Trade page's All-accounts view always renders instantly."""
     if AT not in sys.path:
         sys.path.insert(0, AT)
+    from concurrent.futures import ThreadPoolExecutor
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
-    marks = _fut_marks()
     hm = _holds_map()
-    rows = []
     errs = []
+
+    def fut_leg(acct):
+        api = MexcFuturesAPI(account=acct)
+        return api.open_positions() or []
+
+    def spot_leg(acct):
+        api = MexcSpotAPI(account=acct)
+        rows = []
+        for b in api.account_info().get("balances", []):
+            a_ = b.get("asset")
+            free = float(b.get("free") or 0)
+            if a_ in ("USDT", "USDC", "USD1") or free <= 0:
+                continue
+            try:
+                px = float(api.ticker_price(f"{a_}_USDT") or 0)
+            except Exception:
+                px = 0.0
+            if free * px >= 1.0:
+                rows.append(dict(account=acct, market="spot", asset=a_,
+                                 qty=free, px=px,
+                                 value=round(free * px, 2),
+                                 src=hm.get((acct, "spot", a_))))
+        return rows
+
+    with ThreadPoolExecutor(5) as ex:
+        f_marks = ex.submit(_fut_marks)
+        legs = {}
+        for acct in ("mexc1", "mexc2"):
+            legs[(acct, "fut")] = ex.submit(fut_leg, acct)
+            legs[(acct, "spot")] = ex.submit(spot_leg, acct)
+    marks = f_marks.result()
+    rows = []
     for acct in ("mexc1", "mexc2"):
         try:
-            for p in _fut_positions(MexcFuturesAPI(account=acct), marks):
+            for p in _fut_positions(legs[(acct, "fut")].result(), marks):
                 p.update(account=acct, market="fut",
                          src=hm.get((acct, "lev",
                                      (p["symbol"] or "").split("_")[0])))
@@ -1128,24 +1168,33 @@ def trade_positions_all():
         except Exception as e:
             errs.append(f"{acct} fut: {str(e)[:80]}")
         try:
-            api = MexcSpotAPI(account=acct)
-            for b in api.account_info().get("balances", []):
-                a_ = b.get("asset")
-                free = float(b.get("free") or 0)
-                if a_ in ("USDT", "USDC", "USD1") or free <= 0:
-                    continue
-                try:
-                    px = float(api.ticker_price(f"{a_}_USDT") or 0)
-                except Exception:
-                    px = 0.0
-                if free * px >= 1.0:
-                    rows.append(dict(account=acct, market="spot", asset=a_,
-                                     qty=free, px=px,
-                                     value=round(free * px, 2),
-                                     src=hm.get((acct, "spot", a_))))
+            rows.extend(legs[(acct, "spot")].result())
         except Exception as e:
             errs.append(f"{acct} spot: {str(e)[:80]}")
-    out = dict(rows=rows, errors=errs, xfer=_xfer_rules())
+    return dict(rows=rows, errors=errs, xfer=_xfer_rules())
+
+
+def _positions_all_warm():
+    """Keep _TPA_CACHE warm so the page never waits on exchange calls."""
+    time.sleep(20)                        # let the panel finish booting
+    while True:
+        try:
+            _TPA_CACHE["all"] = (time.time(), _positions_all_compute())
+        except Exception as e:
+            print(f"positions_all warm error: {e}", flush=True)
+        time.sleep(12)
+
+
+threading.Thread(target=_positions_all_warm, daemon=True).start()
+
+
+@app.route("/api/trade/positions_all")
+def trade_positions_all():
+    now = time.time()
+    c = _TPA_CACHE.get("all")
+    if c and now - c[0] < 30:             # warmer refreshes every ~12s
+        return jsonify(**c[1])
+    out = _positions_all_compute()
     _TPA_CACHE["all"] = (now, out)
     return jsonify(**out)
 

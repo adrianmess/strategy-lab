@@ -1656,6 +1656,22 @@ var TD = {pair:'BTC', tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
 if(!('ema' in TD.ind)) TD.ind.ema = true;   // EMA overlay on by default
 var TD_EMAS = [5, 10, 30, 60];
 var TD_EMA_COLORS = {5:'#f0b90b', 10:'#2ebd85', 30:'#4c8dff', 60:'#8b5cf6'};
+// instant paint: restore the last known positions/balances snapshot so the
+// tables render immediately; fresh data replaces it within seconds
+try{
+  var _snap = JSON.parse(localStorage.getItem('tdSnap')||'null');
+  if(_snap && Date.now() - _snap.at < 86400000){
+    TD.cache = _snap.cache || {};
+    TD.allPos = _snap.allPos || null;
+    TD.allXfer = _snap.allXfer || [];
+  }
+}catch(e){}
+function tdSnapSave(){
+  try{
+    localStorage.setItem('tdSnap', JSON.stringify(
+      {cache:TD.cache, allPos:TD.allPos, allXfer:TD.allXfer, at:Date.now()}));
+  }catch(e){}
+}
 // ---- chart time zone (lightweight-charts renders raw epochs as UTC, so we
 // shift each bar into the chosen zone, DST-aware, like TradingView's picker)
 TD.tz = localStorage.getItem('tdTz') || 'America/Los_Angeles';
@@ -2030,7 +2046,7 @@ function tdState(){
   var k = tdKey();
   if(TD.cache[k]) tdApply(TD.cache[k]);          // instant from cache
   API('trade/state?market='+TD.mkt+'&pair='+TD.pair+'&account='+TD.acct).then(function(d){
-    if(d && !d.error) TD.cache[k] = d;
+    if(d && !d.error){ TD.cache[k] = d; tdSnapSave(); }
     var v = document.getElementById('v-trade');
     if(v && v.classList.contains('on') && k === tdKey()) tdApply(d);
   });
@@ -2075,7 +2091,7 @@ function tdPosScope(all){
 function tdAllLoad(force){
   if(!force && TD.allPos && Date.now()-TD.allT < 15000) return;
   API('trade/positions_all').then(function(d){
-    if(d && d.rows){ TD.allPos = d.rows; TD.allErrs = d.errors||[]; TD.allXfer = d.xfer||[]; TD.allT = Date.now();
+    if(d && d.rows){ TD.allPos = d.rows; TD.allErrs = d.errors||[]; TD.allXfer = d.xfer||[]; TD.allT = Date.now(); tdSnapSave();
       if(TD.tab==='pos' && TD.posAll && !ARMED && !tdTyping()) renderTdPos(); }
   });
 }
