@@ -1801,6 +1801,12 @@ function tdInit(){
     if(!el.clientWidth) return;
     TD.chart.applyOptions({width:el.clientWidth});
     Object.keys(TD.sub).forEach(function(k){ TD.sub[k].chart.applyOptions({width:el.clientWidth}); });
+    // widening keeps the bar spacing, which can run past the oldest loaded
+    // candle and leave blank space on the left — if the view was already
+    // showing everything (right edge live, left edge past the data), refit
+    var lr = TD.chart.timeScale().getVisibleLogicalRange();
+    if(lr && lr.from < -2 && TD.rows.length && lr.to > TD.rows.length - 2)
+      TD.chart.timeScale().fitContent();
   }).observe(el);
 }
 // ---- indicator sub-panes (separate charts, time-synced with the main one)
@@ -2001,7 +2007,7 @@ function tdRefreshChips(){
   if(a1) a1.textContent = nm.mexc1; if(a2) a2.textContent = nm.mexc2;
 }
 function tdKlines(){
-  API('klines?pair='+TD.pair+'&tf='+TD.tf+'&limit=400').then(function(d){
+  API('klines?pair='+TD.pair+'&tf='+TD.tf+'&limit=1000').then(function(d){
     if(d.error || !TD.series) return;
     // keep the user's pan/zoom across data refreshes: only auto-fit when
     // the pair/timeframe actually changed; otherwise restore the view (or
@@ -2033,7 +2039,15 @@ function tdKlines(){
     }));
     tdIndUpdate();
     tdLegendShow(TD.rows.length - 1);
-    if(fresh){ TD.klKey = key; TD.chart.timeScale().fitContent(); }
+    if(fresh){
+      TD.klKey = key;
+      // default view: the last ~400 bars; the rest of the 1000 loaded sit
+      // in reserve for panning left or widening the window
+      if(TD.rows.length > 420)
+        TD.chart.timeScale().setVisibleLogicalRange(
+          {from: TD.rows.length - 400, to: TD.rows.length + 5});
+      else TD.chart.timeScale().fitContent();
+    }
     else if(lr && !atEdge) TD.chart.timeScale().setVisibleLogicalRange(lr);
     else if(lr) TD.chart.timeScale().scrollToRealTime();
     var last = (d.rows || [])[d.rows.length - 1];
@@ -2662,7 +2676,6 @@ function tdPanel(){
   var el = document.getElementById('tdPanel');
   if(d.error){ el.innerHTML = '<span class="mini down">'+d.error+'</span>'; return; }
   if(TD.mkt === 'fut'){
-    var pos = (d.positions || [])[0];
     el.innerHTML =
       '<div class="mini" style="margin-bottom:5px">LEVERAGE</div>'+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">'+
@@ -2689,18 +2702,9 @@ function tdPanel(){
           'onclick="tdOpen(this,\'long\')">Open Long</button>'+
         '<button class="btn" style="border-color:var(--down);color:var(--down);font-weight:700;padding:11px" '+
           'onclick="tdOpen(this,\'short\')">Open Short</button></div>'+
-      '<div id="tdMsg" style="margin-bottom:11px"></div>'+
-      (pos
-        ? '<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px">'+
-          '<div class="mini" style="margin-bottom:5px">OPEN POSITION '+
-            '<span class="tag '+(pos.side==='long'?'g':'live')+'">'+pos.side.toUpperCase()+' '+(pos.lev||'?')+'x</span></div>'+
-          '<div class="num" style="font-size:15px">'+pos.vol+' contracts @ '+(+pos.avg).toPrecision(6)+'</div>'+
-          '<div class="mini" style="margin:4px 0 9px">liq <span class="down num">'+(+pos.liq).toPrecision(6)+
-            '</span> &middot; margin <span class="num">$'+(+pos.margin).toFixed(2)+'</span></div>'+
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-            '<button class="btn sm" onclick="tdClose(this,50)">Close 50%</button>'+
-            '<button class="btn sm danger" onclick="tdClose(this,100)">Close position</button></div></div>'
-        : '<div class="mini" style="border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center">no open '+TD.pair+' futures position</div>');
+      '<div id="tdMsg" style="margin-bottom:11px"></div>';
+    // (the OPEN POSITION box that used to sit here duplicated the Positions
+    // table below — removed 2026-08-27 at Adrian's request)
     tdPrev();
   } else {
     el.innerHTML =
