@@ -210,7 +210,12 @@ body.masked .amt:hover{filter:none}
   <section class="view on" id="v-overview"><div class="wrap">
     <div class="g4" id="kpis"></div>
     <div class="g2">
-      <div class="card"><h3>Cumulative realized P&amp;L — 30d <span class="mini">both accounts</span></h3>
+      <div class="card"><h3>Cumulative realized P&amp;L — 30d <span class="mini">all wallets, both accounts
+        <select id="originSel" onchange="setOrigin(this.value)" title="filter every P&amp;L aggregate by trade origin">
+          <option value="">bot + manual</option>
+          <option value="bot">bot only</option>
+          <option value="manual">manual only</option>
+        </select></span></h3>
         <div class="body" id="bigchart"><span class="mini">loading…</span></div></div>
       <div class="card"><h3>Accounts</h3><div class="body" id="accts"><span class="mini">loading…</span></div></div>
     </div>
@@ -555,16 +560,25 @@ function pctOfAcct(account, realized){
 function moneyPct(v){ return fig(v, pctOf(v)); }
 
 function renderKpis(){
-  var d1=0,d7=0,d30=0,tr=0,ex=0;
-  INSTS.forEach(function(x){ var p=PERF[x.id]; if(!p||!p.windows) return;
-    d1+=p.windows['24h'].realized; d7+=p.windows['7d'].realized;
-    d30+=p.windows['30d'].realized; tr+=p.windows['30d'].trades;
-    ex+=(p.windows['30d'].excluded||0); });
+  // event-based, over ALL FOUR account x market combos, honoring the
+  // bot/manual origin switch
+  var now = Date.now(), ev = countedEvents();
+  function win(days){
+    var lo = now - days * 86400000;
+    var sel = ev.filter(function(e){ return e.t >= lo; });
+    return {sum: sel.reduce(function(a,e){ return a + e.pnl; }, 0),
+            n: sel.length};
+  }
+  var w1 = win(1), w7 = win(7), w30 = win(30);
+  var ex = allEvents().filter(function(e){
+    return e.ignored && e.t >= now - 30 * 86400000; }).length;
+  var lbl = ORIGIN ? ' · ' + ORIGIN + ' only' : '';
+  var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
   document.getElementById('kpis').innerHTML =
-    kpi('Realized 24h', moneyPct(d1), 'USDT · % on starting balance', d1) +
-    kpi('Realized 7d', moneyPct(d7), 'USDT · % on starting balance', d7) +
-    kpi('Realized 30d', moneyPct(d30), tr + ' trades' +
-        (ex ? ' · ' + ex + ' excluded' : ''), d30) +
+    kpi('Realized 24h', moneyPct(d1), 'USDT · % on starting balance' + lbl, d1) +
+    kpi('Realized 7d', moneyPct(d7), 'USDT · % on starting balance' + lbl, d7) +
+    kpi('Realized 30d', moneyPct(d30), w30.n + ' trades' +
+        (ex ? ' · ' + ex + ' excluded' : '') + lbl, d30) +
     kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
         INSTS.length + ' live', 0);
@@ -757,14 +771,46 @@ function area(vals, w, h, c1, c2){
 }
 
 // every realized close across both accounts, merged in time order
+var PNLE = null;    // /api/pnl_events: ALL 4 acct x mkt combos, origin-tagged
+var ORIGIN = localStorage.getItem('slOrigin') || '';   // ''|'bot'|'manual'
+function setOrigin(v){
+  ORIGIN = v; localStorage.setItem('slOrigin', v);
+  renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
+}
+function loadPnl(){
+  API('pnl_events').then(function(d){
+    if(d && d.events){
+      PNLE = d.events;
+      renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
+    }
+  }).catch(function(){});
+}
 function allEvents(){
+  if(PNLE){
+    return PNLE.map(function(s){
+      var inst = INSTS.find(function(x){
+        var p = PERF[x.id] || {}, st = STATUS[x.id] || {};
+        return (p.account || st.api_account) === s.account
+            && (p.mode || st.mode) === s.mode;
+      });
+      return {t:s.t, pnl:s.realized, pct:s.pct, entry:s.entry, exit:s.exit,
+              side:s.side, lev:s.lev, symbol:s.symbol,
+              inst:(inst ? inst.id : 'x:' + s.account + ':' + s.mode),
+              id:s.id, ignored:!!s.ignored, reason:s.reason,
+              origin:s.origin,
+              name:(inst ? (inst.name || inst.id)
+                    : s.account + ' ' + (s.mode === 'lev' ? 'futures' : 'spot')),
+              account:s.account, mode:s.mode};
+    }).sort(function(a,b){ return a.t-b.t; });
+  }
+  // fallback until the first pnl_events fetch lands
   var ev = [];
   Object.keys(PERF).forEach(function(id){
     var p = PERF[id];
     (p && p.series || []).forEach(function(s){
       ev.push({t:s.t, pnl:s.pnl, pct:s.pct, entry:s.entry, exit:s.exit,
                side:s.side, lev:s.lev, symbol:s.symbol, inst:id,
-               id:s.id, ignored:!!s.ignored, reason:s.reason,
+               id:s.id, ignored:!!s.ignored, reason:s.reason, origin:null,
                name:(INSTS.find(function(x){return x.id===id;})||{}).name||id,
                account:p.account, mode:p.mode});
     });
@@ -772,9 +818,16 @@ function allEvents(){
   ev.sort(function(a,b){ return a.t-b.t; });
   return ev;
 }
-// aggregates NEVER include excluded trades; only the history lists them
+// aggregates NEVER include excluded trades; only the history lists them.
+// The Overview origin switch (bot / manual / both) applies here so every
+// aggregate follows it.
 function countedEvents(){
-  return allEvents().filter(function(e){ return !e.ignored; });
+  return allEvents().filter(function(e){
+    if(e.ignored) return false;
+    if(ORIGIN && e.origin && e.origin !== ORIGIN) return false;
+    if(ORIGIN && !e.origin) return false;
+    return true;
+  });
 }
 
 function renderChart(){
@@ -784,7 +837,8 @@ function renderChart(){
   document.getElementById('bigchart').innerHTML =
     area(vals, 900, 205, last>=0?cssv('--up'):cssv('--violet'), cssv('--cyan')) +
     '<div class="mini" style="margin-top:8px">one step per closed trade &middot; '+
-    ev.length+' closes across both accounts</div>';
+    ev.length+' closes &middot; '+
+    (ORIGIN ? ORIGIN+' trades only' : 'bot + manual, all wallets on both accounts')+'</div>';
 }
 
 // ---------------- daily P&L ----------------
@@ -1056,10 +1110,17 @@ function renderHistory(){
     ss.value = fs;
   }
   var is = document.getElementById('hInst');
-  if(is._sig !== INSTS.map(function(x){return x.id;}).join()){
-    is._sig = INSTS.map(function(x){return x.id;}).join();
-    is.innerHTML = '<option value="">All instances</option>' +
-      INSTS.map(function(x){ return '<option value="'+x.id+'">'+(x.name||x.id)+'</option>'; }).join('');
+  var instOpts = {};
+  ev.forEach(function(e){
+    instOpts[e.inst] = e.name +
+      (e.mode ? ' · ' + (e.mode === 'lev' ? 'futures' : 'spot') : '');
+  });
+  var isig = Object.keys(instOpts).sort().join();
+  if(is._sig !== isig){
+    is._sig = isig;
+    is.innerHTML = '<option value="">All accounts</option>' +
+      Object.keys(instOpts).sort().map(function(k){
+        return '<option value="'+k+'">'+instOpts[k]+'</option>'; }).join('');
     is.value = fi;
   }
   var showIgn = document.getElementById('hShowIgn').checked;
@@ -1089,7 +1150,7 @@ function renderHistory(){
     (nIgn ? ' &middot; <span class="warn">' + nIgn + ' excluded (' + money(ignNet) +
       ' not counted)</span>' : '');
   document.getElementById('hist').innerHTML = rows.length
-    ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Symbol</th><th>Side</th>'+
+    ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Origin</th><th>Symbol</th><th>Side</th>'+
       '<th class="n">Entry</th><th class="n">Exit</th>'+
       '<th class="n">P&amp;L %</th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(e){
@@ -1098,6 +1159,11 @@ function renderHistory(){
         return '<tr style="'+(ig?'opacity:.45':'')+'">'+
           '<td class="dim">'+new Date(e.t).toLocaleString()+'</td>'+
           '<td>'+e.name+' <span class="mini">'+(e.account||'')+'</span></td>'+
+          '<td>'+(e.origin==='bot'
+            ? '<span class="tag b" title="close matches a trader-recorded close on this account+market">BOT</span>'
+            : e.origin==='manual'
+            ? '<span class="tag" title="no trader recorded this close — opened/closed by hand">MANUAL</span>'
+            : '<span class="dim">—</span>')+'</td>'+
           '<td><b>'+e.symbol+'</b>'+(ig?'<div class="mini warn">excluded'+
             (e.reason?' — '+e.reason:'')+'</div>':'')+'</td>'+
           '<td>'+(e.side ? '<span class="tag '+(e.side==='LONG'?'g':'live')+'">'+e.side+
@@ -3464,11 +3530,13 @@ for(var i=0;i<btns.length;i++){
 })();
 syncSoundBtn(); syncToggles();
 applyTheme(localStorage.getItem('slTheme') || 'dark');
-loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust(); loadFlows();
+loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust(); loadFlows(); loadPnl();
+(function(){ var s = document.getElementById('originSel'); if(s) s.value = ORIGIN; })();
 setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
 setInterval(loadDust, 300000);
 setInterval(loadFlows, 300000);
+setInterval(loadPnl, 60000);
 setInterval(loadTicker, 15000);
 setInterval(loadStatus, 20000);
 setInterval(function(){ loadOptimize(); loadProgress(); }, 90000);

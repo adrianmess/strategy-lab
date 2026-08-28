@@ -1204,6 +1204,13 @@ def _manual_close_alert(prev, cur):
         acct, mkt, name = k
         if f"{acct} {mkt}" in errtxt:
             continue
+        sym_key = name if mkt == "fut" else f"{name}_USDT"
+        if time.time() - _RECENT_MCLOSE.get((acct, mkt, sym_key), 0) < 120:
+            continue            # already announced by the UI action / TP-SL
+        _manual_note("position_closed", acct, mkt, sym_key,
+                     (r.get("side") or "long").upper(),
+                     r.get("vol") or r.get("qty"), r.get("mark") or r.get("px"),
+                     lev=r.get("lev"), reason="detected")
         if mkt == "fut":
             detail = ""
             try:
@@ -1410,6 +1417,10 @@ def _tpsl_fire(rule, why, px):
             api.market_sell(sym, q)
     print(f"TPSL FIRED {acct} {rule['market']} {sym}: {why} at {px} "
           f"(entry {rule['entry']}, close {cp:.0f}%)", flush=True)
+    _RECENT_MCLOSE[(acct, rule["market"], sym)] = time.time()
+    _manual_note("position_closed", acct, rule["market"], sym,
+                 (rule.get("side") or "long").upper(), rule.get("qty"), px,
+                 lev=rule.get("lev"), reason=f"tpsl {why}")
     try:
         subprocess.run([os.path.expanduser("~/.hermes/hermes"), "send",
                         "-t", "whatsapp", f"TP/SL {why}: closed {sym} "
@@ -1739,6 +1750,31 @@ def trade_order():
         return jsonify(error=str(e)[:300]), 502
     print(f"MANUAL TRADE {acct} {market} {pair} {action}: {str(res)[:180]}",
           flush=True)
+    # feed the alert stream (toasts + /api/trades) — manual trades notify
+    # exactly like bot trades do
+    try:
+        sym_full = f"{pair}_USDT"
+        if market == "fut":
+            if action in ("long", "short"):
+                _manual_note("position_opened", acct, "fut", sym_full,
+                             action.upper(), d.get("margin"), d.get("price"),
+                             lev=d.get("lev"))
+            elif action == "close":
+                csym = (d.get("symbol") or sym_full).upper()
+                _RECENT_MCLOSE[(acct, "fut", csym)] = time.time()
+                _manual_note("position_closed", acct, "fut", csym,
+                             reason="manual_close")
+        else:
+            if action == "buy":
+                _manual_note("position_opened", acct, "spot", sym_full,
+                             "LONG", d.get("usdt"), d.get("price"))
+            elif action == "sell":
+                _RECENT_MCLOSE[(acct, "spot", sym_full)] = time.time()
+                _manual_note("position_closed", acct, "spot", sym_full,
+                             "LONG", d.get("qty"), d.get("price"),
+                             reason="manual_close")
+    except Exception:
+        pass
     return jsonify(ok=True, result=(res if isinstance(res, dict) else
                                     dict(raw=str(res)[:200])))
 
@@ -3246,6 +3282,138 @@ def api_performance():
                                  key=lambda s: -abs(s["realized"]))[:8],
                 source=source, as_of=time.strftime("%Y-%m-%d %H:%M:%S"))
     _PERF_CACHE[key] = dict(t=time.time(), data=data)
+    return jsonify(data)
+
+
+# ---- manual-trade notifications + bot/manual P&L attribution ----
+# Manual opens/closes are appended to notifications.log in the traders' own
+# schema, so the alert feed (/api/trades -> toasts) covers BOTH bot and
+# manual trades. Exchange P&L events are labeled bot vs manual by matching
+# close times against the traders' recorded closes.
+_RECENT_MCLOSE = {}          # (acct, market, symbol) -> epoch of manual close
+
+
+def _manual_note(event, acct, market, symbol, side=None, qty=None,
+                 price=None, lev=None, reason=None):
+    try:
+        line = dict(at=time.strftime("%Y-%m-%d %H:%M:%S"), event=event,
+                    config=f"manual ({acct} {market})", account=acct,
+                    symbol=symbol, side=side, qty=qty, price=price,
+                    lev=lev, reason=reason, comp="manual", live=True)
+        with open(os.path.join(AT, "notifications.log"), "a") as f:
+            f.write(json.dumps(line, default=float) + "\n")
+    except Exception as e:
+        print(f"manual note error: {e}", flush=True)
+
+
+_BOTIDX_CACHE = {"t": 0.0, "idx": None}
+
+
+def _bot_close_index():
+    """(account, mode, symbol) -> sorted close epochs (ms) recorded by the
+    TRADERS themselves (config field ends in .json). Cached 60s."""
+    now = time.time()
+    if _BOTIDX_CACHE["idx"] is not None and now - _BOTIDX_CACHE["t"] < 60:
+        return _BOTIDX_CACHE["idx"]
+    cfg_map = {}
+    for f in os.listdir(AT):
+        if f.startswith("config") and f.endswith(".json"):
+            try:
+                c = json.load(open(os.path.join(AT, f)))
+                cfg_map[f] = (c.get("api_account", "mexc1"),
+                              c.get("mode", "lev"))
+            except Exception:
+                continue
+    idx = {}
+    try:
+        with open(os.path.join(AT, "notifications.log"), "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 2_000_000))
+            lines = f.read().decode(errors="replace").splitlines()
+    except FileNotFoundError:
+        lines = []
+    for ln in lines:
+        try:
+            e = json.loads(ln)
+        except Exception:
+            continue
+        if e.get("event") != "position_closed":
+            continue
+        am = cfg_map.get(e.get("config") or "")
+        if not am:
+            continue                     # manual notes / unknown configs
+        try:
+            ts = time.mktime(time.strptime(e.get("at"),
+                                           "%Y-%m-%d %H:%M:%S")) * 1000
+        except Exception:
+            continue
+        idx.setdefault((am[0], am[1], e.get("symbol")), []).append(ts)
+    for v in idx.values():
+        v.sort()
+    _BOTIDX_CACHE.update(t=now, idx=idx)
+    return idx
+
+
+def _spot_symbols_union(sapi):
+    syms = {f"{p}_USDT" for p in ("BTC", "ETH", "SOL", "XRP", "DOGE",
+                                  "SUI", "HYPE", "LINK")}
+    try:
+        for b in sapi.account_info().get("balances", []):
+            a = b.get("asset")
+            if a in ("USDT", "USDC", "USD", "USD1", "DAI", "MX"):
+                continue
+            if float(b.get("free") or 0) + float(b.get("locked") or 0) > 0:
+                syms.add(f"{a}_USDT")
+    except Exception:
+        pass
+    return sorted(syms)
+
+
+_PNLE_CACHE = {"t": 0.0, "data": None}
+
+
+@app.route("/api/pnl_events")
+def pnl_events():
+    """Realized P&L events for ALL FOUR account x market combos over 30d,
+    each labeled origin 'bot' | 'manual' (bot = a trader recorded a close of
+    that symbol on that account+market within +-4 min). Feeds the Overview
+    aggregates, the origin switch and the History page."""
+    now_s = time.time()
+    if not request.args.get("force") and _PNLE_CACHE["data"] is not None \
+            and now_s - _PNLE_CACHE["t"] < 60:
+        return jsonify(_PNLE_CACHE["data"])
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcFuturesAPI, MexcSpotAPI
+    since = now_s * 1000 - 30 * 86400 * 1000
+    bot_idx = _bot_close_index()
+    ign = _ignored_load()
+    events, errors = [], []
+    for acct in ("mexc1", "mexc2"):
+        try:
+            for e in _futures_realized(MexcFuturesAPI(account=acct), since):
+                e.update(account=acct, mode="lev")
+                events.append(e)
+        except Exception as ex:
+            errors.append(f"{acct} fut: {str(ex)[:80]}")
+        try:
+            sapi = MexcSpotAPI(account=acct)
+            for e in _spot_realized(sapi, _spot_symbols_union(sapi), since):
+                e.update(account=acct, mode="spot")
+                events.append(e)
+        except Exception as ex:
+            errors.append(f"{acct} spot: {str(ex)[:80]}")
+    for e in events:
+        ts_list = bot_idx.get((e["account"], e["mode"], e["symbol"])) or []
+        e["origin"] = ("bot" if any(abs(e["t"] - ts) < 240_000
+                                    for ts in ts_list) else "manual")
+        e["ignored"] = e.get("id") in ign
+        e["reason"] = (ign.get(e.get("id")) or {}).get("reason")
+        e["realized"] = round(float(e.get("realized") or 0), 4)
+    events.sort(key=lambda e: e["t"])
+    data = dict(events=events, errors=errors,
+                as_of=time.strftime("%Y-%m-%d %H:%M:%S"))
+    _PNLE_CACHE.update(t=now_s, data=data)
     return jsonify(data)
 
 
