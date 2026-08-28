@@ -559,9 +559,28 @@ function pctOfAcct(account, realized){
 }
 function moneyPct(v){ return fig(v, pctOf(v)); }
 
+function dietzPct(P, days){
+  // Modified Dietz: return on the AVERAGE capital at risk in the window.
+  // Capital base = balance at window start + each external flow weighted by
+  // the fraction of the window it was present — so deposited-then-withdrawn
+  // money counts only for the days it was actually in the account. The
+  // numerator follows the origin filter; the base is the whole pool (bot
+  // and manual trade the same wallets).
+  if(!EQ.total) return null;
+  var now = Date.now(), lo = now - days * 86400000, len = days * 86400000;
+  var allP = allEvents().filter(function(e){
+    return !e.ignored && e.t >= lo; })
+    .reduce(function(a, e){ return a + e.pnl; }, 0);
+  var fl = FLOWS.filter(function(f){ return f.t >= lo; });
+  var netFlow = fl.reduce(function(a, f){ return a + f.usdt; }, 0);
+  var start = EQ.total - allP - netFlow;      // balance at window start
+  var avg = start + fl.reduce(function(a, f){
+    return a + f.usdt * (now - f.t) / len; }, 0);
+  return avg > 0 ? 100 * P / avg : null;
+}
 function renderKpis(){
   // event-based, over ALL FOUR account x market combos, honoring the
-  // bot/manual origin switch
+  // bot/manual origin switch; % is Modified Dietz on avg capital at risk
   var now = Date.now(), ev = countedEvents();
   function win(days){
     var lo = now - days * 86400000;
@@ -575,9 +594,11 @@ function renderKpis(){
   var lbl = ORIGIN ? ' · ' + ORIGIN + ' only' : '';
   var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
   document.getElementById('kpis').innerHTML =
-    kpi('Realized 24h', moneyPct(d1), 'USDT · % on starting balance' + lbl, d1) +
-    kpi('Realized 7d', moneyPct(d7), 'USDT · % on starting balance' + lbl, d7) +
-    kpi('Realized 30d', moneyPct(d30), w30.n + ' trades' +
+    kpi('Realized 24h', fig(d1, dietzPct(d1, 1)),
+        'USDT · % on avg capital at risk' + lbl, d1) +
+    kpi('Realized 7d', fig(d7, dietzPct(d7, 7)),
+        'USDT · % on avg capital at risk' + lbl, d7) +
+    kpi('Realized 30d', fig(d30, dietzPct(d30, 30)), w30.n + ' trades' +
         (ex ? ' · ' + ex + ' excluded' : '') + lbl, d30) +
     kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
@@ -923,6 +944,13 @@ function renderDaily(){
   }
   if(!dailyEquity()){ el.innerHTML = '<span class="mini">waiting for account balances…</span>'; return; }
   var d = dailySeries(30);
+  // time-weighted return: compound the daily flow-adjusted returns
+  var twr30 = null;
+  if(d.some(function(x){ return x.pct != null; })){
+    var acc = 1;
+    d.forEach(function(x){ if(x.pct != null) acc *= (1 + x.pct / 100); });
+    twr30 = 100 * (acc - 1);
+  }
   var active = d.filter(function(x){ return Math.abs(x.pnl) > 1e-9; });
   var avgAll = d.reduce(function(a,x){ return a + (x.pct || 0); }, 0) / d.length;
   var avgAct = active.length
@@ -972,7 +1000,11 @@ function renderDaily(){
       '<span>' + d[0].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span>'+
       '<span>' + (DSCOPE ? (DSCOPE + ' only · on its own balance of $' +
         dailyEquity().toFixed(2)) : 'both accounts combined') +
-        ' · deposits/withdrawals excluded from P&amp;L</span>'+
+        ' · deposits/withdrawals excluded from P&amp;L' +
+        (twr30 == null ? '' :
+          ' · <span title="time-weighted return: daily flow-adjusted returns compounded — immune to deposit/withdrawal timing">TWR 30d ' +
+          '<b class="' + cls(twr30) + '">' + (twr30 >= 0 ? '+' : '') +
+          twr30.toFixed(2) + '%</b></span>') + '</span>'+
       '<span>' + d[d.length-1].date.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + '</span></div>';
 }
 
