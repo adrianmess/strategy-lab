@@ -82,6 +82,7 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 .tbtn.kill{background:rgba(246,70,93,.12);border-color:rgba(246,70,93,.55);color:var(--down)}
 .tbtn.kill:hover{background:var(--down);border-color:var(--down);color:#fff}
 .wrap{padding:12px;display:grid;gap:12px}
+.wrap>*{min-width:0}  /* grid items must shrink; wide tables scroll inside */
 .g2{display:grid;grid-template-columns:2fr 1fr;gap:12px}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:8px}
@@ -129,6 +130,10 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--f
  text-shadow:0 1px 3px rgba(0,0,0,.8)}
 .tfit td,.tfit th{white-space:nowrap}
 .tfit th:last-child,.tfit td:last-child{width:100%}
+/* wide tfit tables scroll INSIDE their card — they must never widen the
+   page (that dragged the chart past the viewport on narrow windows) */
+#tdPos .body,#tdBots .body{overflow-x:auto}
+#tdPos,#tdBots{min-width:0;max-width:100%}
 .tdtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:10px;flex-wrap:wrap}
 .tdtabs button{background:none;border:none;color:var(--dim);font:inherit;font-size:13px;font-weight:600;
  padding:9px 13px;cursor:pointer;border-bottom:2px solid transparent}
