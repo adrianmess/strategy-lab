@@ -575,18 +575,32 @@ def status():
     cfg = json.load(open(cfg_path)) if os.path.exists(cfg_path) else {}
     state_file = os.path.join(AT, cfg.get("state_file", "trader_state.json"))
     state = json.load(open(state_file)) if os.path.exists(state_file) else {}
-    _pos = state.get("position") or {}
+    _plist = _positions_of(state)
+    _pos = _plist[0] if _plist else {}
     _sym = _pos.get("symbol") or cfg.get("symbol")
     _ovp = os.path.join(AT, ".override_" + os.path.basename(
         cfg.get("state_file", "trader_state.json")))
     _ov = None
-    if _pos and os.path.exists(_ovp):
+    _od = None
+    if _plist and os.path.exists(_ovp):
         try:
-            _o = json.load(open(_ovp))
-            if _o.get("pos_key") == str(_pos.get("opened_at")):
-                _ov = _o
+            _od = json.load(open(_ovp))
+            if _od.get("pos_key") == str(_pos.get("opened_at")):
+                _ov = _od
         except Exception:
             pass
+    # per-position enrichment (cascade: several at once): live price,
+    # contract size and any armed override, keyed by opened_at
+    _prows = []
+    for _p in _plist:
+        _ps = _p.get("symbol")
+        _prows.append(dict(_p,
+            price=_pub_price(_ps, cfg.get("mode")),
+            contract_size=(1.0 if cfg.get("mode") == "spot" else
+                           ((cfg.get("contract_sizes") or {}).get(_ps)
+                            or cfg.get("contract_size"))),
+            override=(_od if _od and _od.get("pos_key")
+                      == str(_p.get("opened_at")) else None)))
     return jsonify(dict(
         symbol=_sym,
         price=(_pub_price(_sym, cfg.get("mode")) if _pos else None),
@@ -606,7 +620,10 @@ def status():
         mode=cfg.get("mode"), method=cfg.get("method"),
         equity_usdt=cfg.get("equity_usdt"),
         candidate=cfg.get("candidate"),
-        position=state.get("position"),
+        position=(_pos or None),
+        positions=_prows,
+        cascade=bool(cfg.get("cascade")),
+        cascade_free=state.get("cascade_free"),
         # components that WOULD hold a position if the slot were free —
         # written by the fcfs runner every bar (membership changes) / 30s
         shadow=state.get("shadow") or [],
@@ -622,6 +639,16 @@ def _state_file_of(cfg_name):
         return c.get("state_file", "trader_state.json")
     except Exception:
         return None
+
+
+def _positions_of(st):
+    """Tracked positions as a LIST. Cascade state files hold a "positions"
+    list; legacy files a single "position" (the runner keeps that key as a
+    mirror of positions[0], so prefer the list when present)."""
+    rows = st.get("positions")
+    if rows is None:
+        rows = [st["position"]] if st.get("position") else []
+    return [p for p in rows if p]
 
 
 def _find_trader_proc(cfg_name):
@@ -770,11 +797,11 @@ def _trader_holds(pair):
             c = json.load(open(os.path.join(AT, cfg_name)))
         except Exception:
             continue
-        p = st.get("position")
-        if p and (p.get("symbol") or "").startswith(pair + "_"):
-            out.append(dict(name=_iname(i),
-                            account=c.get("api_account", "mexc1"),
-                            mode=c.get("mode", "lev")))
+        for p in _positions_of(st):
+            if (p.get("symbol") or "").startswith(pair + "_"):
+                out.append(dict(name=_iname(i),
+                                account=c.get("api_account", "mexc1"),
+                                mode=c.get("mode", "lev")))
     return out
 
 
@@ -831,8 +858,9 @@ def _holds_map():
             c = json.load(open(os.path.join(AT, cfg_name)))
         except Exception:
             continue
-        p = st.get("position")
-        if p and p.get("symbol"):
+        for p in _positions_of(st):
+            if not p.get("symbol"):
+                continue
             pr = (p.get("symbol") or "").split("_")[0]
             out[(c.get("api_account", "mexc1"), c.get("mode", "lev"),
                  pr)] = dict(
@@ -2353,7 +2381,7 @@ def adopt_shadow():
         st = json.load(open(os.path.join(AT, sfile)))
     except Exception:
         st = {}
-    if st.get("position"):
+    if _positions_of(st):
         return jsonify(error=f"{_iname(i)} already holds a position — "
                              "close it first, then adopt"), 400
     p = os.path.join(AT, ".adopt_" + os.path.basename(sfile))
@@ -2661,8 +2689,7 @@ def _alerts_eval_once(active, rules, log):
                     AT, cfg.get("state_file", "trader_state.json"))))
             except Exception:
                 continue
-            pos = st.get("position")
-            if pos:
+            for pos in _positions_of(st):
                 _alert_fire(r, f"{_iname(i)} is STOPPED but still tracking "
                                f"{pos.get('qty')} {pos.get('symbol')} "
                                f"@ {pos.get('entry_price')}", rules, log)
@@ -2848,16 +2875,18 @@ def killall():
                 st = json.load(open(sp))
             except Exception:
                 continue
-            pos = st.get("position")
-            if not pos:
+            plist = _positions_of(st)
+            if not plist:
                 continue
-            lbl = pos.get("mirror_entry_t")
-            if lbl and pos.get("comp") is not None:
-                st.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+            for pos in plist:
+                lbl = pos.get("mirror_entry_t")
+                if lbl and pos.get("comp") is not None:
+                    st.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+                report.append(dict(step="clear_state", config=f,
+                                   symbol=pos.get("symbol")))
             st["position"] = None
+            st["positions"] = []
             json.dump(st, open(sp, "w"), indent=1)
-            report.append(dict(step="clear_state", config=f,
-                               symbol=pos.get("symbol")))
     summary = (f"{'WOULD stop' if dry else 'Stopped'} {stopped} trader(s), "
                f"{'would close' if dry else 'closed'} {flat} position(s)")
     if not dry:
@@ -4263,9 +4292,16 @@ def override():
     d = request.get_json(force=True)
     sp = os.path.join(AT, sf)
     st = json.load(open(sp)) if os.path.exists(sp) else {}
-    pos = st.get("position")
-    if not pos:
+    plist = _positions_of(st)
+    if not plist:
         return jsonify(error="no open position on this instance"), 400
+    # cascade: the client says WHICH position via pos_key (opened_at);
+    # without one, the single/first position is meant
+    pos = next((p for p in plist
+                if str(p.get("opened_at")) == str(d.get("pos_key"))),
+               None) if d.get("pos_key") else plist[0]
+    if pos is None:
+        return jsonify(error="that position is no longer tracked"), 400
     cfgj = json.load(open(os.path.join(AT, cfg_name)))
     sym = pos.get("symbol") or cfgj.get("symbol")
     cur = _pub_price(sym, cfgj.get("mode"))
@@ -4698,8 +4734,7 @@ def mexc_account():
                         AT, c.get("state_file", "trader_state.json"))))
                 except Exception:
                     continue
-                pos = st.get("position")
-                if pos:
+                for pos in _positions_of(st):
                     # live-ness comes from HOW THE TRADER WAS STARTED (--live),
                     # not the config's dry_run field — reading the file made
                     # every live position display as "dry-run". And a config
@@ -4830,22 +4865,27 @@ def _reconcile_after_manual_close(I, icfg, acct, symbol):
     if not sp or not os.path.exists(sp):
         return None
     st = json.load(open(sp))
-    pos = st.get("position")
-    if not pos:
-        return None
-    if pos.get("symbol") and symbol and pos["symbol"] != symbol:
+    plist = _positions_of(st)
+    match = [p for p in plist
+             if not symbol or not p.get("symbol") or p["symbol"] == symbol]
+    if not match:
         return None
     if not _exchange_flat(icfg, acct, symbol):
         return "MEXC still shows a position — state file left untouched"
     shutil.copy(sp, sp + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
-    lbl = pos.get("mirror_entry_t")
-    if lbl and pos.get("comp") is not None:
-        st.setdefault("late_skips", {})[str(pos["comp"])] = lbl
-    st["position"] = None
+    noted = []
+    for pos in match:
+        lbl = pos.get("mirror_entry_t")
+        if lbl and pos.get("comp") is not None:
+            st.setdefault("late_skips", {})[str(pos["comp"])] = lbl
+            noted.append(f"comp #{pos['comp']}'s virtual trade {lbl}")
+    st["positions"] = [p for p in plist if p not in match]
+    st["position"] = st["positions"][0] if st["positions"] else None
     json.dump(st, open(sp, "w"), indent=1)
-    return (f"cleared the tracked {pos.get('symbol')} position from {sf}"
-            + (f" and marked comp #{pos['comp']}'s virtual trade {lbl} "
-               f"as skipped" if lbl and pos.get("comp") is not None else ""))
+    return (f"cleared the tracked "
+            f"{', '.join(p.get('symbol') or '?' for p in match)} "
+            f"position(s) from {sf}"
+            + (f" and marked {', '.join(noted)} as skipped" if noted else ""))
 
 
 @app.route("/api/manual", methods=["POST"])
@@ -5333,19 +5373,21 @@ def clear_bot_position():
     if not os.path.exists(sp):
         return jsonify(error="no state file"), 404
     st = json.load(open(sp))
-    old = st.get("position")
+    old = _positions_of(st)
     if not old:
         return jsonify(ok=True, note="already flat")
     import shutil
     shutil.copy(sp, sp + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
-    # mark the component's virtual trade as skipped, or the late-join will
-    # re-enter it on the next start — the position was closed on purpose
-    lbl = old.get("mirror_entry_t")
-    if lbl and old.get("comp") is not None:
-        st.setdefault("late_skips", {})[str(old["comp"])] = lbl
+    # mark each component's virtual trade as skipped, or the late-join will
+    # re-enter it on the next start — the positions were closed on purpose
+    for p in old:
+        lbl = p.get("mirror_entry_t")
+        if lbl and p.get("comp") is not None:
+            st.setdefault("late_skips", {})[str(p["comp"])] = lbl
     st["position"] = None
+    st["positions"] = []
     json.dump(st, open(sp, "w"), indent=1)
-    return jsonify(ok=True, cleared=old,
+    return jsonify(ok=True, cleared=(old[0] if len(old) == 1 else old),
                    late_skips=st.get("late_skips") or {})
 
 @app.route("/api/trader_configs/delete", methods=["POST"])

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """FCFS live adapter — PARENT. One shared position slot over N component
-strategies spread across any pairs/timeframes (2..N components).
+strategies spread across any pairs/timeframes (2..N components) — or, with
+"cascade": true in the config, a CAPITAL POOL: every fresh signal opens
+while free capital remains (one position per symbol, each entry capped by
+the liquidity guardrail), validated in optimizer/cascade_sim.py 2026-08-28.
 
 Semantics (mirrors optimizer/fcfsx_cli.py, the backtested merge):
   - every component runs virtually, engine-exact, inside per-(pair,tf) host
@@ -63,8 +66,9 @@ class PairExec:
         else:
             self.ex = Executor(self.cfg)
 
-    def open(self, direction, lev, price):
-        return self.ex.open_position(direction, lev, price)
+    def open(self, direction, lev, price, margin_cap=None):
+        return self.ex.open_position(direction, lev, price,
+                                     margin_cap=margin_cap)
 
     def close(self):
         return self.ex.close_position()
@@ -174,8 +178,28 @@ def main_fcfs(cfg, live):
     # candidate. A stale top-level "mode" would route a spot combo through
     # the futures executor.
     cfg["mode"] = mode
-    log.info("FCFS live adapter starting: %d components, mode=%s, dry_run=%s",
-             len(comps), mode, cfg["dry_run"])
+
+    # ---- CASCADE (multi-slot): validated in optimizer/cascade_sim.py
+    # (2026-08-28). Instead of ONE shared slot, every fresh signal opens
+    # while free capital remains — the liquidity guardrail caps each pair,
+    # and what a capped position leaves behind funds the next signal.
+    # OFF by default: flag off = the exact one-slot FCFS behavior.
+    # Adoption, armed rules and late-join stay FLAT-ONLY in both modes
+    # (the sim validated fresh-signal cascading only).
+    cascade = bool(cfg.get("cascade"))
+    max_slots = int(cfg.get("cascade_max_slots") or 0)     # 0 = unlimited
+    if cascade and mode == "lev":
+        _missing = sorted({c["pair"] for c in comps
+                           if not (cfg.get("contract_sizes") or {})
+                           .get(c["pair"])})
+        if _missing:
+            # ex_for() raises on a missing contract_size; under cascade that
+            # would kill the loop mid-flight — refuse at startup instead
+            raise SystemExit(f"cascade needs contract_sizes for every "
+                             f"component pair — missing {_missing}")
+    log.info("FCFS live adapter starting: %d components, mode=%s, dry_run=%s, "
+             "cascade=%s%s", len(comps), mode, cfg["dry_run"], cascade,
+             (f" (max_slots={max_slots})" if max_slots else ""))
 
     # manual close-override sidecar (written by the panel, polled by mtime)
     ov_path = os.path.join(HERE, ".override_" +
@@ -186,15 +210,50 @@ def main_fcfs(cfg, live):
     ad_path = os.path.join(HERE, ".adopt_" +
                            os.path.basename(cfg["state_file"]))
 
-    # state
+    # state — positions is a LIST (cascade holds several at once; one-slot
+    # mode simply never grows it past 1). Legacy single "position" migrates
+    # in on load and is kept as a MIRROR of positions[0] on every save so
+    # older panel readers keep working.
     sf = os.path.join(HERE, cfg["state_file"])
     state = json.load(open(sf)) if os.path.exists(sf) else {}
-    state.setdefault("position", None)   # {symbol, comp, dir, lev, qty,
-    #                                       entry_price, mirror_entry_t, group}
+    if state.get("positions") is None:
+        state["positions"] = ([state["position"]]
+                              if state.get("position") else [])
+    positions = state["positions"]       # mutate in place, NEVER rebind
+    # each: {symbol, comp, dir, lev, qty, entry_price, mirror_entry_t,
+    #        group, margin?, ...}
+
     def save():
+        state["position"] = positions[0] if positions else None
         tmp = sf + ".tmp"
         json.dump(state, open(tmp, "w"), indent=2, default=float)
         os.replace(tmp, sf)
+
+    def pos_of_comp(ci):
+        for p in positions:
+            if p.get("comp") == ci:
+                return p
+        return None
+
+    def sym_held(sym):
+        # ONE position per symbol: exchange-side, same-symbol positions
+        # merge (futures) / share a wallet balance (spot), so a second
+        # "position" on a held pair could not be closed independently
+        return any(p.get("symbol") == sym for p in positions)
+
+    def cascade_free():
+        """Free margin available to the NEXT allocation, or None when the
+        executor should size itself. Dry-run cascade: a paper tracker
+        (equity_usdt minus margin committed to open paper positions, plus
+        realized paper P&L) — without it every dry position would size from
+        the same full paper balance. Live cascade: None — the exchange's
+        available balance already shrinks as margin is committed, which IS
+        the cascade allocation."""
+        if not cascade or not cfg["dry_run"]:
+            return None
+        if state.get("cascade_free") is None:
+            state["cascade_free"] = float(cfg.get("equity_usdt") or 0)
+        return float(state["cascade_free"])
 
     # groups
     q = queue.Queue()
@@ -221,13 +280,12 @@ def main_fcfs(cfg, live):
         return f"#{i} {c['pair']}/{c['timeframe']}·{c['strategy']}"
 
     def tell_flat():
-        flat = state.get("position") is None
+        flat = not positions
         for h in hosts.values():
             h.set_flat(flat)
 
-    def do_close(reason, px=None):
-        pos = state.get("position")
-        if not pos:
+    def do_close(pos, reason, px=None):
+        if pos is None or pos not in positions:
             return
         res = ex_for(pos["symbol"]).close()
         log.info("CLOSE %s (%s): %s", comp_label(pos["comp"]), reason,
@@ -289,7 +347,20 @@ def main_fcfs(cfg, live):
             state["auto_last"] = dict(comp=pos.get("comp"),
                                       entry_t=pos.get("mirror_entry_t"),
                                       exit_px=(px or pos.get("entry_price")))
-        state["position"] = None
+        positions.remove(pos)
+        # dry-run cascade paper accounting: return the margin + paper P&L
+        # to the free pool (fees ignored — the soak measures behavior)
+        if cascade and cfg["dry_run"] and pos.get("margin"):
+            m = float(pos["margin"])
+            ent = float(pos.get("entry_price") or 0)
+            lv = float(pos.get("lev") or 1.0) if mode == "lev" else 1.0
+            r = ((float(px) / ent - 1.0) * int(pos.get("dir") or 1) * lv
+                 if px and ent else 0.0)
+            state["cascade_free"] = round(
+                float(state.get("cascade_free") or 0)
+                + m * (1.0 + max(r, -1.0)), 4)
+            log.info("CASCADE paper close: margin %.2f r=%+.2f%% -> free "
+                     "%.2f", m, 100 * r, state["cascade_free"])
         save(); tell_flat()
 
     # arbitration: same-bar ties resolved by component order (backtest rule)
@@ -315,9 +386,9 @@ def main_fcfs(cfg, live):
             ep = c.get("entry_px")
             if lbl is None or not ep:
                 continue
-            if pos is not None and key == pos.get("group") \
-                    and ci == pos.get("comp"):
-                continue          # that IS the real position, not a shadow
+            if any(p.get("group") == key and p.get("comp") == ci
+                   for p in positions):
+                continue          # that IS a real position, not a shadow
             d = int(c.get("dir") or 1)
             lv = float(c.get("lev") or 1.0)
             pct = ((px / float(ep) - 1.0) * d * 100.0 *
@@ -370,8 +441,9 @@ def main_fcfs(cfg, live):
 
     def do_adopt(ci, want, close_pct=None, src="panel"):
         """Open the chosen shadow as a REAL position (shared by the panel
-        Adopt button and the armed auto-adopt rules)."""
-        if state.get("position"):
+        Adopt button and the armed auto-adopt rules). FLAT-ONLY even under
+        cascade — the sim validated fresh-signal cascading, not adoption."""
+        if positions:
             log.warning("ADOPT (%s) refused: a position is already open", src)
             return False
         row = None
@@ -401,7 +473,8 @@ def main_fcfs(cfg, live):
                             "too close to ITS liquidation",
                             comp_label(ci), 100 * adv, lv)
                 return False
-        res, qty = ex_for(comps[ci]["pair"]).open(d, lv, px)
+        free = cascade_free()
+        res, qty = ex_for(comps[ci]["pair"]).open(d, lv, px, margin_cap=free)
         if (res or {}).get("status") == "error" or not qty:
             notify("order_failed", account="fcfs", action="adopt",
                    config=os.path.basename(cfg.get("_path", "?")),
@@ -411,7 +484,7 @@ def main_fcfs(cfg, live):
         fill = float((res or {}).get("fill_price") or px)
         state.setdefault("late_skips", {}).pop(str(ci), None)
         opened_bar[ci] = row["entry_t"]
-        state["position"] = dict(
+        posn = dict(
             symbol=comps[ci]["pair"], comp=ci, dir=d, lev=lv, qty=qty,
             entry_price=fill, group=row["group"],
             mirror_entry_t=row["entry_t"], mirror_entry_px=ep, adopted=True,
@@ -420,6 +493,14 @@ def main_fcfs(cfg, live):
                              else None),
             opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
             opened_ms=int(time.time() * 1000))
+        if free is not None:            # dry-run cascade paper accounting
+            cs = (1.0 if mode == "spot"
+                  else float((cfg.get("contract_sizes") or {})
+                             .get(comps[ci]["pair"]) or 0))
+            mg = qty * cs * fill / lv if mode == "lev" else qty * fill
+            posn["margin"] = round(mg, 4)
+            state["cascade_free"] = round(max(0.0, free - mg), 4)
+        positions.append(posn)
         log.info("ADOPTED (%s) %s: virtual entry %s @%.6g, joined @%.6g "
                  "dir=%+d lev=%.1f qty=%s close_at=%s", src, comp_label(ci),
                  row["entry_t"], ep, fill, d, lv, qty, close_pct)
@@ -480,7 +561,7 @@ def main_fcfs(cfg, live):
         close of an auto-adopted position, the SAME virtual trade is only
         re-adopted once price has dropped >=1% below that exit."""
         au = _ar["auto"]
-        if not au or not au.get("enabled") or state.get("position"):
+        if not au or not au.get("enabled") or positions:
             return
         thr = float(au.get("adopt_pct", -1e9))
         # optional pair restriction and PER-PAIR depths (research
@@ -518,7 +599,7 @@ def main_fcfs(cfg, live):
 
     def check_armed():
         _armed_load()
-        if state.get("position"):
+        if positions:
             return
         if not _ar["rules"]:
             check_auto()
@@ -553,68 +634,98 @@ def main_fcfs(cfg, live):
         if changed:
             _ar["rules"] = keep
             _armed_write()
-        if state.get("position") is None:
+        if not positions:
             check_auto()
 
     def check_armed_close():
-        pos2 = state.get("position")
-        cap = (pos2 or {}).get("armed_close_pct")
-        if not pos2 or cap is None:
-            return
-        h = hosts.get(pos2.get("group"))
-        px = float(getattr(h, "last_px", None) or 0)
-        if not px:
-            return
-        d = int(pos2.get("dir") or 1)
-        lv = float(pos2.get("lev") or 1.0) if mode == "lev" else 1.0
-        pct = (px / float(pos2["entry_price"]) - 1.0) * d * 100.0 * lv
-        if pct >= float(cap):
-            log.info("ARMED close: %+.2f%% >= %.2f%% target", pct, float(cap))
-            do_close("armed_target", px)
+        for pos2 in list(positions):
+            cap = pos2.get("armed_close_pct")
+            if cap is None:
+                continue
+            h = hosts.get(pos2.get("group"))
+            px = float(getattr(h, "last_px", None) or 0)
+            if not px:
+                continue
+            d = int(pos2.get("dir") or 1)
+            lv = float(pos2.get("lev") or 1.0) if mode == "lev" else 1.0
+            pct = (px / float(pos2["entry_price"]) - 1.0) * d * 100.0 * lv
+            if pct >= float(cap):
+                log.info("ARMED close: %+.2f%% >= %.2f%% target",
+                         pct, float(cap))
+                do_close(pos2, "armed_target", px)
 
     def flush_pending():
-        nonlocal pending_opens, pending_deadline
-        if not pending_opens or state.get("position"):
+        nonlocal pending_opens
+        if not pending_opens or (not cascade and positions):
             pending_opens = []
             return
         pending_opens.sort(key=lambda x: (x[0], x[1]))   # (bar time, comp idx)
-        bar_t, i, d, lev, px, gkey, osrc = pending_opens[0]
+        todo = pending_opens if cascade else pending_opens[:1]
         pending_opens = []
-        c = comps[i]
-        if mode != "lev":
-            lev = 1.0
-        # `px` is the last CLOSED bar's close, and we fire up to 1.5s later
-        # (arbitration window) plus poll latency. Size and anchor on the LIVE
-        # tick instead: entry_price is the denominator of the emergency-exit
-        # net, the liq-proximity warning and the reported P&L.
-        h = hosts.get(gkey)
-        px_live = float(getattr(h, "last_px", None) or px)
-        res, qty = ex_for(c["pair"]).open(d, lev, px_live)
-        if (res or {}).get("status") == "error":
-            notify("order_failed", account="fcfs", action="open",
-                   config=os.path.basename(cfg.get("_path", "?")),
-                   detail=res.get("message"))
-            return
-        if qty and qty > 0:
+        opened = None
+        for bar_t, i, d, lev, px, gkey, osrc in todo:
+            c = comps[i]
+            if mode != "lev":
+                lev = 1.0
+            if sym_held(c["pair"]) or pos_of_comp(i) is not None:
+                log.info("CASCADE skip %s: %s already held",
+                         comp_label(i), c["pair"])
+                continue
+            if max_slots and len(positions) >= max_slots:
+                log.info("CASCADE stop: %d slots in use (max %d)",
+                         len(positions), max_slots)
+                break
+            free = cascade_free()
+            if free is not None and free < float(
+                    cfg.get("cascade_min_alloc", 20.0)):
+                log.info("CASCADE stop: free capital %.2f below minimum "
+                         "allocation — %s not opened", free, comp_label(i))
+                break
+            # `px` is the last CLOSED bar's close, and we fire up to 1.5s
+            # later (arbitration window) plus poll latency. Size and anchor
+            # on the LIVE tick instead: entry_price is the denominator of
+            # the emergency-exit net, the liq-proximity warning and the
+            # reported P&L.
+            h = hosts.get(gkey)
+            px_live = float(getattr(h, "last_px", None) or px)
+            res, qty = ex_for(c["pair"]).open(d, lev, px_live,
+                                              margin_cap=free)
+            if (res or {}).get("status") == "error":
+                notify("order_failed", account="fcfs", action="open",
+                       config=os.path.basename(cfg.get("_path", "?")),
+                       detail=res.get("message"))
+                continue
+            if not qty or qty <= 0:
+                continue
             # prefer the venue's own fill price when the executor confirmed it
-            px = float((res or {}).get("fill_price") or px_live)
-            state["position"] = dict(
+            fpx = float((res or {}).get("fill_price") or px_live)
+            posn = dict(
                 symbol=c["pair"], comp=i, dir=d, lev=lev, qty=qty,
-                entry_price=px, group=gkey,
-                mirror_entry_t=None,   # filled below from the bar msg
+                entry_price=fpx, group=gkey,
+                mirror_entry_t=None,   # bound post-flush / from the bar msg
                 late_join=(osrc == "late_join"),
                 opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
                 opened_ms=int(time.time() * 1000))
+            if free is not None:        # dry-run cascade paper accounting
+                cs = (1.0 if mode == "spot"
+                      else float((cfg.get("contract_sizes") or {})
+                                 .get(c["pair"]) or 0))
+                mg = qty * cs * fpx / lev if mode == "lev" else qty * fpx
+                posn["margin"] = round(mg, 4)
+                state["cascade_free"] = round(max(0.0, free - mg), 4)
+            positions.append(posn)
             log.info("OPEN %s dir=%+d lev=%.1f qty=%s px=%.6g "
-                     "(signal bar %s, %s)",
-                     comp_label(i), d, lev, qty, px, bar_t, osrc)
+                     "(signal bar %s, %s%s)",
+                     comp_label(i), d, lev, qty, fpx, bar_t, osrc,
+                     (f", slot {len(positions)}" if cascade else ""))
             notify("position_opened", account="fcfs",
                    config=os.path.basename(cfg.get("_path", "?")),
                    symbol=c["pair"], side=("LONG" if d > 0 else "SHORT"),
-                   qty=qty, lev=lev, price=px, comp=comp_label(i),
+                   qty=qty, lev=lev, price=fpx, comp=comp_label(i),
                    live=(not cfg["dry_run"]))
             save(); tell_flat()
-            return bar_t
+            opened = bar_t
+        return opened
 
     opened_bar = {}   # comp_i -> mirror entry_t recorded at open time
 
@@ -636,7 +747,6 @@ def main_fcfs(cfg, live):
                 key, msg = None, None
 
             now = time.time()
-            pos = state.get("position")
 
             if msg is not None:
                 e = msg.get("e")
@@ -661,7 +771,7 @@ def main_fcfs(cfg, live):
                     bars_seen[0] += 1
                     cbyi = {c["i"]: c for c in msg.get("comps", [])}
                     note_shadows(key, cbyi, float(msg.get("px") or 0), now)
-                    if pos is None:
+                    if not positions or cascade:
                         sk = state.setdefault("late_skips", {})
                         for ci, c in sorted(cbyi.items()):
                             if c.get("opens_now"):
@@ -671,6 +781,10 @@ def main_fcfs(cfg, live):
                                      float(c.get("lev") or 1.0),
                                      float(msg.get("px") or 0), key,
                                      "fresh"))
+                                continue
+                            if positions:
+                                # late-join stays FLAT-ONLY under cascade —
+                                # the sim validated fresh-signal cascading
                                 continue
                             # With auto-adopt enabled, mid-trade joins are
                             # governed ONLY by its per-pair thresholds: the
@@ -746,9 +860,10 @@ def main_fcfs(cfg, live):
                                          comp_label(ci), lbl, ep, px)
                         if pending_opens and not pending_deadline:
                             pending_deadline = now + 1.5
-                    else:
-                        # position open: watch ONLY the owning component
-                        if key == pos["group"] and pos["comp"] in cbyi:
+                    # follow the mirror of EVERY position owned by this group
+                    for pos in [p for p in list(positions)
+                                if p.get("group") == key
+                                and p.get("comp") in cbyi]:
                             me = cbyi[pos["comp"]]
                             # engine's projected close for OUR position —
                             # refreshed every bar; persisted by the regular
@@ -771,9 +886,10 @@ def main_fcfs(cfg, live):
                                 if bind is None:
                                     # virtual trade already closed again —
                                     # mirror it out immediately
-                                    do_close("virtual_exit_fast", msg.get("px"))
+                                    do_close(pos, "virtual_exit_fast",
+                                             msg.get("px"))
                                 else:
-                                    state["position"]["mirror_entry_t"] = bind
+                                    pos["mirror_entry_t"] = bind
                                     save()
                             elif me.get("open") != pos["mirror_entry_t"]:
                                 # WHY did the virtual trade end? A LIQUIDATION
@@ -821,11 +937,12 @@ def main_fcfs(cfg, live):
                                     sk[str(pos["comp"])] = me.get("open") or ""
                                     save()
                                 else:
-                                    do_close("virtual_exit", msg.get("px"))
+                                    do_close(pos, "virtual_exit",
+                                             msg.get("px"))
 
             # panel-requested adopt of a chosen shadow (only when flat) +
             # armed auto-adopt / auto-close rules
-            if state.get("position") is None:
+            if not positions:
                 try_adopt()
                 check_armed()
             else:
@@ -834,78 +951,86 @@ def main_fcfs(cfg, live):
             # arbitration window expired?
             if pending_deadline and now >= pending_deadline:
                 pending_deadline = 0.0
-                bar_t = flush_pending()
-                if bar_t and state.get("position") is not None:
-                    p = state["position"]
-                    if p.get("mirror_entry_t") is None:
-                        p["mirror_entry_t"] = opened_bar.get(p["comp"])
+                if flush_pending():
+                    _bchg = False
+                    for p in positions:
+                        if (p.get("mirror_entry_t") is None
+                                and opened_bar.get(p["comp"]) is not None):
+                            p["mirror_entry_t"] = opened_bar.get(p["comp"])
+                            _bchg = True
+                    if _bchg:
                         save()
 
-            # protective intra-bar checks on the live price of the open pair
-            pos = state.get("position")
-            if pos:
+            # protective intra-bar checks on the live price of each open pair
+            if positions:
+                # manual override sidecar (one armed rule per instance;
+                # pos_key picks the position) — read ONCE per round
+                try:
+                    m = os.path.getmtime(ov_path)
+                except OSError:
+                    m = 0
+                    ov["d"] = None
+                if m and m != ov["m"]:
+                    ov["m"] = m
+                    try:
+                        ov["d"] = json.load(open(ov_path))
+                    except Exception:
+                        ov["d"] = None
+            for pos in list(positions):
                 h = hosts.get(pos["group"])
                 px = h.last_px if h else None
-                if px:
-                    adverse = (px / pos["entry_price"] - 1.0) * pos["dir"]
-                    if mode == "lev":
-                        liq_dist = 1.0 / max(pos["lev"], 1e-9) - 0.008
-                        if adverse <= -0.5 * liq_dist and now - last_note > 300:
-                            last_note = now
-                            log.warning("LIQ PROXIMITY %s: adverse %.2f%% "
-                                        "(liq at %.2f%%)",
-                                        comp_label(pos["comp"]),
-                                        100 * -adverse, 100 * liq_dist)
-                    em = cfg.get("emergency_exit_adverse")
-                    if em and adverse <= -abs(em):
-                        do_close("emergency_exit", px)
-                    # ---- STANDALONE position (its sim liquidated) ----
-                    # It has no mirror left to follow, so it gets an explicit
-                    # plan anchored to OUR entry: take the component's own
-                    # edge if it arrives, and cap the downside — never leave
-                    # a stopless leveraged position drifting.
-                    elif pos.get("standalone"):
-                        tp = float(cfg.get("standalone_take_profit", 0.005))
-                        liq_d = (1.0 / max(pos["lev"], 1e-9) - 0.008
-                                 if mode == "lev" else 1.0)
-                        sl_frac = float(cfg.get("standalone_stop_frac", 0.5))
-                        if adverse >= tp:
-                            log.info("STANDALONE take-profit hit (+%.2f%% "
-                                     "from our entry)", 100 * adverse)
-                            do_close("standalone_take_profit", px)
-                        elif adverse <= -abs(sl_frac * liq_d):
-                            log.warning("STANDALONE stop hit (%.2f%% adverse, "
-                                        "%.0f%% of our liquidation distance)",
-                                        100 * -adverse, 100 * sl_frac)
-                            do_close("standalone_stop", px)
-                    # manual override: panel-set trigger price for THIS
-                    # position (sidecar file, mtime-polled — no restart)
+                if not px:
+                    continue
+                adverse = (px / pos["entry_price"] - 1.0) * pos["dir"]
+                if mode == "lev":
+                    liq_dist = 1.0 / max(pos["lev"], 1e-9) - 0.008
+                    if adverse <= -0.5 * liq_dist and now - last_note > 300:
+                        last_note = now
+                        log.warning("LIQ PROXIMITY %s: adverse %.2f%% "
+                                    "(liq at %.2f%%)",
+                                    comp_label(pos["comp"]),
+                                    100 * -adverse, 100 * liq_dist)
+                em = cfg.get("emergency_exit_adverse")
+                if em and adverse <= -abs(em):
+                    do_close(pos, "emergency_exit", px)
+                    continue
+                # ---- STANDALONE position (its sim liquidated) ----
+                # It has no mirror left to follow, so it gets an explicit
+                # plan anchored to OUR entry: take the component's own
+                # edge if it arrives, and cap the downside — never leave
+                # a stopless leveraged position drifting.
+                elif pos.get("standalone"):
+                    tp = float(cfg.get("standalone_take_profit", 0.005))
+                    liq_d = (1.0 / max(pos["lev"], 1e-9) - 0.008
+                             if mode == "lev" else 1.0)
+                    sl_frac = float(cfg.get("standalone_stop_frac", 0.5))
+                    if adverse >= tp:
+                        log.info("STANDALONE take-profit hit (+%.2f%% "
+                                 "from our entry)", 100 * adverse)
+                        do_close(pos, "standalone_take_profit", px)
+                        continue
+                    elif adverse <= -abs(sl_frac * liq_d):
+                        log.warning("STANDALONE stop hit (%.2f%% adverse, "
+                                    "%.0f%% of our liquidation distance)",
+                                    100 * -adverse, 100 * sl_frac)
+                        do_close(pos, "standalone_stop", px)
+                        continue
+                # manual override: panel-set trigger for THIS position
+                d_ = ov["d"]
+                if (d_ and str(pos.get("opened_at")) == d_.get("pos_key")
+                        and (d_.get("now")
+                             or ((px >= d_["price"]) if d_.get("above")
+                                 else (px <= d_["price"])))):
+                    log.warning("MANUAL %s close at %.6g",
+                                "CLOSE-NOW" if d_.get("now") else
+                                f"OVERRIDE (trigger {d_['price']:.6g})",
+                                px)
                     try:
-                        m = os.path.getmtime(ov_path)
+                        os.remove(ov_path)
                     except OSError:
-                        m = 0
-                        ov["d"] = None
-                    if m and m != ov["m"]:
-                        ov["m"] = m
-                        try:
-                            ov["d"] = json.load(open(ov_path))
-                        except Exception:
-                            ov["d"] = None
-                    d_ = ov["d"]
-                    if (d_ and str(pos.get("opened_at")) == d_.get("pos_key")
-                            and (d_.get("now")
-                                 or ((px >= d_["price"]) if d_.get("above")
-                                     else (px <= d_["price"])))):
-                        log.warning("MANUAL %s close at %.6g",
-                                    "CLOSE-NOW" if d_.get("now") else
-                                    f"OVERRIDE (trigger {d_['price']:.6g})",
-                                    px)
-                        try:
-                            os.remove(ov_path)
-                        except OSError:
-                            pass
-                        ov["d"] = None
-                        do_close("manual_override", px)
+                        pass
+                    ov["d"] = None
+                    do_close(pos, "manual_override", px)
 
             # due host restarts (scheduled, never blocking — see "died")
             for _k, _h in hosts.items():
@@ -916,11 +1041,10 @@ def main_fcfs(cfg, live):
                     tell_flat()
 
             # watchdog: a silent host while we hold ITS position is a hazard
-            if pos:
-                h = hosts.get(pos["group"])
+            for _g in {p.get("group") for p in positions}:
+                h = hosts.get(_g)
                 if h and h.alive() and time.time() - h.last_seen > 300:
-                    log.warning("host %s silent >5min while positioned",
-                                pos["group"])
+                    log.warning("host %s silent >5min while positioned", _g)
 
             # periodic heartbeat + stale-feed detection
             if now - last_hb >= HB_EVERY:
@@ -936,8 +1060,9 @@ def main_fcfs(cfg, live):
                     if age > max(240, tf * 60 * 4):
                         stale.append(f"{k} ({age/60:.0f}m"
                                      + ("" if lb else ", no bars yet") + ")")
-                where = (f"{pos['symbol']} via {comp_label(pos['comp'])}"
-                         if pos else "empty")
+                where = (", ".join(
+                    f"{p['symbol']} via {comp_label(p['comp'])}"
+                    for p in positions) if positions else "empty")
                 (log.warning if stale else log.info)(
                     "heartbeat: slot=%s | %d/%d hosts alive | %d bars "
                     "evaluated in the last %dm%s", where,

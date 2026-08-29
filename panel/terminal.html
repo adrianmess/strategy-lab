@@ -450,6 +450,13 @@ var INSTS = [], PERF = {};
 
 function money(v){ return (v>=0?'+':'') + v.toFixed(2); }
 function cls(v){ return v>0?'up':(v<0?'down':'dim'); }
+// an instance's tracked positions as a LIST — cascade traders report
+// `positions` (each row enriched with price/contract_size/override);
+// legacy single-slot traders report `position`
+function plist(s){
+  if(s && s.positions && s.positions.length) return s.positions;
+  return (s && s.position) ? [s.position] : [];
+}
 
 // ---- display mode + amount masking -------------------------------------
 // DISPLAY: 'both' | 'money' | 'pct' — applies to the realized figures on the
@@ -1116,20 +1123,23 @@ function saveLiqGuard(){
 function renderRisk(){
   var gross = 0, margin = 0, nearest = null, rows = [];
   INSTS.forEach(function(x){
-    var s = STATUS[x.id] || {}, p = s.position;
-    if(!p) return;
-    var cs = s.contract_size != null ? s.contract_size : 1;
-    var notional = (+p.qty) * cs * (+s.price || +p.entry_price);
-    gross += notional;
-    var lev = s.mode==='lev' ? (+p.lev||1) : 1;
-    if(s.mode==='lev'){
-      margin += notional/lev;
-      var dist = 100/lev;   // liquidation ~1/lev away, the engine's own model
-      if(nearest==null || dist<nearest) nearest = dist;
-    }
-    rows.push({inst:x.name||x.id, sym:p.symbol, dir:p.dir>0?'LONG':'SHORT',
-               qty:p.qty, lev:lev, entry:p.entry_price, now:s.price,
-               mode:s.mode, notional:notional, dist:s.mode==='lev'?100/lev:null});
+    var s = STATUS[x.id] || {};
+    plist(s).forEach(function(p){
+      var cs = p.contract_size != null ? p.contract_size
+             : (s.contract_size != null ? s.contract_size : 1);
+      var px = +p.price || +s.price || 0;
+      var notional = (+p.qty) * cs * (px || +p.entry_price);
+      gross += notional;
+      var lev = s.mode==='lev' ? (+p.lev||1) : 1;
+      if(s.mode==='lev'){
+        margin += notional/lev;
+        var dist = 100/lev; // liquidation ~1/lev away, the engine's own model
+        if(nearest==null || dist<nearest) nearest = dist;
+      }
+      rows.push({inst:x.name||x.id, sym:p.symbol, dir:p.dir>0?'LONG':'SHORT',
+                 qty:p.qty, lev:lev, entry:p.entry_price, now:(px||null),
+                 mode:s.mode, notional:notional, dist:s.mode==='lev'?100/lev:null});
+    });
   });
   var eq = 0;
   Object.keys(PERF).forEach(function(){});
@@ -1479,22 +1489,30 @@ function renderCards(){
   if(!box) return;
   if(ARMED) return;   // an inline Confirm/Cancel is up — do not wipe it
   box.innerHTML = INSTS.map(function(x){
-    var s = STATUS[x.id] || {}, p = s.position, perf = PERF[x.id] || {};
+    var s = STATUS[x.id] || {}, ps = plist(s), p = ps[0], perf = PERF[x.id] || {};
     var nm = x.name || ('Instance '+x.id);
-    // ---- hero position banner ----
+    // ---- hero position banner(s) — a cascade holds several at once ----
     var hero = '';
-    if(p){
-      var px = +s.price || null;
+    if(ps.length){
+      hero = (s.cascade && ps.length>1
+        ? '<div class="mini" style="margin-bottom:6px"><span class="tag b">CASCADE</span> '+
+          ps.length+' positions'+
+          (s.cascade_free!=null?' · free capital <b class="num">$'+(+s.cascade_free).toFixed(2)+'</b>':'')+'</div>'
+        : '') +
+      ps.map(function(p, pi){
+      var px = +p.price || +s.price || null;
       var mv = px ? (px/(+p.entry_price)-1)*(p.dir>0?1:-1) : null;
       var pct = mv==null ? null : 100*mv*(s.mode==='lev' ? (+p.lev||1) : 1);
-      var cs = s.contract_size;
+      var cs = p.contract_size!=null ? p.contract_size : s.contract_size;
       var usd = (px && cs!=null) ? (+p.qty)*cs*(px-(+p.entry_price))*(p.dir>0?1:-1) : null;
+      var ovr = p.override || (pi===0 ? s.override : null);
+      var pk = String(p.opened_at||'').replace(/'/g,'');
       // what the P&L WOULD be from the component's virtual entry (the big
       // number always counts from OUR real fill)
       var virt = (px && p.mirror_entry_px)
         ? 100*(px/(+p.mirror_entry_px)-1)*(p.dir>0?1:-1)*(s.mode==='lev' ? (+p.lev||1) : 1) : null;
       var neg = pct!=null && pct<0;
-      hero = '<div style="border:1px solid '+(neg?'var(--down)':'var(--up)')+
+      return '<div style="border:1px solid '+(neg?'var(--down)':'var(--up)')+
         ';border-left-width:4px;border-radius:8px;padding:11px 14px;margin-bottom:11px;background:'+
         (neg?'rgba(246,70,93,.07)':'rgba(46,189,133,.07)')+'">'+
         '<div class="rowsb" style="flex-wrap:wrap;align-items:baseline;gap:12px">'+
@@ -1523,15 +1541,16 @@ function renderCards(){
           (p.exit_proj?'<span>proj. close '+projFmt(p.exit_proj)+'</span>':'')+
           '<span>via <b>'+(p.group||'')+'</b></span></div>'+
         '<div style="margin-top:9px;display:flex;gap:7px;flex-wrap:wrap;align-items:center">'+
-          (s.override
-            ? '<span class="tag lev">override armed at '+s.override.price+'</span>'+
+          (ovr
+            ? '<span class="tag lev">override armed at '+(ovr.now?'market':ovr.price)+'</span>'+
               '<button class="btn sm" onclick="disarm(\''+x.id+'\')">disarm</button>'
-            : '<input id="ov_'+x.id+'" placeholder="price or ±%" style="width:110px">'+
-              '<select id="ovu_'+x.id+'"><option value="price">price</option>'+
+            : '<input id="ov_'+x.id+'_'+pi+'" placeholder="price or ±%" style="width:110px">'+
+              '<select id="ovu_'+x.id+'_'+pi+'"><option value="price">price</option>'+
               '<option value="pct">% from entry</option></select>'+
-              '<button class="btn sm" onclick="arm(\''+x.id+'\')">arm</button>')+
-          '<button class="btn sm danger" style="margin-left:auto" onclick="closeNow(this,\''+x.id+'\')">'+
+              '<button class="btn sm" onclick="arm(\''+x.id+'\',\''+pi+'\',\''+pk+'\')">arm</button>')+
+          '<button class="btn sm danger" style="margin-left:auto" onclick="closeNow(this,\''+x.id+'\',\''+pk+'\')">'+
             'Close position now</button></div></div>';
+      }).join('');
     } else {
       hero = '<div class="mini" style="border:1px dashed var(--line);border-radius:8px;padding:12px;'+
              'text-align:center;margin-bottom:11px">No open position</div>';
@@ -1602,7 +1621,8 @@ function renderCards(){
       '<div class="rowsb" style="flex-wrap:wrap;margin-bottom:10px">'+
         '<div>'+state+' <span class="mini">'+(s.started?('· since '+s.started):'')+'</span>'+
           '<div class="mini">'+(s.config||'')+'</div>'+
-          '<div class="mini">'+(comps?('FCFS router · '+comps+' components · one shared slot'):
+          '<div class="mini">'+(comps?('FCFS router · '+comps+' components · '+
+            (s.cascade?'CASCADE (capital pool'+(s.cascade_free!=null?', free $'+(+s.cascade_free).toFixed(0):'')+')':'one shared slot')):
             ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+'</div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (s.running
@@ -1626,11 +1646,14 @@ function renderCards(){
   }).join('');
 }
 
-function arm(i){
-  var v = document.getElementById('ov_'+i).value.trim();
-  var u = document.getElementById('ovu_'+i).value;
+function arm(i, pi, posKey){
+  var sfx = (pi==null ? '' : '_'+pi);
+  var el = document.getElementById('ov_'+i+sfx) || document.getElementById('ov_'+i);
+  var eu = document.getElementById('ovu_'+i+sfx) || document.getElementById('ovu_'+i);
+  var v = el ? el.value.trim() : '';
   if(!v) return;
-  var body = {instance:i}; body[u==='pct'?'pct':'price'] = v;
+  var body = {instance:i}; body[(eu&&eu.value)==='pct'?'pct':'price'] = v;
+  if(posKey) body.pos_key = posKey;   // cascade: which of N positions
   API('override', {method:'POST', headers:{'Content-Type':'application/json'},
                    body:JSON.stringify(body)}).then(function(r){
     if(r.error) alert(r.error); loadStatus(); });
@@ -1658,11 +1681,13 @@ function armConfirm(btn, label, fn, note){
   x.onclick = function(ev){ ev.stopPropagation(); clearTimeout(tid); undo(); };
   c.onclick = function(ev){ ev.stopPropagation(); clearTimeout(tid); undo(); fn(); };
 }
-function closeNow(btn, i){
+function closeNow(btn, i, posKey){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
   armConfirm(btn, 'Confirm close — real order', function(){
+    var body = {instance:i, now:true};
+    if(posKey) body.pos_key = posKey;   // cascade: which of N positions
     API('override', {method:'POST', headers:{'Content-Type':'application/json'},
-                     body:JSON.stringify({instance:i, now:true})}).then(function(r){
+                     body:JSON.stringify(body)}).then(function(r){
       if(r.error) flash(r.error, 'r');
       else flash('Close armed — the trader will flatten on its next check.', 'g');
       loadStatus(); });
@@ -1692,7 +1717,8 @@ function restartTrader(btn, i){
       else flash(nm+' restarted — running '+(r.live?'LIVE':'dry-run')+' again. '+
                  'Hosts take a few minutes to backfill.', 'g');
       loadAll(); });
-  }, s.position ? ('Open '+s.position.symbol+' position is kept and re-tracked.') : null);
+  }, plist(s).length ? ('Open '+plist(s).map(function(p){return p.symbol;}).join(', ')+
+                        ' position'+(plist(s).length>1?'s are':' is')+' kept and re-tracked.') : null);
 }
 function stopTrader(btn, i){
   var s = STATUS[i]||{};
@@ -1702,8 +1728,10 @@ function stopTrader(btn, i){
                         body:JSON.stringify({instance:i})}).then(function(r){
       if(r.error) flash(r.error, 'r'); else flash(nm+' stopped.', 'g');
       loadAll(); });
-  }, s.position ? ('WARNING: '+nm+' is holding '+s.position.qty+' '+s.position.symbol+
-                   ' — stopping leaves that position OPEN with nothing managing it. '+
+  }, plist(s).length ? ('WARNING: '+nm+' is holding '+
+                   plist(s).map(function(p){return p.qty+' '+p.symbol;}).join(', ')+
+                   ' — stopping leaves th'+(plist(s).length>1?'ose positions':'at position')+
+                   ' OPEN with nothing managing them. '+
                    'Use KILL ALL if you want it flattened.') : null);
 }
 function clearErrs(i){
@@ -1719,12 +1747,13 @@ var LASTPLAN = null;
 function posRows(){
   var rows = [], seen = {};
   INSTS.forEach(function(x){
-    var s = STATUS[x.id] || {}, p = s.position;
-    if(!p) return;
-    var px = +s.price || null;
+    var s = STATUS[x.id] || {};
+    plist(s).forEach(function(p){
+    var px = +p.price || +s.price || null;
     var lev = s.mode === 'lev' ? (+p.lev || 1) : 1;
     var mv = px ? (px/(+p.entry_price) - 1) * (p.dir > 0 ? 1 : -1) : null;
-    var cs = s.contract_size != null ? s.contract_size : 1;
+    var cs = p.contract_size != null ? p.contract_size
+           : (s.contract_size != null ? s.contract_size : 1);
     seen[(s.api_account||'') + '|' + (p.symbol||'')] = true;
     rows.push({
       tracked: true, inst: x.name || x.id, account: s.api_account,
@@ -1739,6 +1768,7 @@ function posRows(){
       usd: (px != null) ? (+p.qty) * cs * (px - (+p.entry_price)) * (p.dir > 0 ? 1 : -1) : null,
       notional: px != null ? (+p.qty) * cs * px : null,
       held: held(p), comp: p.group || ''
+    });
     });
   });
   ((LASTPLAN && LASTPLAN.report) || []).forEach(function(x){
@@ -1758,7 +1788,7 @@ function shadowRows(){
   INSTS.forEach(function(x){
     var s = STATUS[x.id]||{};
     (s.shadow||[]).forEach(function(r){
-      rows.push({id:x.id, inst:(x.name||x.id), held:!!s.position, r:r});
+      rows.push({id:x.id, inst:(x.name||x.id), held:plist(s).length>0, r:r});
     });
   });
   rows.sort(function(a,b){ return ((b.r.pct||0)-(a.r.pct||0)); });
@@ -2530,18 +2560,20 @@ function renderTdBots(){
     var s = STATUS[x.id] || {};
     if(!s.running) return;
     if(!TD.posAll && !(s.api_account === TD.acct && s.mode === wm)) return;
-    var p = s.position, px = s.price;
-    if(!p) return;   // only REAL bot-opened trades here — no virtual-only rows
+    var ps = plist(s);
+    if(!ps.length) return; // only REAL bot-opened trades here — no virtual-only rows
     var inner = '';
-    var dir = (p.dir||1) > 0 ? 1 : -1;
-    var mult = s.mode === 'lev' ? (p.lev||1) : 1;
-    var pct = (px && p.entry_price)
-      ? (px/p.entry_price - 1) * dir * 100 * mult : null;
     inner += '<table class="tfit"><thead><tr>'+
       '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
       '<th class="n">market entry</th>'+
       '<th class="n">now</th><th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
-      '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
+     ps.map(function(p){
+    var px = +p.price || +s.price || null;
+    var dir = (p.dir||1) > 0 ? 1 : -1;
+    var mult = s.mode === 'lev' ? (p.lev||1) : 1;
+    var pct = (px && p.entry_price)
+      ? (px/p.entry_price - 1) * dir * 100 * mult : null;
+    return '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
       '<td><span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
         ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span></td>'+
       '<td>'+(p.adopted
@@ -2558,7 +2590,8 @@ function renderTdBots(){
         (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
       '<td class="n">'+projFmt(p.exit_proj)+'</td>'+
       '<td class="n">'+(p.armed_close_pct!=null?('&ge; +'+p.armed_close_pct+'%'):'&mdash;')+'</td>'+
-      '</tr></tbody></table>';
+      '</tr>';
+     }).join('')+'</tbody></table>';
     h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px">'+
       '<div style="margin-bottom:7px"><b>'+(x.name||x.id)+'</b> <span class="mini">'+
       s.api_account+' &middot; '+(s.mode==='lev'?'Leverage':'Spot')+
@@ -3472,7 +3505,7 @@ function adoptShadow(btn, i, comp, entryT){
   var s = STATUS[i]||{};
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
   var r = (s.shadow||[]).find(function(x){ return x.comp===comp && x.entry_t===entryT; }) || {};
-  if(s.position){ flash(nm+' already holds a position — close it first.', 'r'); return; }
+  if(plist(s).length){ flash(nm+' already holds a position — close it first.', 'r'); return; }
   armConfirm(btn, s.live ? 'Confirm adopt — real order' : 'Confirm adopt (dry-run)', function(){
     API('adopt_shadow', {method:'POST', headers:{'Content-Type':'application/json'},
                          body:JSON.stringify({instance:i, comp:comp, entry_t:entryT,

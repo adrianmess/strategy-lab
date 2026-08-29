@@ -170,8 +170,36 @@ Capacity-adjusted projections: see the 2026-08-28 conversation — the
 backtest +387%/mo lev rate decays to roughly +290/+245/+187%/mo over three
 months under this cap.
 
-Planned next (NOT built): cascade/multi-slot — when the winning signal's
-pair caps out, deploy the remainder into the next arbitration signal, etc.
-This converts the one-slot FCFS router into a capital pool and breaks
-backtest parity, so it must be validated in simulation first (capacity-aware
-multi-slot replay vs one-slot baseline) before any router refactor.
+## Cascade / multi-slot router (2026-08-29)
+
+Validated in `optimizer/cascade_sim.py` (cascade beats one-slot at every
+scale once depth caps bind; irrelevant while one position absorbs all
+capital), then built into `fcfs_runner.py` behind a config flag:
+
+- **Flag**: `"cascade": true` in the trader config (default OFF = exact
+  one-slot behavior). Optional `cascade_max_slots` (0 = unlimited),
+  `cascade_min_alloc` (default $20, dry-run tracker only).
+- **Semantics**: every fresh `opens_now` signal opens while free capital
+  remains — ONE position per symbol; each entry capped by the liquidity
+  guardrail; remainder funds the next signal. Adoption (panel/armed/auto)
+  and late-join stay FLAT-ONLY in both modes (sim validated fresh-signal
+  cascading only).
+- **Allocation**: LIVE — the exchange's available balance shrinks as margin
+  commits, which IS the cascade; executors size from it as before. DRY —
+  `state["cascade_free"]` paper tracker (seeded from `equity_usdt`,
+  margin out on open, margin+paper P&L back on close, fees ignored);
+  passed to executors as `margin_cap`.
+- **State**: `state["positions"]` LIST is authoritative; legacy
+  `state["position"]` kept as a mirror of positions[0] for old readers.
+  Migration is automatic on trader start.
+- **Panel**: instance status returns `positions` (each row enriched with
+  price/contract_size/override), `cascade`, `cascade_free`; terminal
+  renders one hero banner per position (per-position arm/close via
+  `pos_key`), Risk/Trade tables aggregate all positions; clear-state and
+  kill-switch paths clear the whole list.
+- **Rollout**: dry-soak instance "MEX Lev Cascade (dry soak)"
+  (`config_fcfs_cascade_soak_LEV.json`, same router as MEX Lev 1,
+  $1000 paper) started 2026-08-29. Live cutover = set `"cascade": true`
+  in MEX Lev 1's config + Adrian restarts it from the panel. Thresholds
+  where cascade starts to matter: lev ~$2-3k equity (SUI cap ~$4.7k
+  notional at 8-10x), spot ~$5k.

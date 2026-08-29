@@ -174,9 +174,12 @@ class Executor:
             return {"status": "error", "message": str(out)[:300]}
         return out if out.get("status") else {"status": "success", "raw": out}
 
-    def open_position(self, direction, lev, price):
+    def open_position(self, direction, lev, price, margin_cap=None):
         cfg = self.cfg
-        notional = cfg["equity_usdt"] * lev
+        equity = float(cfg["equity_usdt"])
+        if margin_cap is not None:
+            equity = min(equity, float(margin_cap))
+        notional = equity * lev
         qty = int(notional / price / cfg["contract_size"])
         if qty < 1:
             self.log.warning("qty < 1 contract, skipping (equity too small)")
@@ -210,7 +213,7 @@ class APIExecutor:
         self.log.info("MEXC futures API executor ready (account=%s, proxy=%s)",
                       self.api.account, bool(self.api.proxies))
 
-    def open_position(self, direction, lev, price):
+    def open_position(self, direction, lev, price, margin_cap=None):
         cfg = self.cfg
         # LIVE sizing = 100% of what the account actually has (the backtests
         # compound full equity every trade — a fixed equity_usdt either
@@ -231,6 +234,12 @@ class APIExecutor:
             except Exception as e:
                 self.log.warning("balance query failed (%s) — falling back "
                                  "to equity_usdt=%.2f", e, margin)
+        # cascade allocation: the fcfs runner passes the free-capital slice
+        # this position may use (dry-run tracker, or a live sanity bound)
+        if margin_cap is not None and margin > float(margin_cap):
+            self.log.info("margin capped by allocator: %.2f -> %.2f",
+                          margin, float(margin_cap))
+            margin = float(margin_cap)
         notional = margin * lev
         g_on, g_bps, g_frac = liq_guard_cfg(cfg)
         if g_on:
@@ -329,7 +338,7 @@ class APISpotExecutor:
         self.log.info("MEXC SPOT API executor ready (account=%s, proxy=%s)",
                       self.api.account, bool(self.api.proxies))
 
-    def open_position(self, direction, lev, price):
+    def open_position(self, direction, lev, price, margin_cap=None):
         cfg = self.cfg
         if direction < 0:
             self.log.error("spot cannot short — signal ignored")
@@ -347,6 +356,13 @@ class APISpotExecutor:
             except Exception as e:
                 self.log.warning("balance query failed (%s) — falling back "
                                  "to equity_usdt=%.2f", e, quote)
+        # cascade allocation: the fcfs runner passes the free-capital slice
+        # this position may spend (dry-run tracker, or a live sanity bound)
+        if margin_cap is not None and quote > float(margin_cap):
+            self.log.info("spend capped by allocator: %.2f -> %.2f",
+                          quote, float(margin_cap))
+            quote = float(margin_cap)
+        if not cfg["dry_run"]:
             # PRE-FLIGHT: MEXC rejects spot orders under 1 USDT (code 30002).
             # Firing one anyway on every signal spams the error banner and
             # the Hermes alerts, so skip quietly (one warning per dry spell).
@@ -387,20 +403,31 @@ class APISpotExecutor:
             self.log.error("SPOT BUY FAILED: %s", e)
             return {"status": "error", "message": str(e)}, 0
 
-    def _tracked_qty(self):
+    def _tracked_pos(self):
+        """THIS symbol's tracked position. Cascade state files hold a
+        "positions" LIST (one per symbol at most); legacy files a single
+        "position". Matching by symbol keeps a multi-position close from
+        selling another pair's quantity."""
         try:
             st = json.load(open(os.path.join(HERE, self.cfg["state_file"])))
-            pos = st.get("position") or {}
-            return float(pos.get("qty") or 0)
+            rows = st.get("positions")
+            if rows is None:
+                rows = [st.get("position")] if st.get("position") else []
+            for p in rows:
+                if (p or {}).get("symbol") == self.cfg["symbol"]:
+                    return p
+            return {}
+        except Exception:
+            return {}
+
+    def _tracked_qty(self):
+        try:
+            return float(self._tracked_pos().get("qty") or 0)
         except Exception:
             return 0.0
 
     def _tracked_tp(self):
-        try:
-            st = json.load(open(os.path.join(HERE, self.cfg["state_file"])))
-            return (st.get("position") or {}).get("tp_order_id")
-        except Exception:
-            return None
+        return self._tracked_pos().get("tp_order_id")
 
     # ---- exchange-side take-profit net (resting GTC limit sell) ----
     def place_tp(self, qty, price):
