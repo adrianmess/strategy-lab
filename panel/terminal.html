@@ -210,11 +210,16 @@ body.masked .amt:hover{filter:none}
   <section class="view on" id="v-overview"><div class="wrap">
     <div class="g4" id="kpis"></div>
     <div class="g2">
-      <div class="card"><h3>Cumulative realized P&amp;L — 30d <span class="mini">all wallets, both accounts
+      <div class="card"><h3>Cumulative realized P&amp;L — 30d <span class="mini">all wallets
         <select id="originSel" onchange="setOrigin(this.value)" title="filter every P&amp;L aggregate by trade origin">
           <option value="">bot + manual</option>
           <option value="bot">bot only</option>
           <option value="manual">manual only</option>
+        </select>
+        <select id="cumAcct" onchange="setCumAcct(this.value)" title="filter THIS chart by account (spot + futures wallets of that account)">
+          <option value="">both accounts</option>
+          <option value="mexc1">mexc1 only</option>
+          <option value="mexc2">mexc2 only</option>
         </select></span></h3>
         <div class="body" id="bigchart"><span class="mini">loading…</span></div></div>
       <div class="card"><h3>Accounts</h3><div class="body" id="accts"><span class="mini">loading…</span></div></div>
@@ -851,15 +856,23 @@ function countedEvents(){
   });
 }
 
+var CUMACCT = localStorage.getItem('slCumAcct') || '';
+function setCumAcct(v){
+  CUMACCT = v; localStorage.setItem('slCumAcct', v);
+  renderChart();
+}
 function renderChart(){
-  var ev = countedEvents(), cum = 0;
+  var ev = countedEvents().filter(function(e){
+    return !CUMACCT || e.account === CUMACCT; });
+  var cum = 0;
   var vals = ev.map(function(e){ cum += e.pnl; return cum; });
   var last = vals.length ? vals[vals.length-1] : 0;
   document.getElementById('bigchart').innerHTML =
     area(vals, 900, 205, last>=0?cssv('--up'):cssv('--violet'), cssv('--cyan')) +
     '<div class="mini" style="margin-top:8px">one step per closed trade &middot; '+
     ev.length+' closes &middot; '+
-    (ORIGIN ? ORIGIN+' trades only' : 'bot + manual, all wallets on both accounts')+'</div>';
+    (ORIGIN ? ORIGIN+' trades only' : 'bot + manual')+' &middot; '+
+    (CUMACCT ? CUMACCT+' (spot + futures)' : 'both accounts, all wallets')+'</div>';
 }
 
 // ---------------- daily P&L ----------------
@@ -3563,7 +3576,8 @@ for(var i=0;i<btns.length;i++){
 syncSoundBtn(); syncToggles();
 applyTheme(localStorage.getItem('slTheme') || 'dark');
 loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust(); loadFlows(); loadPnl();
-(function(){ var s = document.getElementById('originSel'); if(s) s.value = ORIGIN; })();
+(function(){ var s = document.getElementById('originSel'); if(s) s.value = ORIGIN;
+  var a = document.getElementById('cumAcct'); if(a) a.value = CUMACCT; })();
 setInterval(pollTrades, 20000);
 setInterval(loadAll, 60000);
 setInterval(loadDust, 300000);
