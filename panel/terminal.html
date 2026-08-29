@@ -862,8 +862,13 @@ function setCumAcct(v){
   renderChart();
 }
 function renderChart(){
+  // with an origin filter active the account dropdown hides and is ignored —
+  // the card behaves exactly as it did before the account filter existed
+  var acct = ORIGIN ? '' : CUMACCT;
+  var sel = document.getElementById('cumAcct');
+  if(sel) sel.style.display = ORIGIN ? 'none' : '';
   var ev = countedEvents().filter(function(e){
-    return !CUMACCT || e.account === CUMACCT; });
+    return !acct || e.account === acct; });
   var cum = 0;
   var vals = ev.map(function(e){ cum += e.pnl; return cum; });
   var last = vals.length ? vals[vals.length-1] : 0;
@@ -871,8 +876,9 @@ function renderChart(){
     area(vals, 900, 205, last>=0?cssv('--up'):cssv('--violet'), cssv('--cyan')) +
     '<div class="mini" style="margin-top:8px">one step per closed trade &middot; '+
     ev.length+' closes &middot; '+
-    (ORIGIN ? ORIGIN+' trades only' : 'bot + manual')+' &middot; '+
-    (CUMACCT ? CUMACCT+' (spot + futures)' : 'both accounts, all wallets')+'</div>';
+    (ORIGIN ? ORIGIN+' trades only, both accounts' : 'bot + manual')+
+    (ORIGIN ? '' : ' &middot; '+
+      (acct ? acct+' (spot + futures)' : 'both accounts, all wallets'))+'</div>';
 }
 
 // ---------------- daily P&L ----------------
