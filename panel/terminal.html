@@ -564,21 +564,23 @@ function pctOfAcct(account, realized){
 }
 function moneyPct(v){ return fig(v, pctOf(v)); }
 
-function dietzPct(P, days){
+function dietzPct(P, days, acct){
   // Modified Dietz: return on the AVERAGE capital at risk in the window.
   // Capital base = balance at window start + each external flow weighted by
   // the fraction of the window it was present — so deposited-then-withdrawn
   // money counts only for the days it was actually in the account. The
-  // numerator follows the origin filter; the base is the whole pool (bot
-  // and manual trade the same wallets).
-  if(!EQ.total) return null;
+  // numerator follows the origin/account filters; the base is that scope's
+  // whole capital pool (bot and manual trade the same wallets).
+  var eqNow = acct ? EQ[acct] : EQ.total;
+  if(!eqNow) return null;
   var now = Date.now(), lo = now - days * 86400000, len = days * 86400000;
   var allP = allEvents().filter(function(e){
-    return !e.ignored && e.t >= lo; })
+    return !e.ignored && e.t >= lo && (!acct || e.account === acct); })
     .reduce(function(a, e){ return a + e.pnl; }, 0);
-  var fl = FLOWS.filter(function(f){ return f.t >= lo; });
+  var fl = FLOWS.filter(function(f){
+    return f.t >= lo && (!acct || f.account === acct); });
   var netFlow = fl.reduce(function(a, f){ return a + f.usdt; }, 0);
-  var start = EQ.total - allP - netFlow;      // balance at window start
+  var start = eqNow - allP - netFlow;          // balance at window start
   var avg = start + fl.reduce(function(a, f){
     return a + f.usdt * (now - f.t) / len; }, 0);
   return avg > 0 ? 100 * P / avg : null;
@@ -586,7 +588,9 @@ function dietzPct(P, days){
 function renderKpis(){
   // event-based, over ALL FOUR account x market combos, honoring the
   // bot/manual origin switch; % is Modified Dietz on avg capital at risk
-  var now = Date.now(), ev = countedEvents();
+  var now = Date.now(), acct = acctFilter();
+  var ev = countedEvents().filter(function(e){
+    return !acct || e.account === acct; });
   function win(days){
     var lo = now - days * 86400000;
     var sel = ev.filter(function(e){ return e.t >= lo; });
@@ -595,15 +599,17 @@ function renderKpis(){
   }
   var w1 = win(1), w7 = win(7), w30 = win(30);
   var ex = allEvents().filter(function(e){
-    return e.ignored && e.t >= now - 30 * 86400000; }).length;
-  var lbl = ORIGIN ? ' · ' + ORIGIN + ' only' : '';
+    return e.ignored && e.t >= now - 30 * 86400000
+        && (!acct || e.account === acct); }).length;
+  var lbl = (ORIGIN ? ' · ' + ORIGIN + ' only' : '') +
+            (acct ? ' · ' + acct : '');
   var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
   document.getElementById('kpis').innerHTML =
-    kpi('Realized 24h', fig(d1, dietzPct(d1, 1)),
+    kpi('Realized 24h', fig(d1, dietzPct(d1, 1, acct)),
         'USDT · % on avg capital at risk' + lbl, d1) +
-    kpi('Realized 7d', fig(d7, dietzPct(d7, 7)),
+    kpi('Realized 7d', fig(d7, dietzPct(d7, 7, acct)),
         'USDT · % on avg capital at risk' + lbl, d7) +
-    kpi('Realized 30d', fig(d30, dietzPct(d30, 30)), w30.n + ' trades' +
+    kpi('Realized 30d', fig(d30, dietzPct(d30, 30, acct)), w30.n + ' trades' +
         (ex ? ' · ' + ex + ' excluded' : '') + lbl, d30) +
     kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
@@ -857,16 +863,21 @@ function countedEvents(){
 }
 
 var CUMACCT = localStorage.getItem('slCumAcct') || '';
+function acctFilter(){
+  // active account scope: hidden and ignored under "manual only"
+  return ORIGIN === 'manual' ? '' : CUMACCT;
+}
 function setCumAcct(v){
   CUMACCT = v; localStorage.setItem('slCumAcct', v);
-  renderChart();
+  renderChart(); renderKpis();
 }
 function renderChart(){
-  // with an origin filter active the account dropdown hides and is ignored —
-  // the card behaves exactly as it did before the account filter existed
-  var acct = ORIGIN ? '' : CUMACCT;
+  // under "manual only" the account dropdown hides and is ignored (both
+  // accounts, as before the filter existed); under "bot only" and the
+  // combined view it applies — to this chart AND the Realized KPIs
+  var acct = acctFilter();
   var sel = document.getElementById('cumAcct');
-  if(sel) sel.style.display = ORIGIN ? 'none' : '';
+  if(sel) sel.style.display = ORIGIN === 'manual' ? 'none' : '';
   var ev = countedEvents().filter(function(e){
     return !acct || e.account === acct; });
   var cum = 0;
