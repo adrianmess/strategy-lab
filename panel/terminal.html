@@ -1093,6 +1093,26 @@ function renderAccounts(){
 }
 
 // ---------------- risk ----------------
+var LIQG = null;   // global liquidity-guard settings (adaptive_trader side)
+function loadLiqGuard(){
+  API('liq_guard').then(function(d){ LIQG = d; renderRisk(); })
+    .catch(function(){});
+}
+function saveLiqGuard(){
+  var on = document.getElementById('lgOn').checked;
+  var frac = parseFloat(document.getElementById('lgFrac').value) / 100;
+  var bps = parseFloat(document.getElementById('lgBps').value);
+  if(isNaN(frac) || isNaN(bps)){ flash('numeric values please', 'r'); return; }
+  document.activeElement && document.activeElement.blur();
+  API('liq_guard', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enabled:on, frac:frac, bps:bps})})
+    .then(function(r){
+      if(r.error){ flash(r.error, 'r'); return; }
+      LIQG = r;
+      flash('Liquidity guard saved — applies from the next bot order.', 'g');
+      renderRisk();
+    });
+}
 function renderRisk(){
   var gross = 0, margin = 0, nearest = null, rows = [];
   INSTS.forEach(function(x){
@@ -1134,7 +1154,9 @@ function renderRisk(){
             (r.dist==null?'n/a':r.dist.toFixed(1)+'%')+'</td></tr>'; }).join('')+
       '</tbody></table>'
     : '<div class="body"><span class="mini">both accounts are flat</span></div>';
-  document.getElementById('riskrules').innerHTML =
+  var rr = document.getElementById('riskrules');
+  // (skip only this card while the guard form is being edited)
+  if(!rr.contains(document.activeElement)) rr.innerHTML =
     '<div class="rowsb"><span class="dim">Leverage cap</span><b class="num">10x</b></div>'+
     '<div class="rowsb"><span class="dim">Stop loss (leverage)</span><b class="down">OFF — by design</b></div>'+
     '<div class="rowsb"><span class="dim">Position sizing</span><b class="num">100% of free</b></div>'+
@@ -1142,7 +1164,20 @@ function renderRisk(){
     '<div class="mini" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">'+
     'With no stop loss on leverage, liquidation distance IS the stop. The 19 Aug ETH close was a '+
     'simulated liquidation mirrored onto a real position; the guard added since refuses a late join '+
-    'past half the liquidation distance.</div>';
+    'past half the liquidation distance.</div>'+
+    '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">'+
+      '<div class="rowsb"><span class="dim">Liquidity guard</span>'+
+      '<span style="display:inline-flex;gap:6px;align-items:center" class="mini">'+
+      '<label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer">'+
+        '<input type="checkbox" id="lgOn"'+(LIQG && LIQG.enabled===false?'':' checked')+'> on</label>'+
+      '&le;<input type="number" id="lgFrac" min="1" max="100" step="1" style="width:52px" '+
+        'value="'+(LIQG?Math.round(100*(LIQG.frac||0.25)):25)+'">% of'+
+      '<input type="number" id="lgBps" min="1" max="100" step="1" style="width:48px" '+
+        'value="'+(LIQG?(LIQG.bps||5):5)+'">bps depth '+
+      '<button class="btn sm" onclick="saveLiqGuard()">Save</button></span></div>'+
+      '<div class="mini" style="margin-top:4px">every bot entry is sized at most this fraction of the '+
+      'order-book depth within that many bps of mid, read live per order. Applies immediately — '+
+      'no restart. Thin pairs (SUI/HYPE) bind first.</div></div>';
   // realized by pair
   var by = {};
   countedEvents().forEach(function(e){ by[e.symbol] = (by[e.symbol]||0) + e.pnl; });
@@ -3592,7 +3627,7 @@ for(var i=0;i<btns.length;i++){
 })();
 syncSoundBtn(); syncToggles();
 applyTheme(localStorage.getItem('slTheme') || 'dark');
-loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust(); loadFlows(); loadPnl();
+loadAll(); loadTicker(); loadBT(); loadOptimize(); loadProgress(); pollTrades(); loadDust(); loadFlows(); loadPnl(); loadLiqGuard();
 (function(){ var s = document.getElementById('originSel'); if(s) s.value = ORIGIN;
   var a = document.getElementById('cumAcct'); if(a) a.value = CUMACCT; })();
 setInterval(pollTrades, 20000);

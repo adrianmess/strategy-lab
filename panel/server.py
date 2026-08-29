@@ -1275,6 +1275,33 @@ def trade_positions_all():
 # it through research2/fees_live.py, so exchange fee changes propagate
 # everywhere automatically. Futures rates are public (contract detail);
 # spot rates are per-account (signed /api/v3/tradeFee, queried on mexc1).
+_LIQG_P = os.path.join(AT, "liq_guard.json")
+
+
+@app.route("/api/liq_guard", methods=["GET", "POST"])
+def liq_guard():
+    """Global liquidity-guard settings (adaptive_trader/liq_guard.json).
+    Executors re-read this per order, so changes apply LIVE — no trader
+    restart. Per-config keys (liq_guard/_bps/_frac) still override."""
+    if request.method == "GET":
+        try:
+            return jsonify(**json.load(open(_LIQG_P)))
+        except Exception:
+            return jsonify(enabled=True, bps=5, frac=0.25, default=True)
+    d = request.get_json(force=True)
+    try:
+        doc = dict(enabled=bool(d.get("enabled", True)),
+                   bps=max(1.0, min(100.0, float(d.get("bps", 5)))),
+                   frac=max(0.01, min(1.0, float(d.get("frac", 0.25)))),
+                   at=time.strftime("%Y-%m-%d %H:%M"))
+    except (TypeError, ValueError):
+        return jsonify(error="bps and frac must be numeric"), 400
+    tmp = _LIQG_P + ".tmp"
+    json.dump(doc, open(tmp, "w"), indent=1)
+    os.replace(tmp, _LIQG_P)
+    return jsonify(ok=True, **doc)
+
+
 _FEES_P = os.path.join(AT, "fees.json")
 
 

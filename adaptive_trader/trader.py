@@ -83,6 +83,28 @@ def save_state(cfg, state):
     os.replace(tmp, path)
 
 
+_LIQG = {"mt": None, "doc": None}
+
+
+def liq_guard_cfg(cfg):
+    """Effective guardrail settings: adaptive_trader/liq_guard.json (panel-
+    editable, mtime-cached, re-read PER ORDER so UI changes apply live, no
+    trader restart) overridden by per-config keys when present."""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "liq_guard.json")
+    try:
+        mt = os.path.getmtime(p)
+        if _LIQG["mt"] != mt:
+            _LIQG["doc"] = json.load(open(p))
+            _LIQG["mt"] = mt
+    except Exception:
+        _LIQG["doc"] = None
+    g = _LIQG["doc"] or {}
+    return (bool(cfg.get("liq_guard", g.get("enabled", True))),
+            float(cfg.get("liq_guard_bps", g.get("bps", 5))),
+            float(cfg.get("liq_guard_frac", g.get("frac", 0.25))))
+
+
 def depth_cap_notional(symbol, mode, contract_size, bps=5.0, frac=0.25,
                        log=None):
     """LIQUIDITY GUARDRAIL: at most `frac` of the worst-side order-book
@@ -210,18 +232,16 @@ class APIExecutor:
                 self.log.warning("balance query failed (%s) — falling back "
                                  "to equity_usdt=%.2f", e, margin)
         notional = margin * lev
-        if cfg.get("liq_guard", True):
+        g_on, g_bps, g_frac = liq_guard_cfg(cfg)
+        if g_on:
             cap = depth_cap_notional(cfg["symbol"], "lev",
                                      cfg.get("contract_size"),
-                                     float(cfg.get("liq_guard_bps", 5)),
-                                     float(cfg.get("liq_guard_frac", 0.25)),
-                                     self.log)
+                                     g_bps, g_frac, self.log)
             if cap and notional > cap:
                 self.log.info(
                     "LIQUIDITY GUARD %s: notional %.0f capped to %.0f "
                     "(%.0f%% of %.0fbps depth)", cfg["symbol"], notional,
-                    cap, 100 * float(cfg.get("liq_guard_frac", 0.25)),
-                    float(cfg.get("liq_guard_bps", 5)))
+                    cap, 100 * g_frac, g_bps)
                 notional = cap
                 margin = notional / lev
         qty = int(notional / price / cfg["contract_size"])
@@ -342,17 +362,15 @@ class APISpotExecutor:
                         quote, min_notional, self.base_asset)
                 return {"status": "skipped", "message": "below min notional"}, 0
             self._warned_low = False
-        if cfg.get("liq_guard", True):
+        g_on, g_bps, g_frac = liq_guard_cfg(cfg)
+        if g_on:
             cap = depth_cap_notional(cfg["symbol"], "spot", 1.0,
-                                     float(cfg.get("liq_guard_bps", 5)),
-                                     float(cfg.get("liq_guard_frac", 0.25)),
-                                     self.log)
+                                     g_bps, g_frac, self.log)
             if cap and quote > cap:
                 self.log.info(
                     "LIQUIDITY GUARD %s: spend %.0f capped to %.0f "
                     "(%.0f%% of %.0fbps depth)", cfg["symbol"], quote, cap,
-                    100 * float(cfg.get("liq_guard_frac", 0.25)),
-                    float(cfg.get("liq_guard_bps", 5)))
+                    100 * g_frac, g_bps)
                 quote = cap
         qty_est = quote / price
         if cfg["dry_run"]:
