@@ -83,6 +83,51 @@ def save_state(cfg, state):
     os.replace(tmp, path)
 
 
+def depth_cap_notional(symbol, mode, contract_size, bps=5.0, frac=0.25,
+                       log=None):
+    """LIQUIDITY GUARDRAIL: at most `frac` of the worst-side order-book
+    depth within `bps` of mid — a market order sized under this cannot move
+    the price against us by more than a small fraction of the bps budget
+    (thin pairs like SUI/HYPE bind first; majors effectively never).
+    Returns None (no cap) when the book cannot be read: a depth outage must
+    not block trading, only the sizing courtesy is lost."""
+    import requests
+    try:
+        if mode == "spot":
+            d = requests.get("https://api.mexc.com/api/v3/depth",
+                             params=dict(symbol=symbol.replace("_", ""),
+                                         limit=100), timeout=8).json()
+            asks = [(float(p), float(q)) for p, q in (d.get("asks") or [])]
+            bids = [(float(p), float(q)) for p, q in (d.get("bids") or [])]
+            cs = 1.0
+        else:
+            d = (requests.get("https://contract.mexc.com/api/v1/contract/"
+                              f"depth/{symbol}", params=dict(limit=200),
+                              timeout=8).json().get("data") or {})
+            asks = [(float(r[0]), float(r[1])) for r in (d.get("asks") or [])]
+            bids = [(float(r[0]), float(r[1])) for r in (d.get("bids") or [])]
+            cs = float(contract_size or 1)
+        if not asks or not bids:
+            return None
+        mid = (asks[0][0] + bids[0][0]) / 2
+        def within(levels, up):
+            lim = mid * (1 + bps / 10000.0) if up else \
+                  mid * (1 - bps / 10000.0)
+            tot = 0.0
+            for px, q in levels:
+                if (up and px > lim) or (not up and px < lim):
+                    break
+                tot += px * q * cs
+            return tot
+        cap = frac * min(within(asks, True), within(bids, False))
+        return cap if cap > 0 else None
+    except Exception as e:
+        if log:
+            log.warning("liquidity guard: depth read failed (%s) — "
+                        "no cap this order", e)
+        return None
+
+
 class Executor:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -165,6 +210,20 @@ class APIExecutor:
                 self.log.warning("balance query failed (%s) — falling back "
                                  "to equity_usdt=%.2f", e, margin)
         notional = margin * lev
+        if cfg.get("liq_guard", True):
+            cap = depth_cap_notional(cfg["symbol"], "lev",
+                                     cfg.get("contract_size"),
+                                     float(cfg.get("liq_guard_bps", 5)),
+                                     float(cfg.get("liq_guard_frac", 0.25)),
+                                     self.log)
+            if cap and notional > cap:
+                self.log.info(
+                    "LIQUIDITY GUARD %s: notional %.0f capped to %.0f "
+                    "(%.0f%% of %.0fbps depth)", cfg["symbol"], notional,
+                    cap, 100 * float(cfg.get("liq_guard_frac", 0.25)),
+                    float(cfg.get("liq_guard_bps", 5)))
+                notional = cap
+                margin = notional / lev
         qty = int(notional / price / cfg["contract_size"])
         if qty < 1:
             self.log.warning("qty < 1 contract, skipping (equity too small)")
@@ -283,6 +342,18 @@ class APISpotExecutor:
                         quote, min_notional, self.base_asset)
                 return {"status": "skipped", "message": "below min notional"}, 0
             self._warned_low = False
+        if cfg.get("liq_guard", True):
+            cap = depth_cap_notional(cfg["symbol"], "spot", 1.0,
+                                     float(cfg.get("liq_guard_bps", 5)),
+                                     float(cfg.get("liq_guard_frac", 0.25)),
+                                     self.log)
+            if cap and quote > cap:
+                self.log.info(
+                    "LIQUIDITY GUARD %s: spend %.0f capped to %.0f "
+                    "(%.0f%% of %.0fbps depth)", cfg["symbol"], quote, cap,
+                    100 * float(cfg.get("liq_guard_frac", 0.25)),
+                    float(cfg.get("liq_guard_bps", 5)))
+                quote = cap
         qty_est = quote / price
         if cfg["dry_run"]:
             self.log.info("[DRY RUN] would SPOT-BUY %.2f USDT (~%.4f %s) at ~%.3f",

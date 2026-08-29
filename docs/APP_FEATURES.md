@@ -156,3 +156,22 @@ trading logic lives in `adaptive_trader/`. Companion docs:
 - All order/transfer/arm actions require explicit confirms
   (TRADE/TRANSFER/CONVERT/ARM); LIVE traders are only ever enabled by
   Adrian in the panel.
+
+## Liquidity guardrail (2026-08-28)
+
+Every API-executed entry (futures margin sizing and spot spend) is capped at
+`liq_guard_frac` (default 25%) of the worst-side order-book depth within
+`liq_guard_bps` (default 5) of mid, read LIVE at order time
+(`trader.depth_cap_notional`). Thin pairs (SUI/HYPE) bind first; majors
+effectively never. Config overrides per instance: `liq_guard` (bool),
+`liq_guard_bps`, `liq_guard_frac`. Depth-read failures fail OPEN (order
+proceeds uncapped, warning logged) — a depth outage must not halt trading.
+Capacity-adjusted projections: see the 2026-08-28 conversation — the
+backtest +387%/mo lev rate decays to roughly +290/+245/+187%/mo over three
+months under this cap.
+
+Planned next (NOT built): cascade/multi-slot — when the winning signal's
+pair caps out, deploy the remainder into the next arbitration signal, etc.
+This converts the one-slot FCFS router into a capital pool and breaks
+backtest parity, so it must be validated in simulation first (capacity-aware
+multi-slot replay vs one-slot baseline) before any router refactor.
