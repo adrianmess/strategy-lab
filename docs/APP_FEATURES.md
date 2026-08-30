@@ -170,6 +170,30 @@ Capacity-adjusted projections: see the 2026-08-28 conversation — the
 backtest +387%/mo lev rate decays to roughly +290/+245/+187%/mo over three
 months under this cap.
 
+## Overview loading reliability (2026-08-30)
+
+The "wrong numbers for a few seconds, then they correct" class of bug, fixed
+end to end: slow endpoints are never computed inside a page request —
+`pnl_events` (warm thread, 50s), `performance` (stale-while-revalidate +
+warm), `flows` (SWR + warm ~4min), `mexc/account` (already warm). The client
+snapshots events/flows/equity in localStorage (`slPnlSnap`/`slFlowSnap`/
+`slEqSnap`) for an instant, CORRECT first paint; the per-instance PERF
+fallback for the P&L cards was removed (it lacked origin tags and manual
+trades — it WAS the wrong numbers); truly-empty states show "…"/"loading".
+Also: per-instance status/perf fetches are Promise.all'd into one render
+pass (was N re-renders per cycle), the accounts fetch is debounced, and the
+instance cards don't re-render while an input inside them has focus.
+
+**Resume-path fix (important)**: `_resume_traders` now spawns with
+`start_new_session=True` like the API start path, and persists the restored
+intent immediately. Before this, machine-reboot/panel-boot RESUMED traders
+sat inside the panel's launchd session and were REAPED by the watchdog's
+`launchctl remove` on the next panel restart — on 2026-08-30 both LIVE
+traders died this way and `should_run:false` (saved during the boot window)
+blocked the auto-resume; Adrian authorized an immediate LIVE restart.
+Panel restarts are now genuinely safe for ALL traders however they were
+started.
+
 ## Cascade / multi-slot router (2026-08-29)
 
 Validated in `optimizer/cascade_sim.py` (cascade beats one-slot at every

@@ -238,8 +238,16 @@ def _resume_traders():
                            else f"trader_stdout_i{i}.log")
         try:
             with open(log, "a") as lf:
+                # start_new_session: EXACTLY like the API start path. Without
+                # it a resumed trader lives inside the panel's launchd
+                # session, and the watchdog's `launchctl remove` before the
+                # next panel (re)submit REAPS it — resumed LIVE traders died
+                # on the next panel restart (bit us 2026-08-30: both live
+                # traders were resume-spawned and got reaped, leaving a live
+                # leveraged position unmanaged).
                 proc = subprocess.Popen(
                     cmd, cwd=AT, stdout=lf, stderr=subprocess.STDOUT,
+                    start_new_session=True,
                     env={**os.environ, "TRADER_CONFIG": cfg_name})
             t.update(proc=proc, config=cfg_name, live=live,
                      started=time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -247,6 +255,12 @@ def _resume_traders():
                   f"{'LIVE' if live else 'dry'})", flush=True)
         except Exception as e:
             print(f"trader resume FAILED for instance {i}: {e}", flush=True)
+    # persist the restored intent NOW: the boot-time save in
+    # _readopt_orphans ran while these procs were still dead and wrote
+    # should_run=false — if the panel restarts again before any other save,
+    # that stale false blocks the next resume (2026-08-30: second restart
+    # inside 15 min found should_run=false and left both LIVE traders down)
+    _save_instances()
 
 
 _resume_traders()
@@ -3210,11 +3224,42 @@ def api_flows():
     """External capital flows per account (credited deposits, successful
     withdrawals), valued in USDT. The daily P&L view subtracts these when it
     reconstructs day-opening balances, so money moving in or out of an
-    account never shows up as profit or loss."""
-    now = time.time()
+    account never shows up as profit or loss.
+    STALE-WHILE-REVALIDATE: any cached copy is served instantly; a stale one
+    kicks a background refresh (deposit/withdraw history + ticker valuations
+    used to block the request for seconds when the 5-min cache expired)."""
     c = _FLOWS_CACHE.get("all")
-    if c and now - c[0] < 300:
+    if c:
+        if time.time() - c[0] >= 300:
+            threading.Thread(target=_flows_compute_safe, daemon=True).start()
         return jsonify(**c[1])
+    return jsonify(**_flows_compute())
+
+
+def _flows_compute_safe():
+    try:
+        _flows_compute()
+    except Exception as e:
+        print(f"flows refresh error: {e}", flush=True)
+
+
+_FLOWS_BUSY = [False]
+
+
+def _flows_compute():
+    if _FLOWS_BUSY[0]:
+        c = _FLOWS_CACHE.get("all")
+        if c:
+            return c[1]
+    _FLOWS_BUSY[0] = True
+    try:
+        return _flows_compute_inner()
+    finally:
+        _FLOWS_BUSY[0] = False
+
+
+def _flows_compute_inner():
+    now = time.time()
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI
@@ -3259,7 +3304,11 @@ def api_flows():
             out.setdefault("errors", []).append(f"{acct}: {str(e)[:80]}")
     out["flows"].sort(key=lambda f: f["t"])
     _FLOWS_CACHE["all"] = (now, out)
-    return jsonify(**out)
+    return out
+
+
+_PERF_BUSY = set()             # (acct, mode) refreshes in flight
+_PERF_LOCK = threading.Lock()
 
 
 @app.route("/api/performance")
@@ -3269,7 +3318,14 @@ def api_performance():
 
     Deliberately account-based, not config-based: it answers "how is this
     account doing", so switching the config underneath does not reset it, and
-    trades placed by hand are included."""
+    trades placed by hand are included.
+
+    STALE-WHILE-REVALIDATE: the client polls every 60s and the cache TTL was
+    also 60s, so nearly every poll paid a cold multi-second exchange-history
+    read — the Overview's per-instance windows sat on '…' or old numbers.
+    Now any cached copy is served instantly; a stale one kicks a background
+    refresh; only a truly empty cache (first request for a brand-new
+    account+mode) computes inline."""
     i, I = _inst()
     try:
         cfg = json.load(open(os.path.join(AT, I["trader"].get("config")
@@ -3278,11 +3334,48 @@ def api_performance():
         return jsonify(error=f"cannot read this instance's config: {e}"), 404
     acct = cfg.get("api_account", "mexc1")
     mode = cfg.get("mode", "lev")
-    now = time.time() * 1000
     key = (acct, mode)
-    if not request.args.get("force") and key in _PERF_CACHE \
-            and time.time() - _PERF_CACHE[key]["t"] < 60:
-        return jsonify(_PERF_CACHE[key]["data"])
+    c = _PERF_CACHE.get(key)
+    if not request.args.get("force") and c:
+        if time.time() - c["t"] >= 60:
+            _perf_refresh_async(i, I)
+        return jsonify(c["data"])
+    return jsonify(_perf_compute(i, I))
+
+
+def _perf_refresh_async(i, I):
+    key_args = (i, dict(I))
+
+    def run():
+        try:
+            _perf_compute(*key_args)
+        except Exception as e:
+            print(f"perf refresh error: {e}", flush=True)
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _perf_compute(i, I):
+    cfg = json.load(open(os.path.join(AT, I["trader"].get("config")
+                                      or I.get("cfg"))))
+    acct = cfg.get("api_account", "mexc1")
+    mode = cfg.get("mode", "lev")
+    key = (acct, mode)
+    with _PERF_LOCK:
+        if key in _PERF_BUSY:
+            # someone is already recomputing this combo — serve what exists
+            c = _PERF_CACHE.get(key)
+            if c:
+                return c["data"]
+        _PERF_BUSY.add(key)
+    try:
+        return _perf_compute_locked(i, I, cfg, acct, mode, key)
+    finally:
+        with _PERF_LOCK:
+            _PERF_BUSY.discard(key)
+
+
+def _perf_compute_locked(i, I, cfg, acct, mode, key):
+    now = time.time() * 1000
     since = now - 30 * 86400 * 1000
     if AT not in sys.path:
         sys.path.insert(0, AT)
@@ -3296,7 +3389,7 @@ def api_performance():
             events = _futures_realized(MexcFuturesAPI(account=acct), since)
             source = "closed futures positions (MEXC realized P&L)"
     except Exception as e:
-        return jsonify(error=f"{type(e).__name__}: {e}"), 502
+        return dict(error=f"{type(e).__name__}: {e}")
     events.sort(key=lambda e: e["t"])
     # Excluded trades stay in the series, flagged, so the history can show and
     # un-exclude them — but they are kept out of every AGGREGATE.
@@ -3338,7 +3431,7 @@ def api_performance():
                                  key=lambda s: -abs(s["realized"]))[:8],
                 source=source, as_of=time.strftime("%Y-%m-%d %H:%M:%S"))
     _PERF_CACHE[key] = dict(t=time.time(), data=data)
-    return jsonify(data)
+    return data
 
 
 # ---- manual-trade notifications + bot/manual P&L attribution ----
@@ -3484,14 +3577,36 @@ def _pnl_events_compute():
 
 
 def _pnle_warm():
-    """Keep the pnl_events cache perpetually fresh so the Overview never
-    waits on a cold compute (matters most right after a panel restart)."""
+    """Keep the Overview's slow caches perpetually fresh so no page request
+    ever waits on a cold compute (matters most right after a panel restart):
+    pnl_events every ~50s, per-instance performance every ~50s (only when its
+    cache is older than 50s — stale-while-revalidate covers the rest), and
+    flows every ~4 min."""
     time.sleep(20)          # let the panel finish booting first
+    n = 0
     while True:
         try:
             _pnl_events_compute()
         except Exception as e:
             print(f"pnl_events warm error: {e}", flush=True)
+        for i, I in list(instances.items()):
+            try:
+                cfgp = I["trader"].get("config") or I.get("cfg")
+                if not cfgp:
+                    continue
+                cfg = json.load(open(os.path.join(AT, cfgp)))
+                key = (cfg.get("api_account", "mexc1"),
+                       cfg.get("mode", "lev"))
+                c = _PERF_CACHE.get(key)
+                if c and time.time() - c["t"] < 50:
+                    continue
+                _perf_compute(i, I)
+            except Exception as e:
+                print(f"perf warm error ({i}): {e}", flush=True)
+        c = _FLOWS_CACHE.get("all")
+        if n % 5 == 0 or not c:
+            _flows_compute_safe()
+        n += 1
         time.sleep(50)
 
 

@@ -530,11 +530,16 @@ function loadAll(){
     document.getElementById('pTraders').textContent = up + ' of ' + INSTS.length + ' traders up';
     document.getElementById('pLive').style.display = live ? '' : 'none';
     renderInsts();
-    INSTS.forEach(function(x){
-      API('performance?instance='+x.id).then(function(p){
-        PERF[x.id]=p; renderInsts(); renderKpis(); renderCards();
-        renderChart(); renderAccounts(); renderRisk(); renderHistory();
-        renderDaily(); }).catch(function(){});
+    // fetch every instance's perf in parallel and render ONCE when all have
+    // landed — per-response re-render storms made the Overview repaint (and
+    // visibly jump) up to N times per cycle. The P&L cards no longer read
+    // PERF at all (they render from pnl_events), so only the instance
+    // tables/cards need refreshing here.
+    Promise.all(INSTS.map(function(x){
+      return API('performance?instance='+x.id).then(function(p){
+        PERF[x.id]=p; }).catch(function(){});
+    })).then(function(){
+      renderInsts(); renderCards(); renderAccounts(); renderRisk();
     });
     loadStatus();
   });
@@ -1076,9 +1081,15 @@ function renderDaily(){
 }
 
 // ---------------- accounts (live state next to the mode) ----------------
+var _ACCT_BUSY = false, _ACCT_AT = 0;
 function renderAccounts(){
   var el = document.getElementById('accts');
+  // coalesce: several callers used to trigger overlapping fetches per cycle
+  // (one per instance perf response) — one request every >=5s is plenty
+  if(_ACCT_BUSY || Date.now() - _ACCT_AT < 5000) return;
+  _ACCT_BUSY = true; _ACCT_AT = Date.now();
   API('mexc/account').then(function(accs){
+    _ACCT_BUSY = false;
     if(!accs || !accs.length){ el.innerHTML = '<span class="mini">no API keys configured</span>'; return; }
     EQ = {total: 0};
     el.innerHTML = accs.filter(function(a){ return !a.skipped; }).map(function(a, ix){
@@ -1127,7 +1138,10 @@ function renderAccounts(){
     try{ localStorage.setItem('slEqSnap', JSON.stringify(EQ)); }catch(e){}
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
-  }).catch(function(){ el.innerHTML = '<span class="mini down">could not read accounts</span>'; });
+  }).catch(function(){
+    _ACCT_BUSY = false;
+    el.innerHTML = '<span class="mini down">could not read accounts</span>';
+  });
 }
 
 // ---------------- risk ----------------
@@ -1513,9 +1527,12 @@ function held(p){
 }
 
 function loadStatus(){
-  INSTS.forEach(function(x){
-    API('status?instance='+x.id).then(function(s){
-      STATUS[x.id]=s; renderCards(); renderRisk(); renderPositions(); renderTdBots(); }).catch(function(){});
+  // parallel fetch, single render pass (see loadAll for why)
+  Promise.all(INSTS.map(function(x){
+    return API('status?instance='+x.id).then(function(s){
+      STATUS[x.id]=s; }).catch(function(){});
+  })).then(function(){
+    renderCards(); renderRisk(); renderPositions(); renderTdBots();
   });
   API('errors').then(function(e){ ERRS=e||{}; renderCards(); }).catch(function(){});
 }
@@ -1524,6 +1541,9 @@ function renderCards(){
   var box = document.getElementById('icards');
   if(!box) return;
   if(ARMED) return;   // an inline Confirm/Cancel is up — do not wipe it
+  // typing guard: the hero banners and auto-adopt forms hold live inputs —
+  // a 20s status refresh must not wipe a half-typed override price
+  if(box.contains(document.activeElement)) return;
   box.innerHTML = INSTS.map(function(x){
     var s = STATUS[x.id] || {}, ps = plist(s), p = ps[0], perf = PERF[x.id] || {};
     var nm = x.name || ('Instance '+x.id);
