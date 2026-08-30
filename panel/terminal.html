@@ -465,6 +465,12 @@ function pastLiq(sh){
   return (-sh.pct / (100 * sh.lev)) > (1 / sh.lev - 0.008);
 }
 var PASTLIQ_TAG = ' <span class="tag lev" title="the simulated position is past the point where a real position at this leverage would have been liquidated — its P&L is not achievable and nothing will adopt or join it">past liq — sim only</span>';
+// a shadow's price move in the trade's direction since its virtual entry —
+// the unleveraged P&L %, same as the Price Δ column on real positions
+function shPx(sh){
+  if(!sh || !sh.entry_px || !sh.px) return null;
+  return 100 * ((+sh.px)/(+sh.entry_px) - 1) * (sh.dir > 0 ? 1 : -1);
+}
 
 // ---- display mode + amount masking -------------------------------------
 // DISPLAY: 'both' | 'money' | 'pct' — applies to the realized figures on the
@@ -1638,8 +1644,11 @@ function renderCards(){
         '</summary>'+
         '<table style="margin-top:6px"><thead><tr><th>Component</th><th>Side</th>'+
           '<th class="n">Virtual entry</th><th class="n">Entry px</th>'+
-          '<th class="n">Now</th><th class="n">Unreal</th><th></th></tr></thead><tbody>'+
+          '<th class="n">Now</th>'+
+          '<th class="n" title="the trade\'s price move since the virtual entry — the unleveraged P&amp;L %">Price &Delta;</th>'+
+          '<th class="n">Unreal</th><th></th></tr></thead><tbody>'+
         sh.map(function(x){
+          var pxch = shPx(x);
           return '<tr'+(x.skipped?' style="opacity:.5"':'')+'>'+
             '<td>'+x.label+'</td>'+
             '<td><span class="tag '+(x.dir>0?'g':'live')+'">'+(x.dir>0?'LONG':'SHORT')+
@@ -1647,6 +1656,8 @@ function renderCards(){
             '<td class="n dim">'+(x.entry_t||'').slice(5,16)+'</td>'+
             '<td class="n">'+(+x.entry_px).toPrecision(6)+'</td>'+
             '<td class="n">'+(x.px?(+x.px).toPrecision(6):'?')+'</td>'+
+            '<td class="n '+(pxch==null?'dim':cls(pxch))+'" style="font-weight:600">'+
+              (pxch==null?'—':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
             '<td class="n '+(x.pct==null?'dim':cls(x.pct))+'" style="font-weight:600">'+
               (x.pct==null?'—':(x.pct>=0?'+':'')+x.pct.toFixed(2)+'%')+'</td>'+
             '<td class="mini">'+(pastLiq(x)?PASTLIQ_TAG:
@@ -1872,15 +1883,20 @@ function toggleShadows(){
 }
 function shadowTable(rows){
   return '<table style="margin-top:9px"><thead><tr><th>Instance</th><th>Component</th><th>Side</th>'+
-    '<th class="n">Virtual entry</th><th class="n">Entry px</th><th class="n">Unreal %</th><th class="n">Proj. close</th><th></th></tr></thead><tbody>'+
+    '<th class="n">Virtual entry</th><th class="n">Entry px</th>'+
+    '<th class="n" title="the trade\'s price move since the virtual entry — the unleveraged P&amp;L %">Price &Delta;</th>'+
+    '<th class="n">Unreal %</th><th class="n">Proj. close</th><th></th></tr></thead><tbody>'+
     rows.map(function(o){
       var r = o.r;
+      var pxch = shPx(r);
       return '<tr'+(r.skipped?' style="opacity:.55"':'')+'><td>'+o.inst+'</td>'+
         '<td>'+(r.label||('#'+r.comp))+'</td>'+
         '<td><span class="tag '+(r.dir>0?'g':'live')+'">'+(r.dir>0?'LONG':'SHORT')+
           (r.lev>1?' '+(+r.lev).toFixed(0)+'x':'')+'</span></td>'+
         '<td class="n dim">'+(r.entry_t||'')+'</td>'+
         '<td class="n">'+(r.entry_px?(+r.entry_px).toPrecision(6):'—')+'</td>'+
+        '<td class="n '+(pxch==null?'dim':cls(pxch))+'" style="font-weight:600">'+
+          (pxch==null?'—':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
         '<td class="n '+(r.pct==null?'dim':cls(r.pct))+'" style="font-weight:600">'+
           (r.pct==null?'—':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
         '<td class="n">'+projFmt(r.exit_proj)+'</td>'+
