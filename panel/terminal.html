@@ -1152,11 +1152,11 @@ function renderRisk(){
   document.getElementById('risktbl').innerHTML = rows.length
     ? '<table><thead><tr><th>Instance</th><th>Symbol</th><th>Dir</th><th class="n">Size</th>'+
       '<th class="n">Lev</th><th class="n">Entry</th><th class="n">Now</th>'+
-      '<th class="n" title="raw price change since the position opened (no leverage, no direction)">&Delta; price</th>'+
+      '<th class="n" title="the trade\'s price move since open — the unleveraged P&amp;L %">&Delta; price</th>'+
       '<th class="n">Notional</th>'+
       '<th class="n">Liq distance</th></tr></thead><tbody>'+
       rows.map(function(r){
-        var pxch = r.now ? 100*((+r.now)/(+r.entry)-1) : null;
+        var pxch = r.now ? 100*((+r.now)/(+r.entry)-1)*(r.dir==='SHORT'?-1:1) : null;
         return '<tr><td>'+r.inst+'</td><td><b>'+r.sym+'</b></td>'+
           '<td class="'+(r.dir==='LONG'?'up':'down')+'">'+r.dir+'</td>'+
           '<td class="n">'+amt(r.qty)+'</td><td class="n">'+(r.mode==='lev'?r.lev+'x':'spot')+'</td>'+
@@ -1516,7 +1516,7 @@ function renderCards(){
       // number always counts from OUR real fill)
       var virt = (px && p.mirror_entry_px)
         ? 100*(px/(+p.mirror_entry_px)-1)*(p.dir>0?1:-1)*(s.mode==='lev' ? (+p.lev||1) : 1) : null;
-      var pxch = px ? 100*(px/(+p.entry_price)-1) : null;   // raw price move
+      var pxch = px ? 100*(px/(+p.entry_price)-1)*(p.dir>0?1:-1) : null;   // unleveraged trade %
       var neg = pct!=null && pct<0;
       return '<div style="border:1px solid '+(neg?'var(--down)':'var(--up)')+
         ';border-left-width:4px;border-radius:8px;padding:11px 14px;margin-bottom:11px;background:'+
@@ -1530,7 +1530,7 @@ function renderCards(){
           '<b class="'+(usd==null?'':(usd>=0?'up':'down'))+'" style="font-size:15px">'+
             (usd==null?'':amt((usd>=0?'+$':'-$')+Math.abs(usd).toFixed(2)))+'</b>'+
           (pxch!=null
-            ? '<span class="mini" title="raw price change since the position opened (no leverage, no direction)">price '+
+            ? '<span class="mini" title="the trade\'s price move since open — the unleveraged P&L %">price '+
               '<b class="num '+cls(pxch)+'">'+(pxch>=0?'+':'')+pxch.toFixed(2)+'%</b></span>'
             : '')+
           (virt!=null
@@ -1774,7 +1774,7 @@ function posRows(){
       // virtual entry (the primary number always counts from OUR fill)
       virt: (px && p.mirror_entry_px)
         ? 100 * (px/(+p.mirror_entry_px) - 1) * (p.dir > 0 ? 1 : -1) * lev : null,
-      pxch: px ? 100 * (px/(+p.entry_price) - 1) : null,   // raw price move
+      pxch: px ? 100 * (px/(+p.entry_price) - 1) * (p.dir > 0 ? 1 : -1) : null,  // unleveraged trade %
       adopted: !!p.adopted,
       usd: (px != null) ? (+p.qty) * cs * (px - (+p.entry_price)) * (p.dir > 0 ? 1 : -1) : null,
       notional: px != null ? (+p.qty) * cs * px : null,
@@ -2578,7 +2578,7 @@ function renderTdBots(){
       '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
       '<th class="n">market entry</th>'+
       '<th class="n">now</th>'+
-      '<th class="n" title="raw price change since the position opened (no leverage, no direction)">price &Delta;</th>'+
+      '<th class="n" title="the trade\'s price move since open — the unleveraged P&amp;L %">price &Delta;</th>'+
       '<th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
      ps.map(function(p){
     var px = +p.price || +s.price || null;
@@ -2586,7 +2586,7 @@ function renderTdBots(){
     var mult = s.mode === 'lev' ? (p.lev||1) : 1;
     var pct = (px && p.entry_price)
       ? (px/p.entry_price - 1) * dir * 100 * mult : null;
-    var pxch = (px && p.entry_price) ? (px/p.entry_price - 1) * 100 : null;
+    var pxch = (px && p.entry_price) ? (px/p.entry_price - 1) * dir * 100 : null;
     return '<tr><td><b>'+(p.symbol||'')+'</b></td>'+
       '<td><span class="tag '+(dir>0?'g':'live')+'">'+(dir>0?'LONG':'SHORT')+
         ((p.lev||1)>1?(' '+(+p.lev).toFixed(0)+'x'):'')+'</span></td>'+
@@ -3545,7 +3545,7 @@ function renderPositions(){
   el.innerHTML =
     '<table><thead><tr><th>Instance</th><th>Symbol</th><th>Side</th><th>Type</th>'+
     '<th class="n">Qty</th><th class="n">Entry</th><th class="n">Now</th>'+
-    '<th class="n" title="raw price change since the position opened (no leverage, no direction)">Price &Delta;</th>'+
+    '<th class="n" title="the trade\'s price move since open — the unleveraged P&amp;L %">Price &Delta;</th>'+
     '<th class="n">Notional</th><th class="n">P&amp;L %</th><th class="n">P&amp;L $</th>'+
     '<th class="n">Held</th></tr></thead><tbody>' +
     rows.map(function(r){
@@ -3567,7 +3567,7 @@ function renderPositions(){
         '<td class="n">' + r.entry.toPrecision(6) + '</td>'+
         '<td class="n">' + (r.now ? r.now.toPrecision(6) : '?') + '</td>'+
         '<td class="n ' + (r.pxch == null ? 'dim' : cls(r.pxch)) + '" style="font-weight:600" '+
-          'title="raw price change since the position opened (no leverage, no direction)">' +
+          'title="the trade\'s price move since open — the unleveraged P&amp;L %">' +
           (r.pxch == null ? '—' : (r.pxch >= 0 ? '+' : '') + r.pxch.toFixed(2) + '%') + '</td>'+
         '<td class="n">' + (r.notional == null ? '—' : amt('$' + r.notional.toFixed(0))) + '</td>'+
         '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
