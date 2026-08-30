@@ -589,6 +589,18 @@ def main_fcfs(cfg, live):
                     xp = last.get("exit_px")
                     if not px or not xp or px > float(xp) * 0.99:
                         continue          # not 1% below our last exit yet
+                # skip candidates do_adopt's liq-distance guard would refuse
+                # anyway. Without this, one ZOMBIE shadow (a virtual trade
+                # past its real liquidation point that the sim never killed —
+                # e.g. the DOGE v7 short sitting at -151% on 2026-08-30)
+                # is picked as "deepest" every cycle, gets refused, and
+                # STARVES auto-adopt of every other eligible shadow.
+                lv = float(r.get("lev") or 1.0) if mode == "lev" else 1.0
+                if lv > 1:
+                    adv = -pct / (100.0 * lv)     # adverse price fraction
+                    if (adv / max(1.0 / lv - 0.008, 1e-9)
+                            > float(cfg.get("late_join_max_drawdown", 0.5))):
+                        continue
                 if best is None or pct < best.get("pct"):
                     best = r
         if best is not None:

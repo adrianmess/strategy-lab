@@ -457,6 +457,14 @@ function plist(s){
   if(s && s.positions && s.positions.length) return s.positions;
   return (s && s.position) ? [s.position] : [];
 }
+// A shadow whose adverse move is past a real position's liquidation point:
+// the SIM never killed it, so its unrealized (e.g. -151%) is a number no
+// real account could reach. Guards refuse to adopt/join these.
+function pastLiq(sh){
+  if(sh == null || sh.pct == null || !(sh.lev > 1)) return false;
+  return (-sh.pct / (100 * sh.lev)) > (1 / sh.lev - 0.008);
+}
+var PASTLIQ_TAG = ' <span class="tag lev" title="the simulated position is past the point where a real position at this leverage would have been liquidated — its P&L is not achievable and nothing will adopt or join it">past liq — sim only</span>';
 
 // ---- display mode + amount masking -------------------------------------
 // DISPLAY: 'both' | 'money' | 'pct' — applies to the realized figures on the
@@ -1641,8 +1649,9 @@ function renderCards(){
             '<td class="n">'+(x.px?(+x.px).toPrecision(6):'?')+'</td>'+
             '<td class="n '+(x.pct==null?'dim':cls(x.pct))+'" style="font-weight:600">'+
               (x.pct==null?'—':(x.pct>=0?'+':'')+x.pct.toFixed(2)+'%')+'</td>'+
-            '<td class="mini">'+(x.skipped?'judged, sitting out':'late-join eligible')+
-              (p ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+xid+'\','+x.comp+
+            '<td class="mini">'+(pastLiq(x)?PASTLIQ_TAG:
+                (x.skipped?'judged, sitting out':'late-join eligible'))+
+              (p || pastLiq(x) ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+xid+'\','+x.comp+
                         ',\''+String(x.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
               armCell(xid, x.comp, x.entry_t, s.armed)+
             '</td></tr>';
@@ -1875,8 +1884,9 @@ function shadowTable(rows){
         '<td class="n '+(r.pct==null?'dim':cls(r.pct))+'" style="font-weight:600">'+
           (r.pct==null?'—':(r.pct>=0?'+':'')+(+r.pct).toFixed(2)+'%')+'</td>'+
         '<td class="n">'+projFmt(r.exit_proj)+'</td>'+
-        '<td class="mini">'+(r.skipped?'judged, sitting out':'late-join eligible')+
-          (o.held ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+o.id+'\','+r.comp+
+        '<td class="mini">'+(pastLiq(r)?PASTLIQ_TAG:
+            (r.skipped?'judged, sitting out':'late-join eligible'))+
+          (o.held || pastLiq(r) ? '' : ' <button class="btn sm" onclick="adoptShadow(this,\''+o.id+'\','+r.comp+
                          ',\''+String(r.entry_t||'').replace(/'/g,'')+'\')">Adopt</button>')+
           armCell(o.id, r.comp, r.entry_t, (STATUS[o.id]||{}).armed)+
         '</td></tr>';
