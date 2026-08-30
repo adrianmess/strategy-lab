@@ -2576,7 +2576,9 @@ function renderTdBots(){
     inner += '<table class="tfit"><thead><tr>'+
       '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
       '<th class="n">market entry</th>'+
-      '<th class="n">now</th><th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
+      '<th class="n">now</th>'+
+      '<th class="n" title="raw price change since the position opened (no leverage, no direction)">price &Delta;</th>'+
+      '<th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
      ps.map(function(p){
     var px = +p.price || +s.price || null;
     var dir = (p.dir||1) > 0 ? 1 : -1;
@@ -2597,11 +2599,9 @@ function renderTdBots(){
       '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
       '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+
       '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
+      '<td class="n">'+(pxch==null?'&mdash;':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
       '<td class="n" style="font-weight:700;color:var(--'+((pct||0)>=0?'up':'down')+')">'+
-        (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+
-        (pxch==null?'':'<div class="mini dim" style="font-weight:400" '+
-          'title="raw price change since the position opened (no leverage, no direction)">price: '+
-          (pxch>=0?'+':'')+pxch.toFixed(2)+'%</div>')+'</td>'+
+        (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
       '<td class="n">'+projFmt(p.exit_proj)+'</td>'+
       '<td class="n">'+(p.armed_close_pct!=null?('&ge; +'+p.armed_close_pct+'%'):'&mdash;')+'</td>'+
       '</tr>';
@@ -3543,6 +3543,7 @@ function renderPositions(){
   el.innerHTML =
     '<table><thead><tr><th>Instance</th><th>Symbol</th><th>Side</th><th>Type</th>'+
     '<th class="n">Qty</th><th class="n">Entry</th><th class="n">Now</th>'+
+    '<th class="n" title="raw price change since the position opened (no leverage, no direction)">Price &Delta;</th>'+
     '<th class="n">Notional</th><th class="n">P&amp;L %</th><th class="n">P&amp;L $</th>'+
     '<th class="n">Held</th></tr></thead><tbody>' +
     rows.map(function(r){
@@ -3552,7 +3553,7 @@ function renderPositions(){
           '<td class="dim">' + (r.dir || '—') + '</td>'+
           '<td><span class="tag b">untracked</span></td>'+
           '<td class="n">' + amt(r.qty) + '</td>'+
-          '<td class="n dim" colspan="6">on the exchange, not tracked by a trader</td></tr>';
+          '<td class="n dim" colspan="7">on the exchange, not tracked by a trader</td></tr>';
       }
       return '<tr><td>' + r.inst + ' <span class="mini">' + (r.account||'') + '</span></td>'+
         '<td><b>' + r.symbol + '</b>' + (r.adopted ? ' <span class="tag b">adopted</span>' : '') +
@@ -3563,12 +3564,11 @@ function renderPositions(){
         '<td class="n">' + amt(r.qty) + '</td>'+
         '<td class="n">' + r.entry.toPrecision(6) + '</td>'+
         '<td class="n">' + (r.now ? r.now.toPrecision(6) : '?') + '</td>'+
+        '<td class="n" title="raw price change since the position opened (no leverage, no direction)">' +
+          (r.pxch == null ? '—' : (r.pxch >= 0 ? '+' : '') + r.pxch.toFixed(2) + '%') + '</td>'+
         '<td class="n">' + (r.notional == null ? '—' : amt('$' + r.notional.toFixed(0))) + '</td>'+
         '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
           (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') +
-          (r.pxch != null
-            ? '<div class="mini dim" title="raw price change since the position opened (no leverage, no direction)">'+
-              'price: ' + (r.pxch >= 0 ? '+' : '') + r.pxch.toFixed(2) + '%</div>' : '') +
           (r.virt != null
             ? '<div class="mini" title="if it had been held since the component\'s virtual entry">'+
               'virtual: ' + (r.virt >= 0 ? '+' : '') + r.virt.toFixed(2) + '%</div>' : '') + '</td>'+
@@ -3576,7 +3576,7 @@ function renderPositions(){
           (r.usd == null ? '—' : amt((r.usd >= 0 ? '+$' : '-$') + Math.abs(r.usd).toFixed(2))) + '</td>'+
         '<td class="n dim">' + (r.held || '') + '</td></tr>';
     }).join('') +
-    '</tbody><tfoot><tr><td colspan="9" class="n dim">unrealized across open positions</td>'+
+    '</tbody><tfoot><tr><td colspan="10" class="n dim">unrealized across open positions</td>'+
     '<td class="n ' + cls(net) + '" style="font-weight:700">' +
       amt((net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2)) + '</td><td></td></tr></tfoot></table>' +
     extrasRow();
