@@ -550,6 +550,12 @@ function loadAll(){
 }
 
 var EQ = {total: 0};
+// instant paint: last known equity, so Dietz %s and the Equity KPI don't
+// wait on the (slow) accounts call and re-render once it lands
+try{
+  var _eqs = JSON.parse(localStorage.getItem('slEqSnap')||'null');
+  if(_eqs && _eqs.total > 0) EQ = _eqs;
+}catch(e){}
 
 // Return on the balance you STARTED the period with: realized / (equity now
 // minus what you made in the period). Dividing by the current balance would
@@ -595,6 +601,17 @@ function dietzPct(P, days, acct){
 function renderKpis(){
   // event-based, over ALL FOUR account x market combos, honoring the
   // bot/manual origin switch; % is Modified Dietz on avg capital at risk
+  if(PNLE === null){
+    // no events yet (first ever visit) — say "loading", never show zeros
+    document.getElementById('kpis').innerHTML =
+      kpi('Realized 24h', '…', 'loading trade history', 0) +
+      kpi('Realized 7d', '…', 'loading trade history', 0) +
+      kpi('Realized 30d', '…', 'loading trade history', 0) +
+      kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
+          INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
+          INSTS.length + ' live', 0);
+    return;
+  }
   var now = Date.now(), acct = acctFilter();
   var ev = countedEvents().filter(function(e){
     return !acct || e.account === acct; });
@@ -811,6 +828,13 @@ function area(vals, w, h, c1, c2){
 
 // every realized close across both accounts, merged in time order
 var PNLE = null;    // /api/pnl_events: ALL 4 acct x mkt combos, origin-tagged
+// instant paint: restore the last good event set so the Overview shows the
+// CORRECT last-known numbers immediately instead of a partial reconstruction
+// that jumps to the right values when the (seconds-slow) fetch lands
+try{
+  var _ps = JSON.parse(localStorage.getItem('slPnlSnap')||'null');
+  if(_ps && _ps.events && _ps.events.length) PNLE = _ps.events;
+}catch(e){}
 var ORIGIN = localStorage.getItem('slOrigin') || '';   // ''|'bot'|'manual'
 function setOrigin(v){
   ORIGIN = v; localStorage.setItem('slOrigin', v);
@@ -820,6 +844,8 @@ function loadPnl(){
   API('pnl_events').then(function(d){
     if(d && d.events){
       PNLE = d.events;
+      try{ localStorage.setItem('slPnlSnap',
+        JSON.stringify({events:d.events, at:Date.now()})); }catch(e){}
       renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
     }
   }).catch(function(){});
@@ -842,20 +868,11 @@ function allEvents(){
               account:s.account, mode:s.mode};
     }).sort(function(a,b){ return a.t-b.t; });
   }
-  // fallback until the first pnl_events fetch lands
-  var ev = [];
-  Object.keys(PERF).forEach(function(id){
-    var p = PERF[id];
-    (p && p.series || []).forEach(function(s){
-      ev.push({t:s.t, pnl:s.pnl, pct:s.pct, entry:s.entry, exit:s.exit,
-               side:s.side, lev:s.lev, symbol:s.symbol, inst:id,
-               id:s.id, ignored:!!s.ignored, reason:s.reason, origin:null,
-               name:(INSTS.find(function(x){return x.id===id;})||{}).name||id,
-               account:p.account, mode:p.mode});
-    });
-  });
-  ev.sort(function(a,b){ return a.t-b.t; });
-  return ev;
+  // No events yet (first ever visit, nothing in localStorage): render the
+  // honest loading state rather than a partial per-instance reconstruction —
+  // that fallback lacked origin tags and manual/instance-less trades, so the
+  // cards showed WRONG numbers that later jumped to the right ones.
+  return [];
 }
 // aggregates NEVER include excluded trades; only the history lists them.
 // The Overview origin switch (bot / manual / both) applies here so every
@@ -885,6 +902,11 @@ function renderChart(){
   var acct = acctFilter();
   var sel = document.getElementById('cumAcct');
   if(sel) sel.style.display = ORIGIN === 'manual' ? 'none' : '';
+  if(PNLE === null){
+    document.getElementById('bigchart').innerHTML =
+      '<div class="mini" style="padding:40px 0;text-align:center">loading trade history…</div>';
+    return;
+  }
   var ev = countedEvents().filter(function(e){
     return !acct || e.account === acct; });
   var cum = 0;
@@ -916,9 +938,17 @@ function dailyEquity(){
   return DSCOPE ? (EQ[DSCOPE] || 0) : (EQ.total || 0);
 }
 var FLOWS = [];   // deposits/withdrawals from /api/flows — capital, not P&L
+try{
+  var _fs = JSON.parse(localStorage.getItem('slFlowSnap')||'null');
+  if(_fs && _fs.flows) FLOWS = _fs.flows;   // instant paint, like slPnlSnap
+}catch(e){}
 function loadFlows(){
-  API('flows').then(function(d){ FLOWS = (d && d.flows) || []; renderDaily(); })
-    .catch(function(){});
+  API('flows').then(function(d){
+    FLOWS = (d && d.flows) || [];
+    try{ localStorage.setItem('slFlowSnap',
+      JSON.stringify({flows:FLOWS, at:Date.now()})); }catch(e){}
+    renderDaily(); renderKpis();
+  }).catch(function(){});
 }
 function dailySeries(days){
   days = days || 30;
@@ -1094,6 +1124,7 @@ function renderAccounts(){
         '</div>'+
         '<div class="bar g" style="margin-top:8px"><i style="width:100%"></i></div></div>';
     }).join('');
+    try{ localStorage.setItem('slEqSnap', JSON.stringify(EQ)); }catch(e){}
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
   }).catch(function(){ el.innerHTML = '<span class="mini down">could not read accounts</span>'; });

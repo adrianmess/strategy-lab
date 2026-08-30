@@ -3433,11 +3433,19 @@ def pnl_events():
     """Realized P&L events for ALL FOUR account x market combos over 30d,
     each labeled origin 'bot' | 'manual' (bot = a trader recorded a close of
     that symbol on that account+market within +-4 min). Feeds the Overview
-    aggregates, the origin switch and the History page."""
-    now_s = time.time()
+    aggregates, the origin switch and the History page.
+    A background thread keeps the cache warm (see _pnle_warm), so requests
+    normally return instantly instead of blocking ~seconds on four proxied
+    exchange legs — that block was why the Overview cards sat on stale or
+    partial numbers for the first seconds after a page load."""
     if not request.args.get("force") and _PNLE_CACHE["data"] is not None \
-            and now_s - _PNLE_CACHE["t"] < 60:
+            and time.time() - _PNLE_CACHE["t"] < 60:
         return jsonify(_PNLE_CACHE["data"])
+    return jsonify(_pnl_events_compute())
+
+
+def _pnl_events_compute():
+    now_s = time.time()
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcFuturesAPI, MexcSpotAPI
@@ -3469,8 +3477,25 @@ def pnl_events():
     events.sort(key=lambda e: e["t"])
     data = dict(events=events, errors=errors,
                 as_of=time.strftime("%Y-%m-%d %H:%M:%S"))
-    _PNLE_CACHE.update(t=now_s, data=data)
-    return jsonify(data)
+    # a fully-errored round must not overwrite a good cache with emptiness
+    if events or not errors or _PNLE_CACHE["data"] is None:
+        _PNLE_CACHE.update(t=now_s, data=data)
+    return data
+
+
+def _pnle_warm():
+    """Keep the pnl_events cache perpetually fresh so the Overview never
+    waits on a cold compute (matters most right after a panel restart)."""
+    time.sleep(20)          # let the panel finish booting first
+    while True:
+        try:
+            _pnl_events_compute()
+        except Exception as e:
+            print(f"pnl_events warm error: {e}", flush=True)
+        time.sleep(50)
+
+
+threading.Thread(target=_pnle_warm, daemon=True).start()
 
 
 _TICK = {"t": 0, "data": []}
