@@ -1162,7 +1162,8 @@ function renderRisk(){
           '<td class="n">'+amt(r.qty)+'</td><td class="n">'+(r.mode==='lev'?r.lev+'x':'spot')+'</td>'+
           '<td class="n">'+(+r.entry).toPrecision(6)+'</td>'+
           '<td class="n">'+(r.now?(+r.now).toPrecision(6):'?')+'</td>'+
-          '<td class="n dim">'+(pxch==null?'&mdash;':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
+          '<td class="n '+(pxch==null?'dim':cls(pxch))+'" style="font-weight:600">'+
+            (pxch==null?'&mdash;':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
           '<td class="n">'+amt('$'+r.notional.toFixed(0))+'</td>'+
           '<td class="n '+(r.dist==null?'dim':(r.dist<10?'down':'up'))+'">'+
             (r.dist==null?'n/a':r.dist.toFixed(1)+'%')+'</td></tr>'; }).join('')+
@@ -1530,7 +1531,7 @@ function renderCards(){
             (usd==null?'':amt((usd>=0?'+$':'-$')+Math.abs(usd).toFixed(2)))+'</b>'+
           (pxch!=null
             ? '<span class="mini" title="raw price change since the position opened (no leverage, no direction)">price '+
-              '<b class="num">'+(pxch>=0?'+':'')+pxch.toFixed(2)+'%</b></span>'
+              '<b class="num '+cls(pxch)+'">'+(pxch>=0?'+':'')+pxch.toFixed(2)+'%</b></span>'
             : '')+
           (virt!=null
             ? '<span class="mini" title="if it had been held since the component\'s virtual entry '+
@@ -2599,7 +2600,8 @@ function renderTdBots(){
       '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
       '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+
       '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
-      '<td class="n">'+(pxch==null?'&mdash;':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
+      '<td class="n '+(pxch==null?'dim':cls(pxch))+'" style="font-weight:600">'+
+        (pxch==null?'&mdash;':(pxch>=0?'+':'')+pxch.toFixed(2)+'%')+'</td>'+
       '<td class="n" style="font-weight:700;color:var(--'+((pct||0)>=0?'up':'down')+')">'+
         (pct==null?'&mdash;':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>'+
       '<td class="n">'+projFmt(p.exit_proj)+'</td>'+
@@ -3564,7 +3566,8 @@ function renderPositions(){
         '<td class="n">' + amt(r.qty) + '</td>'+
         '<td class="n">' + r.entry.toPrecision(6) + '</td>'+
         '<td class="n">' + (r.now ? r.now.toPrecision(6) : '?') + '</td>'+
-        '<td class="n" title="raw price change since the position opened (no leverage, no direction)">' +
+        '<td class="n ' + (r.pxch == null ? 'dim' : cls(r.pxch)) + '" style="font-weight:600" '+
+          'title="raw price change since the position opened (no leverage, no direction)">' +
           (r.pxch == null ? '—' : (r.pxch >= 0 ? '+' : '') + r.pxch.toFixed(2) + '%') + '</td>'+
         '<td class="n">' + (r.notional == null ? '—' : amt('$' + r.notional.toFixed(0))) + '</td>'+
         '<td class="n ' + (r.pct == null ? 'dim' : cls(r.pct)) + '" style="font-weight:600">' +
