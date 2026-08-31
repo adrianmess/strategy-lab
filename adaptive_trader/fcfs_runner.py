@@ -276,8 +276,13 @@ def main_fcfs(cfg, live):
         return execs[sym]
 
     def comp_label(i):
+        # include the method: "v7" alone is ambiguous — the family can run
+        # as trend3/vol3/etc., and comparing against the wrong candidate
+        # cost a debugging session (2026-08-31, DOGE zombie shadow)
         c = comps[i]
-        return f"#{i} {c['pair']}/{c['timeframe']}·{c['strategy']}"
+        m = c.get("method")
+        return (f"#{i} {c['pair']}/{c['timeframe']}·{c['strategy']}"
+                + (f"·{m}" if m else ""))
 
     def tell_flat():
         flat = not positions
