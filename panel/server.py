@@ -638,6 +638,8 @@ def status():
         positions=_prows,
         cascade=bool(cfg.get("cascade")),
         cascade_free=state.get("cascade_free"),
+        paused=os.path.exists(os.path.join(AT, ".pause_" + os.path.basename(
+            cfg.get("state_file", "trader_state.json")))),
         # components that WOULD hold a position if the slot were free —
         # written by the fcfs runner every bar (membership changes) / 30s
         shadow=state.get("shadow") or [],
@@ -2405,6 +2407,35 @@ def adopt_shadow():
                                   "acts within a few seconds. If the virtual "
                                   "trade closed meanwhile it is refused "
                                   "(see the trader log)."))
+
+
+@app.route("/api/trader/pause", methods=["POST"])
+def trader_pause():
+    """Wind-down switch: while paused, the fcfs runner opens NOTHING new
+    (fresh signals, late-join, adopt, armed/auto rules, cascade slots) but
+    keeps managing every open position to its normal close. Sidecar file
+    `.pause_<statefile>`, mtime-polled by the trader — applies within
+    seconds, no restart, survives trader and panel restarts. fcfs routers
+    only (the single-pair trader.py does not read it)."""
+    d = request.get_json(force=True)
+    i, I = _inst()
+    cfg_name = I["trader"].get("config") or I.get("cfg") or "config.json"
+    sfile = _state_file_of(cfg_name)
+    if not sfile:
+        return jsonify(error="could not resolve the trader's state file"), 500
+    p = os.path.join(AT, ".pause_" + os.path.basename(sfile))
+    if d.get("pause"):
+        json.dump(dict(at=time.strftime("%Y-%m-%d %H:%M:%S"), by="panel"),
+                  open(p, "w"))
+        return jsonify(ok=True, paused=True,
+                       note=f"{_iname(i)} paused — open positions run to "
+                            "their normal close; no new entries.")
+    try:
+        os.remove(p)
+    except OSError:
+        pass
+    return jsonify(ok=True, paused=False,
+                   note=f"{_iname(i)} resumed — entries re-enabled.")
 
 
 @app.route("/api/trader/restart", methods=["POST"])

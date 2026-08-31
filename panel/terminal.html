@@ -1694,6 +1694,8 @@ function renderCards(){
       ? (s.live ? '<span class="tag live">RUNNING — LIVE</span>'
                 : '<span class="tag g">running (dry-run)</span>')
       : '<span class="tag b">stopped</span>';
+    if(s.running && s.paused)
+      state += ' <span class="tag lev" title="no NEW positions open; every open position is still managed to its normal close">PAUSED — winding down</span>';
     var comps = ((s.candidate||{}).components||[]).length;
     return '<div class="card"><h3>'+nm+
       ' <span style="display:flex;gap:6px">'+
@@ -1707,7 +1709,11 @@ function renderCards(){
             ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+'</div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (s.running
-            ? '<button class="btn sm" onclick="restartTrader(this,\''+x.id+'\')">Restart</button>'+
+            ? '<button class="btn sm'+(s.paused?' on':'')+'" '+
+              'title="paused = open positions run to their normal close, but nothing NEW opens" '+
+              'onclick="pauseTrader(this,\''+x.id+'\','+(s.paused?'false':'true')+')">'+
+              (s.paused?'Resume':'Pause')+'</button>'+
+              '<button class="btn sm" onclick="restartTrader(this,\''+x.id+'\')">Restart</button>'+
               '<button class="btn sm" onclick="stopTrader(this,\''+x.id+'\')">Stop</button>'
             : '<button class="btn sm" onclick="startTrader(this,\''+x.id+'\',false)">Start dry-run</button>'+
               '<button class="btn sm danger" onclick="startTrader(this,\''+x.id+'\',true)">Start LIVE</button>')+
@@ -1800,6 +1806,14 @@ function restartTrader(btn, i){
       loadAll(); });
   }, plist(s).length ? ('Open '+plist(s).map(function(p){return p.symbol;}).join(', ')+
                         ' position'+(plist(s).length>1?'s are':' is')+' kept and re-tracked.') : null);
+}
+function pauseTrader(btn, i, on){
+  var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
+  API('trader/pause', {method:'POST', headers:{'Content-Type':'application/json'},
+                       body:JSON.stringify({instance:i, pause:!!on})}).then(function(r){
+    if(r.error) flash(r.error, 'r');
+    else flash(r.note || (nm + (on ? ' paused.' : ' resumed.')), 'g');
+    loadStatus(); });
 }
 function stopTrader(btn, i){
   var s = STATUS[i]||{};

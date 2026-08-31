@@ -209,6 +209,29 @@ def main_fcfs(cfg, live):
     # component's virtual trade (deliberate close-and-switch, stage 2)
     ad_path = os.path.join(HERE, ".adopt_" +
                            os.path.basename(cfg["state_file"]))
+    # PAUSE sidecar (panel-written, mtime-polled — no restart): while it
+    # exists, NO new position is opened (fresh signals, late-join, adopt,
+    # armed/auto rules, cascade slots) but every OPEN position keeps being
+    # managed exactly as before — mirror exits, TP/SL, emergency exit,
+    # manual overrides all still fire. Wind-down mode.
+    pz_path = os.path.join(HERE, ".pause_" +
+                           os.path.basename(cfg["state_file"]))
+    _pz = {"m": -1.0, "on": False}
+
+    def paused():
+        try:
+            m = os.path.getmtime(pz_path)
+        except OSError:
+            m = 0.0
+        if m != _pz["m"]:
+            was = _pz["on"]
+            _pz["m"] = m
+            _pz["on"] = bool(m)
+            if _pz["on"] != was:
+                log.warning("PAUSE %s", "ON — open positions still managed "
+                            "to close; no NEW entries" if _pz["on"]
+                            else "OFF — entries resume")
+        return _pz["on"]
 
     # state — positions is a LIST (cascade holds several at once; one-slot
     # mode simply never grows it past 1). Legacy single "position" migrates
@@ -451,6 +474,9 @@ def main_fcfs(cfg, live):
         if positions:
             log.warning("ADOPT (%s) refused: a position is already open", src)
             return False
+        if paused():
+            log.warning("ADOPT (%s) refused: instance is PAUSED", src)
+            return False
         row = None
         for rows in shadow_by_key.values():
             for r in rows:
@@ -616,8 +642,8 @@ def main_fcfs(cfg, live):
 
     def check_armed():
         _armed_load()
-        if positions:
-            return
+        if positions or paused():
+            return    # paused: rules stay armed, nothing fires
         if not _ar["rules"]:
             check_auto()
             return
@@ -673,7 +699,7 @@ def main_fcfs(cfg, live):
 
     def flush_pending():
         nonlocal pending_opens
-        if not pending_opens or (not cascade and positions):
+        if not pending_opens or (not cascade and positions) or paused():
             pending_opens = []
             return
         pending_opens.sort(key=lambda x: (x[0], x[1]))   # (bar time, comp idx)
@@ -788,7 +814,7 @@ def main_fcfs(cfg, live):
                     bars_seen[0] += 1
                     cbyi = {c["i"]: c for c in msg.get("comps", [])}
                     note_shadows(key, cbyi, float(msg.get("px") or 0), now)
-                    if not positions or cascade:
+                    if (not positions or cascade) and not paused():
                         sk = state.setdefault("late_skips", {})
                         for ci, c in sorted(cbyi.items()):
                             if c.get("opens_now"):

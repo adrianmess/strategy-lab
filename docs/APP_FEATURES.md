@@ -170,6 +170,18 @@ Capacity-adjusted projections: see the 2026-08-28 conversation — the
 backtest +387%/mo lev rate decays to roughly +290/+245/+187%/mo over three
 months under this cap.
 
+## Pause / wind-down per instance (2026-08-31)
+
+Pause button on each instance card (`/api/trader/pause` -> sidecar
+`.pause_<statefile>`, mtime-polled by the fcfs runner — applies within ~a
+bar, no restart, survives trader AND panel restarts). While paused: NO new
+entries of any kind (fresh signals, late-join, panel Adopt, armed/auto
+rules, cascade slots — armed rules stay armed, nothing fires or is
+consumed) but every OPEN position keeps being managed to its normal close
+(mirror exits, TP/SL, emergency exit, manual overrides). Card shows
+"PAUSED — winding down"; button toggles to Resume. fcfs routers only; a
+trader must be running post-2026-08-31 code to honor it.
+
 ## Overview loading reliability (2026-08-30)
 
 The "wrong numbers for a few seconds, then they correct" class of bug, fixed
