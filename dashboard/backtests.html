@@ -264,6 +264,11 @@ button.rtradd.on{opacity:1;filter:none}
     <button style="color:var(--red)" onclick="delSelected()">✕ delete selected</button>
     <button onclick="clearDelSel()">clear</button>
   </div>
+  <div id="rrBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--amber);border-radius:6px;background:rgba(210,153,34,.06)">
+    <span id="rrCount" style="font-weight:600"></span>
+    <button onclick="rerunSelected()" title="one job for the whole batch — entries are replaced as they finish; progress bar under 'active now'; anything that liquidates (now or ever) shows in red">↻ re-run selected on current data</button>
+    <button onclick="clearRrSel()">clear</button>
+  </div>
   <div id="rtrBar" style="display:none;margin:4px 0 8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:rgba(88,166,255,.06)">
     <details id="rtrDet" ontoggle="localStorage.setItem('rtrOpen', this.open?'1':'')">
     <summary style="font-weight:600;cursor:pointer;user-select:none">Router components <span class="hint" id="rtrCount"></span></summary>
@@ -292,6 +297,7 @@ button.rtradd.on{opacity:1;filter:none}
     <th>name</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th>optimizer settings</th><th>growth/mo</th>
     <th>total %</th><th>total ×</th><th>liq?</th><th>max DD (MTM)</th><th>stops</th><th>trades</th><th>win</th><th title="out-of-sample verdict: bold 'OOS' = this entry IS a holdout/walk-forward simulation (judged on itself); plain glyph = this is a full-history entry, showing whether its config passed the run's holdout">OOS</th>
     <th>gaps</th><th>created</th><th title="your quality rating: ★ good, ★★ very good, ★★★ great — click to sort">rating</th><th></th>
+    <th title="tick several rows, then use the re-run bar that appears above the table to refresh them all in one job">↻</th>
   </tr></thead><tbody></tbody></table>
   </div>
 </section>
@@ -652,6 +658,24 @@ function gauntOf(name){
       return GAUNT[name.slice(0,-sf.length)];
   return null;
 }
+const RRSEL = new Set();
+function rrBarUpd(){
+  document.getElementById('rrBar').style.display = RRSEL.size ? '' : 'none';
+  document.getElementById('rrCount').textContent = RRSEL.size + ' selected for re-run';
+}
+function clearRrSel(){ RRSEL.clear(); rrBarUpd(); render(); }
+async function rerunSelected(){
+  if(!RRSEL.size) return;
+  if(!confirm(`Re-run ${RRSEL.size} backtest(s) against the most recently downloaded market data?\n\nOne job for the whole batch — each entry is REPLACED as it finishes (progress bar under "active now"). Anything that liquidates — now or in any earlier run — shows in red.`)) return;
+  const r = await fetch('/api/backtests/rerun_router', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({names:[...RRSEL], label:`${RRSEL.size} hand-picked entries`})}).then(x=>x.json());
+  alert(r.ok ? `Started: ${r.n} backtest(s) queued.`+
+        (r.missing&&r.missing.length?`\n\nNo genome (skipped): ${r.missing.join(', ')}`:'')
+      : ('error: '+(r.error||'')));
+  if(r.ok){ RRSEL.clear(); rrBarUpd(); render(); }
+  pollActiveJobs();
+}
 const DELSEL = new Set();
 function delBarUpd(){
   document.getElementById('delBar').style.display = DELSEL.size ? '' : 'none';
@@ -794,7 +818,7 @@ function sendToCombine(){
 }
 function fp(x){return (x>=0?'+':'')+x.toFixed(2)+'%'}
 function fm(x){return x>=1000?x.toExponential(1):x.toFixed(2)}
-const COLKEYS = ['name','kind','strategy','mode','method','optstr','s.monthly_growth_pct','totalpct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win','_oos',null,'created','rating',null];
+const COLKEYS = ['name','kind','strategy','mode','method','optstr','s.monthly_growth_pct','totalpct','s.total_mult','s.liq','s.maxdd_mtm','s.sl_hits','s.n','s.win','_oos',null,'created','rating',null,null];
 function totalPct(e){ const s=e.stats; if(!s || s.liq || s.total_mult==null || !isFinite(s.total_mult)) return null; return (s.total_mult-1)*100; }
 function fTotalPct(e){ const p=totalPct(e); if(p==null) return '<span class="hint">—</span>';
   const t = Math.abs(p)>=10000 ? (p>=0?'+':'')+p.toExponential(2)+'%'
@@ -1112,12 +1136,13 @@ function render(){
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
-      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td></tr>`}).join('');
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td>
+    <td><input type="checkbox" class="rrSel" data-name="${e.name}"${RRSEL.has(e.name)?' checked':''} title="select for BULK re-run on current data — a re-run bar appears above the table" style="accent-color:var(--amber)"></td></tr>`}).join('');
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
     if(row){
-      row.insertAdjacentHTML('afterend', `<tr class="detailrow"><td colspan="18" id="detailCell" style="background:var(--bg)"></td></tr>`);
+      row.insertAdjacentHTML('afterend', `<tr class="detailrow"><td colspan="20" id="detailCell" style="background:var(--bg)"></td></tr>`);
       document.getElementById('detailCell').appendChild(holder);
       holder.style.display='';
     }
@@ -1154,6 +1179,11 @@ function render(){
     ev.stopPropagation();
     if(cb.checked) DELSEL.add(cb.dataset.name); else DELSEL.delete(cb.dataset.name);
     delBarUpd();
+  });
+  tb.querySelectorAll('input.rrSel').forEach(cb=>cb.onclick=ev=>{
+    ev.stopPropagation();
+    if(cb.checked) RRSEL.add(cb.dataset.name); else RRSEL.delete(cb.dataset.name);
+    rrBarUpd();
   });
   tb.querySelectorAll('button.rtradd').forEach(b=>b.onclick=ev=>{
     ev.stopPropagation();
