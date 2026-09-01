@@ -3702,11 +3702,22 @@ def _bt_index_build():
     try:
         p = os.path.join(DASH, "backtests.js")
         mt = os.path.getmtime(p)
-        if os.path.exists(BT_INDEX_P) \
-                and os.path.getmtime(BT_INDEX_P) >= mt:
-            _BTIDX["rows"] = json.load(open(BT_INDEX_P))
-            _BTIDX["built"] = mt
-            return
+        # The disk cache must record WHICH source state it was built from.
+        # Comparing file mtimes was wrong: a slow build writes the index
+        # AFTER the ingester folds new results into backtests.js, so the
+        # index file looks newer while its CONTENT predates them — and every
+        # "rebuild" then reloads its own stale cache ("re-run on current
+        # data" appeared to do nothing, 2026-08-31). A bare-list cache is
+        # the old format = unknown provenance = rebuild.
+        if os.path.exists(BT_INDEX_P):
+            try:
+                doc = json.load(open(BT_INDEX_P))
+                if isinstance(doc, dict) and doc.get("src_mt") == mt:
+                    _BTIDX["rows"] = doc["rows"]
+                    _BTIDX["built"] = mt
+                    return
+            except Exception:
+                pass
         s = open(p).read()
         dec = json.JSONDecoder()
         i = s.index("[") + 1
@@ -3733,7 +3744,9 @@ def _bt_index_build():
         _BTIDX["rows"] = rows
         _BTIDX["built"] = mt
         try:
-            json.dump(rows, open(BT_INDEX_P, "w"))
+            tmp = BT_INDEX_P + ".tmp"
+            json.dump(dict(src_mt=mt, rows=rows), open(tmp, "w"))
+            os.replace(tmp, BT_INDEX_P)
         except Exception:
             pass
     except Exception as e:
@@ -3780,7 +3793,11 @@ def backtests_lite():
     except Exception:
         lim = 60
     return jsonify(rows=rows[:lim], total=total,
-                   indexed=len(_BTIDX["rows"]), state="ready")
+                   indexed=len(_BTIDX["rows"]),
+                   # rows are from the previous index while a rebuild runs —
+                   # lets the page say "refreshing" instead of looking stuck
+                   stale=bool(_BTIDX["built"] < mt),
+                   state="ready")
 
 
 @app.route("/api/router_components")

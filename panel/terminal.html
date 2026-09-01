@@ -1385,8 +1385,10 @@ function loadBT(){
   if(note) note.textContent = srt === 'growth' ? 'sorted by growth/mo' : 'newest first';
   API('backtests_lite?limit=80&sort='+srt+'&q='+q+'&verdict='+v+'&mode='+m).then(function(d){
     document.getElementById('btState').textContent =
-      d.state === 'ready' ? (d.total.toLocaleString()+' matching of '+d.indexed.toLocaleString()+' indexed')
+      d.state === 'ready' ? (d.total.toLocaleString()+' matching of '+d.indexed.toLocaleString()+' indexed'+
+                             (d.stale?' — refreshing with new results…':''))
                           : ('index '+d.state+'…');
+    if(d.stale) setTimeout(loadBT, 20000);   // poll until the rebuild lands
     document.getElementById('bt').innerHTML = (d.rows||[]).length
       ? '<table><thead><tr><th></th><th>Name</th><th>Verdict</th><th>Pair</th><th class="n">Growth/mo</th>'+
         '<th class="n">Total x</th><th class="n">Max DD</th><th class="n">Trades</th><th class="n">Win</th>'+
