@@ -146,6 +146,13 @@ def main():
                       f"(rc {r.returncode}) — "
                       f"{'retrying' if attempt == 1 else 'giving up'}",
                       flush=True)
+                # a crashed child can leave a HALF-WRITTEN jit cache that
+                # segfaults every later load from this thread's dir (the
+                # macOS "Python quit unexpectedly" popups cascade) — wipe
+                # it so the retry AND all later items compile clean
+                import shutil
+                shutil.rmtree(nb_cache, ignore_errors=True)
+                os.makedirs(nb_cache, exist_ok=True)
             with lock:
                 if r.returncode == 0:
                     with open(done_f, "a") as f:
