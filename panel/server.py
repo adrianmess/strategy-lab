@@ -4389,6 +4389,25 @@ def _bt_fold(pend):
         os.replace(tmp, p)
 
 
+@app.route("/api/backtests/version")
+def bt_version():
+    """Store generation vs what the pages can currently load: the classic
+    page polls this and reloads itself only once the part files have caught
+    up with the store (reloading earlier just re-reads the old generation)."""
+    try:
+        smt = os.path.getmtime(os.path.join(REPO, "dashboard",
+                                            "backtests.js"))
+    except OSError:
+        smt = 0
+    try:
+        pmt = json.load(open(BT_PARTS_MAN)).get("mtime") or 0
+    except Exception:
+        pmt = 0
+    return jsonify(store_mt=smt, parts_mt=pmt,
+                   parts_building=_BT_PARTS["building"],
+                   index_fresh=bool(_BTIDX["built"] >= smt))
+
+
 @app.route("/api/backtests/rerun", methods=["POST"])
 def bt_rerun():
     """Re-run ONE published entry on the most recently downloaded market
@@ -4593,6 +4612,16 @@ def _bt_ingester():
             if not pend:
                 continue
             _bt_fold(pend)      # shared: replace-by-name + sticky liq_ever
+            # rebuild the page-facing derivatives NOW instead of waiting for
+            # a page request — the 554MB store means parts + lite index take
+            # minutes, and until they finish every page serves the PREVIOUS
+            # generation ("my re-run didn't do anything", 2026-09-01)
+            if not _BT_PARTS["building"]:
+                threading.Thread(target=_bt_parts_build,
+                                 daemon=True).start()
+            if not _BTIDX["building"]:
+                threading.Thread(target=_bt_index_build,
+                                 daemon=True).start()
             for fn in files:
                 try:
                     os.remove(os.path.join(d, fn))

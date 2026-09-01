@@ -470,16 +470,31 @@ async function pollActiveJobs(){
     }
     el.innerHTML = act.length ? '<span class="livedot"></span><b>active now:</b> ' +
       act.map(j=>`${j.name} <span class="hint">(${j.kind}${j.progress?`, ${Math.round(100*j.progress.pct)}% · ETA ${Math.round((j.progress.eta_s||0)/60)}m`:''})</span>`).join(' · ') + bars : '';
-    const now = new Set(act.map(j=>j.id));
-    for(const id of _prevRunningJobs){
-      if(!now.has(id)){
-        const j = jobs.find(x=>x.id===id);
-        if(j && (j.kind==='backtest' || j.kind.startsWith('optimize'))){ reloadBacktests(); break; }
+    _prevRunningJobs = new Set(act.map(j=>j.id));
+    // store-version watcher: reload only once the page-facing PART FILES
+    // have caught up with the store. The old "reload when the job ends"
+    // heuristic fired BEFORE the minutes-long parts rebuild of the 554MB
+    // store, re-read the previous generation, and made finished re-runs
+    // look like they did nothing (2026-09-01).
+    try{
+      const v = await fetch('/api/backtests/version').then(r=>r.json());
+      if(STOREV === null) STOREV = v.store_mt;
+      let cu = document.getElementById('btCatchup');
+      if(!cu){
+        cu = document.createElement('div'); cu.id = 'btCatchup';
+        el.parentNode.insertBefore(cu, el.nextSibling);
       }
-    }
-    _prevRunningJobs = now;
+      if(v.store_mt !== STOREV && v.parts_mt === v.store_mt){
+        STOREV = v.store_mt; cu.innerHTML = ''; reloadBacktests();
+      } else if(v.store_mt !== STOREV){
+        cu.innerHTML = '<div class="hint" style="margin:4px 0;padding:6px 12px;border:1px solid var(--amber);border-radius:6px">'+
+          '<span class="livedot" style="background:var(--amber)"></span> new results are in the store — '+
+          'page data is rebuilding (~1–3 min on the 550MB store) and the list will refresh itself…</div>';
+      } else cu.innerHTML = '';
+    }catch(e){}
   }catch(e){}
 }
+let STOREV = null;
 setInterval(pollActiveJobs, 4000); pollActiveJobs();
 
 // runs currently traded by a live/dry instance -> badge on their backtest entries
