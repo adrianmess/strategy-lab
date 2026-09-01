@@ -472,10 +472,13 @@ def _bt_parts_build():
             return f
 
         def _close_part(f, k):
+            # tmp only — the WHOLE set swaps in at the end. Replacing each
+            # part as it finished let a browser mid-rebuild load a MIXED
+            # generation (new part0 + old part1/2): entries shift between
+            # parts on every fold, so rows showed stale copies or vanished
+            # ("liq still says no", 2026-08-31)
             f.write(");\n")
             f.close()
-            d = os.path.join(DASH, f"backtests_part{k}.js")
-            os.replace(d + ".tmp", d)
 
         out = _open_part(0)
         while True:
@@ -499,6 +502,10 @@ def _bt_parts_build():
             first = False
         _close_part(out, k)
         del s
+        # swap the complete new set in as one quick pass, then the manifest
+        for kk in range(k + 1):
+            d = os.path.join(DASH, f"backtests_part{kk}.js")
+            os.replace(d + ".tmp", d)
         # drop leftover higher-numbered parts (+ their .gz) from bigger builds
         j = k + 1
         while True:
