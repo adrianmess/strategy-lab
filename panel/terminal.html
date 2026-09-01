@@ -1402,8 +1402,10 @@ function loadBT(){
               r.name+'</td>'+
             '<td><span class="tag '+vc+'">'+r.verdict+'</span></td>'+
             '<td><span class="tag b">'+((r.pair||'').split('_')[0]||'multi')+' '+(r.tf||'')+'</span></td>'+
-            '<td class="n up">'+(r.growth==null?'—':'+'+(+r.growth).toFixed(1)+'%')+'</td>'+
-            '<td class="n">'+(r.mult==null?'—':(+r.mult).toExponential(1))+'</td>'+
+            '<td class="n '+(r.growth==null?'dim':cls(+r.growth))+'">'+
+              (r.growth==null?'—':((+r.growth)>=0?'+':'')+(+r.growth).toFixed(1)+'%')+'</td>'+
+            '<td class="n">'+(r.mult==null?'—':(+r.mult).toExponential(1))+
+              (r.liq?' <span class="tag live" title="the simulated account LIQUIDATED on this data — final equity 0">LIQ</span>':'')+'</td>'+
             '<td class="n">'+(r.dd==null?'—':(100*r.dd).toFixed(1)+'%')+'</td>'+
             '<td class="n">'+(r.n==null?'—':r.n)+'</td>'+
             '<td class="n">'+(r.win==null?'—':Math.round(100*r.win)+'%')+'</td></tr>'; }).join('')+
