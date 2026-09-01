@@ -274,8 +274,8 @@ button.rtradd.on{opacity:1;filter:none}
     <summary style="font-weight:600;cursor:pointer;user-select:none">Router components <span class="hint" id="rtrCount"></span></summary>
     <div style="margin-top:6px">
     <table style="font-size:12px" id="rtrT"><thead><tr>
-      <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th title="total gain over the whole backtest: final equity ÷ starting equity − 1 (— when liquidated)">total %</th><th title="worst mark-to-market drawdown over the whole backtest">max DD</th><th title="out-of-sample verdict for this entry (same logic as the main table's OOS column)">OOS</th><th></th></tr></thead>
-      <tbody id="rtrList"><tr><td colspan="10" class="hint">use the 🔀 button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
+      <th>name</th><th>pair</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th title="total gain over the whole backtest: final equity ÷ starting equity − 1 (— when liquidated)">total %</th><th title="worst mark-to-market drawdown over the whole backtest">max DD</th><th title="when this backtest was last RUN — a re-run replaces the entry and stamps it with the re-run time (green = within 24h)">last run</th><th title="out-of-sample verdict for this entry (same logic as the main table's OOS column)">OOS</th><th></th></tr></thead>
+      <tbody id="rtrList"><tr><td colspan="11" class="hint">use the 🔀 button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
       <button onclick="rerunRtrSel()" title="re-run the backtest of every component in THIS list (whatever you loaded from the saved routers or picked with 🔀) against the most recently downloaded market data — one job, progress bar under 'active now'. Strategies that liquidate, now or in any earlier run, show in red.">↻ re-run these on current data</button>
@@ -812,7 +812,7 @@ function rtrRender(){
   document.getElementById('rtrBar').style.display = '';   // always visible (collapsed by default)
   const tb = document.getElementById('rtrList');
   document.getElementById('rtrCount').textContent = RTRSEL.length ? `— ${RTRSEL.length} selected` : '';
-  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="10" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
+  if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="11" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
     const s = e.stats||{};
@@ -826,11 +826,12 @@ function rtrRender(){
       : '';
     const liq = (s.liq||e.liq_ever)
       ? ` <span class="pill" style="background:rgba(248,81,73,.15);color:var(--red)" title="${s.liq?'this candidate LIQUIDATES on its data':'a previous run of this candidate liquidated'}">${s.liq?'LIQ':'liq before'}</span>` : '';
-    return `<tr${(s.liq||e.liq_ever)?' style="background:rgba(248,81,73,.06)"':''}><td>${e.name} ${cand}${liq}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
+    return `<tr${s.liq?' style="background:rgba(248,81,73,.16)" title="the MOST RECENT backtest of this component liquidated"':(e.liq_ever?' style="background:rgba(248,81,73,.06)"':'')}><td>${e.name} ${cand}${liq}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
       <td>${stratName(e.strategy)}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
       <td>${e.method||''}</td>
       <td>${e.stats?fTotalPct(e):'<span class="hint">?</span>'}</td>
       <td class="${(s.maxdd_mtm||0)>0.5?'warn':''}">${s.maxdd_mtm==null?'<span class="hint">?</span>':(100*s.maxdd_mtm).toFixed(1)+'%'}</td>
+      <td class="hint" ${(()=>{const cr=e.created||'';const fresh=cr&&(Date.now()-new Date(cr.replace(' ','T')).getTime())<86400000;return fresh?'style="color:var(--green);font-weight:600" title="backtest last run within 24h"':'';})()}>${e.created||'?'}</td>
       <td>${oosCell(e)}</td>
       <td><button onclick="rtrRemove('${e.name}')" title="remove">✕</button></td></tr>`;}).join('');
 }
