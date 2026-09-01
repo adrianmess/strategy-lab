@@ -532,6 +532,7 @@ function rtrSrcRun(name){                   // entry name -> optimizer run dir
 }
 let RTROF = '';                             // selected router run ('' = off)
 const RTROF_CACHE = {};                     // run -> [component run names]
+const RTROF_FILES = {};                     // run -> {component run: candidate file}
 function fillRtrOfSelect(){
   const sel = document.getElementById('fRtrOf');
   if(!sel) return;
@@ -556,7 +557,11 @@ async function rtrOfChanged(){
                       .then(x=>x.json());
       if(r.error){ alert(`could not read that router's components: ${r.error}`);
                    RTROF = ''; el.value = ''; }
-      else RTROF_CACHE[RTROF] = (r.components||[]).map(c=>c.run);
+      else {
+        RTROF_CACHE[RTROF] = (r.components||[]).map(c=>c.run);
+        RTROF_FILES[RTROF] = Object.fromEntries(
+          (r.components||[]).map(c=>[c.run, c.file||'']));
+      }
     }catch(e){ alert('could not reach the panel to read the components'); RTROF=''; el.value=''; }
     el.disabled = false;
   }
@@ -565,9 +570,18 @@ async function rtrOfChanged(){
   if(RTROF && RTROF_CACHE[RTROF]){
     const want = RTROF_CACHE[RTROF];
     const have = BT.filter(e=>entryInRuns(e.name, new Set(want))).map(e=>e.name);
-    const pick = want.map(r=>have.find(n=>n===r+'_oosbest_full')
-                            || have.find(n=>n===r+'_full')
-                            || have.find(n=>n.startsWith(r+'_'))).filter(Boolean);
+    // pick the entry for the CANDIDATE the router actually uses (its `file`
+    // field: holdout_best_config.json -> _oosbest_full, else _full) — the
+    // old blanket _oosbest_full preference could show the wrong sibling
+    // (they can disagree badly: one liquidates, the other doesn't)
+    const files = RTROF_FILES[RTROF] || {};
+    const pick = want.map(r=>{
+      const pref = (files[r]||'').startsWith('holdout') ? '_oosbest_full' : '_full';
+      return have.find(n=>n===r+pref)
+          || have.find(n=>n===r+'_oosbest_full')
+          || have.find(n=>n===r+'_full')
+          || have.find(n=>n.startsWith(r+'_'));
+    }).filter(Boolean);
     RTRSEL.length = 0; RTRSEL.push(...pick);
     rtrRender();
     document.getElementById('rtrCount').textContent =
@@ -801,7 +815,18 @@ function rtrRender(){
   if(!RTRSEL.length){ tb.innerHTML = '<tr><td colspan="8" class="hint">use the 🔀 button on any run to add it — or load a saved selection below…</td></tr>'; return; }
   tb.innerHTML = RTRSEL.map(n=>{
     const e = BT.find(x=>x.name===n) || {name:n};
-    return `<tr><td>${e.name}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
+    const s = e.stats||{};
+    // which CANDIDATE of the run this entry is — a run publishes both an
+    // OOS-best (_oosbest_full) and a train-best (_full) entry, and they can
+    // disagree badly (one liquidates, the other doesn't)
+    const cand = n.endsWith('_oosbest_full')
+      ? '<span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="the candidate that won the run\'s out-of-sample holdout (holdout_best_config.json) — the one routers normally trade">OOS-best</span>'
+      : (n.endsWith('_full')||n.endsWith('_best_full'))
+      ? '<span class="pill" style="background:rgba(210,153,34,.15);color:var(--amber)" title="the candidate that scored best on TRAINING data (best_config.json) — different parameters from the OOS-best of the same run">train-best</span>'
+      : '';
+    const liq = (s.liq||e.liq_ever)
+      ? ` <span class="pill" style="background:rgba(248,81,73,.15);color:var(--red)" title="${s.liq?'this candidate LIQUIDATES on its data':'a previous run of this candidate liquidated'}">${s.liq?'LIQ':'liq before'}</span>` : '';
+    return `<tr${(s.liq||e.liq_ever)?' style="background:rgba(248,81,73,.06)"':''}><td>${e.name} ${cand}${liq}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
       <td>${stratName(e.strategy)}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
       <td>${e.method||''}</td>
       <td>${oosCell(e)}</td>
