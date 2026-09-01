@@ -1405,7 +1405,8 @@ function loadBT(){
             '<td class="n '+(r.growth==null?'dim':cls(+r.growth))+'">'+
               (r.growth==null?'—':((+r.growth)>=0?'+':'')+(+r.growth).toFixed(1)+'%')+'</td>'+
             '<td class="n">'+(r.mult==null?'—':(+r.mult).toExponential(1))+
-              (r.liq?' <span class="tag live" title="the simulated account LIQUIDATED on this data — final equity 0">LIQ</span>':'')+'</td>'+
+              (r.liq?' <span class="tag live" title="the simulated account LIQUIDATED on this data — final equity 0">LIQ</span>'
+               :(r.liq_ever?' <span class="tag lev" title="no liquidation on the current data, but an earlier run of this exact entry liquidated — the config has died on some data vintage">was LIQ</span>':''))+'</td>'+
             '<td class="n">'+(r.dd==null?'—':(100*r.dd).toFixed(1)+'%')+'</td>'+
             '<td class="n">'+(r.n==null?'—':r.n)+'</td>'+
             '<td class="n">'+(r.win==null?'—':Math.round(100*r.win)+'%')+'</td></tr>'; }).join('')+

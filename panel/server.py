@@ -3745,7 +3745,7 @@ def _bt_index_build():
                 strategy=obj.get("strategy"), created=obj.get("created"),
                 growth=st.get("monthly_growth_pct"), mult=st.get("total_mult"),
                 dd=st.get("maxdd_mtm"), n=st.get("n"), win=st.get("win"),
-                liq=st.get("liq")))
+                liq=st.get("liq"), liq_ever=bool(obj.get("liq_ever"))))
         del s
         rows.sort(key=lambda r: (r.get("created") or ""), reverse=True)
         _BTIDX["rows"] = rows
@@ -4357,7 +4357,12 @@ def bt_submit():
 
 
 def _bt_fold(pend):
-    """Replace-by-name a batch of entries in backtests.js (shared lock)."""
+    """Replace-by-name a batch of entries in backtests.js (shared lock).
+    LIQUIDATION HISTORY IS STICKY: if the entry being replaced ever
+    liquidated (its old stats, or an earlier refresh recorded liq_ever),
+    the refreshed entry carries liq_ever=true — a strategy that died on
+    ANY data vintage stays flagged even when the latest window looks
+    clean."""
     import fcntl
     p = os.path.join(REPO, "dashboard", "backtests.js")
     with open(p + ".lock", "w") as lk:
@@ -4365,6 +4370,12 @@ def _bt_fold(pend):
         txt = open(p).read()
         entries = json.JSONDecoder().raw_decode(
             txt[txt.index("=") + 1:].lstrip())[0]
+        old = {x.get("name"): x for x in entries if x.get("name") in pend}
+        for nm, e in pend.items():
+            o = old.get(nm) or {}
+            if (o.get("liq_ever") or (o.get("stats") or {}).get("liq")
+                    or (e.get("stats") or {}).get("liq")):
+                e["liq_ever"] = True
         entries = [x for x in entries
                    if x.get("name") not in pend] + list(pend.values())
         tmp = p + f".tmp{os.getpid()}"
@@ -4387,6 +4398,26 @@ def bt_rerun():
     e = next((x for x in entries if x.get("name") == name), None)
     if not e:
         return jsonify(error=f"no entry '{name}'"), 404
+    item = _rerun_item(e)
+    if not item:
+        return jsonify(error="no genome for this entry — router combos and "
+                             "quick backtests must be re-run from their own "
+                             "flows (fcfsx: Re-run on the Optimize page)"), 400
+    sd = os.path.join(REPO, "dashboard", "bt_refresh")
+    os.makedirs(sd, exist_ok=True)
+    shard = os.path.join(sd, f"one_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
+    json.dump([item], open(shard, "w"))
+    jid = spawn("backtest", f"re-run {name} on current data",
+                [sys.executable,
+                 os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
+                 "--shard", shard, "--procs", "1",
+                 "--hub", "http://localhost:8800"], REPO)
+    return jsonify(ok=True, id=jid)
+
+
+def _rerun_item(e):
+    """A refresh-worker item for one published entry (None = no genome)."""
+    name = e.get("name") or ""
     _SUF = ["_oosbest_full", "_best_full", "_full"]
     _GEN = {"_oosbest_full": "holdout_best_config.json",
             "_best_full": "best_config.json", "_full": "best_config.json"}
@@ -4402,31 +4433,73 @@ def bt_rerun():
                     genome = json.load(open(gp))
                 break
     if not genome:
-        return jsonify(error="no genome for this entry — router combos and "
-                             "quick backtests must be re-run from their own "
-                             "flows (fcfsx: Re-run on the Optimize page)"), 400
-    item = dict(name=name, pair=e.get("pair"),
+        return None
+    return dict(name=name, pair=e.get("pair"),
                 timeframe=str(e.get("timeframe") or ""), mode=e.get("mode"),
                 method=e.get("method"), strategy=e.get("strategy"),
                 kind=e.get("kind"), opt=e.get("opt"), genome=genome)
+
+
+@app.route("/api/backtests/rerun_router", methods=["POST"])
+def bt_rerun_router():
+    """Re-run the backtest of EVERY component strategy behind one router run
+    on the most recently downloaded market data. For each component run the
+    published entries (_oosbest_full / _best_full / _full variants) are all
+    refreshed; one worker job handles the whole batch. Liquidation history
+    stays sticky via liq_ever (see _bt_fold)."""
+    run = os.path.basename(
+        (request.get_json(force=True) or {}).get("run") or "")
+    if not run or not re.fullmatch(r"[A-Za-z0-9_.\-]+", run):
+        return jsonify(error="bad run name"), 400
+    path = os.path.join(OPT, "runs", run, "best_config.json")
+    if not os.path.isfile(path):
+        return jsonify(error=f"no best_config.json for run '{run}'"), 404
+    comps = ((json.load(open(path)).get("cand") or {})
+             .get("components") or [])
+    comp_runs = sorted({c.get("run") for c in comps if c.get("run")})
+    if not comp_runs:
+        return jsonify(error="that run has no components"), 400
+    p = os.path.join(REPO, "dashboard", "backtests.js")
+    txt = open(p).read()
+    entries = json.JSONDecoder().raw_decode(
+        txt[txt.index("=") + 1:].lstrip())[0]
+    by = {x.get("name"): x for x in entries}
+    del txt, entries
+    items, missing = [], []
+    for r in comp_runs:
+        found = False
+        for suf in ("_oosbest_full", "_best_full", "_full"):
+            e = by.get(r + suf)
+            if e:
+                it = _rerun_item(e)
+                if it:
+                    items.append(it)
+                    found = True
+        if not found:
+            missing.append(r)
+    if not items:
+        return jsonify(error="no published component entries found for "
+                             f"'{run}' — nothing to refresh"), 404
     sd = os.path.join(REPO, "dashboard", "bt_refresh")
     os.makedirs(sd, exist_ok=True)
-    shard = os.path.join(sd, f"one_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
-    json.dump([item], open(shard, "w"))
-    jid = spawn("backtest", f"re-run {name} on current data",
+    shard = os.path.join(sd,
+                         f"rtr_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
+    json.dump(items, open(shard, "w"))
+    jid = spawn("backtest",
+                f"re-run router {run}: {len(items)} component backtests "
+                "on current data",
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
-                 "--shard", shard, "--procs", "1",
+                 "--shard", shard, "--procs", "4",
                  "--hub", "http://localhost:8800"], REPO)
-    return jsonify(ok=True, id=jid)
+    return jsonify(ok=True, id=jid, n=len(items),
+                   entries=[i["name"] for i in items], missing=missing)
 
 
 def _bt_ingester():
     """Every 60s: fold all pending bt_incoming files into backtests.js
     (replace-by-name) under the shared lock, in a single parse+write."""
-    import fcntl
     d = os.path.join(REPO, "dashboard", "bt_incoming")
-    p = os.path.join(REPO, "dashboard", "backtests.js")
     while True:
         time.sleep(60)
         try:
@@ -4442,19 +4515,7 @@ def _bt_ingester():
                     pass
             if not pend:
                 continue
-            with open(p + ".lock", "w") as lk:
-                fcntl.flock(lk, fcntl.LOCK_EX)
-                txt = open(p).read()
-                entries = json.JSONDecoder().raw_decode(
-                    txt[txt.index("=") + 1:].lstrip())[0]
-                entries = [x for x in entries
-                           if x.get("name") not in pend] + list(pend.values())
-                tmp = p + f".tmp{os.getpid()}"
-                with open(tmp, "w") as f:
-                    f.write("window.BACKTESTS = ")
-                    json.dump(entries, f, default=float)
-                    f.write(";")
-                os.replace(tmp, p)
+            _bt_fold(pend)      # shared: replace-by-name + sticky liq_ever
             for fn in files:
                 try:
                     os.remove(os.path.join(d, fn))

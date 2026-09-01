@@ -170,6 +170,28 @@ Capacity-adjusted projections: see the 2026-08-28 conversation — the
 backtest +387%/mo lev rate decays to roughly +290/+245/+187%/mo over three
 months under this cap.
 
+## Backtest re-runs & liquidation history (2026-08-31)
+
+- **Re-run one entry**: select it on the classic Backtests page -> "Re-run
+  on current data" (`/api/backtests/rerun`). The refreshed entry REPLACES
+  the old one and its `created` is stamped with the re-run time (last-24h
+  entries show a green created date).
+- **Re-run a whole router**: pick the router in the classic page's router
+  filter -> "re-run all components" (`/api/backtests/rerun_router`): every
+  component run's published entries (_oosbest_full/_best_full/_full) are
+  refreshed in one worker job (4 procs). A PROGRESS BAR (done/total from
+  the worker's heartbeats via `/api/bt_refresh/progress`) appears under
+  the "active now" banner.
+- **Liquidation history is STICKY**: `_bt_fold` sets `liq_ever` on a
+  refreshed entry when its old stats (or a previous liq_ever) show a
+  liquidation — a config that died on ANY data vintage stays flagged.
+  Classic page: red row tint + red liq cell ("LIQ" now / "no — LIQ
+  before"); the "no liquidations only" filter excludes both. Terminal
+  Backtests: red LIQ tag (current) / "was LIQ" tag (historical).
+- Index/parts staleness fixed the same day: the lite index disk cache
+  records source provenance (src_mt), the classic page's part files swap
+  atomically as a complete set, and gz copies regenerate off the raw parts.
+
 ## Pause / wind-down per instance (2026-08-31)
 
 Pause button on each instance card (`/api/trader/pause` -> sidecar

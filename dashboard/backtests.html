@@ -32,6 +32,9 @@ tr.rate2 td:first-child{box-shadow:inset 3px 0 0 rgb(45,186,150)}
 tr.rate3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
 tr.best td{background:rgba(63,185,80,.08)}
 tr.best td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+/* liquidated on current data OR in any earlier run of the same entry */
+tr.liqrow td{background:rgba(248,81,73,.07)}
+tr.liqrow td:first-child{box-shadow:inset 3px 0 0 var(--red)}
 tr.best:hover td{background:rgba(63,185,80,.14)} tr.best.sel td{background:#1f3a5f}
 button.star{background:none;border:none;cursor:pointer;font-size:14px;color:var(--dim)}
 button.star:hover{color:var(--green)} button.star.on{color:var(--green)}
@@ -155,7 +158,7 @@ button.rtradd.on{opacity:1;filter:none}
     <label class="hint" title="pick a router/combo and see ONLY the backtests it was built from — its component runs, plus the router's own entries. The component list comes from the router run's best_config.json.">router
       <select id="fRtrOf" onchange="rtrOfChanged()" style="margin-left:4px;max-width:260px">
         <option value="">all</option>
-      </select></label>
+      </select></label><button onclick="rerunRouter()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px" title="re-run the backtest of EVERY component strategy of the selected router against the most recently downloaded market data (one job; entries are replaced as they finish — watch the progress bar under 'active now'). Any strategy that liquidates — now or in any earlier run — shows in red.">↻ re-run all components</button>
     <label class="hint" title="routers/combos are the composed entries (MetaX, MetaX2, PairX, FCFS) — everything else is a single-strategy run">routers
       <select id="fRouters" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -440,8 +443,26 @@ async function pollActiveJobs(){
     const act = jobs.filter(j=>j.status==='running');
     const el = document.getElementById('activeJobs');
     el.style.display = act.length ? '' : 'none';
+    // re-run progress bars: the refresh worker heartbeats done/total to the
+    // panel — show one bar per running re-run batch under the job line
+    let bars = '';
+    if(act.some(j=>j.kind==='backtest')){
+      try{
+        const pr = await fetch('/api/bt_refresh/progress').then(r=>r.json());
+        bars = Object.entries(pr)
+          .filter(([,v])=>v && v.total && v.status!=='done' && v.done < v.total)
+          .map(([w,v])=>{
+            const pct = Math.round(100*v.done/v.total);
+            return `<div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+              <span class="hint" style="white-space:nowrap">re-run ${v.done}/${v.total} backtests</span>
+              <div style="flex:0 1 340px;height:7px;border-radius:4px;background:rgba(120,130,150,.25);overflow:hidden">
+                <div style="height:7px;background:var(--green);width:${pct}%;transition:width .5s"></div></div>
+              <span class="hint">${pct}%</span></div>`;
+          }).join('');
+      }catch(e){}
+    }
     el.innerHTML = act.length ? '<span class="livedot"></span><b>active now:</b> ' +
-      act.map(j=>`${j.name} <span class="hint">(${j.kind}${j.progress?`, ${Math.round(100*j.progress.pct)}% · ETA ${Math.round((j.progress.eta_s||0)/60)}m`:''})</span>`).join(' · ') : '';
+      act.map(j=>`${j.name} <span class="hint">(${j.kind}${j.progress?`, ${Math.round(100*j.progress.pct)}% · ETA ${Math.round((j.progress.eta_s||0)/60)}m`:''})</span>`).join(' · ') + bars : '';
     const now = new Set(act.map(j=>j.id));
     for(const id of _prevRunningJobs){
       if(!now.has(id)){
@@ -991,7 +1012,7 @@ function render(){
   const _isRtr = i => ['metax','metax2','pairx','fcfsx'].includes(BT[i].strategy);
   if(fRtV === 'only') order = order.filter(_isRtr);
   else if(fRtV === 'hide') order = order.filter(i=>!_isRtr(i));
-  if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq);
+  if(fNoLiqV) order = order.filter(i=>!(BT[i].stats||{}).liq && !BT[i].liq_ever);
   if(fOpenV === 'open') order = order.filter(hasOpen);
   else if(fOpenV === 'flat') order = order.filter(i=>!hasOpen(i));
   // combine selection active: only compatible partners stay visible
@@ -1070,7 +1091,7 @@ function render(){
   // sort/filters/500-row cap would hide it — e.g. arriving via a ?sel= link)
   if(sel!==null && !_shown.includes(sel)) _shown = [sel, ..._shown];
   const _capNote = order.length>_cap ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(order.length-_cap).toLocaleString()} more match — use the filters or the search box above to narrow down</td></tr>` : '';
-  tb.innerHTML = _capNote + _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''} rate${e.rating||0}">
+  tb.innerHTML = _capNote + _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''}${(s.liq||e.liq_ever)?' liqrow':''} rate${e.rating||0}">
     <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const g=gauntOf(e.name);if(!g)return '';
       if(g.full&&g.passed===5)return ` <span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="HOLDOUT GAUNTLET: this run's sweep family passed ALL 5 holdout types — every leg's winner survived its own out-of-sample holdout without liquidating">✓ 5/5 holdouts</span>`;
       if(g.full)return ` <span class="pill" style="background:rgba(248,81,73,.15);color:var(--red)" title="HOLDOUT GAUNTLET complete: only ${g.passed} of 5 holdout types passed">holdouts ${g.passed}/5</span>`;
@@ -1080,12 +1101,12 @@ function render(){
     <td class="${s.monthly_growth_pct>=0?'pos':'neg'}">${fp(s.monthly_growth_pct)}</td>
     <td>${fTotalPct(e)}</td>
     <td>${fm(s.total_mult)}</td>
-    <td class="${s.liq?'neg':'pos'}">${s.liq?'LIQ':'no'}</td>
+    <td class="${(s.liq||e.liq_ever)?'neg':'pos'}" title="${s.liq?'the simulated account LIQUIDATED on the current data':(e.liq_ever?'no liquidation on the CURRENT data, but an earlier run of this exact entry liquidated — the config has died on some data vintage':'never liquidated')}">${s.liq?'LIQ':(e.liq_ever?'no — LIQ before':'no')}</td>
     <td class="${(s.maxdd_mtm||0)>0.5?'warn':''}">${(100*(s.maxdd_mtm??0)).toFixed(1)}%</td>
     <td>${s.sl_hits??0}</td><td>${s.n??''}</td><td>${(100*(s.win||0)).toFixed(0)}%</td>
     <td>${oosCell(e)}</td>
     <td>${gapBadge(e)}</td>
-    <td class="hint">${e.created||''}</td>
+    <td class="hint" ${(()=>{const c=e.created||'';const fresh=c && (Date.now()-new Date(c.replace(' ','T')).getTime())<86400000;return fresh?'style="color:var(--green);font-weight:600" title="run in the last 24h — a re-run replaces the entry and stamps it with the re-run time"':'';})()}>${e.created||''}</td>
     <td><span class="rstars r${e.rating||0}" title="quality rating — independent of the ★ best mark">${[1,2,3].map(k=>
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
@@ -1175,6 +1196,17 @@ async function adoptThis(){
     body:JSON.stringify({entry:e.name, target:t})}).then(x=>x.json());
   if(r.ok) alert((r.note||('Saved as '+t))+`\n\nOn the Control panel, pick "${r.target||t}" on an instance and start it (dry-run first).`);
   else alert('error: '+(r.error||''));
+}
+async function rerunRouter(){
+  const run = document.getElementById('fRtrOf').value;
+  if(!run){ alert('Pick a router in the "router" filter first — its components are what get re-run.'); return; }
+  if(!confirm(`Re-run the backtests of ALL component strategies of\n\n  ${run}\n\nagainst the most recently downloaded market data?\n\nEach component entry is REPLACED as it finishes (several minutes total — a progress bar appears under "active now"). Strategies that liquidate, now or in any earlier run, show in red.`)) return;
+  const r = await fetch('/api/backtests/rerun_router', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({run})}).then(x=>x.json());
+  alert(r.ok ? `Started: ${r.n} component backtest(s) queued.`+
+        (r.missing&&r.missing.length?`\n\nNo published entries found for: ${r.missing.join(', ')}`:'')
+      : ('error: '+(r.error||'')));
+  pollActiveJobs();
 }
 async function rerunThis(){
   if(sel===null) return;
