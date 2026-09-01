@@ -22,11 +22,21 @@ REPO = os.path.abspath(os.path.join(HERE, ".."))
 OPT = os.path.join(REPO, "optimizer")
 
 
+def _hub_headers():
+    # off-box workers (MacBook offload) must authenticate: the panel
+    # requires X-Panel-Key for non-local requests
+    h = {"Content-Type": "application/json"}
+    k = os.environ.get("PANEL_KEY")
+    if k:
+        h["X-Panel-Key"] = k
+    return h
+
+
 def submit(hub, entries):
     req = urllib.request.Request(
         hub + "/api/backtests/submit",
         data=json.dumps(entries, default=float).encode(),
-        headers={"Content-Type": "application/json"}, method="POST")
+        headers=_hub_headers(), method="POST")
     # generous timeout + retries: losing a finished multi-minute sim to a
     # transient submit hiccup wastes the whole re-run (bit us 2026-08-31
     # when submits timed out behind the old synchronous fold)
@@ -164,7 +174,7 @@ def main():
                 a.hub + "/api/bt_refresh/heartbeat",
                 data=json.dumps(dict(worker=me, done=n, total=len(items),
                                      status=status)).encode(),
-                headers={"Content-Type": "application/json"}, method="POST")
+                headers=_hub_headers(), method="POST")
             urllib.request.urlopen(req, timeout=15).read()
         except Exception:
             pass
