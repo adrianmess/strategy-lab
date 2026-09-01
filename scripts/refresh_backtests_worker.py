@@ -72,6 +72,14 @@ def run_one(path, hub):
                          or it.get("strategy"))
     json.dump(g, open(cfgp, "w"))
     e = BT.run_single(cfgp)
+    # gap metadata: the publish path attaches this, run_single's return may
+    # not — without it the dashboard's gaps column shows "unknown" even
+    # though segmentation/contamination-skipping WAS active (it always is;
+    # gap_info just describes the loaded dataset's segments)
+    try:
+        gh = e.get("gap_handling") or BT.gap_info()
+    except Exception:
+        gh = None
     entry = dict(
         name=it["name"], pair=it["pair"], timeframe=it["timeframe"],
         mode=it["mode"], method=it.get("method") or e.get("method"),
@@ -81,7 +89,9 @@ def run_one(path, hub):
         curve=(e.get("curve") or [])[-400:],
         trades=(e.get("trades") or [])[-400:],
         open_positions=e.get("open_positions") or [],
-        gap_mode=e.get("gap_mode"),
+        gap_mode=e.get("gap_mode") or "skip_contaminated",
+        gap_handling=gh,
+        suppressed_bars=e.get("suppressed_bars"),
         max_hold_days=(e.get("stats") or {}).get("max_hold_days"),
         created=time.strftime("%Y-%m-%d %H:%M"))
     submit(hub, [entry])
