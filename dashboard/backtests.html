@@ -273,6 +273,7 @@ button.rtradd.on{opacity:1;filter:none}
       <tbody id="rtrList"><tr><td colspan="8" class="hint">use the 🔀 button on any run to add it — or pick a router in the <b>router</b> filter above to load the one it was built from…</td></tr></tbody></table>
     <div style="margin-top:6px">
       <button onclick="sendToRouter()" title="Each selected backtest is mapped back to the optimizer run that produced it; those runs are preloaded as Specific components in the Routers & combos section on the Optimize page">→ build a router with these on the Optimize page</button>
+      <button onclick="rerunRtrSel()" title="re-run the backtest of every component in THIS list (whatever you loaded from the saved routers or picked with 🔀) against the most recently downloaded market data — one job, progress bar under 'active now'. Strategies that liquidate, now or in any earlier run, show in red.">↻ re-run these on current data</button>
       <button id="rtrOnlyBtn" onclick="toggleRtrOnly()" title="show ONLY the selected components in the list below (all other filters still apply) — click again to show everything">⧉ show only these below</button>
       <button onclick="clearRtr()">clear</button>
       <span style="margin-left:14px;padding-left:14px;border-left:1px solid var(--border)">
@@ -1196,6 +1197,19 @@ async function adoptThis(){
     body:JSON.stringify({entry:e.name, target:t})}).then(x=>x.json());
   if(r.ok) alert((r.note||('Saved as '+t))+`\n\nOn the Control panel, pick "${r.target||t}" on an instance and start it (dry-run first).`);
   else alert('error: '+(r.error||''));
+}
+async function rerunRtrSel(){
+  if(!RTRSEL.length){ alert('no components selected — load a saved router selection or add runs with 🔀 first.'); return; }
+  const label = document.getElementById('rtrSaveName').value.trim()
+             || (document.getElementById('rtrSavedSel')||{}).value || '';
+  if(!confirm(`Re-run the backtests of the ${RTRSEL.length} component(s) in the Router components list${label?` (“${label}”)`:''}\n\nagainst the most recently downloaded market data?\n\nEach entry is REPLACED as it finishes (a progress bar appears under "active now"). Strategies that liquidate, now or in any earlier run, show in red.`)) return;
+  const r = await fetch('/api/backtests/rerun_router', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({names:[...RTRSEL], label})}).then(x=>x.json());
+  alert(r.ok ? `Started: ${r.n} component backtest(s) queued.`+
+        (r.missing&&r.missing.length?`\n\nNot published (skipped): ${r.missing.join(', ')}`:'')
+      : ('error: '+(r.error||'')));
+  pollActiveJobs();
 }
 async function rerunRouter(){
   const run = document.getElementById('fRtrOf').value;

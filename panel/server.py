@@ -4442,23 +4442,29 @@ def _rerun_item(e):
 
 @app.route("/api/backtests/rerun_router", methods=["POST"])
 def bt_rerun_router():
-    """Re-run the backtest of EVERY component strategy behind one router run
-    on the most recently downloaded market data. For each component run the
-    published entries (_oosbest_full / _best_full / _full variants) are all
-    refreshed; one worker job handles the whole batch. Liquidation history
-    stays sticky via liq_ever (see _bt_fold)."""
-    run = os.path.basename(
-        (request.get_json(force=True) or {}).get("run") or "")
-    if not run or not re.fullmatch(r"[A-Za-z0-9_.\-]+", run):
-        return jsonify(error="bad run name"), 400
-    path = os.path.join(OPT, "runs", run, "best_config.json")
-    if not os.path.isfile(path):
-        return jsonify(error=f"no best_config.json for run '{run}'"), 404
-    comps = ((json.load(open(path)).get("cand") or {})
-             .get("components") or [])
-    comp_runs = sorted({c.get("run") for c in comps if c.get("run")})
-    if not comp_runs:
-        return jsonify(error="that run has no components"), 400
+    """Re-run a router's component backtests on the most recently downloaded
+    market data, in one worker job. Two ways to say WHICH components:
+      {"run": <router run dir>}   — every component run's published entries
+                                    (_oosbest_full/_best_full/_full variants)
+      {"names": [entry, ...]}     — exact published entry names (the classic
+                                    page's Router-components bar / a SAVED
+                                    router selection), optional "label".
+    Liquidation history stays sticky via liq_ever (see _bt_fold)."""
+    d = request.get_json(force=True) or {}
+    names = [str(n) for n in (d.get("names") or []) if n]
+    run = os.path.basename(d.get("run") or "")
+    if not names:
+        if not run or not re.fullmatch(r"[A-Za-z0-9_.\-]+", run):
+            return jsonify(error="need a run name or a names list"), 400
+        path = os.path.join(OPT, "runs", run, "best_config.json")
+        if not os.path.isfile(path):
+            return jsonify(error=f"no best_config.json for run '{run}'"), 404
+        comps = ((json.load(open(path)).get("cand") or {})
+                 .get("components") or [])
+        comp_runs = sorted({c.get("run") for c in comps if c.get("run")})
+        if not comp_runs:
+            return jsonify(error="that run has no components"), 400
+    label = run or (d.get("label") or f"{len(names)} selected components")
     p = os.path.join(REPO, "dashboard", "backtests.js")
     txt = open(p).read()
     entries = json.JSONDecoder().raw_decode(
@@ -4466,27 +4472,35 @@ def bt_rerun_router():
     by = {x.get("name"): x for x in entries}
     del txt, entries
     items, missing = [], []
-    for r in comp_runs:
-        found = False
-        for suf in ("_oosbest_full", "_best_full", "_full"):
-            e = by.get(r + suf)
-            if e:
-                it = _rerun_item(e)
-                if it:
-                    items.append(it)
-                    found = True
-        if not found:
-            missing.append(r)
+    if names:
+        for nm in names:
+            it = _rerun_item(by[nm]) if nm in by else None
+            if it:
+                items.append(it)
+            else:
+                missing.append(nm)
+    else:
+        for r in comp_runs:
+            found = False
+            for suf in ("_oosbest_full", "_best_full", "_full"):
+                e = by.get(r + suf)
+                if e:
+                    it = _rerun_item(e)
+                    if it:
+                        items.append(it)
+                        found = True
+            if not found:
+                missing.append(r)
     if not items:
-        return jsonify(error="no published component entries found for "
-                             f"'{run}' — nothing to refresh"), 404
+        return jsonify(error=f"no published component entries found for "
+                             f"'{label}' — nothing to refresh"), 404
     sd = os.path.join(REPO, "dashboard", "bt_refresh")
     os.makedirs(sd, exist_ok=True)
     shard = os.path.join(sd,
                          f"rtr_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
     json.dump(items, open(shard, "w"))
     jid = spawn("backtest",
-                f"re-run router {run}: {len(items)} component backtests "
+                f"re-run router {label}: {len(items)} component backtests "
                 "on current data",
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
