@@ -101,14 +101,31 @@ def main():
                 idx[0] += 1
             tf = (it["timeframe"] or "3").rstrip("m") or "3"
             coin = (it["pair"] or "SOL_USDT").split("_")[0].lower()
+            # PER-THREAD numba cache dir: parallel children sharing the
+            # default cache corrupt it when two compile the same jitted
+            # function at once — the next child to LOAD it segfaults in
+            # numba's Dispatcher_call (macOS crash popup, no traceback).
+            # Same disease and same fix as the fcfs hosts (2026-08-23);
+            # bit the router re-run batches on 2026-08-31 at --procs 4.
+            nb_cache = os.path.join(tmpd, f"nb{tid}")
+            os.makedirs(nb_cache, exist_ok=True)
             env = {**os.environ, "LAB_TF": tf, "LAB_COIN": coin,
-                   "LAB_MARKET": ("spot" if it["mode"] == "spot" else "lev")}
+                   "LAB_MARKET": ("spot" if it["mode"] == "spot" else "lev"),
+                   "NUMBA_CACHE_DIR": nb_cache}
             ip = os.path.join(tmpd, f"{tid}_{idx[0]}.json")
             json.dump(it, open(ip, "w"))
-            r = subprocess.run([sys.executable, os.path.abspath(__file__),
-                                "--one", ip, "--hub", a.hub],
-                               env=env, capture_output=True, text=True,
-                               timeout=1800)
+            r = None
+            for attempt in (1, 2):      # one retry: JIT-cache/segfault-class
+                r = subprocess.run([sys.executable, os.path.abspath(__file__),
+                                    "--one", ip, "--hub", a.hub],
+                                   env=env, capture_output=True, text=True,
+                                   timeout=1800)
+                if r.returncode == 0:
+                    break
+                print(f"attempt {attempt} failed for {it['name']} "
+                      f"(rc {r.returncode}) — "
+                      f"{'retrying' if attempt == 1 else 'giving up'}",
+                      flush=True)
             with lock:
                 if r.returncode == 0:
                     with open(done_f, "a") as f:
