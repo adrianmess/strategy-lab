@@ -4344,15 +4344,18 @@ def bt_submit():
         ents = [ents]
     if not all(isinstance(e, dict) and e.get("name") for e in ents):
         return jsonify(error="entries need names"), 400
-    if len(ents) <= 3:
-        # small submissions (single re-runs) fold synchronously so the page
-        # sees the refreshed entry as soon as the job finishes
-        _bt_fold({e["name"]: e for e in ents})
-        return jsonify(ok=True, folded=len(ents))
+    # ALWAYS queue — never fold inside the request. The old synchronous fold
+    # for small submissions parsed the 554MB store while the caller waited;
+    # parallel re-run children serialized behind the lock, each fold took
+    # about a minute, the workers timed out at 60s and marked entries FAIL
+    # even though the folds succeeded (2026-08-31). The ingester is kicked
+    # to fold within seconds instead of its 60s tick.
     d = os.path.join(REPO, "dashboard", "bt_incoming")
     os.makedirs(d, exist_ok=True)
-    fn = os.path.join(d, f"{int(time.time()*1000)}_{os.getpid()}.json")
+    fn = os.path.join(d, f"{int(time.time()*1000)}_{os.getpid()}_"
+                         f"{uuid.uuid4().hex[:6]}.json")
     json.dump(ents, open(fn, "w"), default=float)
+    _BT_KICK.set()
     return jsonify(ok=True, queued=len(ents))
 
 
@@ -4510,12 +4513,18 @@ def bt_rerun_router():
                    entries=[i["name"] for i in items], missing=missing)
 
 
+_BT_KICK = threading.Event()
+
+
 def _bt_ingester():
-    """Every 60s: fold all pending bt_incoming files into backtests.js
-    (replace-by-name) under the shared lock, in a single parse+write."""
+    """Fold all pending bt_incoming files into backtests.js (replace-by-name)
+    under the shared lock, in a single parse+write — within seconds of a
+    submit (the Event), or every 60s as a sweep."""
     d = os.path.join(REPO, "dashboard", "bt_incoming")
     while True:
-        time.sleep(60)
+        _BT_KICK.wait(timeout=60)
+        time.sleep(2)          # let a burst of submits coalesce into one fold
+        _BT_KICK.clear()
         try:
             files = sorted(os.listdir(d)) if os.path.isdir(d) else []
             if not files:

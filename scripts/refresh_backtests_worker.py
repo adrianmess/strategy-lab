@@ -27,8 +27,18 @@ def submit(hub, entries):
         hub + "/api/backtests/submit",
         data=json.dumps(entries, default=float).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    # generous timeout + retries: losing a finished multi-minute sim to a
+    # transient submit hiccup wastes the whole re-run (bit us 2026-08-31
+    # when submits timed out behind the old synchronous fold)
+    last = None
+    for i in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return json.load(r)
+        except Exception as e:
+            last = e
+            time.sleep(10 * (i + 1))
+    raise last
 
 
 def run_one(path, hub):
