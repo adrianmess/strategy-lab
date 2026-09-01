@@ -4456,6 +4456,46 @@ def bt_rerun_router():
     d = request.get_json(force=True) or {}
     names = [str(n) for n in (d.get("names") or []) if n]
     run = os.path.basename(d.get("run") or "")
+    inst = str(d.get("instance") or "")
+    if inst and not names:
+        # {"instance": "all"|"<id>"}: the EXACT entries the running traders
+        # use — each component's run plus WHICH candidate (file:
+        # holdout_best_config.json -> _oosbest_full, else _full). This is
+        # the "am I trading something that liquidates on current data?"
+        # button: a hand-kept saved selection can drift from what the
+        # instances really run (2026-08-31).
+        targets = ([(i, I) for i, I in sorted(instances.items())
+                    if I["trader"]["proc"] is not None
+                    and I["trader"]["proc"].poll() is None]
+                   if inst == "all" else
+                   ([(inst, instances[inst])] if inst in instances else []))
+        if not targets:
+            return jsonify(error="no running instances to read"), 404
+        labels = []
+        for i, I in targets:
+            cfgp = I["trader"].get("config") or I.get("cfg")
+            if not cfgp:
+                continue
+            try:
+                icfg = json.load(open(os.path.join(AT, cfgp)))
+            except Exception:
+                continue
+            comps = ((icfg.get("candidate") or {}).get("components") or [])
+            got = False
+            for c in comps:
+                if c.get("run"):
+                    suf = ("_oosbest_full"
+                           if (c.get("file") or "").startswith("holdout")
+                           else "_full")
+                    names.append(c["run"] + suf)
+                    got = True
+            if got:
+                labels.append(_iname(i))
+        names = sorted(set(names))
+        if not names:
+            return jsonify(error="running instances have no router "
+                                 "components to re-run"), 404
+        d.setdefault("label", "TRADED components of " + ", ".join(labels))
     if not names:
         if not run or not re.fullmatch(r"[A-Za-z0-9_.\-]+", run):
             return jsonify(error="need a run name or a names list"), 400
@@ -4475,9 +4515,20 @@ def bt_rerun_router():
     by = {x.get("name"): x for x in entries}
     del txt, entries
     items, missing = [], []
+    _SUFS = ("_oosbest_full", "_best_full", "_full")
     if names:
         for nm in names:
-            it = _rerun_item(by[nm]) if nm in by else None
+            e = by.get(nm)
+            if e is None:
+                # fall back to a sibling candidate entry of the same run
+                base = nm
+                for s in _SUFS:
+                    if nm.endswith(s):
+                        base = nm[:-len(s)]
+                        break
+                e = next((by[base + s] for s in _SUFS if base + s in by),
+                         None)
+            it = _rerun_item(e) if e else None
             if it:
                 items.append(it)
             else:
@@ -4494,6 +4545,9 @@ def bt_rerun_router():
                         found = True
             if not found:
                 missing.append(r)
+    _seen = set()      # the sibling fallback can map two names to one entry
+    items = [it for it in items
+             if it["name"] not in _seen and not _seen.add(it["name"])]
     if not items:
         return jsonify(error=f"no published component entries found for "
                              f"'{label}' — nothing to refresh"), 404

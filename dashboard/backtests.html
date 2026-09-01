@@ -158,7 +158,7 @@ button.rtradd.on{opacity:1;filter:none}
     <label class="hint" title="pick a router/combo and see ONLY the backtests it was built from — its component runs, plus the router's own entries. The component list comes from the router run's best_config.json.">router
       <select id="fRtrOf" onchange="rtrOfChanged()" style="margin-left:4px;max-width:260px">
         <option value="">all</option>
-      </select></label><button onclick="rerunRouter()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px" title="re-run the backtest of EVERY component strategy of the selected router against the most recently downloaded market data (one job; entries are replaced as they finish — watch the progress bar under 'active now'). Any strategy that liquidates — now or in any earlier run — shows in red.">↻ re-run all components</button>
+      </select></label><button onclick="rerunRouter()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px" title="re-run the backtest of EVERY component strategy of the selected router against the most recently downloaded market data (one job; entries are replaced as they finish — watch the progress bar under 'active now'). Any strategy that liquidates — now or in any earlier run — shows in red.">↻ re-run all components</button><button onclick="rerunTraded()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px;border-color:var(--amber)" title="re-run the EXACT strategies your running trader instances are using right now (each component's run + the candidate it actually trades, read from the live configs — no saved list to drift out of date). The one check that answers: am I trading something that liquidates on current data?">↻ re-run TRADED strategies</button>
     <label class="hint" title="routers/combos are the composed entries (MetaX, MetaX2, PairX, FCFS) — everything else is a single-strategy run">routers
       <select id="fRouters" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -1208,6 +1208,15 @@ async function rerunRtrSel(){
     body:JSON.stringify({names:[...RTRSEL], label})}).then(x=>x.json());
   alert(r.ok ? `Started: ${r.n} component backtest(s) queued.`+
         (r.missing&&r.missing.length?`\n\nNot published (skipped): ${r.missing.join(', ')}`:'')
+      : ('error: '+(r.error||'')));
+  pollActiveJobs();
+}
+async function rerunTraded(){
+  if(!confirm(`Re-run the backtests of the EXACT strategies your running instances are trading right now\n(every component's run + the candidate it actually uses, read live from the trader configs)\n\nagainst the most recently downloaded market data?\n\nEntries are replaced as they finish (progress bar under "active now"). Anything that liquidates — now or in any earlier run — shows in red, and traded entries carry the TRADING badge.`)) return;
+  const r = await fetch('/api/backtests/rerun_router', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({instance:'all'})}).then(x=>x.json());
+  alert(r.ok ? `Started: ${r.n} traded-component backtest(s) queued.`+
+        (r.missing&&r.missing.length?`\n\nNo published entry for: ${r.missing.join(', ')}`:'')
       : ('error: '+(r.error||'')));
   pollActiveJobs();
 }
