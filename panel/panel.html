@@ -605,7 +605,16 @@ function updateCfgSummary(i){
     venueBadge(c.api_account, c.execution, c.mode)+
     `${c.adopted_from?` — parameters adopted from <b>${c.adopted_from.split('/').slice(-2)[0]}</b> at ${c.adopted_at}`:''}` +
     (c.components && c.components.length ? ` <a style="cursor:pointer" title="the full provenance story of this router — which strategies were optimized/combined, bucket assignment, walk-forward, adoption" onclick="showCfgStory('${(c.adopted_from||'').split('/runs/')[1]?(c.adopted_from||'').split('/runs/')[1].split('/')[0]:''}')">📖 story</a><details style="margin-top:4px"><summary style="cursor:pointer">router components (${c.components.length} runs${c.components.some(x=>x.assigned)?`, ${c.components.filter(x=>x.assigned).length} assigned to buckets`:''})</summary><div style="margin:4px 0 0 12px;font-size:12px">` +
-      c.components.map(x=>`<div>${x.assigned?'●':'○'} <b>${x.run}</b> <span style="color:var(--dim)">(${x.strategy}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})${x.assigned?'':' — mined but not assigned to any bucket'}</span></div>`).join('') +
+      c.components.map(x=>{
+        // which CANDIDATE of the run this component trades — the run
+        // publishes an OOS-best (_oosbest_full) and a train-best (_full)
+        // entry, and they can disagree badly (one liquidates, one doesn't)
+        const oos = (x.file||'').startsWith('holdout');
+        const suffix = x.file ? (oos ? '_oosbest_full' : '_full') : '';
+        const cand = x.file
+          ? ` <span style="color:${oos?'var(--green)':'var(--amber)'};font-weight:600" title="this component trades the run's ${oos?'OOS-best candidate (holdout_best_config.json)':'TRAIN-best candidate (best_config.json)'} — its backtest entry is ${x.run}${suffix}">${oos?'OOS-best':'train-best'}</span>` : '';
+        return `<div>${x.assigned?'●':'○'} <b title="${x.file?`backtest entry: ${x.run}${suffix}`:''}">${x.run}</b>${cand} <span style="color:var(--dim)">(${x.strategy}${x.method?`·${x.method}`:''}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})${x.assigned?'':' — mined but not assigned to any bucket'}</span></div>`;
+      }).join('') +
       `</div></details>` : '');
 }
 

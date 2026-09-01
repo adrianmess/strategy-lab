@@ -5655,8 +5655,12 @@ def trader_configs():
         comps = None
         if strat == "fcfsx" and cand.get("components"):
             # FCFS combos: every component is a run in its own right, so the
-            # Backtests page can filter to "what this instance is trading"
+            # Backtests page can filter to "what this instance is trading".
+            # `file` says WHICH candidate of the run is traded
+            # (holdout_best_config.json -> the _oosbest_full entry, else the
+            # train-best _full entry) — the siblings can disagree badly
             comps = [dict(run=x.get("run"), strategy=x.get("strategy"),
+                          method=x.get("method"), file=x.get("file"),
                           pair=x.get("pair"), timeframe=x.get("timeframe"),
                           assigned=True) for x in cand["components"]]
         elif strat in ("metax", "metax2") and cand.get("components"):
