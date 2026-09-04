@@ -1953,7 +1953,7 @@ function extrasRow(){
   return '<div class="brow">'+sb+db+'</div>'+(SH_OPEN && rows.length ? shadowTable(rows) : '');
 }
 // ---------------- Trade page (manual orders + chart) ----------------
-var TD = {pair:'BTC', tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
+var TD = {pair:(localStorage.getItem('tdPair')||'BTC'), tf:'15m', mkt:'fut', acct:'mexc1', chart:null,
           series:null, state:null, timer:null, cache:{}, pf:0,
           tab:(localStorage.getItem('tdTab')||'pos'),
           posAll:(localStorage.getItem('tdPosAll')!=='0'),
@@ -2269,7 +2269,12 @@ function tdIndToggle(k){
   tdIndUpdate(); tdRefreshChips();
 }
 function tdRefreshChips(){
-  tdChips('tdPairs', TD_PAIRS, TD.pair, function(v){ TD.pair = v; tdRefresh(); });
+  // an unknown saved pair (renamed/removed) must not strand the page
+  if(TD_PAIRS.indexOf(TD.pair) < 0) TD.pair = TD_PAIRS[0] || 'BTC';
+  tdChips('tdPairs', TD_PAIRS, TD.pair, function(v){
+    TD.pair = v;
+    localStorage.setItem('tdPair', v);   // survive reloads and page switches
+    tdRefresh(); });
   tdChips('tdTfs', TD_TFS, TD.tf, function(v){ TD.tf = v; tdKlines(); tdRefreshChips(); });
   var iw = document.getElementById('tdInds');
   if(iw){
