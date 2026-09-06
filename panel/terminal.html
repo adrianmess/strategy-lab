@@ -1401,7 +1401,11 @@ function loadBT(){
             '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
               r.name+'</td>'+
             '<td><span class="tag '+vc+'">'+r.verdict+'</span></td>'+
-            '<td><span class="tag b">'+((r.pair||'').split('_')[0]||'multi')+' '+(r.tf||'')+'</span></td>'+
+            '<td><span class="tag b">'+((r.pair||'').split('_')[0]||'multi')+' '+(r.tf||'')+'</span>'+
+              (r.lev_x&&r.lev_x>1?' <span class="tag lev">'+Math.round(r.lev_x)+'x</span>':'')+
+              (r.sl==='stops'?' <span class="tag g" title="stop-loss active in every regime">SL</span>'
+               :r.sl==='partial'?' <span class="tag lev" title="stop-loss active in only SOME regimes (or it fired despite a stopless-reading config)">partial SL</span>'
+               :(r.sl==='stopless'&&r.lev_x>1?' <span class="tag live" title="leverage with NO stop-loss — liquidation is the only downside floor">stopless</span>':''))+'</td>'+
             '<td class="n '+(r.growth==null?'dim':cls(+r.growth))+'">'+
               (r.growth==null?'—':((+r.growth)>=0?'+':'')+(+r.growth).toFixed(1)+'%')+'</td>'+
             '<td class="n">'+(r.mult==null?'—':(+r.mult).toExponential(1))+

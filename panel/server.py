@@ -3745,7 +3745,8 @@ def _bt_index_build():
                 strategy=obj.get("strategy"), created=obj.get("created"),
                 growth=st.get("monthly_growth_pct"), mult=st.get("total_mult"),
                 dd=st.get("maxdd_mtm"), n=st.get("n"), win=st.get("win"),
-                liq=st.get("liq"), liq_ever=bool(obj.get("liq_ever"))))
+                liq=st.get("liq"), liq_ever=bool(obj.get("liq_ever")),
+                lev_x=obj.get("lev_x"), sl=obj.get("sl_class")))
         del s
         rows.sort(key=lambda r: (r.get("created") or ""), reverse=True)
         _BTIDX["rows"] = rows
@@ -4374,11 +4375,20 @@ def _bt_fold(pend):
         entries = json.JSONDecoder().raw_decode(
             txt[txt.index("=") + 1:].lstrip())[0]
         old = {x.get("name"): x for x in entries if x.get("name") in pend}
+        from bt_risk import risk_of
         for nm, e in pend.items():
             o = old.get(nm) or {}
             if (o.get("liq_ever") or (o.get("stats") or {}).get("liq")
                     or (e.get("stats") or {}).get("liq")):
                 e["liq_ever"] = True
+            try:                     # leverage + stop-loss classification
+                lv, slc = risk_of(e)
+                if lv:
+                    e["lev_x"] = lv
+                if slc:
+                    e["sl_class"] = slc
+            except Exception:
+                pass
         entries = [x for x in entries
                    if x.get("name") not in pend] + list(pend.values())
         tmp = p + f".tmp{os.getpid()}"
