@@ -441,6 +441,7 @@ def main_fcfs(cfg, live):
             save()
 
     _ad_seen = [0.0]
+    _adopt_backoff = [0.0]   # do not re-attempt adopts before this epoch
 
     def try_adopt():
         """Panel-requested adopt of ONE chosen shadow (mtime-polled sidecar).
@@ -506,6 +507,17 @@ def main_fcfs(cfg, live):
                 return False
         free = cascade_free()
         res, qty = ex_for(comps[ci]["pair"]).open(d, lv, px, margin_cap=free)
+        if (res or {}).get("status") == "skipped":
+            # deliberate no-trade (e.g. free USDT below the exchange minimum)
+            # — NOT an error. Retrying every loop wrote 13k order_failed
+            # notifications in 3 days (2026-09-01..04), ballooning
+            # notifications.log past the origin-matcher's tail and breaking
+            # the bot/manual P&L attribution. Log once, back off 10 min.
+            if time.time() > _adopt_backoff[0]:
+                log.warning("ADOPT (%s) skipped: %s — backing off 10 min",
+                            src, (res or {}).get("message"))
+            _adopt_backoff[0] = time.time() + 600
+            return False
         if (res or {}).get("status") == "error" or not qty:
             notify("order_failed", account="fcfs", action="adopt",
                    config=os.path.basename(cfg.get("_path", "?")),
@@ -592,7 +604,8 @@ def main_fcfs(cfg, live):
         close of an auto-adopted position, the SAME virtual trade is only
         re-adopted once price has dropped >=1% below that exit."""
         au = _ar["auto"]
-        if not au or not au.get("enabled") or positions:
+        if (not au or not au.get("enabled") or positions
+                or time.time() < _adopt_backoff[0]):
             return
         thr = float(au.get("adopt_pct", -1e9))
         # optional pair restriction and PER-PAIR depths (research

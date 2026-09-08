@@ -3515,7 +3515,11 @@ def _bot_close_index():
     try:
         with open(os.path.join(AT, "notifications.log"), "rb") as f:
             f.seek(0, 2)
-            f.seek(max(0, f.tell() - 2_000_000))
+            # 20MB tail (was 2MB): an order_failed retry storm once grew the
+            # log until the tail no longer covered the 30d P&L window, so
+            # every older bot close read as MANUAL and the bot-only chart
+            # collapsed to a single trade (2026-09-06)
+            f.seek(max(0, f.tell() - 20_000_000))
             lines = f.read().decode(errors="replace").splitlines()
     except FileNotFoundError:
         lines = []
@@ -3526,6 +3530,10 @@ def _bot_close_index():
             continue
         if e.get("event") != "position_closed":
             continue
+        if e.get("live") is False:
+            continue                     # DRY-RUN paper closes (soak
+            #                              instances) must not label real
+            #                              exchange events as bot
         am = cfg_map.get(e.get("config") or "")
         if not am:
             continue                     # manual notes / unknown configs
