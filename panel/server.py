@@ -787,6 +787,21 @@ def klines():
                      low=float(lo[i]), close=float(c[i]),
                      vol=(float(v[i]) if i < len(v) else 0.0))
                 for i in range(max(0, len(t) - limit), len(t))]
+        if not rows:
+            # SPOT-ONLY tokens (no futures contract): fall back to the
+            # public spot klines so the Trade chart still works
+            sp_iv = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m",
+                     "4h": "4h", "1d": "1d"}.get(tf)
+            if sp_iv:
+                ks = _rq.get("https://api.mexc.com/api/v3/klines",
+                             params=dict(symbol=f"{pair}USDT",
+                                         interval=sp_iv, limit=limit),
+                             timeout=15).json()
+                if isinstance(ks, list):
+                    rows = [dict(time=int(k[0] // 1000), open=float(k[1]),
+                                 high=float(k[2]), low=float(k[3]),
+                                 close=float(k[4]), vol=float(k[5]))
+                            for k in ks]
         return jsonify(rows=rows)
     except Exception as e:
         return jsonify(error=str(e)[:200]), 502
@@ -1016,7 +1031,10 @@ def trade_state():
 
 _TH_CACHE = {}    # (acct, market, tab) -> (ts, payload)
 _TPA_CACHE = {}   # "all" -> (ts, payload)
-_TD_HIST_PAIRS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "SUI", "HYPE", "LINK"]
+_TD_HIST_PAIRS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "SUI", "HYPE", "LINK",
+                  # spot-only additions 2026-09-07 (gamut candidates)
+                  "ENA", "PUMP", "BNB", "PONS", "DGAI", "LTC", "DASH",
+                  "LIT", "ADA"]
 _FUT_SIDES = {1: "Buy Long", 2: "Close Short", 3: "Sell Short",
               4: "Close Long"}
 _FUT_OSTATE = {1: "Uninformed", 2: "Uncompleted", 3: "Completed",

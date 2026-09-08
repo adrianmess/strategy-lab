@@ -15,6 +15,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 COINS = ["sol", "btc", "eth", "doge", "xrp", "sui", "hype"]
+# SPOT-ONLY additions (no perp data fetched) — gamut candidates 2026-09-07
+SPOT_ONLY = ["ena", "pump", "bnb", "pons", "dgai", "ltc", "dash", "lit",
+             "ada"]
 
 
 def run(args):
@@ -62,13 +65,15 @@ if __name__ == "__main__":
     print(f"=== refreshing {len(COINS)} pairs, perp + spot ===", flush=True)
     rc = 0
     rc |= run(["fetch_pair.py"] + COINS)                       # perp 3m + 1m
-    # spot: only the coins that have spot history on disk (all 7 currently)
+    # spot: the perp coins that have spot history on disk, plus the
+    # spot-only list (always — a missing file means full backfill)
     spot = [c for c in COINS
             if os.path.exists(os.path.join(DATA, f"{c}_spot_1min.parquet"))]
+    spot += [c for c in SPOT_ONLY if c not in spot]
     if spot:
         rc |= run(["fetch_pair.py", "--market", "spot"] + spot)
     print("=== rebuilding 5-minute files ===", flush=True)
-    rc |= run(["gen_5min.py"] + COINS)
+    rc |= run(["gen_5min.py"] + COINS + SPOT_ONLY)
     clear_caches()
     print("=== data refresh complete ===", flush=True)
     sys.exit(1 if rc else 0)

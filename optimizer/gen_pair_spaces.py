@@ -23,7 +23,10 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "adaptive_trader", "research", "data")
 OUT = os.path.join(HERE, "param_spaces")
-COINS = ["btc", "eth", "doge", "xrp", "sui", "hype"]
+COINS = ["btc", "eth", "doge", "xrp", "sui", "hype",
+         # spot-only additions 2026-09-07 (gamut candidates; need
+         # <coin>_spot_3min.parquet — run after the data backfill)
+         "ena", "pump", "bnb", "pons", "dgai", "ltc", "dash", "lit", "ada"]
 
 # %-denominated continuous params per family (everything else stays SOL-range)
 PCT_KEYS = {
