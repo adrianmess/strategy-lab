@@ -646,6 +646,9 @@ function renderKpis(){
         && (!acct || e.account === acct); }).length;
   var lbl = (ORIGIN ? ' · ' + ORIGIN + ' only' : '') +
             (acct ? ' · ' + acct : '');
+  var rvals = Object.keys(PNL_RESET).map(function(k){ return PNL_RESET[k]; });
+  if(rvals.length)
+    lbl += ' · fresh since ' + rvals.sort()[0].slice(5, 16);
   var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
   document.getElementById('kpis').innerHTML =
     kpi('Realized 24h', fig(d1, dietzPct(d1, 1, acct)),
@@ -859,10 +862,12 @@ function setOrigin(v){
   ORIGIN = v; localStorage.setItem('slOrigin', v);
   renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
 }
+var PNL_RESET = {};   // account -> 'YYYY-MM-DD HH:MM' fresh-start cutoffs
 function loadPnl(){
   API('pnl_events').then(function(d){
     if(d && d.events){
       PNLE = d.events;
+      PNL_RESET = d.reset || {};
       try{ localStorage.setItem('slPnlSnap',
         JSON.stringify({events:d.events, at:Date.now()})); }catch(e){}
       renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();

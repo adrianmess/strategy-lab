@@ -3359,6 +3359,12 @@ def _flows_compute_inner():
         except Exception as e:
             out.setdefault("errors", []).append(f"{acct}: {str(e)[:80]}")
     out["flows"].sort(key=lambda f: f["t"])
+    rst = _pnl_reset()
+    if rst:
+        # flows before a P&L reset belong to the OLD accounting era — the
+        # fresh start treats the reset-moment balance as the new baseline
+        out["flows"] = [f for f in out["flows"]
+                        if f.get("t", 0) >= rst.get(f.get("account"), 0)]
     _FLOWS_CACHE["all"] = (now, out)
     return out
 
@@ -3446,6 +3452,9 @@ def _perf_compute_locked(i, I, cfg, acct, mode, key):
             source = "closed futures positions (MEXC realized P&L)"
     except Exception as e:
         return dict(error=f"{type(e).__name__}: {e}")
+    _rst = _pnl_reset().get(acct, 0)
+    if _rst:
+        events = [e for e in events if e["t"] >= _rst]
     events.sort(key=lambda e: e["t"])
     # Excluded trades stay in the series, flagged, so the history can show and
     # un-exclude them — but they are kept out of every AGGREGATE.
@@ -3583,6 +3592,51 @@ def _spot_symbols_union(sapi):
 
 
 _PNLE_CACHE = {"t": 0.0, "data": None}
+_PNL_RESET_P = os.path.join(HERE, "pnl_reset.json")
+
+
+def _pnl_reset():
+    """account -> epoch MS before which P&L history is hidden ('fresh
+    start'). Exchange history obviously survives; this is a display/
+    accounting cutoff applied at the SOURCE (pnl_events, flows,
+    performance) so every panel view inherits it consistently."""
+    try:
+        doc = json.load(open(_PNL_RESET_P))
+        return {k: float(v) for k, v in (doc.get("at_ms") or {}).items()}
+    except Exception:
+        return {}
+
+
+@app.route("/api/pnl_reset", methods=["GET", "POST", "DELETE"])
+def pnl_reset_api():
+    """POST {accounts:["mexc1","mexc2"], confirm:"RESET"} — start P&L fresh
+    from NOW for those accounts. DELETE {accounts:[...]} — undo (full
+    history reappears; nothing is ever lost, the exchange keeps it)."""
+    if request.method == "GET":
+        return jsonify(at_ms=_pnl_reset())
+    d = request.get_json(force=True) or {}
+    accts = [a for a in (d.get("accounts") or []) if a in ("mexc1", "mexc2")]
+    if not accts:
+        return jsonify(error="accounts must include mexc1 and/or mexc2"), 400
+    cur = _pnl_reset()
+    if request.method == "POST":
+        if d.get("confirm") != "RESET":
+            return jsonify(error="confirm='RESET' required — this hides all "
+                                 "prior P&L from every view (undoable via "
+                                 "DELETE)"), 400
+        now_ms = time.time() * 1000
+        for a in accts:
+            cur[a] = now_ms
+    else:
+        for a in accts:
+            cur.pop(a, None)
+    json.dump(dict(at_ms=cur, set_at=time.strftime("%Y-%m-%d %H:%M:%S")),
+              open(_PNL_RESET_P, "w"), indent=1)
+    # every cached derivation is now stale
+    _PNLE_CACHE.update(t=0.0, data=None)
+    _PERF_CACHE.clear()
+    _FLOWS_CACHE.clear()
+    return jsonify(ok=True, at_ms=cur)
 
 
 @app.route("/api/pnl_events")
@@ -3631,8 +3685,15 @@ def _pnl_events_compute():
         e["ignored"] = e.get("id") in ign
         e["reason"] = (ign.get(e.get("id")) or {}).get("reason")
         e["realized"] = round(float(e.get("realized") or 0), 4)
+    rst = _pnl_reset()
+    if rst:
+        events = [e for e in events
+                  if e["t"] >= rst.get(e["account"], 0)]
     events.sort(key=lambda e: e["t"])
     data = dict(events=events, errors=errors,
+                reset={k: time.strftime("%Y-%m-%d %H:%M",
+                                        time.localtime(v / 1000))
+                       for k, v in rst.items()},
                 as_of=time.strftime("%Y-%m-%d %H:%M:%S"))
     # a fully-errored round must not overwrite a good cache with emptiness
     if events or not errors or _PNLE_CACHE["data"] is None:
