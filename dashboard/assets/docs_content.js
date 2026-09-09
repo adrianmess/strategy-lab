@@ -96,6 +96,23 @@ window.DOCS_CONTENT = {pages: [
   'anti-churn (same trade re-adopts only ≥1% below your last exit), '+
   'liquidation distance, and zombies are excluded. Enabling auto-adopt '+
   'suppresses the legacy late-join.</p>'},
+ {id:'adoptclose', title:'How adopted positions close', html:
+  '<p>An adopted position can have <b>two independent close triggers '+
+  'racing</b>:</p>'+
+  '<p><b>1 · Your auto-close</b> (auto-adopt preset, or the close % you '+
+  'set on an armed rule): closes when <i>your</i> unrealized — measured '+
+  'from <i>your</i> fill — reaches the target (spot preset: +2%). It '+
+  'fires regardless of what the virtual trade is doing, and because you '+
+  'entered at a discount it usually fires first.</p>'+
+  '<p><b>2 · The mirror exit</b>: if the component’s virtual trade closes '+
+  '(its own target or stop, computed from the <i>virtual</i> entry), your '+
+  'real position closes with it — in either direction. Exiting on the '+
+  'virtual’s stop still lands you better than the sim by your adoption '+
+  'discount.</p>'+
+  '<p>A manual Adopt with no close % has only trigger 2 — you ride the '+
+  'component’s full plan. Note the banner’s <b>projected close</b> '+
+  'describes the VIRTUAL trade’s plan (anchored at the virtual entry), '+
+  'not your +% target — the “auto-close ≥ +x%” tag is yours.</p>'},
  {id:'cascade', title:'Cascade (capital pool)', html:
   '<p>With <code>"cascade": true</code> the one-slot router becomes a '+
   'capital pool: every fresh signal opens while free capital remains, one '+

@@ -1749,6 +1749,7 @@ function renderCards(){
           '<span class="mini" style="margin-left:auto">'+(held(p)?('open '+held(p)):'')+
             (p.late_mirror?' · late-join':'')+
             (p.armed_close_pct!=null?' · auto-close ≥'+(p.armed_close_pct>=0?'+':'')+p.armed_close_pct+'%':'')+
+            ((p.adopted||p.armed_close_pct!=null)?' '+infoBtn('instances.adoptclose'):'')+
             '</span></div>'+
         '<div class="mini" style="margin-top:5px;display:flex;gap:18px;flex-wrap:wrap">'+
           '<span>entry <b class="num">'+(+p.entry_price).toPrecision(6)+'</b></span>'+
@@ -2832,7 +2833,7 @@ function renderTdBots(){
       '<th class="n">market entry</th>'+
       '<th class="n">now</th>'+
       '<th class="n" title="the trade\'s price move since open — the unleveraged P&amp;L %">price &Delta;</th>'+
-      '<th class="n">uPnL</th><th class="n">proj. close</th><th class="n">auto-close</th></tr></thead><tbody>'+
+      '<th class="n">uPnL</th><th class="n" title="the VIRTUAL trade\'s exit plan, anchored at the virtual entry — not your auto-close target">proj. close</th><th class="n" title="closes when YOUR unrealized (from your fill) reaches this — races against the mirror exit; see the docs via any adopted position\'s info button">auto-close</th></tr></thead><tbody>'+
      ps.map(function(p){
     var px = +p.price || +s.price || null;
     var dir = (p.dir||1) > 0 ? 1 : -1;
@@ -3827,7 +3828,8 @@ function renderPositions(){
           (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%') +
           (r.virt != null
             ? '<div class="mini" title="if it had been held since the component\'s virtual entry">'+
-              'virtual: ' + (r.virt >= 0 ? '+' : '') + r.virt.toFixed(2) + '%</div>' : '') + '</td>'+
+              'virtual: ' + (r.virt >= 0 ? '+' : '') + r.virt.toFixed(2) + '% ' +
+              infoBtn('instances.adoptclose') + '</div>' : '') + '</td>'+
         '<td class="n ' + (r.usd == null ? 'dim' : cls(r.usd)) + '" style="font-weight:600">' +
           (r.usd == null ? '—' : amt((r.usd >= 0 ? '+$' : '-$') + Math.abs(r.usd).toFixed(2))) + '</td>'+
         '<td class="n dim">' + (r.held || '') + '</td></tr>';
