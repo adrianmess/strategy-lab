@@ -1008,7 +1008,7 @@ function allEvents(){
               side:s.side, lev:s.lev, symbol:s.symbol,
               inst:(inst ? inst.id : 'x:' + s.account + ':' + s.mode),
               id:s.id, ignored:!!s.ignored, reason:s.reason,
-              origin:s.origin,
+              origin:s.origin, comp:s.comp, bt:s.bt,
               name:(inst ? (inst.name || inst.id)
                     : s.account + ' ' + (s.mode === 'lev' ? 'futures' : 'spot')),
               account:s.account, mode:s.mode};
@@ -1465,7 +1465,15 @@ function renderHistory(){
             : e.origin==='manual'
             ? '<span class="tag" title="no trader recorded this close — opened/closed by hand">MANUAL</span>'
             : '<span class="dim">—</span>')+'</td>'+
-          '<td><b>'+e.symbol+'</b>'+(ig?'<div class="mini warn">excluded'+
+          '<td><b>'+e.symbol+'</b>'+
+            (e.comp
+              ? '<div class="mini">via '+(e.bt
+                  ? '<a href="/dashboard/backtests.html?sel='+encodeURIComponent(e.bt)+
+                    '" target="_blank" style="color:var(--cyan);text-decoration:none" '+
+                    'title="open this component\'s backtest ('+e.bt+') on the classic Backtests page">'+e.comp+' &#8599;</a>'
+                  : e.comp)+'</div>'
+              : '')+
+            (ig?'<div class="mini warn">excluded'+
             (e.reason?' — '+e.reason:'')+'</div>':'')+'</td>'+
           '<td>'+(e.side ? '<span class="tag '+(e.side==='LONG'?'g':'live')+'">'+e.side+
             (e.lev && e.lev > 1 ? ' '+e.lev+'x' : '')+'</span>' : '')+'</td>'+

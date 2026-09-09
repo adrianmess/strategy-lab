@@ -171,7 +171,11 @@ window.DOCS_CONTENT = {pages: [
   '<p>Each close is labeled BOT (a trader recorded a close of that symbol '+
   'on that account within ±4 min) or MANUAL. Caveat: bot trades closed '+
   'while a trader was down read as manual. The account filter includes '+
-  'combos no instance trades.</p>'},
+  'combos no instance trades.</p>'+
+  '<p>BOT closes show <b>via &lt;component&gt;</b> under the symbol — the '+
+  'exact strategy that ran the trade. Click it to open that component’s '+
+  'backtest entry on the classic Backtests page (the OOS-best or '+
+  'train-best candidate it actually trades).</p>'},
  {id:'exclude', title:'Exclude / Restore', html:
   '<p>Excluded trades stay listed but leave every aggregate on every page '+
   '— for one-off distortions you don’t want polluting the KPIs. '+

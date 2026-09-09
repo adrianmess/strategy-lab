@@ -3523,6 +3523,34 @@ def _manual_note(event, acct, market, symbol, side=None, qty=None,
 _BOTIDX_CACHE = {"t": 0.0, "idx": None}
 
 
+_BT_OF_CACHE = {}
+
+
+def _bt_entry_of(cfg_name, comp_label):
+    """The published backtest ENTRY behind a router component: config +
+    '#N ...' comp label -> components[N].run + the candidate suffix
+    (holdout_best_config.json -> _oosbest_full, else _full)."""
+    try:
+        m = re.match(r"#(\d+)", comp_label or "")
+        if not m or not cfg_name:
+            return None
+        key = (cfg_name, int(m.group(1)))
+        if key in _BT_OF_CACHE:
+            return _BT_OF_CACHE[key]
+        c = json.load(open(os.path.join(AT, cfg_name)))
+        comps = (c.get("candidate") or {}).get("components") or []
+        comp = comps[key[1]] if key[1] < len(comps) else {}
+        r = comp.get("run")
+        suf = ("_oosbest_full"
+               if (comp.get("file") or "").startswith("holdout")
+               else "_full")
+        out = (r + suf) if r else None
+        _BT_OF_CACHE[key] = out
+        return out
+    except Exception:
+        return None
+
+
 def _bot_close_index():
     """(account, mode, symbol) -> sorted close epochs (ms) recorded by the
     TRADERS themselves (config field ends in .json). Cached 60s."""
@@ -3569,9 +3597,12 @@ def _bot_close_index():
                                            "%Y-%m-%d %H:%M:%S")) * 1000
         except Exception:
             continue
-        idx.setdefault((am[0], am[1], e.get("symbol")), []).append(ts)
+        # keep WHO closed it: (ts, config, comp label) — lets the History
+        # page name the component and deep-link to its backtest entry
+        idx.setdefault((am[0], am[1], e.get("symbol")), []).append(
+            (ts, e.get("config"), e.get("comp")))
     for v in idx.values():
-        v.sort()
+        v.sort(key=lambda x: x[0])
     _BOTIDX_CACHE.update(t=now, idx=idx)
     return idx
 
@@ -3680,8 +3711,19 @@ def _pnl_events_compute():
             errors.append(f"{acct} spot: {str(ex)[:80]}")
     for e in events:
         ts_list = bot_idx.get((e["account"], e["mode"], e["symbol"])) or []
-        e["origin"] = ("bot" if any(abs(e["t"] - ts) < 240_000
-                                    for ts in ts_list) else "manual")
+        hit = None
+        for it in ts_list:
+            if (abs(e["t"] - it[0]) < 240_000
+                    and (hit is None
+                         or abs(e["t"] - it[0]) < abs(e["t"] - hit[0]))):
+                hit = it
+        e["origin"] = "bot" if hit else "manual"
+        if hit and hit[2]:
+            # strip the "#N " index — the label is for humans
+            e["comp"] = re.sub(r"^#\d+\s*", "", hit[2])
+            bt = _bt_entry_of(hit[1], hit[2])
+            if bt:
+                e["bt"] = bt
         e["ignored"] = e.get("id") in ign
         e["reason"] = (ign.get(e.get("id")) or {}).get("reason")
         e["realized"] = round(float(e.get("realized") or 0), 4)
