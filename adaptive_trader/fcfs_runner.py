@@ -1053,24 +1053,31 @@ def main_fcfs(cfg, live):
                 # ---- STANDALONE position (its sim liquidated) ----
                 # It has no mirror left to follow, so it gets an explicit
                 # plan anchored to OUR entry: take the component's own
-                # edge if it arrives, and cap the downside — never leave
-                # a stopless leveraged position drifting.
+                # edge if it arrives. On the DOWNSIDE, leveraged positions
+                # are NEVER closed by this guard — Adrian's rule
+                # (2026-09-10): only a strategy's own stop-loss may realize
+                # a leveraged loss; liquidation is the exchange's call.
+                # (The old 50%-of-liq-distance stop realized -$1,180 on the
+                # Sep 6 HYPE spike top, which never reached MEXC's actual
+                # liquidation price and mean-reverted within minutes.)
+                # Spot keeps its -50% disaster brake: no exchange
+                # liquidation exists there to backstop it.
                 elif pos.get("standalone"):
                     tp = float(cfg.get("standalone_take_profit", 0.005))
-                    liq_d = (1.0 / max(pos["lev"], 1e-9) - 0.008
-                             if mode == "lev" else 1.0)
-                    sl_frac = float(cfg.get("standalone_stop_frac", 0.5))
                     if adverse >= tp:
                         log.info("STANDALONE take-profit hit (+%.2f%% "
                                  "from our entry)", 100 * adverse)
                         do_close(pos, "standalone_take_profit", px)
                         continue
-                    elif adverse <= -abs(sl_frac * liq_d):
-                        log.warning("STANDALONE stop hit (%.2f%% adverse, "
-                                    "%.0f%% of our liquidation distance)",
-                                    100 * -adverse, 100 * sl_frac)
-                        do_close(pos, "standalone_stop", px)
-                        continue
+                    elif mode != "lev":
+                        sl_frac = float(cfg.get("standalone_stop_frac", 0.5))
+                        if adverse <= -abs(sl_frac):
+                            log.warning("STANDALONE stop hit (%.2f%% "
+                                        "adverse, spot disaster brake at "
+                                        "%.0f%%)",
+                                        100 * -adverse, 100 * sl_frac)
+                            do_close(pos, "standalone_stop", px)
+                            continue
                 # manual override: panel-set trigger for THIS position
                 d_ = ov["d"]
                 if (d_ and str(pos.get("opened_at")) == d_.get("pos_key")

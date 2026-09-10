@@ -233,7 +233,13 @@ window.DOCS_CONTENT = {pages: [
   'opens the real position; ties break by component order, matching the '+
   'backtest. The real position mirrors its component’s virtual exit. If '+
   'the SIM liquidates, the real position is NOT closed — it detaches and '+
-  'gets its own standalone exit plan.</p>'},
+  'is managed standalone: it closes only when it recovers to the '+
+  'standalone take-profit (+0.5% by default). Leveraged standalone '+
+  'positions are never closed at a loss by the panel — only a strategy’s '+
+  'own stop-loss realizes leveraged losses, and liquidation is left to '+
+  'the exchange (its real liquidation price sits above the naive 1/lev '+
+  'threshold model). Spot standalones keep a −50% disaster brake, since '+
+  'spot has no exchange liquidation to backstop them.</p>'},
  {id:'safety', title:'Safety model', html:
   '<p>Live orders only ever start from a typed confirm. The panel cannot '+
   'withdraw funds. MEXC private API goes through the proxy pool with '+
