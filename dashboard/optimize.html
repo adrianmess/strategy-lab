@@ -177,6 +177,12 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <div class="field"><label data-x="runname">Run name</label><input id="name" placeholder="auto" style="width:150px">
         <span style="font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap">
           <input type="checkbox" id="scMulti" onchange="$('scMultiBox').style.display=this.checked?'':'none'" style="cursor:pointer"> <span class="optx" data-x="scsweep">sweep scorings</span></span></div>
+      <div class="field"><label data-x="runon">Run on</label>
+        <select id="runWhere" style="width:130px" onchange="localStorage.setItem('optWhere',this.value)">
+          <option value="mini">mini (default)</option>
+          <option value="macbook">MacBook</option>
+          <option value="both">both (shared pool)</option></select>
+        <span id="workerNote" style="font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap"></span></div>
       <button class="primary" onclick="launch()" style="height:34px">Start search</button>
       <div id="hoMultiBox" style="display:none;flex-basis:100%;margin-top:6px;padding:8px 10px;border:1px dashed var(--border);border-radius:6px;font-size:12px">
         <b style="font-size:11px;color:var(--dim)">HOLDOUT SWEEP</b> — one search per ticked type:
@@ -371,6 +377,11 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
   </details>
   <script>if(localStorage.getItem('jobsOpen')==='0') document.getElementById('jobsWrap').open=false;</script>
 
+  <details id="rwWrap" style="display:none">
+    <summary style="cursor:pointer;list-style:revert"><h2 style="display:inline-block;margin:14px 0 8px">Remote workers <span class="mini" id="rwTitle"></span></h2></summary>
+    <div class="card" id="rwJobs"></div>
+  </details>
+
   <h2>Runs <span class="mini">— click column headers to sort · click a row's buttons to act</span>
     <span class="mini" style="float:right">
     <label style="margin-right:4px">Show</label>
@@ -521,6 +532,7 @@ const X = {
  scoring: ["Scoring", `How candidates are RANKED during the search (feasibility rules are unchanged).<dl><dt>classic (default)</dt><dd>The original, untouched formula: average monthly growth minus a volatility penalty. All previous runs used this.</dd><dt>worst 3-month window</dt><dd>Ranks by the WORST rolling 3-month stretch instead of the average. A config carried by one lucky quarter stops winning; the only way up is to fix the weak periods.</dd><dt>time-in-trade penalty</dt><dd>Classic minus a penalty for the fraction of time capital sits locked in open positions. Pushes the search toward the quick-recycling character of your live defaults (max holds of days, not months).</dd></dl>New runs record their scoring in the settings chips, so runs bred under different rules are never confused.`],
  maxhold: ["Max days in trade", `Throws out any candidate whose simulation EVER holds a position longer than this many days — including positions still open at the end of the data or at gap boundaries. This kills the configs that get a trade stuck underwater for months waiting for a profit target. It does NOT close or alter any trade; the whole candidate is simply disqualified from the pool (and from holdout survivor ranking). Blank = unlimited.`],
  trainend: ["Holdout", `How unseen data is reserved to verify the result honestly — five ways to carve it:<dl><dt>after date</dt><dd>Train on everything BEFORE the date; holdout = everything after. The classic. Weakness: the holdout is always the most recent era.</dd><dt>before date</dt><dd>Mirror image: train on [date, end); holdout = everything before it. Tests whether a config fitted to the recent era would have survived the past.</dd><dt>between dates</dt><dd>Two dates; the window BETWEEN them is quarantined as the judge and training uses everything outside it (both sides). Good for isolating a specific regime — a crash, a chop range — as the holdout.</dd><dt>outside dates</dt><dd>The inverse: train on the window BETWEEN the two dates, holdout = everything outside it (both the earlier and later data). An overfit detector for era-specific tuning — does the era's fit generalize in both directions?</dd><dt>alternating days</dt><dd>Blocks of N days: train on even blocks, judge on odd. Samples ALL eras, but block boundaries leak slow-moving state — verify with a walk-forward before believing it. Positions force-close at block edges, so very slow strategies suit larger blocks.</dd></dl>Leave the date blank (or days 0) for no holdout — you get no evidence, only an in-sample fit.`],
+ runon: ["Run on", `Which machine executes the search:<dl><dt>mini (default)</dt><dd>The classic path — the search runs on the Mac mini and competes for its cores with the traders. Sequential global queue.</dd><dt>MacBook</dt><dd>The job is queued for the MacBook's dormant worker (installed once via <code>scripts/macbook_worker_setup.sh</code>). The worker polls the panel every 15s; when it claims the job it syncs data from the mini, runs the search locally, then rsyncs the finished run back to <code>optimizer/runs/</code> on the mini and publishes any backtest entries — results always live on the mini. Zero optimizer load on the mini. Requires the MacBook awake, on the network, and with the worker installed (status shows next to the selector).</dd><dt>both (shared pool)</dt><dd>Jobs go into a shared pool claimed by whichever machine is free: the MacBook worker pulls jobs, and the mini pulls one whenever its own optimizer queue is idle. Best for sweeps — legs split dynamically instead of 50/50.</dd></dl>Remote job status appears in the <b>Remote workers</b> panel below Jobs. If the MacBook goes to sleep mid-search the job stalls until it wakes; a failed job shows its log tail there.`],
  runname: ["Run name", `Names the run folder. Re-launching with the same name CONTINUES that run (resumable). Auto-generates if blank.`],
  btn_backtest: ["Backtest (button)", `Runs the run's best config over ALL history (including training data) and publishes it to the Backtests page. A preview with the equity chart appears in this sidebar when it finishes. Note: this is an in-sample number — impressive by construction.`],
  btn_holdout: ["Backtest holdout (button)", `Runs the best config ONLY on the run's held-out window (after/before/between/outside its dates, per its holdout mode) — data the search never saw. This is the honest performance estimate. Also publishes to the Backtests page with "_HOLDOUT" suffix and previews here.`],
@@ -593,7 +605,12 @@ async function launch(){
     cadapt: $('cadapt').checked,
     sticky_oos: $('stickyOos').checked || undefined,
     symbol: $('symbol').value,
-    tf: $('tfsel').value};
+    tf: $('tfsel').value,
+    where: $('runWhere').value!=='mini' ? $('runWhere').value : undefined};
+  if(d.where && !WORKER_FRESH){
+    if(!confirm('The MacBook worker has not checked in recently — the job will '
+        +'sit queued until it does (worker asleep or not installed?). Queue anyway?')) return;
+  }
   if(bt_==='hours') d.hours = bv_; else d.total = bv_;
   if(SEED_CAND) d.seed_cand = SEED_CAND;
   if(COMBINE){ d.resume_from = COMBINE.rf; d.merge_mode = COMBINE.mode; }
@@ -623,12 +640,19 @@ async function launch(){
     d.sweep=sweep;
     const r2 = await api('jobs/optimize2_sweep', d);
     if(r2.error){ $('launchMsg').textContent='error: '+r2.error; return; }
-    $('launchMsg').textContent = `sweep started: ${r2.count} searches queued sequentially — ${r2.names.join(', ')}`;
+    $('launchMsg').textContent = r2.remote
+      ? `sweep queued for ${r2.remote==='both'?'the shared mini+MacBook pool':'the MacBook'}: ${r2.count} searches — ${r2.names.join(', ')} (progress under Remote workers below)`
+      : `sweep started: ${r2.count} searches queued sequentially — ${r2.names.join(', ')}`;
     if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed — the armed merge rides along on EVERY sweep leg'; }
     refreshJobs(); setTimeout(refreshRuns, 3000);
     return;
   }
   const r = await api('jobs/optimize2', d);
+  if(r.remote){
+    $('launchMsg').textContent = `queued for ${r.remote==='both'?'the shared mini+MacBook pool':'the MacBook'} as "${r.name}" — it starts when the worker claims it; progress under Remote workers below. Results land on the mini automatically.`;
+    if(COMBINE){ COMBINE=null; $('cmbMsg').textContent='combine consumed'; }
+    refreshWorkers(); return;
+  }
   if(r.id){ SEARCH_JOB = r.id; localStorage.setItem('searchJob', r.id);
     const w=$('searchProg'); w.style.display='';
     $('searchProgBar').style.width='2%';
@@ -1634,6 +1658,34 @@ async function refreshJobs(){
     </div>${bar}<pre>${(j.log||[]).join('\n')}</pre></div>`;
   }).join('') : 'no jobs yet';
 }
+// ---------- remote workers (MacBook offload) ----------
+let WORKER_FRESH = false;
+async function refreshWorkers(){
+  let r; try{ r = await fetch('/api/remote/status').then(x=>x.json()); }catch(e){ return; }
+  const w = (r.workers||{}).macbook;
+  WORKER_FRESH = !!(w && w.ago < 120);
+  const note = $('workerNote'), sel = $('runWhere');
+  if(note){
+    note.textContent = WORKER_FRESH ? `MacBook online (${w.cores} cores)`
+      : w ? `MacBook last seen ${w.ago<3600?Math.round(w.ago/60)+'m':Math.round(w.ago/3600)+'h'} ago`
+      : 'MacBook worker never seen — run scripts/macbook_worker_setup.sh';
+    note.style.color = WORKER_FRESH ? 'var(--green,#2da44e)' : 'var(--dim)';
+  }
+  const active = (r.jobs||[]).filter(j=>!['done','failed'].includes(j.status));
+  const recent = (r.jobs||[]).slice(-8).reverse();
+  const wrap = $('rwWrap');
+  if(wrap){
+    wrap.style.display = (recent.length || ($('runWhere')||{}).value!=='mini') ? '' : 'none';
+    if(recent.length) wrap.open = wrap.open || active.length>0;
+    $('rwTitle').textContent = active.length ? `— ${active.length} active` : '';
+    $('rwJobs').innerHTML = recent.length ? recent.map(j=>
+      `<div style="border-bottom:1px solid var(--border);padding:6px 0">
+        <b>${j.name}</b> · <span class="${j.status==='running'?'pos':j.status==='failed'?'neg':'kv'}">${j.status}</span>
+        <span class="kv">· ${j.where==='any'?'shared pool':j.where}${j.worker?' → '+j.worker:''} · ${j.at||''}${j.progress?' · '+j.progress:''}</span>
+        ${j.note?`<div class="kv" style="margin-top:2px">${j.note}</div>`:''}</div>`).join('')
+      : 'no remote jobs yet';
+  }
+}
 // ---------- parameter space ----------
 let SPACE=null;
 function spaceSel(){
@@ -2115,6 +2167,8 @@ $('strat').onchange = ()=>{
 $('perreg').disabled = !['v7','prime7'].includes($('strat').value);  // sync after restore
 refreshRuns().then(applyCombineFromBacktests).then(()=>applyMxFromBacktests()); refreshJobs(); loadSpace(); aiKey(); refreshCampaign();
 setInterval(refreshJobs, 4000); setInterval(refreshRuns, 15000); setInterval(refreshCampaign, 10000);
+if($('runWhere')){ $('runWhere').value = localStorage.getItem('optWhere')||'mini'; }
+refreshWorkers(); setInterval(refreshWorkers, 20000);
 </script>
 </body>
 </html>

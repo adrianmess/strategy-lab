@@ -7027,14 +7027,163 @@ def _merge_name_guard(name, d):
     return name
 
 
+# ---------------- remote workers (MacBook offload, 2026-09-10) ----------
+# Pull-based: the panel never reaches into the laptop. The Optimize pages
+# submit with where = mini | macbook | both; non-mini work lands in a queue
+# that scripts/macbook_dispatch.py polls (X-Panel-Key auth). The dispatcher
+# runs the search locally, rsyncs the run dir back to the mini, submits the
+# portable backtest entries, and reports done. 'both' queues as 'any':
+# claimable by the MacBook AND by the mini's own consumer when idle —
+# dynamic meet-in-the-middle instead of a static split.
+_RJOBS_P = os.path.join(HERE, "remote_jobs.json")
+_RJOBS_LOCK = threading.Lock()
+_RWORKERS = {}                     # worker name -> {at, host, cores}
+
+
+def _rjobs_load():
+    try:
+        return json.load(open(_RJOBS_P))
+    except Exception:
+        return []
+
+
+def _rjobs_save(js):
+    tmp = _RJOBS_P + ".tmp"
+    json.dump(js, open(tmp, "w"), indent=1)
+    os.replace(tmp, _RJOBS_P)
+
+
+def _remote_enqueue(name, d, where):
+    job = dict(id=uuid.uuid4().hex[:10], name=name, where=where,
+               args=_opt2_cmd(d, name)[1:],       # dispatcher supplies python
+               payload=d, seed_cand=d.get("seed_cand"),
+               anchor_cand=d.get("anchor_cand"),
+               status="queued", worker=None,
+               at=time.strftime("%Y-%m-%d %H:%M:%S"))
+    with _RJOBS_LOCK:
+        js = _rjobs_load()
+        js.append(job)
+        _rjobs_save(js[-200:])
+    return job["id"]
+
+
+@app.route("/api/remote/status")
+def remote_status():
+    now = time.time()
+    with _RJOBS_LOCK:
+        js = _rjobs_load()
+    return jsonify(
+        workers={k: dict(v, ago=round(now - v["at"]))
+                 for k, v in _RWORKERS.items()},
+        jobs=[{k: j.get(k) for k in ("id", "name", "where", "status",
+                                     "worker", "at", "note", "progress")}
+              for j in js[-30:]])
+
+
+@app.route("/api/remote/poll", methods=["POST"])
+def remote_poll():
+    d = request.get_json(force=True) or {}
+    w = d.get("worker") or "macbook"
+    _RWORKERS[w] = dict(at=time.time(), host=d.get("host"),
+                        cores=d.get("cores"))
+    with _RJOBS_LOCK:
+        js = _rjobs_load()
+        for j in js:
+            if j["status"] == "queued" and j["where"] in (w, "any"):
+                j.update(status="claimed", worker=w,
+                         at=time.strftime("%Y-%m-%d %H:%M:%S"))
+                _rjobs_save(js)
+                return jsonify(job={k: j.get(k) for k in
+                                    ("id", "name", "args", "seed_cand",
+                                     "anchor_cand")})
+    return jsonify(job=None)
+
+
+@app.route("/api/remote/update", methods=["POST"])
+def remote_update():
+    d = request.get_json(force=True) or {}
+    _RWORKERS[d.get("worker") or "macbook"] = dict(
+        at=time.time(), host=d.get("host"), cores=d.get("cores"))
+    with _RJOBS_LOCK:
+        js = _rjobs_load()
+        for j in js:
+            if j["id"] == d.get("id"):
+                j.update(status=d.get("status") or j["status"],
+                         note=d.get("note") or j.get("note"),
+                         progress=d.get("progress", j.get("progress")),
+                         at=time.strftime("%Y-%m-%d %H:%M:%S"))
+        _rjobs_save(js)
+    return jsonify(ok=True)
+
+
+def _remote_mini_finish(rid, jid):
+    """Close out a mini-claimed pool job once its local process ends, so the
+    Remote workers panel doesn't show it as active forever."""
+    t0 = time.time()
+    while time.time() - t0 < 72 * 3600:
+        time.sleep(20)
+        j = jobs.get(jid)
+        if j is None:
+            continue                      # still queued behind another search
+        rc = j["proc"].poll()
+        if rc is None:
+            continue
+        with _RJOBS_LOCK:
+            js = _rjobs_load()
+            for x in js:
+                if x["id"] == rid:
+                    x.update(status="done" if rc == 0 else "failed",
+                             note=f"ran on the mini (job {jid}, exit {rc})",
+                             at=time.strftime("%Y-%m-%d %H:%M:%S"))
+            _rjobs_save(js)
+        return
+
+
+def _remote_mini_consumer():
+    """When the mini's own optimizer queue is idle, pull 'any' jobs so
+    'both' load-balances between the machines."""
+    while True:
+        time.sleep(30)
+        try:
+            r = OPTQ["running"]
+            busy = (r is not None and r in jobs
+                    and jobs[r]["proc"].poll() is None) or bool(OPTQ["items"])
+            if busy:
+                continue
+            with _RJOBS_LOCK:
+                js = _rjobs_load()
+                job = next((j for j in js if j["status"] == "queued"
+                            and j["where"] == "any"), None)
+                if job:
+                    job.update(status="mini", worker="mini",
+                               at=time.strftime("%Y-%m-%d %H:%M:%S"))
+                    _rjobs_save(js)
+            if job:
+                jid, _, _ = _optq_launch(job["name"], job.get("payload") or {})
+                print(f"remote queue: '{job['name']}' claimed by the mini",
+                      flush=True)
+                threading.Thread(target=_remote_mini_finish,
+                                 args=(job["id"], jid), daemon=True).start()
+        except Exception as e:
+            print(f"remote mini consumer: {e}", flush=True)
+
+
+threading.Thread(target=_remote_mini_consumer, daemon=True).start()
+
+
 @app.route("/api/jobs/optimize", methods=["POST"])
 @app.route("/api/jobs/optimize2", methods=["POST"])
 def job_optimize2():
     """One optimizer for every strategy (v7 / prime / v6 / scalpx).
     Sequential by design: a second launch queues behind the running one."""
     d = request.get_json(force=True)
+    where = d.pop("where", None) or "mini"
     name = _safe_name(d.get("name")) or f"opt2_{time.strftime('%m%d_%H%M')}"
     name = _merge_name_guard(name, d)
+    if where in ("macbook", "both"):
+        rid = _remote_enqueue(name, d, "macbook" if where == "macbook" else "any")
+        return jsonify(id=rid, queued=True, position=0, name=name,
+                       remote=where)
     jid, queued, pos = _optq_launch(name, d)
     return jsonify(id=jid, queued=queued, position=pos, name=name)
 
@@ -7048,6 +7197,7 @@ def job_optimize2_sweep():
     each saved under a suffixed name. All legs go through the same global
     sequential queue as plain launches."""
     d = request.get_json(force=True)
+    where = d.pop("where", None) or "mini"
     sweep = d.pop("sweep", None) or {}
     holds = sweep.get("holdouts") or [None]
     scores = sweep.get("scorings") or [None]
@@ -7075,6 +7225,15 @@ def job_optimize2_sweep():
         return jsonify(error="sweep needs at least 2 variations — tick more "
                              "holdout/scoring boxes (or use plain Start search)"), 400
     first = None
+    if where in ("macbook", "both"):
+        # 'both' -> shared 'any' pool: the MacBook dispatcher and the mini's
+        # own consumer each pull the next leg when free (dynamic split).
+        pool = "macbook" if where == "macbook" else "any"
+        for vname, v in variants:
+            rid = _remote_enqueue(vname, v, pool)
+            first = first or rid
+        return jsonify(id=first, count=len(variants), remote=where,
+                       names=[n for n, _ in variants])
     for vname, v in variants:
         jid, _, _ = _optq_launch(vname, v)
         first = first or jid

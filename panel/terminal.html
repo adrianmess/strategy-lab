@@ -367,11 +367,14 @@ body.masked .amt:hover{filter:none}
           <label class="mini">Holdout<br><select id="oHold" style="width:100%;margin-top:4px">
             <option>after</option><option>before</option><option>alternating</option></select></label>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:13px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:13px">
           <label class="mini">Evals<br><input id="oEvals" value="100000" style="width:100%;margin-top:4px"></label>
           <label class="mini">Pairs<br><input id="oPairs" value="SOL" style="width:100%;margin-top:4px"></label>
           <label class="mini">Timeframe<br><select id="oTf" style="width:100%;margin-top:4px">
             <option>1m</option><option>3m</option><option>5m</option></select></label>
+          <label class="mini">Run on <span id="oWhereNote"></span><br><select id="oWhere" style="width:100%;margin-top:4px">
+            <option value="mini">mini</option><option value="macbook">MacBook</option>
+            <option value="both">both (pool)</option></select></label>
         </div>
         <div style="display:flex;gap:9px;flex-wrap:wrap">
           <button class="btn blue" onclick="startSearch()">Start search</button>
@@ -379,7 +382,8 @@ body.masked .amt:hover{filter:none}
           <button class="btn" onclick="location.href='/dashboard/optimize.html'">Gamut runner</button></div>
         <div class="mini" style="margin-top:9px">Campaigns and the gamut runner still live on the classic
           Optimize page — this starts a single search.</div></div>
-      <div class="rcard"><h4>Running</h4><div id="ojobs"><span class="mini">loading…</span></div></div>
+      <div class="rcard"><h4>Running</h4><div id="ojobs"><span class="mini">loading…</span></div>
+        <div id="ormt"></div></div>
     </div>
     <div class="g2" style="gap:16px">
       <div class="rcard"><h4>Recent runs</h4><div class="scroll" id="oruns"></div></div>
@@ -1621,6 +1625,22 @@ function loadOptimize(){
             '<div class="mini" style="margin-top:4px">since '+j.started+'</div></div>'; }).join('')
       : '<span class="mini">nothing running</span>';
   });
+  API('remote/status').then(function(r){
+    var w = ((r||{}).workers||{}).macbook, n = document.getElementById('oWhereNote');
+    var fresh = w && w.ago < 120;
+    if(n) n.innerHTML = fresh ? '<span style="color:var(--up,#3fb950)">● MacBook online</span>'
+      : '<span class="dim">○ MacBook offline</span>';
+    var act = ((r||{}).jobs||[]).filter(function(j){
+      return j.status!=='done' && j.status!=='failed'; });
+    var failed = ((r||{}).jobs||[]).filter(function(j){ return j.status==='failed'; }).slice(-2);
+    var el = document.getElementById('ormt');
+    if(el) el.innerHTML = (act.length||failed.length)
+      ? act.concat(failed).map(function(j){
+          return '<div class="mini" style="margin-top:6px"><b>'+j.name+'</b> · '+j.status+
+            (j.worker?(' on '+j.worker):'')+(j.progress?(' · '+j.progress):'')+
+            (j.note?('<br><span class="dim">'+String(j.note).slice(0,140)+'</span>'):'')+'</div>'; }).join('')
+      : '';
+  }).catch(function(){});
   API('runs2').then(function(rs){
     var rows = (rs||[]).slice(0, 40);
     document.getElementById('oruns').innerHTML =
@@ -1636,17 +1656,25 @@ function loadOptimize(){
   }).catch(function(){});
 }
 function startSearch(){
+  var where = document.getElementById('oWhere').value;
+  // server-side names: symbol (lowercase coin), total (eval budget)
   var body = {strategy:document.getElementById('oStrat').value,
               mode:document.getElementById('oMode').value,
               method:document.getElementById('oReg').value,
-              evals:+document.getElementById('oEvals').value,
-              coin:document.getElementById('oPairs').value,
-              tf:document.getElementById('oTf').value};
+              total:+document.getElementById('oEvals').value,
+              symbol:document.getElementById('oPairs').value.trim().toLowerCase(),
+              tf:document.getElementById('oTf').value.replace('m','')};
+  if(where!=='mini') body.where = where;
+  var whereTxt = where==='mini' ? 'It runs on the mini and competes for cores with the traders.'
+    : where==='macbook' ? 'It runs on the MacBook; the finished run syncs back to the mini automatically.'
+    : 'It goes to the shared mini+MacBook pool — whichever machine is free takes it.';
   if(!confirm('Start an optimizer search?\n\n'+JSON.stringify(body,null,1)+
-              '\n\nIt runs on the mini and competes for cores with the traders.')) return;
+              '\n\n'+whereTxt)) return;
   API('jobs/optimize2', {method:'POST', headers:{'Content-Type':'application/json'},
                          body:JSON.stringify(body)}).then(function(r){
-    alert(r.error ? ('Error: '+r.error) : ('Started: '+(r.name||'ok')));
+    alert(r.error ? ('Error: '+r.error)
+      : r.remote ? ('Queued for '+(r.remote==='both'?'the shared pool':'the MacBook')+': '+(r.name||'ok'))
+      : ('Started: '+(r.name||'ok')));
     loadOptimize();
   });
 }
