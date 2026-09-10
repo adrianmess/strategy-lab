@@ -614,7 +614,10 @@ function updateCfgSummary(i){
         const suffix = x.file ? (oos ? '_oosbest_full' : '_full') : '';
         const cand = x.file
           ? ` <span style="color:${oos?'var(--green)':'var(--amber)'};font-weight:600" title="this component trades the run's ${oos?'OOS-best candidate (holdout_best_config.json)':'TRAIN-best candidate (best_config.json)'} — its backtest entry is ${x.run}${suffix}">${oos?'OOS-best':'train-best'}</span>` : '';
-        return `<div>${x.assigned?'●':'○'} <b title="${x.file?`backtest entry: ${x.run}${suffix}`:''}">${x.run}</b>${cand} <span style="color:var(--dim)">(${x.strategy}${x.method?`·${x.method}`:''}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})${x.assigned?'':' — mined but not assigned to any bucket'}</span></div>`;
+        const nm = x.file
+          ? `<a href="/dashboard/backtests.html?sel=${encodeURIComponent(x.run+suffix)}" target="_blank" style="color:inherit;font-weight:700;text-decoration:underline dotted" title="open this component's backtest (${x.run}${suffix}) on the Backtests page">${x.run}</a>`
+          : `<b>${x.run}</b>`;
+        return `<div>${x.assigned?'●':'○'} ${nm}${cand} <span style="color:var(--dim)">(${x.strategy}${x.method?`·${x.method}`:''}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})${x.assigned?'':' — mined but not assigned to any bucket'}</span></div>`;
       }).join('') +
       `</div></details>` : '');
 }
