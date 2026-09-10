@@ -5987,6 +5987,30 @@ def _variant_path(name, variant, defaults=False):
     return os.path.join(d, f"{name}.{variant}{sfx}.json")
 
 
+@app.route("/api/coins")
+def coins_list():
+    """Pairs with searchable market data — derived from the research data
+    dir, so newly backfilled coins show up in the Optimize UIs without code
+    edits (the hardcoded dropdowns bit us when the 2026-09 spot batch never
+    appeared). spot/perp flags let the UI mark spot-only pairs: they have no
+    futures data, so lev searches on them would fail."""
+    data = os.path.join(AT, "research", "data")
+    out = {}
+    try:
+        for f in os.listdir(data):
+            m = re.match(r"([a-z0-9]+)(_spot)?_3min\.parquet$", f)
+            if m:
+                c = m.group(1)
+                e = out.setdefault(c, dict(coin=c, spot=False, perp=False))
+                e["spot" if m.group(2) else "perp"] = True
+    except Exception:
+        pass
+    canon = ["sol", "btc", "eth", "doge", "xrp", "sui", "hype"]
+    rest = sorted(c for c in out if c not in canon)
+    return jsonify(coins=[out[c] for c in canon if c in out] +
+                         [out[c] for c in rest])
+
+
 @app.route("/api/gamut/start", methods=["POST"])
 def gamut_start():
     cfg = request.get_json(force=True) or {}

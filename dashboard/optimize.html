@@ -582,6 +582,9 @@ async function launch(){
       }
     }
   }
+  if($('mode').value==='lev' && spotOnly($('symbol').value)){
+    alert($('symbol').value.toUpperCase()+' is spot-only (no futures data on MEXC contract API) — switch Mode to spot or pick another pair.'); return;
+  }
   const bt_ = $('budgetType').value, bv_ = +$('budgetVal').value;
   const d = {strategy:$('strat').value, algo:$('algo').value, mode:$('mode').value,
     method:$('method').value, procs:+$('procs').value,
@@ -1704,6 +1707,32 @@ async function initSpaceFiles(){
   }catch(e){}
 }
 initSpaceFiles();
+// ---------- dynamic coin lists ----------
+// The pair dropdowns/checkboxes come from /api/coins (derived from the data
+// dir on the mini), so newly backfilled pairs appear here automatically.
+// Spot-only pairs (no futures data) are marked and guarded against lev runs.
+let COINLIST = [];
+function spotOnly(c){ const e = COINLIST.find(x=>x.coin===c); return !!(e && !e.perp); }
+async function loadCoins(){
+  let r; try{ r = await api('coins'); }catch(e){ return; }
+  COINLIST = (r&&r.coins)||[];
+  if(!COINLIST.length) return;
+  for(const id of ['symbol','rxSym']){
+    const s = $(id); if(!s) continue;
+    let v = s.value;
+    try{ if(id==='symbol'){ const o=JSON.parse(localStorage.getItem('optLaunchSettings')||'null'); if(o&&o.symbol) v=o.symbol; } }catch(e){}
+    s.innerHTML = COINLIST.map(c=>`<option value="${c.coin}">${c.coin.toUpperCase()}${c.perp?'':' (spot-only)'}</option>`).join('');
+    if([...s.options].some(o=>o.value===v)) s.value = v;
+  }
+  const gp = $('gmPairs');
+  if(gp){
+    const checked = [...gp.querySelectorAll('input:checked')].map(i=>i.value);
+    gp.innerHTML = COINLIST.map(c=>
+      `<span style="white-space:nowrap"><input type="checkbox" value="${c.coin}"${checked.includes(c.coin)?' checked':''} onchange="gamutCount()"> <span class="optx" data-x="gmpairs">${c.coin.toUpperCase()}${c.perp?'':'<sup title="spot-only: no futures data — lev runs on this pair will fail" style="color:var(--dim)">s</sup>'}</span></span>`).join(' ');
+    if(typeof gamutCount==='function') gamutCount();
+  }
+}
+loadCoins();
 let SPACE_VARIANT = 'imported';
 function setVariant(v){ SPACE_VARIANT = v; loadSpace(); }
 function variantQ(){
@@ -2121,6 +2150,12 @@ async function gamutStart(){
   const c = gamutCfg();
   const n = gamutCount();
   if(!n){ alert('select at least one option in every group (and one holdout scheme)'); return; }
+  const badLev = c.modes.includes('lev') ? c.pairs.filter(spotOnly) : [];
+  if(badLev.length){
+    alert('lev mode is ticked but these pairs are spot-only (no futures data): '
+      +badLev.map(x=>x.toUpperCase()).join(', ')
+      +'.\n\nUntick lev, or drop those pairs — their lev runs would all fail.'); return;
+  }
   if(!confirm(`Launch ${n} optimization runs (each with automatic backtests), pair by pair?\n\nRough estimate: ${$('gmCount').textContent.split('—')[1]||''}\nResumable; Stop is graceful.`)) return;
   const r = await api('gamut/start', c);
   if(r.error){ $('gmMsg').textContent = 'error: '+r.error; return; }
