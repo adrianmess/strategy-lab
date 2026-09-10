@@ -323,7 +323,14 @@ body.masked .amt:hover{filter:none}
         <option value="win">Winners</option><option value="loss">Losers</option></select>
       <label class="mini" style="display:flex;align-items:center;gap:5px;cursor:pointer">
         <input type="checkbox" id="hShowIgn" checked onchange="renderHistory()"> show excluded</label>
-      <span class="mini" id="hCount"></span></div></div>
+      <span class="mini" id="hCount"></span>
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;padding-left:14px;border-left:1px solid var(--line)">
+        <select id="rstAcct"><option value="both">both accounts</option>
+          <option value="mexc1">mexc1 only</option><option value="mexc2">mexc2 only</option></select>
+        <button class="btn sm" onclick="resetPnl(this)" title="fresh start: hides ALL P&L, trade history and flows before this moment from every view — the balance now becomes the new baseline. The exchange keeps everything; undoable with the restore link that appears while a reset is active.">Reset P&amp;L — fresh start</button>
+        <a id="rstUndo" style="display:none;color:var(--cyan);cursor:pointer;font-size:12px" onclick="undoPnlReset(this)" title="remove the reset cutoffs — the full history reappears everywhere">restore history</a>
+        <button class="info" title="what is this? (opens docs)" onclick="openInfo('history.reset')">i</button>
+      </span></div></div>
     <div class="card"><h3>Closed positions <button class="info" title="what is this? (opens docs)" onclick="openInfo('history.origin')">i</button> <span class="mini">realized P&amp;L from the exchange</span></h3>
       <div class="scroll" id="hist"></div></div>
   </div></section>
@@ -985,11 +992,39 @@ function setOrigin(v){
   renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
 }
 var PNL_RESET = {};   // account -> 'YYYY-MM-DD HH:MM' fresh-start cutoffs
+function _rstAccts(){
+  var v = (document.getElementById('rstAcct')||{}).value || 'both';
+  return v === 'both' ? ['mexc1','mexc2'] : [v];
+}
+function resetPnl(btn){
+  var accts = _rstAccts();
+  armConfirm(btn, 'Confirm fresh start — '+accts.join(' + '), function(){
+    pend(btn);
+    API('pnl_reset', {method:'POST', headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({accounts:accts, confirm:'RESET'})})
+    .then(function(r){
+      if(r.error) flash(r.error, 'r');
+      else flash('P&L reset — '+accts.join(' + ')+' start fresh from now. '+
+                 'Use "restore history" to undo.', 'g');
+      loadPnl(); loadFlows(); loadAll(); });
+  }, 'Hides all prior P&L and trade history from every view (the exchange keeps everything; undoable).');
+}
+function undoPnlReset(el){
+  var accts = _rstAccts();
+  API('pnl_reset', {method:'DELETE', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({accounts:accts})})
+  .then(function(r){
+    if(r.error) flash(r.error, 'r');
+    else flash('Reset removed for '+accts.join(' + ')+' — full history restored.', 'g');
+    loadPnl(); loadFlows(); loadAll(); });
+}
 function loadPnl(){
   API('pnl_events').then(function(d){
     if(d && d.events){
       PNLE = d.events;
       PNL_RESET = d.reset || {};
+      var ru = document.getElementById('rstUndo');
+      if(ru) ru.style.display = Object.keys(PNL_RESET).length ? '' : 'none';
       try{ localStorage.setItem('slPnlSnap',
         JSON.stringify({events:d.events, at:Date.now()})); }catch(e){}
       renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
