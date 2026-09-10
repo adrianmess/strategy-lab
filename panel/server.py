@@ -1507,6 +1507,10 @@ def tpsl():
 
 
 def _tpsl_fire(rule, why, px):
+    """Close per the rule. Returns False when there was nothing to close —
+    the position was already closed elsewhere and the rule is stale. Firing
+    blind used to emit phantom position_closed notifications + WhatsApp
+    pings for long-gone positions (3x on mexc2 fut, 2026-09-10)."""
     if AT not in sys.path:
         sys.path.insert(0, AT)
     from mexc_api import MexcSpotAPI, MexcFuturesAPI
@@ -1515,21 +1519,30 @@ def _tpsl_fire(rule, why, px):
     cp = float(rule.get("close_pct") or 100)
     if rule["market"] == "fut":
         api = MexcFuturesAPI(account=acct)
+        pos = [p for p in (api.open_positions(sym) or [])
+               if float(p.get("holdVol") or 0) > 0]
+        if not pos:
+            print(f"TPSL rule expired {acct} fut {sym}: {why} hit but no "
+                  f"open position (closed elsewhere) — rule dropped quietly",
+                  flush=True)
+            return False
         if cp >= 100:
             api.close_position(sym)
         else:
-            for p in (api.open_positions(sym) or []):
+            for p in pos:
                 hv = float(p.get("holdVol") or 0)
-                if hv <= 0:
-                    continue
                 side = 4 if int(p.get("positionType") or 1) == 1 else 2
                 api.place_market(sym, side, max(1, int(hv * cp / 100)))
     else:
         api = MexcSpotAPI(account=acct)
         qty = rule.get("qty") or api.balance(sym.split("_")[0])
         q, _sc = api.floor_qty(sym, float(qty) * cp / 100)
-        if q > 0:
-            api.market_sell(sym, q)
+        if q <= 0:
+            print(f"TPSL rule expired {acct} spot {sym}: {why} hit but no "
+                  f"balance to sell (closed elsewhere) — rule dropped "
+                  f"quietly", flush=True)
+            return False
+        api.market_sell(sym, q)
     print(f"TPSL FIRED {acct} {rule['market']} {sym}: {why} at {px} "
           f"(entry {rule['entry']}, close {cp:.0f}%)", flush=True)
     _RECENT_MCLOSE[(acct, rule["market"], sym)] = time.time()

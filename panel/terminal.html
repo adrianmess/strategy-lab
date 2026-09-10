@@ -1526,7 +1526,16 @@ function renderHistory(){
             ',\''+e.symbol+'\','+e.pnl+')">'+(ig?'Restore':'Exclude')+'</button></td></tr>';
       }).join('')+
       '</tbody></table>'
-    : '<div class="body"><span class="mini">nothing matches those filters</span></div>';
+    : '<div class="body"><span class="mini">'+histEmptyMsg(ev.length)+'</span></div>';
+}
+function histEmptyMsg(nAll){
+  // an active P&L reset hiding everything looks like "no data" — say so
+  var rv = Object.keys(PNL_RESET).map(function(k){ return PNL_RESET[k]; });
+  if(!nAll && rv.length)
+    return 'no closed trades since the P&amp;L reset on '+rv.sort()[0]+
+      ' — earlier trades are hidden by the reset (open positions and new closes appear as they happen). '+
+      '<a href="#" onclick="undoPnlReset();return false" style="color:var(--cyan)">restore full history</a>';
+  return nAll ? 'nothing matches those filters' : 'no closed trades in the window';
 }
 
 function toggleIgnore(id, ignore, symbol, pnl){
