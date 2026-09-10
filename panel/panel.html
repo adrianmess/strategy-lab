@@ -195,7 +195,8 @@ const $ = id => document.getElementById(id);
 async function api(path, body){
   const r = await fetch('/api/'+path, body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
   const j = await r.json();
-  if(!r.ok) alert('⚠ Request failed\n\n' + (j.error||'unknown error'));
+  if(!r.ok && !j.acct_mismatch)   // mismatch has its own confirm flow
+    alert('⚠ Request failed\n\n' + (j.error||'unknown error'));
   return j;
 }
 // ---------------- modal dialogs (replace native confirm/prompt) ----------------
@@ -757,13 +758,21 @@ const JOBSOPEN = new Set();
 
 async function startTrader(i, live){
   const cfg = $('tcfg_'+i).value;
+  const body = {instance:i, config:cfg, live:!!live};
   if(live){
     const c = await modalWord(`${instName(i)} (#${i}): this will place REAL orders via its venue (${$('acct_'+i).value} — see badge).`, 'LIVE', 'Start LIVE');
     if(c===null) return;
-    await api('trader/start',{instance:i, config:cfg, live:true, confirm:'LIVE'});
-  } else {
-    await api('trader/start',{instance:i, config:cfg, live:false});
+    body.confirm = 'LIVE';
   }
+  let r = await api('trader/start', body);
+  if(r && r.acct_mismatch){
+    // the selected config trades a DIFFERENT account than this instance's
+    // previous config — make the switch explicit
+    if(confirm(`${instName(i)} last traded ${r.acct_mismatch.was}, but "${cfg}" trades ${r.acct_mismatch.now}.\n\nStart anyway on ${r.acct_mismatch.now}?`))
+      r = await api('trader/start', {...body, acct_ok:true});
+    else { alert('Start cancelled — account mismatch.'); return; }
+  }
+  if(r && r.error) alert('error: '+r.error);
   setTimeout(refresh,500);
 }
 async function stopTrader(i){

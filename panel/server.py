@@ -727,6 +727,25 @@ def trader_start():
     live = bool(d.get("live"))
     if live and d.get("confirm") != "LIVE":
         return jsonify(error="live start requires confirm='LIVE'"), 400
+    # ACCOUNT-MISMATCH GUARD (2026-09-10): saved configs default to mexc1,
+    # and starting one on an instance that previously traded a different
+    # account silently pointed the trader at the wrong wallet (adopts then
+    # fail on $0 free with no obvious cause). Demand an explicit ack.
+    prev_cfg = t.get("config") or I.get("cfg")
+    if prev_cfg and prev_cfg != cfg_name and not d.get("acct_ok"):
+        try:
+            a_prev = (json.load(open(os.path.join(AT, prev_cfg)))
+                      .get("api_account", "mexc1"))
+            a_new = (json.load(open(os.path.join(AT, cfg_name)))
+                     .get("api_account", "mexc1"))
+        except Exception:
+            a_prev = a_new = None
+        if a_prev and a_new and a_prev != a_new:
+            return jsonify(
+                error=f"{_iname(i)} last traded {a_prev}, but "
+                      f"'{cfg_name}' trades {a_new} — confirm the account "
+                      "switch to continue",
+                acct_mismatch=dict(was=a_prev, now=a_new)), 409
     # SAFETY: two traders sharing one state file corrupt each other. Refuse.
     mine = _state_file_of(cfg_name)
     for j, J in instances.items():

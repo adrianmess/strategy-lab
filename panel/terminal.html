@@ -1938,11 +1938,21 @@ function closeNow(btn, i, posKey){
 }
 function startTrader(btn, i, live){
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
-  var go = function(){
+  var go = function(acctOk){
     pend(btn);
     API('trader/start', {method:'POST', headers:{'Content-Type':'application/json'},
                          body:JSON.stringify({instance:i, live:!!live,
+                                              acct_ok:(acctOk||undefined),
                                               confirm:(live?'LIVE':undefined)})}).then(function(r){
+      if(r.acct_mismatch){
+        // the selected config trades a DIFFERENT account than this
+        // instance's previous config — make the switch explicit
+        if(confirm(nm+' last traded '+r.acct_mismatch.was+', but the selected '+
+                   'config trades '+r.acct_mismatch.now+'.\n\nStart anyway on '+
+                   r.acct_mismatch.now+'?')) go(true);
+        else flash('Start cancelled — account mismatch.', 'r');
+        return;
+      }
       if(r.error) flash(r.error, 'r');
       else flash(r.note || (nm+' started ('+(live?'LIVE':'dry-run')+').'), 'g');
       loadAll(); });
