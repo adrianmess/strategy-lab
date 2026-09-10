@@ -1,5 +1,22 @@
 # EC2 Gamut Offload — Runbook
 
+> **2026-09-10 — gspot_newpairs campaign.** Plan: `optimizer/campaigns/
+> gamut_gspot_newpairs/` (11,664 specs: 9 new spot pairs × v7/macdx/scalpx2
+> × 3m/1m × 3 methods × 3 scorings × max-hold 2.5/5/7 × 60k/100k × 4
+> holdouts). Campaign-specific files: `ec2_boot_workers_spotnp.sh` /
+> `_spotnp_b.sh` (no hype session), `fleet_userdata_spotnp.sh` (fill
+> EIPALLOC), **`box_autoteardown.sh`** — NEW: cron */10 on each box; when
+> every spec has a durable marker it does a final S3 push and deletes its
+> own fleet / cancels its spot request / terminates itself, ending the
+> idle-burn that inflated the August bill. The gamut-box role needs the
+> extra EC2 actions in `docs/ec2/gamut_box_iam_policy.json`. AI spaces for
+> the new pairs are pre-generated on the mini (`param_spaces/variants/
+> <pair>_<tf>.ai.json`) and ship with the repo rsync — boxes never call
+> gen_ai_spaces. `/api/gamut/remote_queue` now only serves
+> `runner=="macbook"`, so an `ec2` plan can't be claimed by the laptop.
+> EIP release / AMI+snapshot / S3 / IAM cleanup remain manual (§8, items
+> 5-8) — the monitor task should nag once both boxes are gone.
+
 How to rebuild the AWS compute rig that ran the g0801_2122 (12,960 specs) and
 ghype (2,592 specs) gamut campaigns in August 2026. Everything referenced here
 lives in this repo; nothing depends on the torn-down AWS resources.

@@ -6123,8 +6123,8 @@ def gamut_remote_queue():
             cfg = json.load(open(cfg_p))
         except Exception:
             continue
-        if (cfg.get("runner") or "host") == "host":
-            continue
+        if (cfg.get("runner") or "host") != "macbook":
+            continue          # ec2-bound plans must NOT be claimed by the laptop
         try:
             plan = json.load(open(plan_p))
         except Exception:

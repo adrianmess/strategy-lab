@@ -1,0 +1,29 @@
+{
+  "_comment": "Inline policy for the gamut-box role (EC2 instance profile). S3 statement = the August permissions; the EC2 statement adds what fleet_userdata_spotnp.sh (tag/EIP) and box_autoteardown.sh (self-teardown) need. Paste as an inline policy named gamut-box-policy when recreating the role. Replace <ACCT> with the account id if the bucket name changed.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3Rendezvous",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::gamut-sync-637309463295",
+        "arn:aws:s3:::gamut-sync-637309463295/*"
+      ]
+    },
+    {
+      "Sid": "BoxSelfManage",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeTags",
+        "ec2:CreateTags",
+        "ec2:AssociateAddress",
+        "ec2:DeleteFleets",
+        "ec2:CancelSpotInstanceRequests",
+        "ec2:TerminateInstances"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
