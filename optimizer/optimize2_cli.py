@@ -643,6 +643,26 @@ def _market_tag():
 def _tf_tag():
     return os.environ.get("LAB_TF", "3") + "m"
 
+def _known_symbols():
+    """--symbol choices derived from the research data dir (any coin with
+    3-min candles, spot or perp), so newly backfilled pairs are searchable
+    without editing this list — the hardcoded version silently failed all
+    160 specs of the first new-pair gamut (2026-09-10)."""
+    import re as _re
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "..", "adaptive_trader", "research", "data")
+    out = set()
+    try:
+        for f in os.listdir(d):
+            m = _re.match(r"([a-z0-9]+?)(_spot)?_3min\.parquet$", f)
+            if m:
+                out.add(m.group(1))
+    except Exception:
+        pass
+    return sorted(out) or ["sol", "btc", "eth", "doge", "xrp", "sui",
+                           "hype", "pepe", "wif"]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -655,11 +675,11 @@ def main():
     ap.add_argument("--method", default="vol3",
                     choices=["none", "vol3", "vol3_7d", "volume3", "trend3",
                              "volXtrend9", "cvol7"])
-    ap.add_argument("--symbol", default="sol",
-                    choices=["sol", "btc", "eth", "doge", "xrp", "sui",
-                             "hype", "pepe", "wif"],
+    ap.add_argument("--symbol", default="sol", choices=_known_symbols(),
                     help="trading pair (vs USDT): selects data files and "
-                         "per-symbol precompute caches; stamped on the run")
+                         "per-symbol precompute caches; stamped on the run. "
+                         "Choices come from the research data dir — backfill "
+                         "a coin's candles and it becomes searchable")
     ap.add_argument("--tf", type=int, default=3, choices=[1, 3, 5],
                     help="chart timeframe in minutes (default 3). Indicator "
                          "lengths are in BARS, so a 50-EMA on 1m is a "
