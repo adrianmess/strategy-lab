@@ -6523,29 +6523,34 @@ def _gamut_systems():
         parts = ln.split("offload_sync.sh", 1)[1].split()
         if len(parts) < 3:
             continue
-        key, host = parts[0], parts[2]
-        # a remote may carry its repo path ('user@host:Code/strategy-lab');
-        # the ssh TARGET is only the part before the colon
-        rpath = host.split(":", 1)[1] if ":" in host else "strategy-lab"
-        host = host.split(":", 1)[0]
-        rh = host if "@" in host else f"ubuntu@{host}"
-        if rh in seen:
-            continue
-        seen.add(rh)
-        if "macbook" in rh.lower():
-            name = "MacBook"
-        elif "mini" in rh.lower():
-            name = "Mac mini"
-        elif rh.startswith("ubuntu@"):
-            name = f"AWS EC2 ({rh.split('@')[1]})"
-        else:
-            name = rh
-        # personal keys may be passphrase-protected (agent-only, unusable
-        # from this daemon) — the dedicated automation key wins when present
-        auto = os.path.expanduser("~/.ssh/lab_auto_ed25519")
-        if not rh.startswith("ubuntu@") and os.path.exists(auto):
-            key = auto
-        systems.append(dict(id=rh, name=name, ssh=rh, key=key, rpath=rpath))
+        # args: <PEM> <CAMPAIGN> <HOST_A> [HOST_B ...] — EVERY host is a
+        # worker box (only parts[2] was read before, so box B of a two-box
+        # sync loop never appeared in Worker systems; found 2026-09-10)
+        for host in parts[2:]:
+            key = parts[0]
+            # a remote may carry its repo path ('user@host:Code/strategy-lab');
+            # the ssh TARGET is only the part before the colon
+            rpath = host.split(":", 1)[1] if ":" in host else "strategy-lab"
+            host = host.split(":", 1)[0]
+            rh = host if "@" in host else f"ubuntu@{host}"
+            if rh in seen:
+                continue
+            seen.add(rh)
+            if "macbook" in rh.lower():
+                name = "MacBook"
+            elif "mini" in rh.lower():
+                name = "Mac mini"
+            elif rh.startswith("ubuntu@"):
+                name = f"AWS EC2 ({rh.split('@')[1]})"
+            else:
+                name = rh
+            # personal keys may be passphrase-protected (agent-only, unusable
+            # from this daemon) — the dedicated automation key wins if present
+            auto = os.path.expanduser("~/.ssh/lab_auto_ed25519")
+            if not rh.startswith("ubuntu@") and os.path.exists(auto):
+                key = auto
+            systems.append(dict(id=rh, name=name, ssh=rh, key=key,
+                                rpath=rpath))
     return systems
 
 def _gctl(sys_d, action, arg=None):
