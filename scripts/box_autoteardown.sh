@@ -12,7 +12,11 @@
 # (docs/ec2/gamut_box_iam_policy.json). EIPs/AMI/S3 stay — released by hand
 # per the runbook teardown checklist.
 export PATH=/usr/bin:/bin:/usr/local/bin:/snap/bin
-PLAN="$HOME/strategy-lab/optimizer/campaigns/gamut_gspot_newpairs/plan.json"
+# which campaign THIS box answers to: ~/PLAN_NAME holds the campaign dir
+# (written by the fleet user-data). Fallback = the original gspot campaign
+# so the already-running boxes keep working unchanged.
+CAMPDIR=$(cat "$HOME/PLAN_NAME" 2>/dev/null || echo gamut_gspot_newpairs)
+PLAN="$HOME/strategy-lab/optimizer/campaigns/$CAMPDIR/plan.json"
 GUARD="$HOME/TEARDOWN_FIRED"
 LOG="$HOME/autoteardown.log"
 R=us-east-2

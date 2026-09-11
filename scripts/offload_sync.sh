@@ -25,7 +25,10 @@ while true; do
   idx=$idx0
   for IP in "${IPS[@]}"; do
     RH="$(rhost "$IP")"; RP="$(rpath "$IP")"
-    sfx=""; [ $idx -gt 0 ] && sfx="_b"
+    # distinct worker_state suffix PER BOX — with only ""/"_b", boxes C and
+    # D of a second fleet clobbered A and B's state files (2026-09-11)
+    case $idx in 0) sfx="";; 1) sfx="_b";; 2) sfx="_c";; 3) sfx="_d";;
+                 *) sfx="_x$idx";; esac
     rsync -az --ignore-existing --timeout=60 -e "$SSH" \
       "$RH:$RP/optimizer/runs/" "$LAB/optimizer/runs/" 2>/dev/null
     rsync -az --timeout=60 --include='*/' --include='best_config.json' \
