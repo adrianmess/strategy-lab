@@ -73,6 +73,14 @@ rsync -a $BWOPT -e "ssh $SSHOPTS" \
 while read -r DIRN PAIRS; do
   [ -z "$DIRN" ] && continue
   CAMP="${DIRN#gamut_}"
+  # ONE campaign at a time (Adrian, 2026-09-11): if a DIFFERENT campaign's
+  # worker is running, leave this one queued — the queue re-offers every
+  # tick, so it starts automatically when the running one finishes.
+  if ! pgrep -f "gamut_worker.py --plan.*$DIRN" >/dev/null \
+     && pgrep -f "gamut_worker.py --plan" >/dev/null; then
+    log "$CAMP: queued — one campaign at a time; waiting for the running one"
+    continue
+  fi
   # 1) campaign dir
   rsync -a $BWOPT --exclude logs -e "ssh $SSHOPTS" \
     "$MINI:strategy-lab/optimizer/campaigns/$DIRN" "$L/optimizer/campaigns/" 2>>"$LOG"
