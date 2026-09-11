@@ -111,15 +111,27 @@ function fmtH(h){ if(h==null) return '–'; if(h<1) return Math.round(h*60)+' mi
 function ago(ts){ if(!ts) return '';
   const s=(Date.now()-new Date(ts.replace(' ','T')))/1000;
   if(s<90) return Math.round(s)+'s'; if(s<5400) return Math.round(s/60)+'m'; return (s/3600).toFixed(1)+'h'; }
-let CAMP = '';   // '' = server picks the most active campaign
+// ?name=<campaign> selects a campaign directly (used by the cross-gamut
+// links on the per-pair rows); '' = server picks the most active one
+let CAMP = new URLSearchParams(location.search).get('name') || '';
 $('campSel').onchange = ()=>{ CAMP = $('campSel').value; refresh(); };
+function campLabel(n, st){
+  if(!st || !st.total) return n;
+  if(st.complete) return n + ' ✓ done';
+  return n + ' · ' + Math.round(100*st.done/st.total) + '%';
+}
 async function refresh(){
   let d;
   try{ d = await fetch('/api/gamut/progress'+(CAMP?`?name=${encodeURIComponent(CAMP)}`:'')).then(r=>r.json()); }
   catch(e){ $('syncInfo').textContent='panel unreachable'; return; }
   if(d.error){ $('syncInfo').textContent=d.error; return; }
-  if(d.campaigns && $('campSel').options.length !== d.campaigns.length){
-    $('campSel').innerHTML = d.campaigns.map(n=>`<option value="${n}">${n}</option>`).join('');
+  if(d.campaigns){
+    const cst = d.campaign_status || {};
+    const sig = d.campaigns.map(n=>campLabel(n, cst[n])).join('|');
+    if($('campSel')._sig !== sig){
+      $('campSel')._sig = sig;
+      $('campSel').innerHTML = d.campaigns.map(n=>`<option value="${n}">${campLabel(n, cst[n])}</option>`).join('');
+    }
   }
   $('campSel').value = d.name;
   const c=d.counts, done=c.done||0, run=c.running||0, pend=c.pending||0, fail=c.failed||0;
@@ -143,10 +155,19 @@ async function refresh(){
     const hrs=(Date.now()-t0)/3.6e6 + 0.4; // + setup ramp before first completion
     $('cCost').textContent = '$'+(hrs*(+$('rateIn').value||3.54)).toFixed(0);
   }
-  // pairs
+  // pairs (with cross-gamut badges: the same pair covered by ANOTHER
+  // campaign — green when that campaign is complete, amber if in progress)
+  const ew = d.elsewhere || {};
   $('pairs').innerHTML = Object.entries(d.pairs).map(([p,v])=>{
     const w=v.total? 100*v.done/v.total : 0;
-    return `<div class="pairrow"><span class="nm">${p}</span><div class="bar"><div class="done" style="width:${w}%"></div></div><span class="ct">${v.done.toLocaleString()} / ${v.total.toLocaleString()}</span></div>`;
+    const badges = (ew[p]||[]).map(e=>{
+      const done = e.complete;
+      const col = done ? 'var(--green,#3fb950)' : 'var(--amber,#d29922)';
+      const txt = done ? `✓ done in ${e.campaign}`
+                       : `also in ${e.campaign} (${e.total?Math.round(100*e.done/e.total):0}%)`;
+      return ` <a href="progress.html?name=${encodeURIComponent(e.campaign)}" style="color:${col};font-size:11.5px;text-decoration:none;border:1px solid ${col};border-radius:9px;padding:0 7px;white-space:nowrap" title="${done?'this pair was fully gamutted':'this pair is also being gamutted'} in campaign ${e.campaign} (${e.done}/${e.total} specs) — click to open that gamut">${txt}</a>`;
+    }).join('');
+    return `<div class="pairrow"><span class="nm">${p}${badges}</span><div class="bar"><div class="done" style="width:${w}%"></div></div><span class="ct">${v.done.toLocaleString()} / ${v.total.toLocaleString()}</span></div>`;
   }).join('');
   // running table
   $('runCt').textContent = run? `(${run})` : '';

@@ -58,6 +58,12 @@ ssh -i ~/.ssh/lab_auto_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=no
   `optimizer/campaigns/`; gamut worker budget via `optimizer/gamut_limits.json`
   + `scripts/gamut_ctl.sh` (status|pause|resume|cores N — per-PID signals only,
   NEVER process groups).
+- Gamut machine assignment (Adrian, 2026-09-11): the MacBook runs ONE
+  campaign at a time (agent-enforced), and should be given pairs that are
+  NOT already being gamutted on other machines (EC2) — only split a pair
+  across machines when there aren't enough uncovered pairs to go around.
+  Pairs need real history before gamutting (dgai/pons were too young
+  2026-09; check the data range first).
 - Published backtests: `dashboard/backtests.js` (append via flock; entries
   named `<run>_full`, `<run>_oosbest_full`, routers `*_fcfs_full/_fcfs_wf`).
 - Market data refresh must go through

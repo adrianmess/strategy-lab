@@ -6166,6 +6166,36 @@ def gamut_status():
 
 
 _PLAN_KIND = {}      # campaign -> (plan.json mtime, is a gamut plan)
+_CAMP_STAT = {}      # campaign -> (plan mtime, checked_at, status dict)
+
+
+def _campaign_status(d):
+    """done/total/complete for a campaign, from durable run markers.
+    Cached: complete campaigns never recompute; in-progress ones at most
+    once a minute (the big plan is 11.6k specs and Progress polls at 20s)."""
+    plan_p = os.path.join(OPT, "campaigns", d, "plan.json")
+    try:
+        mt = os.path.getmtime(plan_p)
+    except OSError:
+        return None
+    hit = _CAMP_STAT.get(d)
+    now = time.time()
+    if hit and hit[0] == mt and (hit[2]["complete"] or now - hit[1] < 60):
+        return hit[2]
+    try:
+        names = [s.get("name") for s in
+                 (json.load(open(plan_p)).get("specs") or [])]
+    except Exception:
+        return None
+    names = [n for n in names if n]
+    done = sum(1 for n in names if
+               os.path.exists(os.path.join(OPT, "runs", n, "best_config.json"))
+               or os.path.exists(os.path.join(OPT, "runs", n,
+                                              "no_survivor.json")))
+    st = dict(done=done, total=len(names),
+              complete=bool(names) and done >= len(names))
+    _CAMP_STAT[d] = (mt, now, st)
+    return st
 
 @app.route("/api/gamut/progress")
 def gamut_progress():
@@ -6333,8 +6363,35 @@ def gamut_progress():
                             if g is not None else None),
             dd_pct=(round(100 * (h.get("maxdd") or 0)) if h else None),
             liq=bool(h.get("liq")) if h else None))
+    # ---- cross-campaign context (2026-09-11): a pair can be covered by a
+    # DIFFERENT gamut (e.g. BNB finished in g0910_0441 while still pending
+    # in gspot_newpairs) — surface that on the per-pair rows, and give the
+    # campaign dropdown a done/in-progress status for every campaign.
+    camp_status = {}
+    for d in cs:
+        stt = _campaign_status(d)
+        if stt:
+            camp_status[_disp(d)] = stt
+    elsewhere = {}
+    for d in cs:
+        if _disp(d) == name:
+            continue
+        try:
+            opairs = json.load(open(os.path.join(
+                OPT, "campaigns", d, "config.json"))).get("pairs") or []
+        except Exception:
+            continue
+        stt = camp_status.get(_disp(d))
+        if not stt:
+            continue
+        for p in opairs:
+            if p in pairs:
+                elsewhere.setdefault(p, []).append(dict(
+                    campaign=_disp(d), complete=stt["complete"],
+                    done=stt["done"], total=stt["total"]))
     return jsonify(
         name=name, campaigns=campaign_names,
+        campaign_status=camp_status, elsewhere=elsewhere,
         total=len(plan["specs"]), counts=dict(counts),
         pairs={k: dict(done=v[0], total=v[1]) for k, v in sorted(pairs.items())},
         running=sorted(running, key=lambda r: r.get("since") or ""),
