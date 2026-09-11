@@ -45,11 +45,13 @@ sync_once() {
     rsync -a $BWOPT --ignore-existing -e "ssh $SSHOPTS" "$d" \
       "$MINI:$R/optimizer/runs/$(basename "$d")/"
   done
-  # 3) worker state for the Progress page
+  # 3) worker state for the Progress page (merged from worker_state*.json).
+  #    _mb suffix: _b belongs to EC2 box B when a campaign is shared with
+  #    the fleet (offload_sync pulls box states as worker_state{,_b}.json)
   if [ -f "$L/optimizer/campaigns/gamut_$CAMP/worker_state.json" ]; then
     rsync -a $BWOPT -e "ssh $SSHOPTS" \
       "$L/optimizer/campaigns/gamut_$CAMP/worker_state.json" \
-      "$MINI:$R/optimizer/campaigns/gamut_$CAMP/worker_state_b.json"
+      "$MINI:$R/optimizer/campaigns/gamut_$CAMP/worker_state_mb.json"
   fi
   # 4) backtests merge (additive by name, flock-safe on the mini side)
   if [ -f "$L/dashboard/backtests.js" ]; then
