@@ -3903,7 +3903,8 @@ def _bt_index_build():
                 name=nm, verdict=_bt_verdict(nm, obj.get("kind")),
                 kind=obj.get("kind"), pair=obj.get("pair"),
                 tf=obj.get("timeframe"), mode=obj.get("mode"),
-                strategy=obj.get("strategy"), created=obj.get("created"),
+                strategy=obj.get("strategy"), method=obj.get("method"),
+                created=obj.get("created"),
                 growth=st.get("monthly_growth_pct"), mult=st.get("total_mult"),
                 dd=st.get("maxdd_mtm"), n=st.get("n"), win=st.get("win"),
                 liq=st.get("liq"), liq_ever=bool(obj.get("liq_ever")),
@@ -4537,6 +4538,13 @@ def _bt_fold(pend):
             txt[txt.index("=") + 1:].lstrip())[0]
         old = {x.get("name"): x for x in entries if x.get("name") in pend}
         from bt_risk import risk_of
+        _scr = os.path.join(REPO, "scripts")
+        if _scr not in sys.path:
+            sys.path.insert(0, _scr)
+        try:
+            from prune_backtests import prune_entry, split_entry
+        except Exception:
+            prune_entry = split_entry = None
         for nm, e in pend.items():
             o = old.get(nm) or {}
             if (o.get("liq_ever") or (o.get("stats") or {}).get("liq")
@@ -4550,6 +4558,17 @@ def _bt_fold(pend):
                     e["sl_class"] = slc
             except Exception:
                 pass
+            # slim AT INGEST (Adrian 2026-09-11): full curve/trades/config go
+            # to bt_detail/<name>.json (fetched on row click); the list entry
+            # keeps scalars + precomputed filter flags. Without this every
+            # fold re-fattened backtests.js and the browser was parsing a
+            # 554MB store just to draw the table.
+            if prune_entry and not e.get("detail"):
+                try:
+                    prune_entry(e)
+                    split_entry(e)
+                except Exception as ex:
+                    print(f"bt fold slim {nm}: {ex}", flush=True)
         entries = [x for x in entries
                    if x.get("name") not in pend] + list(pend.values())
         tmp = p + f".tmp{os.getpid()}"

@@ -91,8 +91,9 @@ def main():
           f"{os.path.getsize(P)//1048576} MB now")
 
 
-if __name__ == "__main__":
-    main()
+# NB: __main__ guard lives at the BOTTOM of this file — helpers appended
+# below this point (period_flags etc.) must be defined before main() runs;
+# calling main() up here crashed with NameError (2026-09-11).
 
 
 def _week_key(dt_):
@@ -188,3 +189,7 @@ def stamp_opt(e):
                 pass
             break
     return e
+
+
+if __name__ == "__main__":
+    main()

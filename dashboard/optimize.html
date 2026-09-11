@@ -1984,10 +1984,20 @@ let SEED_CAND = null, SEED_NAME = null;
 (function(){
   const q = new URLSearchParams(location.search);
   if(q.get('seed')){
-    fetch('/dashboard/backtests.js?t='+Date.now()).then(r=>r.text()).then(txt=>{
-      const entries = JSON.parse(txt.slice(txt.indexOf('=')+1).trim().replace(/;$/,''));
-      const e = entries.find(x=>x.name===q.get('seed'));
-      if(!e) return;
+    const nm = q.get('seed');
+    // scalars from the lite index + exact params from the per-entry detail
+    // file — the old path downloaded the ENTIRE backtests.js (550+MB) just
+    // to find this one entry
+    Promise.all([
+      fetch('/api/backtests_lite?q='+encodeURIComponent(nm)+'&limit=300').then(r=>r.json()).catch(()=>null),
+      fetch('/dashboard/bt_detail/'+encodeURIComponent(nm)+'.json?t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+    ]).then(([lite, det])=>{
+      const row = ((lite&&lite.rows)||[]).find(x=>x.name===nm);
+      if(!row && !(det&&det.config)) return;
+      const e = {name:nm, strategy:row&&row.strategy, mode:row&&row.mode,
+                 method:row&&row.method, pair:row&&row.pair,
+                 timeframe:row&&row.tf, opt:null,
+                 config:(det&&det.config)||null};
       if(e.config && e.config.regs){ SEED_CAND = e.config; SEED_NAME = e.name; }
       $('resumeBanner').style.display='block';
       $('resumeBanner').innerHTML = `Loaded from backtest <b>${e.name}</b> — every launch field (strategy, algorithm, mode, pair, chart, holdout, …) is set from it.` +
