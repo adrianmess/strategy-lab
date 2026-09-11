@@ -29,7 +29,8 @@ td{padding:4px 8px;border-bottom:1px solid var(--border)}
 .pos{color:var(--green,#3fb950)} .neg{color:var(--red,#f85149)} .mut{color:var(--dim)}
 .pairrow{display:flex;align-items:center;gap:10px;margin:6px 0}
 .pairrow .nm{width:52px;text-transform:uppercase;font-weight:600}
-.pairrow .bar{flex:1}
+.pairrow .ew{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.pairrow .bar{flex:1;min-width:120px}
 .pairrow .ct{width:110px;text-align:right;color:var(--dim);font-size:12px}
 .stale{color:var(--red,#f85149);font-weight:600}
 h2{font-size:15px;margin:0 0 10px}
@@ -167,9 +168,9 @@ async function refresh(){
       const col = done ? 'var(--green,#3fb950)' : 'var(--amber,#d29922)';
       const txt = done ? `✓ done in ${e.campaign}`
                        : `also in ${e.campaign} (${e.total?Math.round(100*e.done/e.total):0}%)`;
-      return ` <a href="progress.html?name=${encodeURIComponent(e.campaign)}" style="color:${col};font-size:11.5px;text-decoration:none;border:1px solid ${col};border-radius:9px;padding:0 7px;white-space:nowrap" title="${done?'this pair was fully gamutted':'this pair is also being gamutted'} in campaign ${e.campaign} (${e.done}/${e.total} specs) — click to open that gamut">${txt}</a>`;
+      return `<a href="progress.html?name=${encodeURIComponent(e.campaign)}" style="color:${col};font-size:11.5px;text-decoration:none;border:1px solid ${col};border-radius:9px;padding:0 7px;white-space:nowrap" title="${done?'this pair was fully gamutted':'this pair is also being gamutted'} in campaign ${e.campaign} (${e.done}/${e.total} specs) — click to open that gamut">${txt}</a>`;
     }).join('');
-    return `<div class="pairrow"><span class="nm">${p}${badges}</span><div class="bar"><div class="done" style="width:${w}%"></div></div><span class="ct">${v.done.toLocaleString()} / ${v.total.toLocaleString()}</span></div>`;
+    return `<div class="pairrow"><span class="nm">${p}</span>${badges?`<span class="ew">${badges}</span>`:''}<div class="bar"><div class="done" style="width:${w}%"></div></div><span class="ct">${v.done.toLocaleString()} / ${v.total.toLocaleString()}</span></div>`;
   }).join('');
   // running table
   $('runCt').textContent = run? `(${run})` : '';
