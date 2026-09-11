@@ -6567,7 +6567,10 @@ def _gamut_systems():
         _host = "Mac mini"
     elif "macbook" in _host.lower():
         _host = "MacBook"
-    systems = [dict(id="local", name=f"{_host} (this computer)", local=True)]
+    # NB: no "(this computer)" here — which machine is "this computer"
+    # depends on WHO IS VIEWING; the browser decides via is_viewer, which
+    # gamut_workers() stamps per request from the client address.
+    systems = [dict(id="local", name=_host, local=True)]
     try:
         ps = subprocess.run(["ps", "-Ao", "command"], capture_output=True,
                             text=True, timeout=5).stdout
@@ -6655,22 +6658,55 @@ def _parse_gctl(txt):
                 nproc = None
     return dict(state=st, plans=plans, pids=npids, cores=cores, nproc=nproc)
 
+_GW_REPORTED = {}     # name -> {t, host, addr, parsed} (self-reported workers)
+
+
+@app.route("/api/gamut/workers/report", methods=["POST"])
+def gamut_workers_report():
+    """Self-report from machines the mini cannot ssh into (the MacBook):
+    they run gamut_ctl.sh status locally and POST the raw text here."""
+    d = request.get_json(force=True) or {}
+    nm = (str(d.get("name") or "worker")).strip()[:40]
+    _GW_REPORTED[nm] = dict(t=time.time(), host=d.get("host"),
+                            addr=request.remote_addr,
+                            parsed=_parse_gctl(d.get("text") or ""))
+    return jsonify(ok=True)
+
+
 @app.route("/api/gamut/workers")
 def gamut_workers():
     if time.time() - _GW_CACHE["t"] < 10 and _GW_CACHE["data"] \
             and not request.args.get("fresh"):
-        return jsonify(_GW_CACHE["data"])
-    systems = _gamut_systems()
-    out = []
-    def probe(s):
-        d = dict(s); d.pop("key", None)
-        d.update(_parse_gctl(_gctl(s, "status")))
-        out.append(d)
-    ts = [threading.Thread(target=probe, args=(s,)) for s in systems]
-    [t.start() for t in ts]; [t.join(timeout=25) for t in ts]
-    data = dict(systems=sorted(out, key=lambda x: x["name"]))
-    _GW_CACHE.update(t=time.time(), data=data)
-    return jsonify(data)
+        base = _GW_CACHE["data"]
+    else:
+        systems = _gamut_systems()
+        out = []
+        def probe(s):
+            d = dict(s); d.pop("key", None)
+            d.update(_parse_gctl(_gctl(s, "status")))
+            out.append(d)
+        ts = [threading.Thread(target=probe, args=(s,)) for s in systems]
+        [t.start() for t in ts]; [t.join(timeout=25) for t in ts]
+        base = dict(systems=sorted(out, key=lambda x: x["name"]))
+        _GW_CACHE.update(t=time.time(), data=base)
+    # per-request assembly: self-reported workers + viewer identification
+    # ("this computer" = whichever machine the BROWSER runs on, matched by
+    # client address — 127.0.0.1 means the viewer sits on the mini itself)
+    now = time.time()
+    va = request.remote_addr or ""
+    probed = {s["name"] for s in base["systems"]}
+    rows = []
+    for s in base["systems"]:
+        r = dict(s)
+        r["is_viewer"] = bool(s.get("local")) and va in ("127.0.0.1", "::1")
+        rows.append(r)
+    for nm, rep in list(_GW_REPORTED.items()):
+        if now - rep["t"] > 180 or nm in probed:
+            continue
+        rows.append(dict(id="rpt:" + nm, name=nm, reported=True,
+                         is_viewer=(va == rep["addr"]),
+                         age=int(now - rep["t"]), **rep["parsed"]))
+    return jsonify(systems=sorted(rows, key=lambda x: x["name"]))
 
 @app.route("/api/gamut/workers/ctl", methods=["POST"])
 def gamut_workers_ctl():

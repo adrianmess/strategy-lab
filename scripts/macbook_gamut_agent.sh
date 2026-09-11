@@ -30,6 +30,27 @@ fi
 
 log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 
+# self-report this machine's gamut status to the panel every tick, so the
+# Progress page's Worker systems shows the MacBook (the mini has no ssh
+# into this laptop — it can only be told). Non-fatal on any failure.
+(
+  TXT=$(bash "$L/scripts/gamut_ctl.sh" status 2>/dev/null)
+  /usr/bin/python3 - "$TXT" <<'PYEOF' 2>/dev/null
+import json, sys, urllib.request, os
+try:
+    cfg = json.load(open(os.path.expanduser('~/.strategy_lab_worker.json')))
+    req = urllib.request.Request(
+        cfg['hub'].rstrip('/') + '/api/gamut/workers/report',
+        data=json.dumps(dict(name='MacBook', host=os.uname().nodename,
+                             text=sys.argv[1])).encode(),
+        headers={'Content-Type': 'application/json',
+                 'X-Panel-Key': cfg['panel_key']})
+    urllib.request.urlopen(req, timeout=10).read()
+except Exception:
+    pass
+PYEOF
+) &
+
 Q=$(ssh $SSHOPTS "$MINI" "curl -s -m 20 http://127.0.0.1:8800/api/gamut/remote_queue" 2>/dev/null) || exit 0
 echo "$Q" | grep -q '"queue"' || exit 0
 cleanup(){

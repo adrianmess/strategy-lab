@@ -205,18 +205,21 @@ async function loadWorkers(fresh){
   }
   tb.innerHTML = d.systems.map(s=>{
     const [col, lbl] = STBADGE[s.state] || STBADGE.unreachable;
-    const canCtl = s.state === 'running' || s.state === 'paused';
-    const btn = !canCtl ? '' : (s.state === 'running'
+    const canCtl = (s.state === 'running' || s.state === 'paused') && !s.reported;
+    const btn = !canCtl
+      ? (s.reported ? `<span class="mut" title="this machine reports its own status (the mini can't reach into it) — pause/resume it on the machine itself: scripts/gamut_ctl.sh pause|resume">self-reported</span>` : '')
+      : (s.state === 'running'
       ? `<button onclick="ctlWorker('${s.id}','pause',this)" title="freeze this machine's gamut worker + its searches in place (no work lost)">⏸ pause</button>`
       : `<button onclick="ctlWorker('${s.id}','resume',this)" title="continue exactly where it was frozen">▶ resume</button>`);
-    const cores = s.state === 'unreachable' ? '<span class="mut">—</span>'
+    const cores = (s.state === 'unreachable') ? '<span class="mut">—</span>'
+      : s.reported ? `<span class="mut">${s.cores ?? '?'}${s.nproc ? ' / '+s.nproc : ''}</span>`
       : `<input type="number" min="1" max="512" value="${s.cores ?? ''}"
            placeholder="${s.nproc ? 'all ' + s.nproc : 'all'}" style="width:62px"
            title="${s.nproc ? 'this machine has ' + s.nproc + ' processors. ' : ''}Set the total gamut budget, then press Apply — running searches finish first."
            id="cores_${btoa(s.id).replace(/=/g,'')}">
          <button onclick="setCores('${s.id}',this)" title="apply the new processor budget">Apply</button>`;
     return `<tr>
-      <td><b>${s.name}</b></td>
+      <td><b>${s.name}</b>${s.is_viewer ? ' <span class="mut">(this computer)</span>' : ''}</td>
       <td><span style="color:${col};font-weight:600">${lbl}</span>${s.pids?` <span class="mut">(${s.pids} procs)</span>`:''}</td>
       <td class="mono">${(s.plans||[]).join(', ') || '<span class="mut">—</span>'}</td>
       <td>${cores}</td>
