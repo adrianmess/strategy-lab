@@ -6192,8 +6192,14 @@ def _campaign_status(d):
                os.path.exists(os.path.join(OPT, "runs", n, "best_config.json"))
                or os.path.exists(os.path.join(OPT, "runs", n,
                                               "no_survivor.json")))
+    # active = some worker touched this campaign's state recently; without
+    # it, a PARKED partial (worker killed, never resuming) looks 'running'
+    import glob as _g
+    sts = _g.glob(os.path.join(OPT, "campaigns", d, "worker_state*.json"))
+    newest = max((os.path.getmtime(p) for p in sts), default=0)
     st = dict(done=done, total=len(names),
-              complete=bool(names) and done >= len(names))
+              complete=bool(names) and done >= len(names),
+              active=bool(newest) and (now - newest) < 900)
     _CAMP_STAT[d] = (mt, now, st)
     return st
 
@@ -6388,6 +6394,7 @@ def gamut_progress():
             if p in pairs:
                 elsewhere.setdefault(p, []).append(dict(
                     campaign=_disp(d), complete=stt["complete"],
+                    active=stt.get("active", False),
                     done=stt["done"], total=stt["total"]))
     return jsonify(
         name=name, campaigns=campaign_names,

@@ -121,7 +121,8 @@ $('campSel').onchange = ()=>{ CAMP = $('campSel').value; refresh(); };
 function campLabel(n, st){
   if(!st || !st.total) return n;
   if(st.complete) return n + ' ✓ done';
-  return n + ' · ' + Math.round(100*st.done/st.total) + '%';
+  return n + ' · ' + Math.round(100*st.done/st.total) + '%'
+       + (st.active ? '' : ' ⏸ stopped');
 }
 async function refresh(){
   let d;
@@ -164,11 +165,15 @@ async function refresh(){
   $('pairs').innerHTML = Object.entries(d.pairs).map(([p,v])=>{
     const w=v.total? 100*v.done/v.total : 0;
     const badges = (ew[p]||[]).map(e=>{
-      const done = e.complete;
-      const col = done ? 'var(--green,#3fb950)' : 'var(--amber,#d29922)';
-      const txt = done ? `✓ done in ${e.campaign}`
-                       : `also in ${e.campaign} (${e.total?Math.round(100*e.done/e.total):0}%)`;
-      return `<a href="progress.html?name=${encodeURIComponent(e.campaign)}" style="color:${col};font-size:11.5px;text-decoration:none;border:1px solid ${col};border-radius:9px;padding:0 7px;white-space:nowrap" title="${done?'this pair was fully gamutted':'this pair is also being gamutted'} in campaign ${e.campaign} (${e.done}/${e.total} specs) — click to open that gamut">${txt}</a>`;
+      const pc = e.total ? Math.round(100*e.done/e.total) : 0;
+      let col, txt, tip;
+      if(e.complete){ col='var(--green,#3fb950)'; txt=`✓ done in ${e.campaign}`;
+        tip='this pair was fully gamutted in campaign '+e.campaign; }
+      else if(e.active){ col='var(--amber,#d29922)'; txt=`also running in ${e.campaign} (${pc}%)`;
+        tip='a worker is actively gamutting this pair in campaign '+e.campaign; }
+      else { col='var(--dim,#8b949e)'; txt=`⏸ partial in ${e.campaign} (${pc}%)`;
+        tip='campaign '+e.campaign+' covers this pair but is STOPPED/parked — no worker is on it'; }
+      return `<a href="progress.html?name=${encodeURIComponent(e.campaign)}" style="color:${col};font-size:11.5px;text-decoration:none;border:1px solid ${col};border-radius:9px;padding:0 7px;white-space:nowrap" title="${tip} (${e.done}/${e.total} specs) — click to open that gamut">${txt}</a>`;
     }).join('');
     return `<div class="pairrow"><span class="nm">${p}</span>${badges?`<span class="ew">${badges}</span>`:''}<div class="bar"><div class="done" style="width:${w}%"></div></div><span class="ct">${v.done.toLocaleString()} / ${v.total.toLocaleString()}</span></div>`;
   }).join('');
