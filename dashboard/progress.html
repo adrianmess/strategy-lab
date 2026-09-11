@@ -70,7 +70,9 @@ h2{font-size:15px;margin:0 0 10px}
 
   <div class="panelbox">
     <h2 style="display:flex;justify-content:space-between;align-items:center">Worker systems
-      <span class="mut" style="font-size:12px;font-weight:400" title="every machine currently wired into the lab (this Mac + everything the sync loops talk to). Pause freezes that machine's gamut worker mid-instruction (SIGSTOP, zero work lost); Resume continues exactly where it stopped. Each system pauses independently.">pause/resume per machine</span></h2>
+      <span class="mut" style="font-size:12px;font-weight:400">
+        <span title="which machine THIS BROWSER is on — saved in this browser (survives IP changes); auto-detected on first visit, correct it here if wrong">viewing from <select id="viewerSel" class="mono" style="font-size:12px" onchange="localStorage.setItem('viewerMachine', this.value); loadWorkers()"></select></span>
+        &nbsp;·&nbsp;<span title="every machine currently wired into the lab (this Mac + everything the sync loops talk to). Pause freezes that machine's gamut worker mid-instruction (SIGSTOP, zero work lost); Resume continues exactly where it stopped. Each system pauses independently.">pause/resume per machine</span></span></h2>
     <table id="workersT" style="width:100%;font-size:13px">
       <thead><tr><th style="text-align:left">system</th><th style="text-align:left">status</th><th style="text-align:left">campaign(s)</th><th style="text-align:left" title="TOTAL processors this machine may use for gamut searches. Change it any time: running searches always finish untouched, then the worker fills the new budget (or idles surplus slots). Blank = no limit.">cores</th><th></th></tr></thead>
       <tbody><tr><td colspan="5" class="mut">probing…</td></tr></tbody>
@@ -195,6 +197,18 @@ const STBADGE = {
   idle:       ['#8b949e', 'idle'],
   unreachable:['#f85149', 'unreachable'],
 };
+// ---- which machine is the BROWSER on? Stored in localStorage so it
+// survives IP changes (DHCP, network moves). The server's is_viewer flag
+// (client-address match) only SEEDS it on first visit; after that the
+// saved value wins, and the selector in the table header overrides it.
+function viewerName(systems){
+  let v = localStorage.getItem('viewerMachine');
+  const names = systems.map(s=>s.name);
+  if(v && names.includes(v)) return v;
+  const hint = systems.find(s=>s.is_viewer);
+  if(hint){ localStorage.setItem('viewerMachine', hint.name); return hint.name; }
+  return v || '';
+}
 async function loadWorkers(fresh){
   const r = await fetch('/api/gamut/workers' + (fresh ? '?fresh=1' : ''));
   const d = await r.json();
@@ -202,6 +216,17 @@ async function loadWorkers(fresh){
   if(!d.systems || !d.systems.length){
     tb.innerHTML = '<tr><td colspan="5" class="mut">no systems found</td></tr>';
     return;
+  }
+  const V = viewerName(d.systems);
+  const vs = $('viewerSel');
+  if(vs){
+    const opts = d.systems.filter(s=>!(s.ssh||'').startsWith('ubuntu@')).map(s=>s.name);
+    const sig = opts.join('|');
+    if(vs._sig !== sig){
+      vs._sig = sig;
+      vs.innerHTML = opts.map(n=>`<option value="${n}">${n}</option>`).join('');
+    }
+    vs.value = V;
   }
   tb.innerHTML = d.systems.map(s=>{
     const [col, lbl] = STBADGE[s.state] || STBADGE.unreachable;
@@ -219,7 +244,7 @@ async function loadWorkers(fresh){
            id="cores_${btoa(s.id).replace(/=/g,'')}">
          <button onclick="setCores('${s.id}',this)" title="apply the new processor budget">Apply</button>`;
     return `<tr>
-      <td><b>${s.name}</b>${s.is_viewer ? ' <span class="mut">(this computer)</span>' : ''}</td>
+      <td><b>${s.name}</b>${s.name === V ? ' <span class="mut">(this computer)</span>' : ''}</td>
       <td><span style="color:${col};font-weight:600">${lbl}</span>${s.pids?` <span class="mut">(${s.pids} procs)</span>`:''}</td>
       <td class="mono">${(s.plans||[]).join(', ') || '<span class="mut">—</span>'}</td>
       <td>${cores}</td>
