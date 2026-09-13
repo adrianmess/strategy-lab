@@ -15,22 +15,28 @@ export PATH=/usr/bin:/bin:/usr/local/bin:/snap/bin
 # which campaign THIS box answers to: ~/PLAN_NAME holds the campaign dir
 # (written by the fleet user-data). Fallback = the original gspot campaign
 # so the already-running boxes keep working unchanged.
-CAMPDIR=$(cat "$HOME/PLAN_NAME" 2>/dev/null || echo gamut_gspot_newpairs)
-PLAN="$HOME/strategy-lab/optimizer/campaigns/$CAMPDIR/plan.json"
+CAMPDIRS=$(cat "$HOME/PLAN_NAME" 2>/dev/null || echo gamut_gspot_newpairs)
 GUARD="$HOME/TEARDOWN_FIRED"
 LOG="$HOME/autoteardown.log"
 R=us-east-2
 
 [ -f "$GUARD" ] && exit 0
-[ -f "$PLAN" ] || exit 0
 
-LEFT=$(python3 - "$PLAN" <<'EOF'
+# ~/PLAN_NAME may list SEVERAL campaigns (one per line) — the box tears
+# down only when EVERY spec of EVERY listed plan has a durable marker
+LEFT=$(python3 - $CAMPDIRS <<'EOF'
 import json, os, sys
-plan = json.load(open(sys.argv[1]))
 runs = os.path.expanduser('~/strategy-lab/optimizer/runs')
-left = sum(1 for s in plan['specs']
-           if not (os.path.exists(os.path.join(runs, s['name'], 'best_config.json'))
-                   or os.path.exists(os.path.join(runs, s['name'], 'no_survivor.json'))))
+left = 0
+for camp in sys.argv[1:]:
+    p = os.path.expanduser(f'~/strategy-lab/optimizer/campaigns/{camp}/plan.json')
+    if not os.path.exists(p):
+        left += 1          # plan not even synced yet — definitely not done
+        continue
+    plan = json.load(open(p))
+    left += sum(1 for s in plan['specs']
+                if not (os.path.exists(os.path.join(runs, s['name'], 'best_config.json'))
+                        or os.path.exists(os.path.join(runs, s['name'], 'no_survivor.json'))))
 print(left)
 EOF
 )
