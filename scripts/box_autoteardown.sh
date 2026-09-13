@@ -35,8 +35,9 @@ for camp in sys.argv[1:]:
         continue
     plan = json.load(open(p))
     left += sum(1 for s in plan['specs']
-                if not (os.path.exists(os.path.join(runs, s['name'], 'best_config.json'))
-                        or os.path.exists(os.path.join(runs, s['name'], 'no_survivor.json'))))
+                if not any(os.path.exists(os.path.join(runs, s['name'], m))
+                           for m in ('best_config.json', 'no_survivor.json',
+                                     'failed_final.json')))
 print(left)
 EOF
 )

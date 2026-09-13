@@ -16,7 +16,7 @@ Usage:
 Stop: touch <plan dir>/STOP_WORKER  (graceful; running specs finish)
 """
 import _bootstrap as B
-import argparse, json, os, subprocess, sys, threading, time
+import argparse, glob, json, os, subprocess, sys, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNS = os.path.join(HERE, "runs")
@@ -64,6 +64,16 @@ def main():
     ap.add_argument("--procs-cap", type=int, default=0,
                     help="rewrite each spec's --procs to at most N "
                          "(per-machine CPU limit; 0 = use the plan's value)")
+    ap.add_argument("--loop", action="store_true",
+                    help="don't exit after one pass over the plan: re-sweep "
+                         "until EVERY spec has a durable marker, so the box "
+                         "stays at full width through the tail (stragglers, "
+                         "retries) instead of idling. Specs that failed 5 "
+                         "times get a durable failed_final marker and are "
+                         "left for manual review. Specs a PEER machine is "
+                         "actively running (fresh worker_state_peer_*.json, "
+                         "synced via S3) are skipped while the peer is live "
+                         "and reclaimed if it goes stale.")
     ap.add_argument("--cores", type=int, default=0,
                     help="TOTAL processors this machine may use for gamut "
                          "work. Live-adjustable: write {\"cores\": N} to "
@@ -152,8 +162,92 @@ def main():
     print(f"worker: {n_total} candidate specs, cores={budget() or 'unlimited'}"
           f" -> up to {_j0} concurrent x {_p0} procs", flush=True)
 
-    it = iter(specs)
     counters = dict(done=0, failed=0, skipped=0)
+    MAXTRY = 5
+
+    def _peer_running():
+        """Spec names a PEER machine is actively working: worker_state_peer_*
+        files land beside the plan (box_s3_push pulls them from S3). A stale
+        file (>20 min) is a dead peer — its claims are ignored."""
+        out = set()
+        now = time.time()
+        for p in glob.glob(os.path.join(pdir, "worker_state_peer_*.json")):
+            try:
+                if now - os.path.getmtime(p) > 1200:
+                    continue
+                for k, v in json.load(open(p)).items():
+                    if v.get("status") == "running":
+                        out.add(k)
+            except Exception:
+                pass
+        return out
+
+    def _failed_final(name):
+        try:
+            os.makedirs(os.path.join(RUNS, name), exist_ok=True)
+            fp = os.path.join(RUNS, name, "failed_final.json")
+            if not os.path.exists(fp):
+                json.dump(dict(at=time.strftime("%F %T"),
+                               note=f"gave up after {MAXTRY} failed tries — "
+                                    f"needs manual review"), open(fp, "w"))
+        except Exception:
+            pass
+
+    def _refill():
+        """(claimable specs, n peer-skipped) for the next sweep."""
+        peers = _peer_running()
+        rem, npeer = [], 0
+        for s in specs:
+            nm = s["name"]
+            st = state.get(nm, {})
+            if st.get("status") == "running":
+                continue                    # in flight on THIS box
+            if done_already(nm) or os.path.exists(
+                    os.path.join(RUNS, nm, "failed_final.json")):
+                continue
+            if st.get("status") == "failed" and st.get("try", 1) >= MAXTRY:
+                _failed_final(nm)
+                continue
+            if nm in peers:
+                npeer += 1
+                continue                    # live peer owns it — for now
+            rem.append(s)
+        return rem, npeer
+
+    # shared claim queue: threads block here instead of exiting, so the box
+    # keeps EVERY slot busy until the plan is truly finished (--loop)
+    Q = dict(specs=list(specs), i=0, refill_at=0.0, sweep=1)
+
+    def next_spec():
+        while True:
+            wait = 0
+            with _lock:
+                if Q["i"] < len(Q["specs"]):
+                    s = Q["specs"][Q["i"]]
+                    Q["i"] += 1
+                    return s
+                if not a.loop:
+                    return None
+                now = time.time()
+                if Q["refill_at"] <= now:
+                    rem, npeer = _refill()
+                    Q["refill_at"] = now + 60
+                    if rem:
+                        Q["specs"], Q["i"] = rem, 0
+                        Q["sweep"] += 1
+                        print(f"[{time.strftime('%H:%M:%S')}] sweep "
+                              f"#{Q['sweep']}: {len(rem)} spec(s) remain"
+                              + (f" (+{npeer} on peers)" if npeer else ""),
+                              flush=True)
+                        continue
+                    if npeer == 0:
+                        return None         # genuinely nothing left
+                    # everything left is live on a peer — idle and re-check
+                    # (if the peer dies its claims go stale and we take over)
+                    wait = 120
+                else:
+                    wait = Q["refill_at"] - now
+            time.sleep(min(max(wait, 5), 120))
 
     def note(name, status, tries=None):
         with _lock:
@@ -180,11 +274,9 @@ def main():
                 time.sleep(10)
             if os.path.exists(stop_p):
                 return
-            with _lock:
-                try:
-                    s = next(it)
-                except StopIteration:
-                    return
+            s = next_spec()
+            if s is None:
+                return
             name = s["name"]
             if done_already(name) or \
                     state.get(name, {}).get("status") in ("done", "skipped"):
