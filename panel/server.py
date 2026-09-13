@@ -3995,22 +3995,46 @@ def router_components():
     return jsonify(run=run, n=len(out), components=out)
 
 
+_GAUNT_CACHE = {"t": 0.0, "data": None}   # gamut era: ~35k run dirs match —
+                                          # cache 120s, don't scan per poll
+
+
 @app.route("/api/gauntlet")
 def gauntlet_api():
     """Holdout-gauntlet verdicts for sweep families: run name ->
     {key, have, passed, full}. A leg passes when its winner (train-best or
     OOS-best) survived its own out-of-sample holdout without liquidating."""
+    if time.time() - _GAUNT_CACHE["t"] < 120 and _GAUNT_CACHE["data"]:
+        return jsonify(_GAUNT_CACHE["data"])
+    # two naming worlds: manual sweeps (..._hA / _hB / _hBtw / _hOut /
+    # _hAltN [+ scoring]) and GAMUT legs (..._hA2508 / _hL7 / _hB2501 /
+    # _hM2503 / _hO2411 / _hN [+ _t60k]) — the latter were invisible here,
+    # so no gamut family ever satisfied the holdout-gauntlet filter
     pat = re.compile(r"^(.+)_(hA|hB|hBtw|hOut|hAlt\d+)((?:_(?:cls|wor|und))?)$")
+    pat_g = re.compile(r"^(.+)_(hA\d+|hAlt\d+|hL\d+|hBtw|hB\d+|hM\d+|hOut|"
+                       r"hO\d+|hN)((?:_t\d+k)?)$")
+
+    def _typ(t):
+        if t.startswith(("hAlt", "hL")):
+            return "hAlt"
+        if t.startswith(("hBtw", "hM")):
+            return "hBtw"
+        if t.startswith(("hOut", "hO")):
+            return "hOut"
+        if t == "hN":
+            return "hN"
+        return "hB" if t.startswith("hB") else "hA"
+
     runs_dir = os.path.join(OPT, "runs")
     running_names = {j.get("name") for j in jobs.values()
                      if j["proc"].poll() is None and "optimize" in j.get("kind", "")}
     groups, names = {}, {}
     for d in os.listdir(runs_dir):
-        m = pat.match(d)
+        m = pat.match(d) or pat_g.match(d)
         if not m:
             continue
         key = m.group(1) + (m.group(3) or "")
-        typ = "hAlt" if m.group(2).startswith("hAlt") else m.group(2)
+        typ = _typ(m.group(2))
         if d in running_names:
             st = "pending"
         else:
@@ -4027,13 +4051,19 @@ def gauntlet_api():
                     pass
         groups.setdefault(key, {})[typ] = st
         names[d] = key
+    # hN (train-only) legs belong to the family but have no holdout to
+    # pass — excluded from the judged count. 'full' = every judged leg has
+    # a verdict; the CLIENT decides how many judged types are enough
+    # (families sweep 3-5 types depending on era).
     out, types = {}, ["hA", "hB", "hBtw", "hOut", "hAlt"]
     for d, key in names.items():
         g = groups[key]
         have = [t for t in types if t in g]
         passed = [t for t in types if g.get(t) == "pass"]
         out[d] = dict(key=key, have=len(have), passed=len(passed),
-                      full=(len(have) == 5 and "pending" not in g.values()))
+                      full=(bool(have) and "pending" not in
+                            [g[t] for t in have]))
+    _GAUNT_CACHE.update(t=time.time(), data=out)
     return jsonify(out)
 
 
