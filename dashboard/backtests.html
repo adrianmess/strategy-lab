@@ -633,6 +633,46 @@ function tradedOf(name){
 }
 
 const BT = window.BACKTESTS||[];
+// ---- lazy row window + background chart-data prefetch (2026-09-14) ----
+let ORDER = [], _ordSig = '', RENDER_N = 50, _pfBusy = 0;
+function growRows(){ RENDER_N += 25; render(); }
+window.addEventListener('scroll', (()=>{ let lock=false; return ()=>{
+  if(lock || ORDER.length <= RENDER_N) return;
+  if(document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 700){
+    lock = true; growRows(); setTimeout(()=>{ lock=false; }, 250);
+  }
+};})());
+function loadDetail(e, cb){
+  // fetch bt_detail/<name>.json ONCE per entry per page-load: merged into
+  // the entry object, so filter/sort changes never re-download anything
+  if(!e || !e.detail || e._dlOk){ if(cb) cb(); return; }
+  (e._dlCbs = e._dlCbs || []).push(cb);
+  if(e._dl) return;                       // fetch already in flight
+  e._dl = true;
+  fetch('bt_detail/'+encodeURIComponent(e.name)+'.json')
+    .then(r=>r.json())
+    .then(d=>{ e.curve = d.curve || e.curve; e.trades = d.trades || [];
+               if(d.config) e.config = d.config;
+               if(d.monthly) e.monthly = d.monthly;
+               if(d.open_positions) e.open_positions = d.open_positions;
+               e._dlOk = true; })
+    .catch(()=>{ e._dl = false; })
+    .finally(()=>{ const cbs = e._dlCbs || []; e._dlCbs = [];
+                   cbs.forEach(f=>{ if(f) f(); }); });
+}
+function prefetchTick(){
+  // after the list is on screen, quietly pull chart data in LIST ORDER
+  // (2 at a time; rendered rows first, then a lookahead capped at ~500 so
+  // an idle tab doesn't slowly download the whole 2GB detail store)
+  if(_pfBusy >= 2) return;
+  const lim = Math.min(ORDER.length, Math.max(RENDER_N, 50) + 450);
+  for(let k = 0; k < lim && _pfBusy < 2; k++){
+    const e = BT[ORDER[k]];
+    if(!e || !e.detail || e._dlOk || e._dl) continue;
+    _pfBusy++;
+    loadDetail(e, ()=>{ _pfBusy--; prefetchTick(); });
+  }
+}
 const tb = document.querySelector('#bt tbody');
 let sel = null, chart=null,
     sortKey = localStorage.getItem('btSortKey') || 'created',
@@ -852,7 +892,7 @@ function rtrRender(){
       (e.sl_class==='stopless'&&e.lev_x>1?` <span class="pill" style="background:rgba(248,81,73,.15);color:var(--red)" title="leverage with NO stop-loss — liquidation is the only downside floor">stopless</span>`
        :e.sl_class==='partial'?` <span class="pill" style="background:rgba(210,153,34,.15);color:var(--amber)" title="stop-loss active in only SOME regimes">partial SL</span>`
        :e.sl_class==='stops'?` <span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="stop-loss active in every regime">SL</span>`:'');
-    return `<tr${s.liq?' style="background:rgba(248,81,73,.16)" title="the MOST RECENT backtest of this component liquidated"':(e.liq_ever?' style="background:rgba(248,81,73,.06)"':'')}><td>${e.name} ${cand}${risk}${liq}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
+    return `<tr${s.liq?' style="background:rgba(248,81,73,.16)" title="the MOST RECENT backtest of this component liquidated"':(e.liq_ever?' style="background:rgba(248,81,73,.06)"':'')}><td><a style="cursor:pointer;text-decoration:underline dotted" onclick="rtrOpen('${e.name}')" title="open this strategy in the backtest list below (selects the row and loads its chart)">${e.name}</a> ${cand}${risk}${liq}</td><td>${pairPill(e.pair, e.market_data, e.timeframe)}</td><td class="hint">${e.kind||''}</td>
       <td>${stratName(e.strategy)}</td><td><span class="pill ${e.mode}">${e.mode||''}</span></td>
       <td>${e.method||''}</td>
       <td>${e.stats?fTotalPct(e):'<span class="hint">?</span>'}</td>
@@ -860,6 +900,16 @@ function rtrRender(){
       <td class="hint" ${(()=>{const cr=e.created||'';const fresh=cr&&(Date.now()-new Date(cr.replace(' ','T')).getTime())<86400000;return fresh?'style="color:var(--green);font-weight:600" title="backtest last run within 24h"':'';})()}>${e.created||'?'}</td>
       <td>${oosCell(e)}</td>
       <td><button onclick="rtrRemove('${e.name}')" title="remove">✕</button></td></tr>`;}).join('');
+}
+function rtrOpen(name){
+  // click a component's NAME -> select that entry in the main list below
+  // (select() pins the row into view even when filters/lazy window hide it)
+  const i = BT.findIndex(x=>x.name===name);
+  if(i < 0){ alert('no published backtest entry named '+name); return; }
+  select(i);
+  const row = document.querySelector(`#btBody tr[data-i="${i}"]`)
+           || document.querySelector(`tr[data-i="${i}"]`);
+  if(row) row.scrollIntoView({behavior:'smooth', block:'center'});
 }
 function sendToRouter(){
   if(!RTRSEL.length){ alert('no runs selected'); return; }
@@ -1174,12 +1224,18 @@ function render(){
       return sortDir*((va??-1e18)-(vb??-1e18));
     });
   }
-  const _cap=500; let _shown = order.length>_cap ? order.slice(0,_cap) : order;
+  // ---- lazy rows: first 50, +25 per scroll (Adrian 2026-09-14). The
+  // window resets when the visible ORDER changes (filters/sort/search);
+  // ORDER also drives the background chart-data prefetch below.
+  ORDER = order;
+  const _osig = order.length+'|'+(order[0]??'')+'|'+(order[order.length-1]??'')+'|'+sortKey+'|'+sortDir;
+  if(_osig !== _ordSig){ _ordSig = _osig; RENDER_N = 50; }
+  let _shown = order.slice(0, RENDER_N);
   // the SELECTED entry is always rendered (pinned on top when the current
-  // sort/filters/500-row cap would hide it — e.g. arriving via a ?sel= link)
+  // sort/filters/lazy window would hide it — e.g. arriving via a ?sel= link)
   if(sel!==null && !_shown.includes(sel)) _shown = [sel, ..._shown];
-  const _capNote = order.length>_cap ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px">…${(order.length-_cap).toLocaleString()} more match — use the filters or the search box above to narrow down</td></tr>` : '';
-  tb.innerHTML = _capNote + _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''}${(s.liq||e.liq_ever)?' liqrow':''} rate${e.rating||0}">
+  const _moreNote = order.length>RENDER_N ? `<tr><td colspan="99" class="hint" style="text-align:center;padding:8px;cursor:pointer" onclick="growRows()" title="25 more rows also load automatically as you scroll down">showing ${Math.min(RENDER_N,order.length).toLocaleString()} of ${order.length.toLocaleString()} — scroll (or click) for more</td></tr>` : '';
+  tb.innerHTML = _shown.map(i=>{const e=BT[i];const s=e.stats;return `<tr data-i="${i}" class="${sel===i?'sel':''}${e.best?' best':''}${(s.liq||e.liq_ever)?' liqrow':''} rate${e.rating||0}">
     <td>${(()=>{const tr=tradedOf(e.name);return tr?`<span class="livedot" style="background:${tr.live?'var(--red)':'var(--amber)'}"></span>`:''})()}${e.name}${(()=>{const g=gauntOf(e.name);if(!g)return '';
       if(g.full&&g.passed===g.have&&g.have>=3)return ` <span class="pill" style="background:rgba(63,185,80,.15);color:var(--green)" title="HOLDOUT GAUNTLET: this run's sweep family passed ALL ${g.have} holdout types it swept — every leg's winner survived its own out-of-sample holdout without liquidating (manual sweeps judge 5 types, gamut families 3-5)">✓ ${g.passed}/${g.have} holdouts</span>`;
       if(g.full)return ` <span class="pill" style="background:rgba(248,81,73,.15);color:var(--red)" title="HOLDOUT GAUNTLET complete: only ${g.passed} of the ${g.have} holdout types this family swept passed">holdouts ${g.passed}/${g.have}</span>`;
@@ -1200,8 +1256,9 @@ function render(){
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
       : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td>
-    <td><input type="checkbox" class="rrSel" data-name="${e.name}"${RRSEL.has(e.name)?' checked':''} title="select for BULK re-run on current data — a re-run bar appears above the table" style="accent-color:var(--amber)"></td></tr>`}).join('');
+    <td><input type="checkbox" class="rrSel" data-name="${e.name}"${RRSEL.has(e.name)?' checked':''} title="select for BULK re-run on current data — a re-run bar appears above the table" style="accent-color:var(--amber)"></td></tr>`}).join('') + _moreNote;
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
+  prefetchTick();
   if(sel!==null){
     const row = tb.querySelector(`tr[data-i="${sel}"]`);
     if(row){
@@ -1348,16 +1405,11 @@ function select(i){
   if(i===null){ if(chart){chart.destroy();chart=null;} return; }
   const e = BT[i];
   // full curve + trades live in per-entry detail files (the single-file
-  // backtests.js grew to 548MB and crashed the tab) — fetch on first view
-  if(e.detail && !e._dl){
-    e._dl = true;
-    fetch('bt_detail/'+encodeURIComponent(e.name)+'.json')
-      .then(r=>r.json())
-      .then(d=>{ e.curve=d.curve||e.curve; e.trades=d.trades||[];
-                 if(d.config) e.config=d.config;
-                 if(sel===i) select(i); })
-      .catch(()=>{ e._dl=false; });
-    // fall through: render coarse curve now, re-render when detail lands
+  // backtests.js grew to 548MB and crashed the tab) — usually the ordered
+  // background prefetch has them already; otherwise fetch on first view
+  if(e.detail && !e._dlOk){
+    loadDetail(e, ()=>{ if(sel===i) select(i); });
+    // fall through: render what we have now, re-render when detail lands
   }
   const tm = e.stats && e.stats.total_mult;
   let totalHtml = '';
