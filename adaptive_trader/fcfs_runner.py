@@ -151,8 +151,11 @@ def main_fcfs(cfg, live):
     cand = cfg["candidate"]
     comps = cand["components"]
     mode = cand.get("mode") or cfg.get("mode") or "lev"
-    if len(comps) < 2:
-        raise SystemExit("fcfsx live needs >= 2 components")
+    if len(comps) < 1:
+        raise SystemExit("fcfsx live needs >= 1 component")
+    # 1-component configs are legitimate: the adopt endpoint wraps standalone
+    # macdx/scalpx/scalpx2 candidates (no standalone adapter) in a one-slot
+    # FCFS router so they run engine-exact (MEX 2 Lev, 2026-09-15).
     for i, c in enumerate(comps):
         c["_i"] = i
         if c["strategy"] not in LIVE_FAMS:
