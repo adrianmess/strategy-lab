@@ -1302,7 +1302,21 @@ function renderAccounts(){
       (a.spot||[]).forEach(function(s){
         spotEq += (s.usdt_value != null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0); });
       var eq = spotEq + futEq;
-      var sub = 'spot $'+spotEq.toFixed(2)+' &middot; futures $'+futEq.toFixed(2)+
+      // parked stables (USDC/USD1) count toward the TOTAL balance shown on
+      // the card but stay OUT of EQ — EQ is the trading-capital denominator
+      // for the Dietz %/TWR math, and reserve deliberately parked in USDC
+      // is not capital at risk
+      var stableExtra = 0;
+      (a.spot||[]).forEach(function(s){
+        if(['USDC','USD1'].indexOf(s.asset)>=0) stableExtra += (+(s.free||0))+(+(s.locked||0)); });
+      var totalBal = eq + stableExtra;
+      // available for trading: free USDT in the wallet this account trades
+      var avail = 0;
+      if(mode==='spot'){ (a.spot||[]).forEach(function(s){ if(s.asset==='USDT') avail += +(s.free||0); }); }
+      else { (a.futures||[]).forEach(function(f){ if(f.currency==='USDT') avail += (+f.available||0); }); }
+      var sub = 'total balance <b class="num">'+amt('$'+totalBal.toFixed(2))+'</b>'+
+        (stableExtra>0.5?' <span title="USDC/USD1 parked in the spot wallet — counted in the total, excluded from performance math">(incl. $'+stableExtra.toFixed(2)+' stables)</span>':'')+
+        ' &middot; spot $'+spotEq.toFixed(2)+' &middot; futures $'+futEq.toFixed(2)+
         (futMargin > 0.005 ? ' (margin '+futMargin.toFixed(2)+')' : '');
       EQ[a.account] = eq;
       EQ.total += eq;
@@ -1312,7 +1326,8 @@ function renderAccounts(){
           (mode==='spot'?'SPOT':'FUTURES')+'</span>'+
         (inst.length ? '<span class="tag '+(live?'live':'b')+'">'+(live?'LIVE':'idle')+'</span>' : '')+
         '</span></div>'+
-        '<div class="num" style="font-size:19px;margin:3px 0">'+amt('$'+eq.toFixed(2))+'</div>'+
+        '<div class="num" style="font-size:19px;margin:3px 0" title="free USDT in the '+(mode==='spot'?'spot':'futures')+' wallet — what the account can trade with right now">'+amt('$'+avail.toFixed(2))+
+          ' <span class="mini" style="font-weight:400">available USDT</span></div>'+
         '<div class="mini">'+amt(sub)+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
         (function(){
           // per-token balances, collapsed by default; Convert market-sells
@@ -1320,7 +1335,8 @@ function renderAccounts(){
           var rows = (a.spot||[]).filter(function(s){ return (+(s.free||0))>0 || (+(s.usdt_value||0))>0.005; })
             .sort(function(x,y){ return (+(y.usdt_value||0)) - (+(x.usdt_value||0)); })
             .map(function(s){
-              var v = (s.usdt_value!=null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0);
+              var v = (s.usdt_value!=null) ? +s.usdt_value
+                    : (['USDT','USDC','USD1'].indexOf(s.asset)>=0 ? (+(s.free||0))+(+(s.locked||0)) : 0);
               var canCv = ['USDT','USDC','USD1','MX'].indexOf(s.asset)<0 && v>1;
               return '<div class="rowsb" style="padding:2.5px 0"><span>'+s.asset+
                 ' <span class="mini">'+(+(s.free||0)).toLocaleString(undefined,{maximumSignificantDigits:7})+'</span></span>'+
@@ -1338,6 +1354,7 @@ function renderAccounts(){
         })()+
         '<div style="margin-top:7px;display:flex;gap:6px">'+
           '<button class="btn sm" onclick="openTransfer(\''+a.account+'\')">Transfer</button>'+
+          '<button class="btn sm" onclick="openTransfer(\''+a.account+'\')" title="USDC ↔ USDT market conversion — same Transfer &amp; Convert dialog as the Trade page">Convert</button>'+
           (inst.length?'<button class="btn sm" onclick="openDeposit(\''+inst[0].id+'\')">Deposit</button>':'')+
         '</div>'+
         '<div class="bar g" style="margin-top:8px"><i style="width:100%"></i></div></div>';
