@@ -236,14 +236,13 @@ async function loadWorkers(fresh){
   }
   tb.innerHTML = d.systems.map(s=>{
     const [col, lbl] = STBADGE[s.state] || STBADGE.unreachable;
-    const canCtl = (s.state === 'running' || s.state === 'paused') && !s.reported;
-    const btn = !canCtl
-      ? (s.reported ? `<span class="mut" title="this machine reports its own status (the mini can't reach into it) — pause/resume it on the machine itself: scripts/gamut_ctl.sh pause|resume">self-reported</span>` : '')
+    const canCtl = (s.state === 'running' || s.state === 'paused');
+    const lagNote = s.reported ? ' — self-reported machine: the command is queued and applies on its next check-in (within ~1 min)' : '';
+    const btn = !canCtl ? ''
       : (s.state === 'running'
-      ? `<button onclick="ctlWorker('${s.id}','pause',this)" title="freeze this machine's gamut worker + its searches in place (no work lost)">⏸ pause</button>`
-      : `<button onclick="ctlWorker('${s.id}','resume',this)" title="continue exactly where it was frozen">▶ resume</button>`);
+      ? `<button onclick="ctlWorker('${s.id}','pause',this)" title="freeze this machine's gamut worker + its searches in place (no work lost)${lagNote}">⏸ pause</button>`
+      : `<button onclick="ctlWorker('${s.id}','resume',this)" title="continue exactly where it was frozen${lagNote}">▶ resume</button>`);
     const cores = (s.state === 'unreachable') ? '<span class="mut">—</span>'
-      : s.reported ? `<span class="mut">${s.cores ?? '?'}${s.nproc ? ' / '+s.nproc : ''}</span>`
       : `<input type="number" min="1" max="512" value="${s.cores ?? ''}"
            placeholder="${s.nproc ? 'all ' + s.nproc : 'all'}" style="width:62px"
            title="${s.nproc ? 'this machine has ' + s.nproc + ' processors. ' : ''}Set the total gamut budget, then press Apply — running searches finish first."
@@ -268,7 +267,7 @@ async function setCores(id, btn){
   const d = await r.json();
   btn.disabled = false; btn.textContent = 'Apply';
   if(!d.ok) alert('error: ' + (d.error || d.output || '?'));
-  else btn.textContent = '✓';
+  else btn.textContent = d.queued ? 'queued ✓' : '✓';
   loadWorkers(true);
 }
 async function ctlWorker(id, action, btn){
@@ -278,6 +277,7 @@ async function ctlWorker(id, action, btn){
     body: JSON.stringify({id, action})});
   const d = await r.json();
   if(!d.ok) alert('error: ' + (d.error || d.output || '?'));
+  else if(d.queued){ btn.textContent = 'queued ✓'; return; }  // state flips on its next report
   loadWorkers(true);
 }
 loadWorkers();

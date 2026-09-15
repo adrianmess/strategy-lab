@@ -6766,18 +6766,22 @@ def _parse_gctl(txt):
     return dict(state=st, plans=plans, pids=npids, cores=cores, nproc=nproc)
 
 _GW_REPORTED = {}     # name -> {t, host, addr, parsed} (self-reported workers)
+_GW_CMDS = {}         # name -> [pending {action, cores}] — pause/resume/cores
+                      # for machines the mini can't ssh into: queued here,
+                      # delivered in the response to their next report
 
 
 @app.route("/api/gamut/workers/report", methods=["POST"])
 def gamut_workers_report():
     """Self-report from machines the mini cannot ssh into (the MacBook):
-    they run gamut_ctl.sh status locally and POST the raw text here."""
+    they run gamut_ctl.sh status locally and POST the raw text here.
+    The response carries any queued control commands for them to execute."""
     d = request.get_json(force=True) or {}
     nm = (str(d.get("name") or "worker")).strip()[:40]
     _GW_REPORTED[nm] = dict(t=time.time(), host=d.get("host"),
                             addr=request.remote_addr,
                             parsed=_parse_gctl(d.get("text") or ""))
-    return jsonify(ok=True)
+    return jsonify(ok=True, cmds=_GW_CMDS.pop(nm, []))
 
 
 @app.route("/api/gamut/workers")
@@ -6829,9 +6833,22 @@ def gamut_workers_ctl():
             return jsonify(error="cores must be a number"), 400
         if not 1 <= arg <= 512:
             return jsonify(error="cores must be between 1 and 512"), 400
-    target = next((s for s in _gamut_systems() if s["id"] == d.get("id")), None)
+    tid = str(d.get("id") or "")
+    if tid.startswith("rpt:"):
+        # self-reported machine (the mini can't ssh in): queue the command;
+        # it executes on the machine's next report tick (~1 min)
+        nm = tid[4:]
+        rep = _GW_REPORTED.get(nm)
+        if not rep or time.time() - rep["t"] > 300:
+            return jsonify(error=f"'{nm}' has not reported recently — is "
+                                 f"its agent running?"), 404
+        _GW_CMDS.setdefault(nm, []).append(dict(action=action, cores=arg))
+        return jsonify(ok=True, queued=True,
+                       output=f"{action} queued for {nm} — applies on its "
+                              f"next check-in (within ~1 min)")
+    target = next((s for s in _gamut_systems() if s["id"] == tid), None)
     if not target:
-        return jsonify(error=f"unknown system '{d.get('id')}' (it may have "
+        return jsonify(error=f"unknown system '{tid}' (it may have "
                              f"bounced to a new IP — refresh)"), 404
     txt = _gctl(target, action, arg)
     _GW_CACHE["t"] = 0            # invalidate cache

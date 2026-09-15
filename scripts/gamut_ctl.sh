@@ -6,7 +6,13 @@
 PAT="gamut_worker.py --plan"
 # the repo lives in a different place on each machine
 OPTDIR=""
+# prefer the dir that actually HOLDS the worker: a phantom ~/strategy-lab
+# (created once by a mispathed sync loop) made 'cores' write a limits file
+# the real worker never reads (bit the MacBook 2026-09-15)
 for d in "$HOME/strategy-lab/optimizer" "$HOME/Code/strategy-lab/optimizer"; do
+  [ -f "$d/gamut_worker.py" ] && OPTDIR="$d" && break
+done
+[ -z "$OPTDIR" ] && for d in "$HOME/strategy-lab/optimizer" "$HOME/Code/strategy-lab/optimizer"; do
   [ -d "$d" ] && OPTDIR="$d" && break
 done
 LIMITS="$OPTDIR/gamut_limits.json"

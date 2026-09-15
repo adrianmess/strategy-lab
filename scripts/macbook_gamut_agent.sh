@@ -35,8 +35,8 @@ log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 # into this laptop — it can only be told). Non-fatal on any failure.
 (
   TXT=$(bash "$L/scripts/gamut_ctl.sh" status 2>/dev/null)
-  /usr/bin/python3 - "$TXT" <<'PYEOF' 2>/dev/null
-import json, sys, urllib.request, os
+  /usr/bin/python3 - "$TXT" <<'PYEOF' 2>/dev/null >> "$L/optimizer/gamut_agent.log"
+import json, subprocess, sys, time, urllib.request, os
 try:
     cfg = json.load(open(os.path.expanduser('~/.strategy_lab_worker.json')))
     req = urllib.request.Request(
@@ -45,7 +45,20 @@ try:
                              text=sys.argv[1])).encode(),
         headers={'Content-Type': 'application/json',
                  'X-Panel-Key': cfg['panel_key']})
-    urllib.request.urlopen(req, timeout=10).read()
+    resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
+    # remote control mailbox: pause/resume/cores clicked on the Progress
+    # page land here and run through gamut_ctl locally
+    ctl = os.path.expanduser('~/Code/strategy-lab/scripts/gamut_ctl.sh')
+    for c in (resp.get('cmds') or []):
+        a = c.get('action')
+        if a not in ('pause', 'resume', 'cores'):
+            continue
+        args = ['bash', ctl, a]
+        if a == 'cores' and c.get('cores'):
+            args.append(str(int(c['cores'])))
+        r = subprocess.run(args, capture_output=True, text=True, timeout=30)
+        print(f"[{time.strftime('%F %T')}] remote ctl '{a}': "
+              f"{(r.stdout or r.stderr).strip()[:100]}", flush=True)
 except Exception:
     pass
 PYEOF
