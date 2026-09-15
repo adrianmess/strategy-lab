@@ -57,13 +57,15 @@ pre{font-size:11px;overflow:auto;background:#1c2129;padding:10px;border-radius:6
 .mcell{background:var(--hover);border-radius:6px;padding:6px 8px;font-size:11px;text-align:center}
 .hint{color:var(--dim);font-size:12px}
 th{cursor:pointer;user-select:none} th:hover{color:var(--blue)}
-/* the 🔀 icon, but not invisible: it used to sit at opacity .4 + grayscale(1),
-   which at 13px read as a faint grey smudge. Bigger, mostly opaque, only
-   lightly desaturated when off — full colour once the run is selected. */
-button.rtradd{background:none;border:none;cursor:pointer;font-size:15px;
-  line-height:1;padding:1px 3px;opacity:.85;filter:grayscale(.55)}
+/* the 🔀 icon: opacity/grayscale alone was too subtle to tell "in the router
+   list" from "not". Off = clearly muted grey; on = full colour inside a blue
+   pill with a ring + glow, so selected rows jump out at a glance. */
+button.rtradd{background:none;border:1px solid transparent;border-radius:5px;
+  cursor:pointer;font-size:15px;line-height:1;padding:1px 3px;
+  opacity:.45;filter:grayscale(1)}
 button.rtradd:hover{opacity:1;filter:none}
-button.rtradd.on{opacity:1;filter:none}
+button.rtradd.on{opacity:1;filter:none;background:rgba(88,166,255,.25);
+  border-color:var(--blue);box-shadow:0 0 0 1px rgba(88,166,255,.35),0 0 7px rgba(88,166,255,.6)}
 #rtrT{width:auto} #rtrT th,#rtrT td{text-align:left;padding:3px 14px 3px 0;white-space:nowrap}
 #rtrT th{cursor:default} #rtrT th:hover{color:var(--dim)} #rtrT tr:hover td{background:transparent}
 .tablewrap{overflow-x:auto}
@@ -796,10 +798,16 @@ function rtrClick(e){
   if(i >= 0) RTRSEL.splice(i, 1);
   else RTRSEL.push(e.name);
   rtrRender();
+  const _in = RTRSEL.includes(e.name);
   document.querySelectorAll(`button.rtradd[data-name="${CSS.escape(e.name)}"]`)
-    .forEach(b=>b.classList.toggle('on', RTRSEL.includes(e.name)));
+    .forEach(b=>{ b.classList.toggle('on', _in);
+      b.title = _in ? 'IN the router component list — click to remove'
+        : 'add as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page'; });
 }
-function rtrRemove(name){ const i=RTRSEL.indexOf(name); if(i>=0) RTRSEL.splice(i,1); rtrRender(); }
+function rtrRemove(name){ const i=RTRSEL.indexOf(name); if(i>=0) RTRSEL.splice(i,1); rtrRender();
+  document.querySelectorAll(`button.rtradd[data-name="${CSS.escape(name)}"]`)
+    .forEach(b=>{ b.classList.remove('on');
+      b.title = 'add as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page'; }); }
 let RTR_ONLY = false;
 function rtrOnlyBtnSync(){
   const b = document.getElementById('rtrOnlyBtn'); if(!b) return;
@@ -815,7 +823,9 @@ function toggleRtrOnly(){
   rtrOnlyBtnSync();
   sel = null; render();
 }
-function clearRtr(){ RTRSEL.length = 0; RTR_ONLY = false; rtrOnlyBtnSync(); rtrRender(); }
+function clearRtr(){ RTRSEL.length = 0; RTR_ONLY = false; rtrOnlyBtnSync(); rtrRender();
+  document.querySelectorAll('button.rtradd.on').forEach(b=>{ b.classList.remove('on');
+    b.title = 'add as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page'; }); }
 // ---- named saved selections ----
 // Server-side (panel/rtr_saved.json via /api/rtr_saved) so they survive
 // browser data wipes and are the same on every device. RTRSAVED is the
@@ -1269,7 +1279,7 @@ function render(){
       `<span class="${k<=(e.rating||0)?'on':''}" data-rname="${e.name}" data-rv="${k===(e.rating||0)?0:k}" title="${k===(e.rating||0)?'clear rating':['','good (★)','very good (★★)','great (★★★)'][k]}">${k<=(e.rating||0)?'★':'☆'}</span>`).join('')}</span></td>
     <td style="white-space:nowrap">${['metax','metax2','pairx'].includes(e.strategy)
       ? `<input type="checkbox" disabled title="Router/basket runs can't be combined here — combine merges optimizer candidate POOLS (flat params for one strategy family), which routers don't have. To combine routers: Stack (same pair), MetaX2 +comp (any pair/timeframe), or the router Extend buttons.">`
-      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="add/remove as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td>
+      : `<input type="checkbox" class="cmbSel" data-name="${e.name}"${CMBSEL.has(e.name)?' checked':''} title="select for combine — its source optimizer run gets prefilled on the Optimize page">`}${['metax','metax2','pairx','fcfsx'].includes(e.strategy)?'':`<button class="rtradd${RTRSEL.includes(e.name)?' on':''}" data-name="${e.name}" title="${RTRSEL.includes(e.name)?'IN the router component list — click to remove':'add as ROUTER COMPONENT — collects runs for the MetaX2 / FCFS combo builders on the Optimize page'}">🔀</button>`}<button class="star${e.best?' on':''}" data-name="${e.name}" title="${e.best?'unmark as best':'mark as best'}">${e.best?'★':'☆'}</button><input type="checkbox" class="delSel" data-name="${e.name}"${DELSEL.has(e.name)?' checked':''} title="select for BULK delete — a delete bar appears above the table" style="accent-color:var(--red)"><button class="del" data-name="${e.name}" title="remove this entry">✕</button></td>
     <td><input type="checkbox" class="rrSel" data-name="${e.name}"${RRSEL.has(e.name)?' checked':''} title="select for BULK re-run on current data — a re-run bar appears above the table" style="accent-color:var(--amber)"></td></tr>`}).join('') + _moreNote;
   tb.querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.i===sel?null:+tr.dataset.i));
   prefetchTick();
