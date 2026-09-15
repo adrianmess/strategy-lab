@@ -492,7 +492,12 @@ async function pollActiveJobs(){
         el.parentNode.insertBefore(cu, el.nextSibling);
       }
       if(v.store_mt !== STOREV && v.parts_mt === v.store_mt){
-        STOREV = v.store_mt; cu.innerHTML = ''; reloadBacktests();
+        // HIDDEN tabs defer the reload until you come back to them —
+        // with campaigns publishing every few minutes, N open tabs each
+        // re-parsing the 150MB parts on every fold froze the whole
+        // browser (2026-09-15, ~20 tabs)
+        if(document.hidden){ _reloadPending = true; cu.innerHTML = ''; }
+        else { STOREV = v.store_mt; cu.innerHTML = ''; reloadBacktests(); }
       } else if(v.store_mt !== STOREV){
         cu.innerHTML = '<div class="hint" style="margin:4px 0;padding:6px 12px;border:1px solid var(--amber);border-radius:6px">'+
           '<span class="livedot" style="background:var(--amber)"></span> new results are in the store — '+
@@ -501,8 +506,16 @@ async function pollActiveJobs(){
     }catch(e){}
   }catch(e){}
 }
-let STOREV = null;
-setInterval(pollActiveJobs, 4000); pollActiveJobs();
+let STOREV = null, _reloadPending = false;
+// background tabs stay cheap: no polling, no auto-reloads, no prefetch —
+// everything catches up the moment the tab is fronted again
+setInterval(()=>{ if(!document.hidden) pollActiveJobs(); }, 4000); pollActiveJobs();
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden) return;
+  if(_reloadPending){ _reloadPending = false; STOREV = null; reloadBacktests(); }
+  else pollActiveJobs();
+  if(typeof prefetchTick === 'function') prefetchTick();
+});
 
 // runs currently traded by a live/dry instance -> badge on their backtest entries
 let TRADED = [];
@@ -664,7 +677,7 @@ function prefetchTick(){
   // after the list is on screen, quietly pull chart data in LIST ORDER
   // (2 at a time; rendered rows first, then a lookahead capped at ~500 so
   // an idle tab doesn't slowly download the whole 2GB detail store)
-  if(_pfBusy >= 2) return;
+  if(_pfBusy >= 2 || document.hidden) return;   // background tabs don't prefetch
   const lim = Math.min(ORDER.length, Math.max(RENDER_N, 50) + 450);
   for(let k = 0; k < lim && _pfBusy < 2; k++){
     const e = BT[ORDER[k]];
