@@ -1084,7 +1084,16 @@ function componentsChip(r){
   if(!r.components || !r.components.length) return '';
   const n = r.components.length, na = r.components.filter(x=>x.assigned).length;
   return `<details style="margin-top:2px"><summary style="cursor:pointer">components: ${n} runs${na?` (${na} assigned)`:''}</summary><div style="margin:2px 0 0 10px">` +
-    r.components.map(x=>`<div>${x.assigned?'●':'○'} ${x.run} <span style="opacity:.7">(${x.strategy}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})</span></div>`).join('') + `</div></details>`;
+    r.components.map(x=>{
+      // link to the EXACT backtest entry the component trades: OOS-best
+      // candidates (holdout_best_config) publish as _oosbest_full,
+      // train-best as _full — same resolution as the control panel's list
+      const suffix = x.file ? (x.file.startsWith('holdout') ? '_oosbest_full' : '_full') : '';
+      const nm = x.file
+        ? `<a href="backtests.html?sel=${encodeURIComponent(x.run+suffix)}" target="_blank" style="color:inherit;text-decoration:underline dotted" title="open this component's backtest (${x.run}${suffix}) on the Backtests page">${x.run}</a>`
+        : x.run;
+      return `<div>${x.assigned?'●':'○'} ${nm} <span style="opacity:.7">(${x.strategy}${x.pair?`, ${(x.pair||'').split('_')[0]} ${x.timeframe||''}`:''})</span></div>`;
+    }).join('') + `</div></details>`;
 }
 function optChips(r){
   if(r.running && r.progress) return progressCell(r);

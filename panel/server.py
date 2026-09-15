@@ -7704,6 +7704,11 @@ def runs2():
                                             strategy=x.get("strategy"),
                                             pair=x.get("pair"),
                                             timeframe=x.get("timeframe"),
+                                            # which candidate the component
+                                            # trades — lets the UI link to
+                                            # the EXACT backtest entry
+                                            # (_oosbest_full vs _full)
+                                            file=x.get("file"),
                                             assigned=(k in _asn))
                                        for k, x in enumerate(_cc)]
                 e["train_end"] = bc.get("train_end")
