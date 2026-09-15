@@ -2047,7 +2047,17 @@ def convert_stables():
         else:
             res = api.market_buy_quote("USDC_USDT", amount)
     except Exception as e:
-        return jsonify(error=str(e)[:300]), 502
+        msg = str(e)
+        if "10004" in msg:
+            # MEXC keys carry a per-symbol TRADING whitelist (reads are
+            # global) — the pair is fine, the key just may not trade it
+            msg = ("this API key is not permitted to TRADE USDC/USDT — "
+                   "MEXC keys have a per-symbol trading whitelist. Fix on "
+                   "mexc.com → API Management → edit this account's key → "
+                   "add USDC/USDT to its spot trading pairs (the key itself "
+                   "is unchanged, no re-whitelisting needed) — or convert "
+                   "once directly on the MEXC site/app.")
+        return jsonify(error=msg[:400]), 502
     print(f"CONVERT {acct}: {amount} {direction} -> "
           f"{str(res)[:160]}", flush=True)
     return jsonify(ok=True, result=dict(
