@@ -5749,9 +5749,69 @@ def adopt():
         return jsonify(error=f"unsupported timeframe "
                              f"{best.get('timeframe')!r} — the live trader "
                              f"supports 1m, 3m and 5m."), 400
-    if _strat in ("metax2", "pairx"):
+    if _strat in ("metax2", "pairx", "rocx"):
         return jsonify(error=f"'{_strat}' runs have no live adapter yet — "
                              f"research artifacts."), 400
+    if _strat in ("macdx", "scalpx", "scalpx2"):
+        # these families have NO standalone live adapter — live they run
+        # engine-exact inside the FCFS runner (as router components), so a
+        # single-run adopt becomes a ONE-component FCFS config. Previously
+        # trader.py mis-routed a macdx candidate down the legacy path and
+        # died on KeyError 'zL' (2026-09-15).
+        rname = d.get("run_name") or os.path.basename(os.path.dirname(src))
+        comp = dict(strategy=_strat,
+                    method=best.get("method", "vol3"),
+                    run=re.sub(r"_(oosbest_full|best_full|oosbest|full)$",
+                               "", rname),
+                    file=os.path.basename(src),
+                    pair=best.get("pair") or "SOL_USDT",
+                    timeframe=str(best.get("timeframe") or "3m"),
+                    cand=best.get("cand") or best.get("candidate"))
+        if not comp["cand"]:
+            return jsonify(error="genome has no candidate parameters"), 400
+        csizes = {}
+        if best.get("mode") == "lev":
+            import requests as _rq
+            try:
+                r = _rq.get("https://contract.mexc.com/api/v1/contract/"
+                            f"detail?symbol={comp['pair']}", timeout=10).json()
+                csizes[comp["pair"]] = float(r["data"]["contractSize"])
+            except Exception:
+                return jsonify(error=f"couldn't fetch the contract size for "
+                                     f"{comp['pair']} from MEXC — retry"), 400
+        suffix = "fcfs_" + re.sub(r"[^A-Za-z0-9_]+", "", rname)[:40]
+        tname = f"config_{suffix}.json"
+        target = os.path.join(AT, tname)
+        created = not os.path.exists(target)
+        if created:
+            cfg = _template_cfg(best.get("mode", "lev"))
+            cfg.pop("candidate", None)
+            cfg.pop("adopted_from", None)
+        else:
+            cfg = json.load(open(target))
+            import shutil
+            shutil.copy(target,
+                        target + ".bak." + time.strftime("%Y%m%d_%H%M%S"))
+        cfg.update(dry_run=True,
+                   state_file=f"trader_state_{suffix}.json",
+                   log_file=f"trader_{suffix}.log",
+                   mode=best.get("mode", "lev"),
+                   timeframe="3m",   # cosmetic; the component carries its own
+                   contract_size=(1.0 if best.get("mode") == "spot"
+                                  else cfg.get("contract_size", 0.1)),
+                   contract_sizes=csizes,
+                   candidate=dict(strategy="fcfsx",
+                                  mode=best.get("mode", "lev"),
+                                  components=[comp], source_run=rname))
+        cfg["adopted_from"] = dict(source=src,
+                                   at=time.strftime("%Y-%m-%d %H:%M"))
+        json.dump(cfg, open(target, "w"), indent=1)
+        return jsonify(ok=True, target=tname, created=created,
+                       note=(f"'{_strat}' has no standalone live adapter — "
+                             f"adopted as a ONE-component FCFS config "
+                             f"{tname} (engine-exact, identical semantics "
+                             f"to a router slot; starts as DRY-RUN). Select "
+                             f"it on an instance and start the trader."))
     if _strat == "fcfsx":
         # FCFS combo adopt: embed every component's cand + pair/timeframe and
         # the per-pair contract sizes, into its own config file (dry-run).
