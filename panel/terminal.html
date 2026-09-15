@@ -1267,7 +1267,12 @@ function renderAccounts(){
   // coalesce: several callers used to trigger overlapping fetches per cycle
   // (one per instance perf response) — one request every >=5s is plenty
   if(_ACCT_BUSY || Date.now() - _ACCT_AT < 5000) return;
+  if(window._cvHold && Date.now() < window._cvHold) return;   // convert armed — don't wipe the confirm
   _ACCT_BUSY = true; _ACCT_AT = Date.now();
+  // keep the balances dropdowns open across re-renders (rebuilding the
+  // card used to snap an open <details> shut under the cursor)
+  var _balOpen = {};
+  el.querySelectorAll('details[data-bal]').forEach(function(d){ _balOpen[d.dataset.bal] = d.open; });
   API('mexc/account').then(function(accs){
     _ACCT_BUSY = false;
     if(!accs || !accs.length){ el.innerHTML = '<span class="mini">no API keys configured</span>'; return; }
@@ -1309,6 +1314,28 @@ function renderAccounts(){
         '</span></div>'+
         '<div class="num" style="font-size:19px;margin:3px 0">'+amt('$'+eq.toFixed(2))+'</div>'+
         '<div class="mini">'+amt(sub)+(inst.length?(' &middot; '+inst[0].name):'')+'</div>'+
+        (function(){
+          // per-token balances, collapsed by default; Convert market-sells
+          // the token to USDT (armed confirm; server needs confirm too)
+          var rows = (a.spot||[]).filter(function(s){ return (+(s.free||0))>0 || (+(s.usdt_value||0))>0.005; })
+            .sort(function(x,y){ return (+(y.usdt_value||0)) - (+(x.usdt_value||0)); })
+            .map(function(s){
+              var v = (s.usdt_value!=null) ? +s.usdt_value : (s.asset==='USDT' ? +s.free : 0);
+              var canCv = ['USDT','USDC','USD1','MX'].indexOf(s.asset)<0 && v>1;
+              return '<div class="rowsb" style="padding:2.5px 0"><span>'+s.asset+
+                ' <span class="mini">'+(+(s.free||0)).toLocaleString(undefined,{maximumSignificantDigits:7})+'</span></span>'+
+                '<span style="display:flex;gap:8px;align-items:center"><span class="num">'+amt('$'+v.toFixed(2))+'</span>'+
+                (canCv?'<button class="btn sm" style="padding:1px 8px" onclick="convertAsset(this,\''+a.account+'\',\''+s.asset+'\')" title="market-sell the free '+s.asset+' balance into USDT (asks to confirm)">Convert</button>':'')+
+                '</span></div>';
+            }).join('');
+          var fut = (a.futures||[]).filter(function(f){ return (+f.equity||0)>0.005; })
+            .map(function(f){ return '<div class="rowsb" style="padding:2.5px 0"><span>'+f.currency+
+              ' <span class="mini">futures</span></span><span class="num">'+amt('$'+(+f.equity).toFixed(2))+'</span></div>'; }).join('');
+          if(!rows && !fut) return '';
+          return '<details data-bal="'+a.account+'"'+(_balOpen[a.account]?' open':'')+' style="margin-top:6px">'+
+            '<summary class="mini" style="cursor:pointer">balances</summary>'+
+            '<div style="margin:5px 0 0 2px;font-size:12.5px">'+rows+fut+'</div></details>';
+        })()+
         '<div style="margin-top:7px;display:flex;gap:6px">'+
           '<button class="btn sm" onclick="openTransfer(\''+a.account+'\')">Transfer</button>'+
           (inst.length?'<button class="btn sm" onclick="openDeposit(\''+inst[0].id+'\')">Deposit</button>':'')+
@@ -1321,6 +1348,21 @@ function renderAccounts(){
   }).catch(function(){
     _ACCT_BUSY = false;
     el.innerHTML = '<span class="mini down">could not read accounts</span>';
+  });
+}
+
+function convertAsset(btn, acct, asset){
+  window._cvHold = Date.now() + 8000;   // pause account re-renders while armed
+  armConfirm(btn, 'Confirm: sell '+asset+' → USDT', function(){
+    pend(btn);
+    API('trade/convert', {method:'POST', headers:{'Content-Type':'application/json'},
+                          body:JSON.stringify({account:acct, asset:asset, confirm:'CONVERT'})})
+    .then(function(r){
+      window._cvHold = 0;
+      if(r.error){ flash(r.error, 'r'); return; }
+      flash('Converted '+r.sold+' '+asset+' → USDT on '+acct, 'g');
+      _ACCT_AT = 0; renderAccounts();
+    }).catch(function(){ window._cvHold = 0; flash('convert failed', 'r'); });
   });
 }
 

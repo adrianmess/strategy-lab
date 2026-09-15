@@ -1204,6 +1204,47 @@ def trade_history():
     return jsonify(**out)
 
 
+@app.route("/api/trade/convert", methods=["POST"])
+def trade_convert():
+    """Convert a spot token balance to USDT: market-sell the FREE balance.
+    Manual action from the Overview accounts card (armed confirm in the
+    UI + explicit confirm field here). Refuses stables and dust below the
+    minimum tradable step."""
+    d = request.get_json(force=True) or {}
+    acct = d.get("account")
+    asset = (d.get("asset") or "").upper()
+    if d.get("confirm") != "CONVERT":
+        return jsonify(error="confirm field missing"), 400
+    if acct not in ("mexc1", "mexc2"):
+        return jsonify(error="account must be mexc1|mexc2"), 400
+    if not asset or asset in ("USDT", "USDC", "USD1", "MX"):
+        return jsonify(error=f"'{asset}' is not convertible here"), 400
+    if AT not in sys.path:
+        sys.path.insert(0, AT)
+    from mexc_api import MexcSpotAPI
+    api = MexcSpotAPI(account=acct)
+    sym = f"{asset}_USDT"
+    try:
+        free = float(api.balance(asset) or 0)
+        q, _sc = api.floor_qty(sym, free)
+        if q <= 0:
+            return jsonify(error=f"{free:g} {asset} is below the minimum "
+                                 f"tradable step — the dust sweep handles "
+                                 f"crumbs"), 400
+        r = api.market_sell(sym, q)
+    except Exception as e:
+        return jsonify(error=str(e)[:250]), 500
+    _RECENT_MCLOSE[(acct, "spot", sym)] = time.time()
+    try:
+        _manual_note("position_closed", acct, "spot", sym, "LONG", q, None,
+                     reason="convert to USDT")
+    except Exception:
+        pass
+    print(f"CONVERT {acct}: sold {q} {asset} -> USDT", flush=True)
+    return jsonify(ok=True, sold=q, asset=asset,
+                   result=(r if isinstance(r, dict) else str(r)[:200]))
+
+
 def _positions_all_compute():
     """Open futures positions + spot holdings across BOTH accounts. The four
     exchange legs run in parallel; a background warmer keeps the cache fresh
