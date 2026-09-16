@@ -731,6 +731,22 @@ def main():
     ap.add_argument("--holdout-days", type=float, default=None,
                     help="alternating-block holdout: train/skip in blocks of N days "
                          "(overrides --train-end)")
+    ap.add_argument("--holdout-gauntlet", action="store_true",
+                    help="ONE search whose winner must pass ALL 5 holdout "
+                         "judge windows (after/before/between/outside/"
+                         "alternating). Training uses the primary holdout "
+                         "mode given above; the other 4 windows act as extra "
+                         "judges at the sticky-OOS checkpoints and the final "
+                         "OOS-best pick. NB: only the primary window is truly "
+                         "unseen by training — the other judges overlap the "
+                         "train data (robustness gate, not 5x OOS proof).")
+    ap.add_argument("--hg-date", default="2025-09-01", metavar="DATE",
+                    help="gauntlet: date for the after/before judge windows")
+    ap.add_argument("--hg-window", default="2024-11-16..2025-08-28",
+                    metavar="A..B",
+                    help="gauntlet: window for the between/outside judges")
+    ap.add_argument("--hg-alt-days", type=float, default=30,
+                    help="gauntlet: block size for the alternating judge")
     ap.add_argument("--anchor", default=None, choices=["defaults", "file"],
                     help="anchored search: seed the population from the strategy's "
                          "stored live defaults ('defaults') or from anchor_cand.json "
@@ -992,8 +1008,10 @@ def main():
         if args.single_set:
             print("note: --single-set applies to V7 only; "
                   f"{args.strategy} always searches per-regime values", flush=True)
-        def eval_any(cand, t0, t1, part="train"):
-            if args.holdout_days:
+        def eval_any(cand, t0, t1, part="train", alt_override="_unset"):
+            if alt_override != "_unset":
+                alt = alt_override          # gauntlet legs pick their own split
+            elif args.holdout_days:
                 alt = (args.holdout_days, part)
             elif args._hbetween and part == "train":
                 alt = dict(days=None, part="train",
@@ -1015,8 +1033,10 @@ def main():
         import optimizer2 as O
         O.load_g3()
         R = O.load_g3()["regimes"][args.method][1]
-        def eval_any(cand, t0, t1, part="train"):
-            if args.holdout_days:
+        def eval_any(cand, t0, t1, part="train", alt_override="_unset"):
+            if alt_override != "_unset":
+                alt = alt_override          # gauntlet legs pick their own split
+            elif args.holdout_days:
                 alt = (args.holdout_days, part)
             elif args._hbetween and part == "train":
                 alt = dict(days=None, part="train",
@@ -1034,6 +1054,58 @@ def main():
             return O.feasible3(m, args.mode, cand=c, max_dd=args.max_dd,
                                max_hold=args.max_hold_days,
                                min_tpm=args.min_tpm)
+
+    # ---- all-5 holdout gauntlet (one search, one winner that passes all) ----
+    _hgwin = None
+    if args.holdout_gauntlet:
+        if not (args.train_end or args.holdout_days or args.holdout_before
+                or args._hbetween or args._houtside):
+            sys.exit("--holdout-gauntlet needs a primary holdout "
+                     "(e.g. --train-end DATE)")
+        _p = args.hg_window.split("..")
+        if len(_p) != 2 or not _p[0] or not _p[1]:
+            sys.exit("--hg-window needs 'YYYY-MM-DD..YYYY-MM-DD'")
+        _hgwin = (_p[0], _p[1])
+        print(f"HOLDOUT GAUNTLET ON: winner must pass all 5 judge windows "
+              f"(after/before {args.hg_date}, between/outside "
+              f"{_p[0]}..{_p[1]}, alternating {args.hg_alt_days:g}d). Only "
+              f"the primary window is unseen by training; the rest are "
+              f"robustness judges.", flush=True)
+
+    def _g5_summary(hm, ok):
+        if hm is None:
+            return dict(ok=False, err="eval failed")
+        import math as _m
+        return dict(ok=bool(ok), growth_pct=(_m.exp(hm["growth"]) - 1) * 100,
+                    maxdd=hm["maxdd"], n=hm.get("n"), liq=bool(hm["liq"]),
+                    max_hold_days=hm.get("max_hold_days"))
+
+    def _gauntlet5(cand):
+        """(all_pass, legs): cand simulated on all 5 judge windows.
+        A leg passes when it doesn't liquidate, compounds > 0, and respects
+        the hold cap. The primary holdout is judged separately by the normal
+        machinery — dupes here are just one cheap extra eval."""
+        w1, w2 = _hgwin
+        legs = [("hA", (args.hg_date, None), None),
+                ("hB", (None, args.hg_date), None),
+                ("hBtw", (w1, w2), None),
+                ("hOut", (None, None), dict(days=None, part="holdout",
+                                            ranges=[[None, w1], [w2, None]])),
+                ("hAlt", (None, None), (args.hg_alt_days, "holdout"))]
+        res, all_ok = {}, True
+        for nm, (t0, t1), alt in legs:
+            try:
+                hm = eval_any(cand, t0, t1, part="holdout", alt_override=alt)
+            except Exception:
+                hm = None
+            ok = bool(hm and not hm["liq"] and hm["growth"] > 0
+                      and not (args.max_hold_days and
+                               hm.get("max_hold_days", 0) > args.max_hold_days))
+            res[nm] = _g5_summary(hm, ok)
+            all_ok = all_ok and ok
+            if not ok:
+                break              # cheap early-out; remaining legs unjudged
+        return all_ok, res
 
     per_regime = not args.single_set
     if args.cadapt:
@@ -1301,14 +1373,26 @@ def main():
                             and _hm.get("n", 0) >= 12
                             and not (args.max_hold_days and
                                      _hm.get("max_hold_days", 0) > args.max_hold_days)):
+                        _glegs = None
+                        if args.holdout_gauntlet:
+                            _gok, _glegs = _gauntlet5(_c)
+                            if not _gok:
+                                _fl = next((k for k, v in _glegs.items()
+                                            if not v.get("ok")), "?")
+                                print(f"  ⚑ sticky OOS: primary passer at eval "
+                                      f"{evaluated} REJECTED by gauntlet "
+                                      f"(failed {_fl})", flush=True)
+                                continue
                         _ss = _hm["growth"] - 0.25 * _hm["maxdd"]
                         if _sticky[0] is None or _ss > _sticky[0]["sscore"]:
                             _sticky[0] = dict(sscore=_ss, cand=_c, metrics=_mtr,
                                               holdout=_hm, train_score=_sc,
-                                              at_eval=evaluated)
+                                              at_eval=evaluated, gauntlet=_glegs)
                             print(f"  ⚑ sticky OOS: banked passer at eval "
                                   f"{evaluated} ({(_m.exp(_hm['growth'])-1)*100:+.1f}%/mo "
-                                  f"holdout, dd {_hm['maxdd']:.0%})", flush=True)
+                                  f"holdout, dd {_hm['maxdd']:.0%}"
+                                  + (", gauntlet 5/5)" if _glegs else ")"),
+                                  flush=True)
             json.dump(dict(pool=pool, evaluated=evaluated, seed_base=seed_base,
                            reservoir=reservoir, res_seen=res_seen[0],
                            runtime_s=runtime_s + (time.time() - t_session)),
@@ -1438,12 +1522,59 @@ def main():
                 return -1e9   # OOS-best must respect the hold limit, like survivors do
             return hm["growth"]
         best_h = max(range(len(holdouts)), key=lambda i: hkey(holdouts[i]))
+        g_legs_pick = None
+        if args.holdout_gauntlet:
+            # walk primary-holdout survivors best-first; the OOS-best is the
+            # FIRST candidate that also passes all 5 gauntlet judges
+            order = sorted(range(len(holdouts)),
+                           key=lambda i: hkey(holdouts[i]), reverse=True)
+            g_checked = 0
+            found = None
+            for i in order:
+                if hkey(holdouts[i]) <= -1e9 or g_checked >= 40:
+                    break          # out of survivors / eval budget guard
+                ok, legs = _gauntlet5(pool_scan[i][1])
+                g_checked += 1
+                if ok:
+                    found, g_legs_pick = i, legs
+                    break
+            out["gauntlet_all"] = bool(found is not None)
+            out["gauntlet_checked"] = g_checked
+            if found is not None:
+                best_h = found
+                print(f"\nGAUNTLET: pool rank #{found+1} passes ALL 5 judge "
+                      f"windows ({g_checked} survivor(s) checked)", flush=True)
+                # record even when the winner is the train-best (rank 1):
+                # holdout_best_config.json is where the scorecard lives
+                if found == 0:
+                    s2, c2, m2 = pool_scan[0]
+                    hb = dict(cand=c2, metrics=m2, holdout=holdouts[0],
+                              gauntlet=g_legs_pick, gauntlet_all=True,
+                              strategy=args.strategy, mode=args.mode,
+                              method=args.method,
+                              note="train-best, and passes ALL 5 holdout "
+                                   "judge windows (gauntlet). Only the "
+                                   "primary window was unseen by training.")
+                    hb["pair"] = _pair_tag()
+                    hb["market_data"] = _market_tag()
+                    hb["timeframe"] = _tf_tag()
+                    json.dump(hb, open("holdout_best_config.json", "w"),
+                              indent=1, default=float)
+                    out["holdout_best"] = dict(rank=1, holdout=holdouts[0],
+                                               gauntlet=g_legs_pick)
+            else:
+                print(f"\nGAUNTLET: NO candidate passed all 5 judge windows "
+                      f"({g_checked} survivor(s) checked) — OOS-best falls "
+                      f"back to the primary-holdout pick", flush=True)
         if holdouts[best_h] and hkey(holdouts[best_h]) > -1e9 and best_h != 0:
             s2, c2, m2 = pool_scan[best_h]
             hb = dict(cand=c2, metrics=m2, holdout=holdouts[best_h],
                       strategy=args.strategy, mode=args.mode, method=args.method,
                       note=f"OOS-best from pool rank #{best_h+1} (train-best was rank #1). "
                            "Caveat: picked USING the holdout, so re-verify with walk-forward before trusting.")
+            if g_legs_pick is not None:
+                hb["gauntlet"], hb["gauntlet_all"] = g_legs_pick, True
+                hb["note"] += " Passes ALL 5 holdout judge windows (gauntlet)."
             hb["pair"] = _pair_tag()
             hb["market_data"] = _market_tag()
             hb["timeframe"] = _tf_tag()
@@ -1457,7 +1588,11 @@ def main():
             st = _sticky[0]
             cur = (out.get("holdout_best") or {}).get("holdout")
             cur_s = (cur["growth"] - 0.25 * cur["maxdd"])                 if (cur and not cur.get("liq")) else -1e9
-            if st["sscore"] > cur_s:
+            # gauntlet mode: a banked all-5 passer ALWAYS beats a final-scan
+            # pick that failed the gauntlet, whatever the primary sscore says
+            _g_force = bool(args.holdout_gauntlet and st.get("gauntlet")
+                            and not out.get("gauntlet_all"))
+            if st["sscore"] > cur_s or _g_force:
                 hb = dict(cand=st["cand"], metrics=st["metrics"],
                           holdout=st["holdout"], strategy=args.strategy,
                           mode=args.mode, method=args.method,
@@ -1465,13 +1600,18 @@ def main():
                                "(train-top-10 at the time; later generations found "
                                "nothing better OOS). Picked USING the holdout — "
                                "re-verify with walk-forward before trusting.")
+                if st.get("gauntlet"):
+                    hb["gauntlet"], hb["gauntlet_all"] = st["gauntlet"], True
+                    hb["note"] += " Passes ALL 5 holdout judge windows (gauntlet)."
+                    out["gauntlet_all"] = True
                 hb["pair"] = _pair_tag()
                 hb["market_data"] = _market_tag()
                 hb["timeframe"] = _tf_tag()
                 json.dump(hb, open("holdout_best_config.json", "w"), indent=1,
                           default=float)
                 out["holdout_best"] = dict(rank=0, holdout=st["holdout"],
-                                           sticky=True, at_eval=st["at_eval"])
+                                           sticky=True, at_eval=st["at_eval"],
+                                           gauntlet=st.get("gauntlet"))
                 print(f"\nSTICKY OOS-BEST (banked at eval {st['at_eval']}) beats "
                       "the final-scan pick -> saved to holdout_best_config.json")
         # seed comparison, if this run was seeded from a backtest

@@ -7243,6 +7243,9 @@ def _opt2_cmd(d, name):
         cmd += ["--stop-score", str(d["stop_score"])]
     if d.get("sticky_oos"):
         cmd += ["--sticky-oos"]
+    if d.get("holdout_gauntlet"):
+        cmd += ["--holdout-gauntlet"]
+        if d.get("hg_date"): cmd += ["--hg-date", str(d["hg_date"])]
     if d.get("resume_from"): cmd += ["--resume-from", d["resume_from"]]
     if d.get("merge_mode"): cmd += ["--merge-mode", d["merge_mode"]]
     if d.get("seed_cand"):
