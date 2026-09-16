@@ -198,6 +198,8 @@ button.rtradd.on{opacity:1;filter:none;background:rgba(88,166,255,.25);
       </select></label>
     <label style="margin-left:10px" title="only show runs whose LONGEST single trade lasted at most this many days (actual hold computed from the full trade list; runs with no trades are hidden while active)">longest hold ≤
       <input id="fMaxHold" type="number" step="0.5" min="0" placeholder="—" style="width:52px" onchange="saveBtFilters()">d</label>
+    <label style="margin-left:10px" title="only show runs that OPENED a position within the last N days of their backtest data (measured back from the entry's created/re-run time, when the data window ends — so it means 'still trading recently', not 'backtest run recently'). Runs that never opened a trade are hidden while active; older entries not yet stamped with a last-open time are kept.">opened ≤
+      <input id="fOpened" type="number" step="1" min="0" placeholder="—" style="width:48px" onchange="saveBtFilters()">d ago</label>
     <label style="margin-left:10px" title="only show runs whose mark-to-market max drawdown is at most this percent">max DD ≤
       <input id="fMaxDD" type="number" step="1" min="0" max="100" placeholder="—" style="width:48px" onchange="saveBtFilters()">%</label>
     <label style="margin-left:10px" title="only show runs whose win rate (share of closed trades that were profitable) is at least this percent">win ≥
@@ -993,6 +995,7 @@ function saveBtFilters(){
   localStorage.setItem('btFilterOpenPos', document.getElementById('fOpenPos').value);
   localStorage.setItem('btFilterNoNeg', document.getElementById('fNoNeg').value);
   localStorage.setItem('btFilterMaxHold', document.getElementById('fMaxHold').value);
+  localStorage.setItem('btFilterOpened', document.getElementById('fOpened').value);
   localStorage.setItem('btFilterMaxDD', document.getElementById('fMaxDD').value);
   localStorage.setItem('btFilterHold', document.getElementById('fHold').value);
   localStorage.setItem('btFilterInst', document.getElementById('fInst').value);
@@ -1042,6 +1045,7 @@ function tfNorm(tf){                       // '3'->'3m', '3m'->'3m', 'multi'->'m
   const fnn = localStorage.getItem('btFilterNoNeg');
   document.getElementById('fNoNeg').value = ['month','week'].includes(fnn) ? fnn : 'all';
   document.getElementById('fMaxHold').value = localStorage.getItem('btFilterMaxHold') || '';
+  document.getElementById('fOpened').value = localStorage.getItem('btFilterOpened') || '';
   document.getElementById('fMaxDD').value = localStorage.getItem('btFilterMaxDD') || '';
   document.getElementById('fHold').value = localStorage.getItem('btFilterHold') || 'all';
   document.getElementById('fGenome').value = localStorage.getItem('btFilterGenome') || 'all';
@@ -1188,6 +1192,19 @@ function render(){
   const _mh = e => (e.max_hold_days != null ? e.max_hold_days
                     : ((e.stats || {}).max_hold_days));
   if(fMH > 0) order = order.filter(i=>_mh(BT[i]) != null && _mh(BT[i]) <= fMH);
+  // "opened a position in the last Xd": gap between the last position OPEN
+  // and the entry's data end (~its created/re-run stamp). last_open==='' means
+  // the run never traded → hide; missing (old unstamped entry) → keep.
+  const fOp = +document.getElementById('fOpened').value;
+  if(fOp > 0) order = order.filter(i=>{
+    const e = BT[i], lo = e.last_open;
+    if(lo == null) return true;
+    if(lo === '') return false;
+    const end = Date.parse((e.created||'').replace(' ','T'));
+    const t = Date.parse(lo.replace(' ','T'));
+    if(!end || !t) return true;
+    return (end - t) / 86400000 <= fOp;
+  });
   const fDD = +document.getElementById('fMaxDD').value;
   if(fDD > 0) order = order.filter(i=>{const st=BT[i].stats||{}; const v = st.maxdd_mtm!=null? st.maxdd_mtm : st.maxdd_closed; return v!=null && 100*v <= fDD;});
   const fWin = +document.getElementById('fWinMin').value;

@@ -26,10 +26,21 @@ def max_hold_days(trades):
     return round(mx, 2)
 
 
+def last_open(trades):
+    """Latest position-open time ('YYYY-MM-DD HH:MM:SS'); '' if no trades.
+    String max works because the format is lexicographically sortable."""
+    return max((t.get("entry_t") or "" for t in trades or []), default="")
+
+
 def prune_entry(e, max_curve=500, max_trades=300):
     # stamp actual longest hold BEFORE trades get capped/stripped
     if e.get("max_hold_days") is None and e.get("trades"):
         e["max_hold_days"] = max_hold_days(e["trades"])
+    # stamp last position-open for the "opened a position in the last Xd"
+    # filter ('' = ran but never traded); trades leave the list entry at
+    # split_entry so this must happen while they are still here
+    if e.get("last_open") is None:
+        e["last_open"] = last_open(e.get("trades"))
     c = e.get("curve") or []
     if len(c) > max_curve:
         step = (len(c) - 1) / (max_curve - 1)
@@ -74,13 +85,22 @@ def main():
         entries = json.JSONDecoder().raw_decode(
             txt[txt.index("=") + 1:].lstrip())[0]
         del txt
-        n = 0
+        n = lo_n = 0
         for e in entries:
-            if e.get("detail"):
-                continue
-            prune_entry(e, a.max_curve, a.max_trades)
-            split_entry(e)
-            n += 1
+            if not e.get("detail"):
+                prune_entry(e, a.max_curve, a.max_trades)
+                split_entry(e)
+                n += 1
+            # backfill last_open on already-slimmed entries (one-off per
+            # entry: '' is a valid stamp, so each detail file is read once)
+            if e.get("last_open") is None and e.get("detail") and e.get("name"):
+                try:
+                    with open(os.path.join(DETAIL_DIR,
+                                           e["name"] + ".json")) as f:
+                        e["last_open"] = last_open(json.load(f).get("trades"))
+                    lo_n += 1
+                except Exception:
+                    pass
         tmp = P + ".tmpprune"
         with open(tmp, "w") as f:
             f.write("window.BACKTESTS = ")
@@ -88,6 +108,7 @@ def main():
             f.write(";")
         os.replace(tmp, P)
     print(f"pruned {n} of {len(entries)} entries; "
+          f"backfilled last_open on {lo_n}; "
           f"{os.path.getsize(P)//1048576} MB now")
 
 

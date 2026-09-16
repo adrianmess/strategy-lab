@@ -3959,7 +3959,8 @@ def _bt_index_build():
                 growth=st.get("monthly_growth_pct"), mult=st.get("total_mult"),
                 dd=st.get("maxdd_mtm"), n=st.get("n"), win=st.get("win"),
                 liq=st.get("liq"), liq_ever=bool(obj.get("liq_ever")),
-                lev_x=obj.get("lev_x"), sl=obj.get("sl_class")))
+                lev_x=obj.get("lev_x"), sl=obj.get("sl_class"),
+                last_open=obj.get("last_open")))
         del s
         rows.sort(key=lambda r: (r.get("created") or ""), reverse=True)
         _BTIDX["rows"] = rows
