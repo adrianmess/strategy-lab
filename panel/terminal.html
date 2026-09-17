@@ -488,6 +488,16 @@ body.masked .amt:hover{filter:none}
   </div>
 </div>
 
+<div class="modal" id="cfgm" onclick="if(event.target===this)closeCfg()">
+  <div class="mbox" style="border-color:rgba(88,166,255,.5)">
+    <header style="color:var(--fg);display:flex;justify-content:space-between;align-items:center">
+      <span>Trader settings <span class="mini" id="cfgTitle" style="display:block;margin-top:3px"></span></span>
+      <span style="cursor:pointer;color:var(--dim);font-weight:400" onclick="closeCfg()">&#10005;</span>
+    </header>
+    <div class="mb" id="cfgb"><span class="mini">loading…</span></div>
+  </div>
+</div>
+
 <div id="docVeil" onclick="closeInfo()"></div>
 <div id="docDrawer">
   <div class="dh"><div><div class="mini" id="docCrumb">Docs</div><b id="docTitle"></b></div>
@@ -1991,8 +2001,8 @@ function renderCards(){
           '<div class="mini">'+(comps?('FCFS router · '+comps+' components · '+
             (s.cascade?'CASCADE (capital pool'+(s.cascade_free!=null?', free $'+(+s.cascade_free).toFixed(0):'')+')':'one shared slot')):
             ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+
-            (s.resting_tp?' · <span class="tag" title="resting reduce-only limit at each position\'s projected target — maker exit (0 fee)">TP-limit</span>':'')+
-            (s.limit_entry?' · <span class="tag" title="post-only limit entries — maker fills; unfilled orders chase market / skip per config">maker-entry</span>':'')+' '+
+            (s.resting_tp?' · <span class="tag" style="cursor:pointer" onclick="openCfg(\''+x.id+'\')" title="resting reduce-only limit at each position\'s projected target — maker exit (0 fee). Click to edit.">TP-limit</span>':'')+
+            (s.limit_entry?' · <span class="tag" style="cursor:pointer" onclick="openCfg(\''+x.id+'\')" title="post-only limit entries — maker fills; unfilled orders chase market / skip per config. Click to edit.">maker-entry</span>':'')+' '+
             infoBtn(s.cascade?'instances.cascade':'concepts.router')+'</div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (s.running
@@ -2005,6 +2015,8 @@ function renderCards(){
             : '<button class="btn sm" onclick="startTrader(this,\''+x.id+'\',false)">Start dry-run</button>'+
               '<button class="btn sm danger" onclick="startTrader(this,\''+x.id+'\',true)">Start LIVE</button>')+
           '<button class="btn sm" onclick="openDeposit(\''+x.id+'\')">Deposit</button>'+
+          '<button class="btn sm" title="per-config trader settings: equity, poll, maker orders — applies on next start" '+
+            'onclick="openCfg(\''+x.id+'\')">&#9881; Settings</button>'+
           infoBtn('instances.controls')+
         '</div></div>'+
       ebar + hero + shadow + autoLine +
@@ -2113,6 +2125,8 @@ function restartTrader(btn, i){
 function pend(b){
   if(b && b.classList){ b.classList.add('pending'); b.blur(); }
 }
+// modal buttons aren't rebuilt by the poll, so they have to be un-pended
+function unpend(b){ if(b && b.classList) b.classList.remove('pending'); }
 function pauseTrader(btn, i, on){
   pend(btn);
   var nm = (INSTS.find(function(x){return x.id===i;})||{}).name || i;
@@ -3551,6 +3565,124 @@ function doTransfer(btn){
         if(typeof refreshMexc === 'function') refreshMexc(); else renderAccounts();
       });
   });
+}
+
+// ---- per-instance trader settings: edits THAT instance's config file ----
+// (same /api/trader_config the classic panel's Settings card uses — the file
+// is the source of truth, and the runner only reads these at start, hence the
+// restart-to-apply note. A LIVE restart is never automated here: hard rule.)
+var CFGM = {inst:null, file:null, cfg:null};
+function openCfg(i){
+  var s = STATUS[i] || {};
+  var nm = (INSTS.find(function(x){ return x.id===i; }) || {}).name || i;
+  CFGM = {inst:i, name:nm, file:s.config, cfg:null,
+          running:!!s.running, live:!!s.live};
+  document.getElementById('cfgTitle').textContent =
+    nm + (s.config ? ' — ' + s.config : '');
+  document.getElementById('cfgm').classList.add('on');
+  var b = document.getElementById('cfgb');
+  if(!s.config){
+    b.innerHTML = '<span class="mini down">no config file selected on this instance</span>';
+    return;
+  }
+  b.innerHTML = '<span class="mini">loading ' + s.config + '…</span>';
+  API('trader_config?file=' + encodeURIComponent(s.config)).then(function(c){
+    if(c.error){ b.innerHTML = '<span class="mini down">' + c.error + '</span>'; return; }
+    CFGM.cfg = c; renderCfg();
+  }).catch(function(){
+    document.getElementById('cfgb').innerHTML =
+      '<span class="mini down">could not read the config</span>';
+  });
+}
+function closeCfg(){ document.getElementById('cfgm').classList.remove('on'); }
+function renderCfg(){
+  var c = CFGM.cfg || {};
+  var lab = function(t, tip){
+    return '<div class="mini"' + (tip ? ' title="' + tip + '"' : '') + '>' + t + '</div>'; };
+  var em = c.emergency_exit_adverse ? (100 * c.emergency_exit_adverse) : '';
+  var note = !CFGM.running
+    ? '<span class="mini">Not running — the new values are picked up when you start it.</span>'
+    : (CFGM.live
+      ? '<span class="mini" style="color:var(--warn)">This instance is RUNNING <b>LIVE</b>. '+
+        'Saving only writes the config file — nothing restarts automatically. '+
+        'Restart it yourself when you want the change to take effect.</span>'
+      : '<span class="mini">Running (dry-run) — restart the instance to apply.</span>');
+  document.getElementById('cfgb').innerHTML =
+    '<div class="mini" style="margin-bottom:12px">'+
+      '<span class="tag ' + (c.mode==='spot'?'spot':'lev') + '">' + String(c.mode||'?').toUpperCase() + '</span> '+
+      '<span class="tag b">' + (c.api_account||'') + '</span> '+
+      '<span class="tag b">' + (c.execution||'') + '</span>'+
+      (c.method ? ' · strategy <b>' + c.method + '</b>' : '') +
+      (c.symbol ? ' · <b>' + c.symbol + '</b>' : '') + '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">'+
+      '<div>' + lab('equity $') +
+        '<input id="cEq" style="width:100%" value="' + (c.equity_usdt!=null?c.equity_usdt:'') + '"></div>'+
+      '<div>' + lab('poll seconds') +
+        '<input id="cPoll" style="width:100%" value="' + (c.poll_seconds!=null?c.poll_seconds:'') + '"></div>'+
+      '<div style="grid-column:1/-1">' + lab('webhook URL') +
+        '<input id="cHook" style="width:100%" value="' + String(c.webhook_url||'').replace(/"/g,'&quot;') + '"></div>'+
+      '<div style="grid-column:1/-1">' +
+        lab('emergency exit at adverse % <span style="opacity:.7">(blank = off)</span>',
+            'hard bail-out: close the position once it is this far underwater, whatever the strategy says') +
+        '<input id="cEmerg" style="width:110px" value="' + em + '"></div>'+
+    '</div>'+
+    '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">'+
+      '<div class="mini" style="margin-bottom:8px"><b>Maker orders</b> — off by default, futures only</div>'+
+      '<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;cursor:pointer" '+
+        'title="on position open, rest a reduce-only limit at the engine\'s projected profit target — fills as MAKER (0 fee) at the exact target, re-placed when the target decays">'+
+        '<input type="checkbox" id="cRtp" style="width:auto;margin-top:2px"' + (c.resting_tp?' checked':'') + '>'+
+        '<span>resting TP<span class="mini" style="display:block">reduce-only limit at the projected target instead of a market exit</span></span></label>'+
+      '<label style="display:flex;gap:8px;align-items:flex-start" '+
+        'title="open positions with a POST-ONLY limit at the live price instead of paying taker. Unfilled after the timeout: chase with market (keeps every backtest trade) or skip the trade">'+
+        '<input type="checkbox" id="cLimEnt" style="width:auto;margin-top:2px"' + (c.limit_entry?' checked':'') + '>'+
+        '<span>maker entries<span class="mini" style="display:block">post-only limit entries instead of taker market opens</span></span></label>'+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:11px">'+
+        '<div>' + lab('entry timeout s') +
+          '<input id="cLeTo" style="width:80px" placeholder="75" value="' +
+          (c.limit_entry_timeout_s!=null?c.limit_entry_timeout_s:'') + '"></div>'+
+        '<div>' + lab('on timeout') +
+          '<select id="cLeChase"><option value="market"' +
+            (c.limit_entry_on_timeout!=='cancel'?' selected':'') + '>chase market</option>'+
+          '<option value="cancel"' + (c.limit_entry_on_timeout==='cancel'?' selected':'') +
+            '>skip trade</option></select></div>'+
+        '<div>' + lab('entry offset bps', '0 = rest at the touch; higher rests deeper and fills less often') +
+          '<input id="cLeOff" style="width:80px" placeholder="0" value="' +
+          (c.limit_entry_offset_bps!=null?c.limit_entry_offset_bps:'') + '"></div>'+
+      '</div></div>'+
+    '<div class="brow" style="margin-top:15px;border-top:1px solid var(--line);padding-top:12px">'+
+      '<button class="btn blue" onclick="saveCfg(this)">Save</button>'+
+      '<span id="cfgMsg" class="mini"></span></div>'+
+    '<div style="margin-top:10px">' + note + '</div>';
+}
+function saveCfg(btn){
+  var v = function(id){ var e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  var ck = function(id){ var e = document.getElementById(id); return !!(e && e.checked); };
+  var em = v('cEmerg');
+  var body = {
+    webhook_url: v('cHook'),
+    emergency_exit_adverse: em ? (+em/100) : null,
+    resting_tp: ck('cRtp'), limit_entry: ck('cLimEnt'),
+    limit_entry_timeout_s: (+v('cLeTo') || 75),
+    limit_entry_on_timeout: v('cLeChase') === 'cancel' ? 'cancel' : 'market',
+    limit_entry_offset_bps: (+v('cLeOff') || 0)
+  };
+  // blank numeric field must NOT write a 0 equity / 0 poll — leave it alone
+  if(v('cEq') !== '' && isFinite(+v('cEq'))) body.equity_usdt = +v('cEq');
+  if(v('cPoll') !== '' && isFinite(+v('cPoll'))) body.poll_seconds = +v('cPoll');
+  pend(btn);
+  API('trader_config?file=' + encodeURIComponent(CFGM.file),
+      {method:'POST', headers:{'Content-Type':'application/json'},
+       body:JSON.stringify(body)}).then(function(r){
+    unpend(btn);
+    var m = document.getElementById('cfgMsg');
+    if(r.error){ if(m){ m.className='mini down'; m.textContent = r.error; } return; }
+    if(m){ m.className = 'mini'; m.style.color = 'var(--up)';
+           m.textContent = 'saved ✓ ' + (CFGM.running ? '(restart the instance to apply)' : ''); }
+    flash('Saved ' + CFGM.file + (CFGM.running ? ' — restart ' + CFGM.name + ' to apply' : ''), 'g');
+    loadStatus();
+  }).catch(function(){ unpend(btn);
+    var m = document.getElementById('cfgMsg');
+    if(m){ m.className='mini down'; m.textContent = 'save failed'; } });
 }
 
 // ---- deposits: read-only address/QR display per instance's account ----
