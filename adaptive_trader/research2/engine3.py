@@ -190,7 +190,10 @@ def precompute3(df3: pd.DataFrame, df1: pd.DataFrame):
     cd3 = m3 / cprev
 
     f = regime_features(dict(c=c, h=h, l=l, vol=df3["volume"].to_numpy()))
-    t_ms = (df3["t"].astype("int64") // 10**6).to_numpy().astype(np.float64)
+    # unit-safe: bare astype(int64) assumes ns — the live feed's coarser unit
+    # made cooldown windows run ~1000x long live (2026-09-17)
+    t_ms = (df3["t"].to_numpy().astype("datetime64[ms]")
+            .astype(np.int64).astype(np.float64))
     return dict(t=df3["t"].to_numpy(), t_ms=t_ms, o=o, h=h, l=l, c=c,
                 vol=df3["volume"].to_numpy(),
                 rsi_all=rsi_all, macdz_all=macdz_all, bb_all=bb_all,

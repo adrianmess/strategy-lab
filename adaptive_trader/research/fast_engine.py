@@ -95,7 +95,8 @@ def precompute(df3: pd.DataFrame, df1: pd.DataFrame, p=DEFAULT_PARAMS):
     cdMetricS = -(m1 if p["cdTfShort"] == "1" else m3) / cprev   # priceIncreaseShort
     cdMetricXS = -(m1 if p["xCdTfShort"] == "1" else m3) / cprev
     cdMetricXL = (m1 if p.get("xCdTfLong", "1") == "1" else m3) / cprev
-    t_ms = (df3["t"].astype("int64") // 10**6).to_numpy()
+    # unit-safe (see 2026-09-17 seconds-as-ms live bug)
+    t_ms = df3["t"].to_numpy().astype("datetime64[ms]").astype(np.int64)
     return dict(t=df3["t"].to_numpy(), t_ms=t_ms.astype(np.float64),
                 o=o, h=h, l=l, c=c, vol=df3["volume"].to_numpy(),
                 rsiL=rsiL, macdL=macdL, bbPctL=bbPctL,

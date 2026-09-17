@@ -190,7 +190,9 @@ def compute_signals(df3: pd.DataFrame, df1: pd.DataFrame, p: dict) -> pd.DataFra
 # ---------------- Event loop ----------------
 
 def run_backtest(sig: pd.DataFrame, p: dict, warmup_bars: int = 3000):
-    t_ms = (sig["t"].astype("int64") // 10**6).to_numpy()  # bar OPEN time ms
+    # unit-safe: datetime64[ms] cast works for ANY datetime64 unit — a bare
+    # astype(int64) assumes ns and turned live-feed seconds into "ms" (2026-09-17)
+    t_ms = sig["t"].to_numpy().astype("datetime64[ms]").astype(np.int64)  # bar OPEN time ms
     o = sig["open"].to_numpy(); h = sig["high"].to_numpy()
     l = sig["low"].to_numpy(); c = sig["close"].to_numpy()
     n = len(sig)

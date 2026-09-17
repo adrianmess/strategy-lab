@@ -125,7 +125,11 @@ def precompute_macdx(df3: pd.DataFrame, df1: pd.DataFrame, p: dict) -> dict:
     # priceIncShort  = (close-close[1])/close[1]  on the 3m series
     dropL = (m1 if m1 is not None else m3) / cprev
     incS = -m3 / cprev
-    t_ms = (df3["t"].astype("int64") // 10**6).to_numpy().astype(np.float64)
+    # unit-safe: a bare astype(int64) assumes ns; the live feed's coarser
+    # datetime64 unit fed this engine SECONDS as "ms" — cooldown/hold timers
+    # never expired and MEX 2 Lev took zero trades (2026-09-17)
+    t_ms = (df3["t"].to_numpy().astype("datetime64[ms]")
+            .astype(np.int64).astype(np.float64))
     return dict(t=df3["t"].to_numpy(), t_ms=t_ms,
                 o=df3["open"].to_numpy(), h=df3["high"].to_numpy(),
                 l=df3["low"].to_numpy(), c=c,

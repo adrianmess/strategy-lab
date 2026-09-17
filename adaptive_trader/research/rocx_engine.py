@@ -80,7 +80,8 @@ def precompute_rocx(df3: pd.DataFrame, df1: pd.DataFrame) -> dict:
             r1[L:] = (low1[L:] / low1[:-L] - 1.0) * 100.0
         roc_stack[vi, ok] = r1[idx[ok]]
     # --- 45-min SMA(close) stack (last COMPLETED bucket), sampled per bar ---
-    tmin = (t.astype("int64") // 60_000_000_000).to_numpy()   # epoch minutes
+    # unit-safe epoch minutes (see 2026-09-17 seconds-as-ms live bug)
+    tmin = t.to_numpy().astype("datetime64[m]").astype(np.int64)   # epoch minutes
     bidx = tmin // 45
     ub, last_pos = np.unique(bidx, return_index=True)
     # last 3-min bar of each bucket = position before the next bucket starts
@@ -95,7 +96,8 @@ def precompute_rocx(df3: pd.DataFrame, df1: pd.DataFrame) -> dict:
     is_new45 = np.zeros(n, dtype=np.int8)
     is_new45[0] = 1
     is_new45[1:] = (bidx[1:] != bidx[:-1]).astype(np.int8)
-    t_ms = (t.astype("int64") // 10**6).to_numpy().astype(np.float64)
+    t_ms = (t.to_numpy().astype("datetime64[ms]")
+            .astype(np.int64).astype(np.float64))   # unit-safe
     return dict(t=t.to_numpy(), t_ms=t_ms,
                 o=df3["open"].to_numpy(), h=df3["high"].to_numpy(),
                 l=df3["low"].to_numpy(), c=c,

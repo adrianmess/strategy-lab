@@ -72,7 +72,8 @@ def scalp_precompute(df3: pd.DataFrame, p=None,
     emaBull[1:] = ((fe[1:] > se[1:]) & (fe[:-1] <= se[:-1])).astype(float)
     emaBear[1:] = ((fe[1:] < se[1:]) & (fe[:-1] >= se[:-1])).astype(float)
     poc = _poc(v, c, vrvpLength)
-    t_ms = (df3["t"].astype("int64") // 10**6).to_numpy().astype(np.float64)
+    t_ms = (df3["t"].to_numpy().astype("datetime64[ms]")
+            .astype(np.int64).astype(np.float64))   # unit-safe (2026-09-17)
     return dict(t=df3["t"].to_numpy(), t_ms=t_ms, o=o, h=h, l=l, c=c, vol=v,
                 rsi=r, cvdUp=cvdUp, cvdDn=cvdDn, aboveCvd=(cvd > cvdSMA).astype(float),
                 belowCvd=(cvd < cvdSMA).astype(float),
@@ -318,7 +319,8 @@ def scalp_precompute2(df3: pd.DataFrame):
         emaBull2d[j, 1:] = ((fe[1:] > se[1:]) & (fe[:-1] <= se[:-1])).astype(float)
         emaBear2d[j, 1:] = ((fe[1:] < se[1:]) & (fe[:-1] >= se[:-1])).astype(float)
 
-    t_ms = (df3["t"].astype("int64") // 10**6).to_numpy().astype(np.float64)
+    t_ms = (df3["t"].to_numpy().astype("datetime64[ms]")
+            .astype(np.int64).astype(np.float64))   # unit-safe (2026-09-17)
     return dict(t=df3["t"].to_numpy(), t_ms=t_ms, o=o, h=h, l=l, c=c, vol=v,
                 rsi2d=rsi2d, cvdUp2d=cvdUp2d, cvdDn2d=cvdDn2d,
                 above2d=above2d, below2d=below2d,
