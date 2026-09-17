@@ -329,6 +329,8 @@ button.rtradd.on{opacity:1;filter:none;background:rgba(88,166,255,.25);
     <span class="hint" style="font-weight:400;font-size:12.5px;margin-left:14px">
       excursion worse than <input id="maeTh" type="number" step="0.5" min="0" placeholder="—" style="width:58px"> %
       <select id="maeBasis" title="price move, or multiplied by each trade's leverage (what your equity felt)"><option value="price">price move</option><option value="equity">× lev (equity)</option></select>
+      <span style="margin-left:14px">times
+      <select id="tzSel" title="display timezone for entry/exit times, applied to every backtest (candle data is stored in UTC; this only changes the display)"><option value="utc">UTC</option><option value="pt">Pacific (PST/PDT)</option><option value="local">this browser's local</option></select></span>
       <span id="maeSum" style="margin-left:8px"></span>
     </span></h2>
   <div style="max-height:340px;overflow-y:auto">
@@ -1499,6 +1501,26 @@ function renderTrades(e){
   const tt=document.querySelector('#tt tbody');
   const tr=(e.trades||[]);
   const ops=(e.open_positions||[]).filter(o=>o.at==='end of data');
+  // display timezone: stored times are UTC (candle data is tz-aware UTC at
+  // ingest); this converts for DISPLAY only, globally for every backtest
+  const _tzMap = {pt:'America/Los_Angeles',
+                  local:Intl.DateTimeFormat().resolvedOptions().timeZone};
+  const _tz = localStorage.getItem('btTz') || 'utc';
+  const fmtTs = s=>{
+    if(!s) return '';
+    if(_tz==='utc') return String(s).slice(0,16).replace('T',' ');
+    let iso = String(s).slice(0,19).replace(' ','T');
+    if(iso.length===16) iso += ':00';
+    const d = new Date(iso+'Z');
+    if(isNaN(d)) return String(s).slice(0,16);
+    // sv-SE locale renders "YYYY-MM-DD HH:MM" — same shape as the raw strings
+    return new Intl.DateTimeFormat('sv-SE',{timeZone:_tzMap[_tz],
+      year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
+  };
+  const _ths = document.querySelectorAll('#tt thead th');
+  const _lbl = _tz==='utc' ? '' : (_tz==='pt' ? ' (PT)' : ' (local)');
+  if(_ths.length>1){ _ths[0].textContent='entry'+_lbl; _ths[1].textContent='exit'+_lbl; }
   // excursion basis: raw price move, or × leverage = equity impact (identical for spot)
   const basisSel = document.getElementById('maeBasis');
   basisSel.style.display = (e.mode==='lev') ? '' : 'none';
@@ -1522,12 +1544,12 @@ function renderTrades(e){
     ? `(showing ${shown.length}${th!=null?` of ${tr.length}`:''}${ops.length?` + ${ops.length} open`:''})`
     : '(none stored)';
   document.getElementById('openinfo').innerHTML = ops.map(o=>
-    `<span class="${o.at==='end of data'?'neg':'hint'}" style="font-weight:600">⚠ OPEN POSITION at ${o.at}: ${o.dir.toUpperCase()} entered ${o.entry_t} @ $${o.entry.toFixed(2)} · ` +
+    `<span class="${o.at==='end of data'?'neg':'hint'}" style="font-weight:600">⚠ OPEN POSITION at ${o.at}: ${o.dir.toUpperCase()} entered ${fmtTs(o.entry_t)} @ $${o.entry.toFixed(2)} · ` +
     `mark $${o.mark.toFixed(2)} (${(100*o.move_pct).toFixed(1)}% ${o.move_pct<0?'underwater':'in profit'} at ${o.lev.toFixed(1)}×, ` +
-    `unrealized ${o.unreal>=0?'+':''}$${o.unreal.toFixed(0)}) as of ${o.as_of}. Not included in the stats above.</span>`).join('<br>');
+    `unrealized ${o.unreal>=0?'+':''}$${o.unreal.toFixed(0)}) as of ${fmtTs(o.as_of)}. Not included in the stats above.</span>`).join('<br>');
   const fpc = (pct,lev)=>`<span class="${pct>=0?'pos':'neg'}" title="price move ${(pct>=0?'+':'')+pct.toFixed(2)}%${lev>1?` · ×${lev.toFixed(1)} leverage = ${(pct*lev>=0?'+':'')+(pct*lev).toFixed(2)}% equity impact`:''}">${(pct>=0?'+':'')+pct.toFixed(2)}%</span>`;
   const openRows = ops.map(o=>`<tr style="background:rgba(248,81,73,.08)">
-    <td>${o.entry_t}</td><td><b>OPEN</b> (${o.at==='end of data'?'end of data':'gap'})</td><td>${o.dir}</td>
+    <td>${fmtTs(o.entry_t)}</td><td><b>OPEN</b> (${o.at==='end of data'?'end of data':'gap'})</td><td>${o.dir}</td>
     <td>${o.entry.toFixed(3)}</td><td>${o.mark.toFixed(3)} <span class="hint">mark</span></td>
     <td>${fpc(100*o.move_pct, o.lev)} <span class="hint">unrealized</span></td>
     <td class="${o.unreal>=0?'pos':'neg'}">${o.unreal.toFixed(2)} <span class="hint">unrealized</span></td>
@@ -1546,7 +1568,7 @@ function renderTrades(e){
     const pct = 100*(t.exit/t.entry-1)*(t.dir==='long'?1:-1);
     const other = 100*(t.mae||0)*(basis==='equity'?1:(t.lev||1));
     return `<tr>
-    <td>${(t.entry_t||'').slice(0,16)}</td><td>${(t.exit_t||'').slice(0,16)}</td><td>${t.dir}</td>
+    <td>${fmtTs(t.entry_t)}</td><td>${fmtTs(t.exit_t)}</td><td>${t.dir}</td>
     <td>${_px(t.entry)}</td><td>${_px(t.exit)}</td>
     <td${hasPx?'':' class="hint" title="this is a router/combo entry — its merged trade records carry net P&L and worst excursion, not entry/exit prices"'}>${hasPx?fpc(pct, t.lev):'—'}</td>
     <td class="${t.net>=0?'pos':'neg'}">${t.net.toFixed(2)}</td>
@@ -1555,6 +1577,13 @@ function renderTrades(e){
 }
 document.getElementById('maeTh').oninput = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
 document.getElementById('maeBasis').onchange = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
+{ // display-timezone setting: persisted, applies to every backtest's trades
+  const z = document.getElementById('tzSel');
+  z.value = ['utc','pt','local'].includes(localStorage.getItem('btTz'))
+            ? localStorage.getItem('btTz') : 'utc';
+  z.onchange = ()=>{ localStorage.setItem('btTz', z.value);
+                     if(sel!=null) renderTrades(BT[sel]); };
+}
 (async function(){
   await loadBtMeta();   // sidecar ratings/best marks (instant to update)
   if(!BT.length){ render(); return; }
