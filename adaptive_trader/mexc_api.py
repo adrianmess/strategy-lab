@@ -34,6 +34,7 @@ PROXY_FILE = os.path.join(os.path.dirname(HERE), "proxy_config.json")
 # order sides (API constants)
 OPEN_LONG, CLOSE_SHORT, OPEN_SHORT, CLOSE_LONG = 1, 2, 3, 4
 TYPE_LIMIT = 1
+TYPE_POST_ONLY = 2          # maker-only: cancelled instead of crossing
 TYPE_MARKET = 5
 ISOLATED, CROSS = 1, 2
 
@@ -203,12 +204,13 @@ class MexcFuturesAPI:
         return self.place_market(symbol, OPEN_SHORT, vol, leverage, price)
 
     def place_limit(self, symbol, side, vol, price, leverage=None,
-                    open_type=ISOLATED):
-        """LIMIT order (rests on the book until filled or cancelled)."""
+                    open_type=ISOLATED, otype=TYPE_LIMIT):
+        """LIMIT order (rests on the book until filled or cancelled).
+        otype=TYPE_POST_ONLY makes it maker-only."""
         return self._post("/api/v1/private/order/create", dict(
             symbol=symbol, price=float(price), vol=float(vol),
             leverage=(int(leverage) if leverage else None), side=int(side),
-            type=TYPE_LIMIT, openType=open_type))
+            type=int(otype), openType=open_type))
 
     def open_orders(self, symbol=None, page_size=50):
         """Resting (unfilled) futures orders."""

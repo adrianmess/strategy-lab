@@ -66,9 +66,33 @@ class PairExec:
         else:
             self.ex = Executor(self.cfg)
 
-    def open(self, direction, lev, price, margin_cap=None):
+    def open(self, direction, lev, price, margin_cap=None, entry_limit=None):
+        if entry_limit is not None:
+            return self.ex.open_position(direction, lev, price,
+                                         margin_cap=margin_cap,
+                                         entry_limit=entry_limit)
         return self.ex.open_position(direction, lev, price,
                                      margin_cap=margin_cap)
+
+    def entry_state(self, order_id, direction):
+        """('resting'|'filled'|'gone', holdVol, holdAvgPrice) or None
+        (unknown). Filled = a position in our direction is actually held —
+        the runner enforces one position per symbol, so the hold IS ours."""
+        if order_id == "dry":
+            return ("resting", None, None)
+        try:
+            oo = self.ex.api.open_orders(self.cfg["symbol"]) or []
+            if any(str(o.get("orderId")) == str(order_id) for o in oo):
+                return ("resting", None, None)
+            want = 1 if direction > 0 else 2
+            for p in (self.ex.api.open_positions(self.cfg["symbol"]) or []):
+                if (int(p.get("positionType") or 0) == want
+                        and float(p.get("holdVol") or 0) > 0):
+                    return ("filled", float(p["holdVol"]),
+                            float(p.get("holdAvgPrice") or 0) or None)
+            return ("gone", None, None)
+        except Exception:
+            return None
 
     def close(self):
         return self.ex.close_position()
@@ -310,11 +334,17 @@ def main_fcfs(cfg, live):
                 return p
         return None
 
+    # resting entry limits awaiting fill (limit_entry) — persisted so a
+    # restart resumes tracking the orders it left on the book
+    pending_entries = state.setdefault("pending_entries", [])
+
     def sym_held(sym):
         # ONE position per symbol: exchange-side, same-symbol positions
         # merge (futures) / share a wallet balance (spot), so a second
-        # "position" on a held pair could not be closed independently
-        return any(p.get("symbol") == sym for p in positions)
+        # "position" on a held pair could not be closed independently.
+        # A RESTING entry order counts — it may fill any moment.
+        return (any(p.get("symbol") == sym for p in positions)
+                or any(pe.get("symbol") == sym for pe in pending_entries))
 
     def cascade_free():
         """Free margin available to the NEXT allocation, or None when the
@@ -360,7 +390,7 @@ def main_fcfs(cfg, live):
                 + (f"·{m}" if m else ""))
 
     def tell_flat():
-        flat = not positions
+        flat = not positions and not pending_entries
         for h in hosts.values():
             h.set_flat(flat)
 
@@ -505,6 +535,96 @@ def main_fcfs(cfg, live):
             pos.pop("tp_px", None)
         save()
 
+    # ---- maker (limit) entries (config: limit_entry, default off) ----
+    # Signal opens rest a POST-ONLY limit at the live price (± offset)
+    # instead of paying taker: filled -> position at the limit price (maker,
+    # 0 fee); unfilled after limit_entry_timeout_s -> cancel, then chase
+    # with a market order (limit_entry_on_timeout: "market", default) or
+    # skip the trade ("cancel"). Panel Adopts stay MARKET — a deliberate
+    # human action should fill now, not maybe. Futures only for now.
+    le_on = bool(cfg.get("limit_entry")) and mode == "lev"
+    if cfg.get("limit_entry") and mode != "lev":
+        log.warning("limit_entry: spot not supported yet — market entries")
+    LE_TIMEOUT = float(cfg.get("limit_entry_timeout_s", 75))
+    LE_CHASE = str(cfg.get("limit_entry_on_timeout", "market")).lower()
+    LE_OFF = float(cfg.get("limit_entry_offset_bps", 0)) / 10000.0
+    if le_on:
+        log.info("LIMIT ENTRY ON: post-only at live px %+.1f bps, timeout "
+                 "%.0fs -> %s", -1e4 * LE_OFF, LE_TIMEOUT, LE_CHASE)
+
+    def _pe_refund(pe):
+        if cascade and cfg["dry_run"] and pe.get("margin") is not None:
+            state["cascade_free"] = round(
+                float(state.get("cascade_free") or 0) + float(pe["margin"]), 4)
+
+    def _mk_posn(pe, qty, fpx, chased=False):
+        posn = dict(symbol=pe["symbol"], comp=pe["comp"], dir=pe["dir"],
+                    lev=pe["lev"], qty=qty, entry_price=float(fpx),
+                    group=pe["group"], mirror_entry_t=None,
+                    late_join=(pe.get("src") == "late_join"),
+                    limit_entry=(not chased),
+                    opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+                    opened_ms=int(time.time() * 1000))
+        positions.append(posn)
+        opened_bar[pe["comp"]] = pe.get("bar_t")
+        notify("position_opened", account="fcfs",
+               config=os.path.basename(cfg.get("_path", "?")),
+               symbol=pe["symbol"],
+               side=("LONG" if pe["dir"] > 0 else "SHORT"),
+               qty=qty, lev=pe["lev"], price=float(fpx),
+               comp=comp_label(pe["comp"])
+               + (" (limit chase)" if chased else " (limit entry)"),
+               live=(not cfg["dry_run"]))
+        return posn
+
+    def _entry_filled(pe, vol, fpx):
+        pending_entries.remove(pe)
+        posn = _mk_posn(pe, vol or pe["qty"], fpx or pe["limit_px"])
+        if pe.get("margin") is not None:
+            posn["margin"] = pe["margin"]     # committed at placement
+        log.info("ENTRY LIMIT FILLED %s: qty %s @ %.6g (maker)",
+                 comp_label(pe["comp"]), posn["qty"], posn["entry_price"])
+        save(); tell_flat()
+        rtp_sync(posn)
+
+    def _entry_timeout(pe, why=""):
+        exx = ex_for(pe["symbol"])
+        exx.cancel_tp(pe["oid"])              # same cancel endpoint
+        if pe["oid"] != "dry":
+            # the cancel may have raced a fill — adopt whatever is held
+            st_ = exx.entry_state(pe["oid"], pe["dir"])
+            if st_ and st_[0] == "filled":
+                _entry_filled(pe, st_[1], st_[2])
+                return
+        pending_entries.remove(pe)
+        _pe_refund(pe)
+        log.info("ENTRY LIMIT %s %s after %.0fs — %s", why,
+                 comp_label(pe["comp"]), time.time() - pe["placed"],
+                 "chasing with market" if LE_CHASE == "market" else "skipped")
+        save(); tell_flat()
+        if LE_CHASE != "market":
+            return
+        h = hosts.get(pe["group"])
+        pxn = float(getattr(h, "last_px", 0) or pe["limit_px"])
+        free = cascade_free()
+        res, qty = ex_for(pe["symbol"]).open(pe["dir"], pe["lev"], pxn,
+                                             margin_cap=free)
+        if (res or {}).get("status") in ("success", "dry_run") and qty:
+            fpx2 = float((res or {}).get("fill_price") or pxn)
+            posn = _mk_posn(pe, qty, fpx2, chased=True)
+            if free is not None:
+                cs = (1.0 if mode == "spot"
+                      else float((cfg.get("contract_sizes") or {})
+                                 .get(pe["symbol"]) or 0))
+                mg = qty * cs * fpx2 / pe["lev"]
+                posn["margin"] = round(mg, 4)
+                state["cascade_free"] = round(max(0.0, free - mg), 4)
+            save(); tell_flat()
+        else:
+            log.warning("ENTRY LIMIT chase failed for %s: %s",
+                        comp_label(pe["comp"]),
+                        (res or {}).get("message"))
+
     # arbitration: same-bar ties resolved by component order (backtest rule)
     pending_opens = []   # [(bar_t, comp_i, dir, lev, px, group_key, src)]
     #                       src: "fresh" | "late_join" — recorded on the
@@ -586,8 +706,9 @@ def main_fcfs(cfg, live):
         """Open the chosen shadow as a REAL position (shared by the panel
         Adopt button and the armed auto-adopt rules). FLAT-ONLY even under
         cascade — the sim validated fresh-signal cascading, not adoption."""
-        if positions:
-            log.warning("ADOPT (%s) refused: a position is already open", src)
+        if positions or pending_entries:
+            log.warning("ADOPT (%s) refused: a position is already open "
+                        "(or an entry limit is resting)", src)
             return False
         if paused():
             log.warning("ADOPT (%s) refused: instance is PAUSED", src)
@@ -828,7 +949,8 @@ def main_fcfs(cfg, live):
 
     def flush_pending():
         nonlocal pending_opens
-        if not pending_opens or (not cascade and positions) or paused():
+        if (not pending_opens or paused()
+                or (not cascade and (positions or pending_entries))):
             pending_opens = []
             return
         pending_opens.sort(key=lambda x: (x[0], x[1]))   # (bar time, comp idx)
@@ -843,9 +965,9 @@ def main_fcfs(cfg, live):
                 log.info("CASCADE skip %s: %s already held",
                          comp_label(i), c["pair"])
                 continue
-            if max_slots and len(positions) >= max_slots:
+            if max_slots and len(positions) + len(pending_entries) >= max_slots:
                 log.info("CASCADE stop: %d slots in use (max %d)",
-                         len(positions), max_slots)
+                         len(positions) + len(pending_entries), max_slots)
                 break
             free = cascade_free()
             if free is not None and free < float(
@@ -860,6 +982,38 @@ def main_fcfs(cfg, live):
             # reported P&L.
             h = hosts.get(gkey)
             px_live = float(getattr(h, "last_px", None) or px)
+            if le_on:
+                # maker entry: rest a post-only limit; the pending-entries
+                # loop promotes it to a position on fill (or times it out)
+                lpx = px_live * (1 - LE_OFF if d > 0 else 1 + LE_OFF)
+                res, qty = ex_for(c["pair"]).open(d, lev, px_live,
+                                                  margin_cap=free,
+                                                  entry_limit=dict(px=lpx))
+                if (res or {}).get("status") == "resting" and qty:
+                    pe = dict(symbol=c["pair"], comp=i, dir=d, lev=lev,
+                              qty=qty,
+                              limit_px=float((res or {}).get("limit_px")
+                                             or lpx),
+                              oid=(res or {}).get("order_id"), group=gkey,
+                              bar_t=bar_t, src=osrc, placed=time.time())
+                    if free is not None:
+                        cs = float((cfg.get("contract_sizes") or {})
+                                   .get(c["pair"]) or 0)
+                        pe["margin"] = round(qty * cs * pe["limit_px"]
+                                             / lev, 4)
+                        state["cascade_free"] = round(
+                            max(0.0, free - pe["margin"]), 4)
+                    pending_entries.append(pe)
+                    opened_bar[i] = bar_t
+                    log.info("ENTRY LIMIT resting %s dir=%+d qty=%s @ %.6g "
+                             "(signal bar %s, %s)", comp_label(i), d, qty,
+                             pe["limit_px"], bar_t, osrc)
+                    save(); tell_flat()
+                    opened = bar_t
+                    continue
+                log.warning("ENTRY LIMIT placement failed for %s (%s) — "
+                            "falling back to market", comp_label(i),
+                            (res or {}).get("message"))
             res, qty = ex_for(c["pair"]).open(d, lev, px_live,
                                               margin_cap=free)
             if (res or {}).get("status") == "error":
@@ -1115,10 +1269,10 @@ def main_fcfs(cfg, live):
 
             # panel-requested adopt of a chosen shadow (only when flat) +
             # armed auto-adopt / auto-close rules
-            if not positions:
+            if not positions and not pending_entries:
                 try_adopt()
                 check_armed()
-            else:
+            elif positions:
                 check_armed_close()
 
             # arbitration window expired?
@@ -1133,6 +1287,32 @@ def main_fcfs(cfg, live):
                             _bchg = True
                     if _bchg:
                         save()
+
+            # resting entry limits: promote fills to positions, time out
+            # stale ones (cancel -> chase or skip). Dry-run paper-fills the
+            # moment the live price crosses the limit.
+            for pe in list(pending_entries):
+                _h = hosts.get(pe["group"])
+                _pxn = float(getattr(_h, "last_px", 0) or 0)
+                if pe["oid"] == "dry":
+                    if _pxn and ((_pxn <= pe["limit_px"]) if pe["dir"] > 0
+                                 else (_pxn >= pe["limit_px"])):
+                        _entry_filled(pe, pe["qty"], pe["limit_px"])
+                        continue
+                elif now - float(pe.get("checked", 0)) > 10:
+                    pe["checked"] = now
+                    st_ = ex_for(pe["symbol"]).entry_state(pe["oid"],
+                                                           pe["dir"])
+                    if st_ and st_[0] == "filled":
+                        _entry_filled(pe, st_[1], st_[2])
+                        continue
+                    if st_ and st_[0] == "gone":
+                        # post-only got cancelled by the exchange (it would
+                        # have crossed) or someone pulled it — policy applies
+                        _entry_timeout(pe, "order gone")
+                        continue
+                if now - float(pe["placed"]) > LE_TIMEOUT:
+                    _entry_timeout(pe, "timed out")
 
             # protective intra-bar checks on the live price of each open pair
             if positions:

@@ -213,7 +213,8 @@ class APIExecutor:
         self.log.info("MEXC futures API executor ready (account=%s, proxy=%s)",
                       self.api.account, bool(self.api.proxies))
 
-    def open_position(self, direction, lev, price, margin_cap=None):
+    def open_position(self, direction, lev, price, margin_cap=None,
+                      entry_limit=None):
         cfg = self.cfg
         # LIVE sizing = 100% of what the account actually has (the backtests
         # compound full equity every trade — a fixed equity_usdt either
@@ -258,6 +259,35 @@ class APIExecutor:
             self.log.warning("qty < 1 contract, skipping (equity too small)")
             return None, 0
         lev_i = max(1, int(lev))   # FLOOR — never more leverage than backtested
+        if entry_limit:
+            # resting OPEN limit (maker entry) — same sizing as market; the
+            # CALLER owns the async lifecycle: fill promotion, timeout,
+            # cancel/chase (fcfs_runner pending_entries)
+            lpx = float(entry_limit["px"])
+            if cfg["dry_run"]:
+                self.log.info("[DRY RUN] would rest OPEN limit: %s %d @ %.6g "
+                              "lev %d", "LONG" if direction > 0 else "SHORT",
+                              qty, lpx, lev_i)
+                return {"status": "resting", "order_id": "dry",
+                        "limit_px": lpx}, qty
+            try:
+                from mexc_api import (OPEN_LONG, OPEN_SHORT, TYPE_LIMIT,
+                                      TYPE_POST_ONLY)
+                side = OPEN_LONG if direction > 0 else OPEN_SHORT
+                ot = (TYPE_POST_ONLY if entry_limit.get("post_only", True)
+                      else TYPE_LIMIT)
+                oid = self.api.place_limit(cfg["symbol"], side, qty, lpx,
+                                           leverage=lev_i, otype=ot)
+                self.log.info("OPEN limit resting: %s %d @ %.6g lev %d "
+                              "(order %s)",
+                              "LONG" if direction > 0 else "SHORT",
+                              qty, lpx, lev_i, oid)
+                return {"status": "resting", "order_id": oid,
+                        "limit_px": lpx}, qty
+            except Exception as e:
+                self.log.error("OPEN limit place FAILED: %s — caller falls "
+                               "back to market", e)
+                return {"status": "error", "message": str(e)}, 0
         if cfg["dry_run"]:
             self.log.info("[DRY RUN] would API-%s %d contracts at ~%.3f lev %d",
                           "LONG" if direction > 0 else "SHORT", qty, price, lev_i)
