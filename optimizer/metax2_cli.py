@@ -140,6 +140,9 @@ def collect(cands_path, out_path):
             rows.append([et, xt, r,
                          float(t.get("mae") or 0.0) * lev])
         tabs[d] = dict(strategy=strat, file=fn, trades=rows,
+                       # the rate these r values already have baked in, so
+                       # the combo can publish what it was costed at
+                       fee=comm,
                        # carry the component's still-OPEN virtual trade: the
                        # merge only consumes CLOSED trades, so without this a
                        # component sitting in a weeks-old position is

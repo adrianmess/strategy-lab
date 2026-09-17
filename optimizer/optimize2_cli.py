@@ -571,6 +571,8 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
                        gap_mode=args.gap_mode, scoring=args.scoring,
                anchor=args.anchor, anchor_strength=args.anchor_strength, evaluated=total_eval,
                        crossfit=report, cand=None, metrics=None, pair=_pair_tag(), market_data=_market_tag(),
+                       fee_per_side=_fee_tags(args.mode)[0],
+                       fee_side=_fee_tags(args.mode)[1],
                        generated=time.strftime("%Y-%m-%d %H:%M")),
                   open("best_config.json", "w"), indent=1, default=float)
         return None
@@ -602,6 +604,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
     out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
     out["timeframe"] = _tf_tag()
+    out["fee_per_side"], out["fee_side"] = _fee_tags(out.get("mode"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print(f"\nCROSS-FIT WINNER ({winner['origin']}): "
           + (f"lockbox worst {(pow(2.718281828, table_holdout['growth'])-1)*100:+.1f}%/mo"
@@ -642,6 +645,24 @@ def _market_tag():
 
 def _tf_tag():
     return os.environ.get("LAB_TF", "3") + "m"
+
+
+def _fee_tags(mode):
+    """(rate per side, what it represents) the SEARCH costed fills at —
+    recorded with the run so the Runs table can show it. The engines read
+    these from fees.json at import; a result is only as meaningful as the
+    fee it assumed, and for a high-frequency genome it IS the result."""
+    fee = None
+    try:
+        import sys as _s
+        _o = _s.modules.get("optimizer2")
+        if _o is not None:
+            fee = getattr(_o, "FUT_COMM" if mode == "lev" else "SPOT_COMM", None)
+    except Exception:
+        fee = None
+    side = ("manual" if os.environ.get("LAB_FEE_OVERRIDE")
+            else (os.environ.get("LAB_FEE_SIDE") or "taker").lower())
+    return (float(fee) if fee is not None else None), side
 
 def _known_symbols():
     """--symbol choices derived from the research data dir (any coin with
@@ -1433,6 +1454,7 @@ def main():
     out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
     out["timeframe"] = _tf_tag()
+    out["fee_per_side"], out["fee_side"] = _fee_tags(out.get("mode"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
     print(json.dumps(best_m, indent=1, default=float))
@@ -1629,6 +1651,7 @@ def main():
         out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
     out["timeframe"] = _tf_tag()
+    out["fee_per_side"], out["fee_side"] = _fee_tags(out.get("mode"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 
     auto_backtest(args, run_dir)

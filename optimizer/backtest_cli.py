@@ -11,7 +11,7 @@ Examples:
   python3 backtest_cli.py --config ../adaptive_trader/research2/final_config_v6_lev_none.json --name production_lev
 """
 import _bootstrap as B
-import argparse, json, os, time
+import argparse, json, os, sys, time
 import numpy as np
 import pandas as pd
 
@@ -764,7 +764,19 @@ def build_entry(tr, eq, months, mdd, liq, curve, label_extra, open_positions=Non
                        for k, v in monthly.items() if np.isfinite(v)]
     else:
         monthly_tbl = []
-    return dict(stats=dict(months=months, final_eq=float(eq), total_mult=eq / 1000.0,
+    # what every fill was costed at. The engines resolve these from fees.json
+    # via fees_live at import; for a high-frequency genome the fee IS the
+    # result (a 1m scalper's edge inverts between 0 and 8bp), so it belongs
+    # with the entry rather than being inferred later (2026-09-17)
+    _mode = (label_extra or {}).get("mode")
+    _wf = sys.modules.get("wf2")
+    _fee = (getattr(_wf, "FUT_COMM" if _mode == "lev" else "SPOT_COMM", None)
+            if _wf is not None else None)
+    _fside = ("manual" if os.environ.get("LAB_FEE_OVERRIDE")
+              else (os.environ.get("LAB_FEE_SIDE") or "taker").lower())
+    return dict(fee_per_side=(float(_fee) if _fee is not None else None),
+                fee_side=_fside,
+                stats=dict(months=months, final_eq=float(eq), total_mult=eq / 1000.0,
                            monthly_growth_pct=float((np.exp(g) - 1) * 100),
                            liq=bool(liq), maxdd_mtm=mdd, n=int(len(tr)),
                            tpm=len(tr) / max(months, 1e-9),

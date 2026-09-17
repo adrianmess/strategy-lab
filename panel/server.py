@@ -7886,6 +7886,10 @@ def runs2():
                 e["anchor_strength"] = bc.get("anchor_strength")
                 e["crossfit"] = bc.get("crossfit")
                 e["winner_origin"] = bc.get("winner_origin")
+                # what the search/merge costed fills at (recorded from
+                # 2026-09-17; older runs have nothing and show "—")
+                e["fee_per_side"] = bc.get("fee_per_side")
+                e["fee_side"] = bc.get("fee_side") or bc.get("fee_mode")
                 fp = os.path.join(runs_dir, d, "backtest_flags.json")
                 if os.path.exists(fp):
                     try:

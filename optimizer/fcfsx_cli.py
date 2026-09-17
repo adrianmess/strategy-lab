@@ -92,7 +92,8 @@ def replay_stats(taken):
     return S, mo, H
 
 
-def publish(name, kind, taken, comps, mode, S, mo, note, open_pos=None):
+def publish(name, kind, taken, comps, mode, S, mo, note, open_pos=None,
+            fee=None, fee_side=None):
     eq, curve, trades = 1000.0, [], []
     for et, xt, r, mae, ci in taken:
         r = max(r, -0.999)
@@ -105,7 +106,7 @@ def publish(name, kind, taken, comps, mode, S, mo, note, open_pos=None):
                            net=round(eq * r / (1 + r), 2), mae=float(mae),
                            reason=f"{c['pair'][:3]}/{c['timeframe']}·{c['strategy']}",
                            lev=1.0))
-    entry = dict(name=name, stats=S,
+    entry = dict(name=name, stats=S, fee_per_side=fee, fee_side=fee_side,
                  curve=curve[-400:], trades=trades[-400:],
                  monthly=[dict(month=m, ret_pct=100 * (v - 1))
                           for m, v in sorted(mo.items())],
@@ -227,13 +228,23 @@ def main():
             if not tab["trades"]:
                 continue
             comps.append(dict(run=d, file=tab["file"], strategy=tab["strategy"],
-                              pair=f"{coin.upper()}_USDT", timeframe=tf))
+                              pair=f"{coin.upper()}_USDT", timeframe=tf,
+                              fee_per_side=tab.get("fee")))
             tabs.append(tab["trades"])
     if len(comps) < 2:
         sys.exit("fewer than 2 usable components survived the collect "
                  "(liquidating components are excluded there)")
     print(f"{len(comps)} components live simultaneously; "
           f"FCFS merge (one slot, first signal wins)…", flush=True)
+    # per-coin rates can differ (MEXC prices fees per symbol); one number for
+    # the column when they agree, the worst of them when they don't
+    _fees = [c.get("fee_per_side") for c in comps
+             if c.get("fee_per_side") is not None]
+    fee_used = max(_fees) if _fees else None
+    fee_side = ("manual" if a.fee is not None
+                else ("maker" if a.fee_mode == "limit" else "taker"))
+    if len(set(_fees)) > 1:
+        fee_note += f" (per-coin: {', '.join(f'{100*f:g}%' for f in _fees)})"
 
     # ---------- full-history replay ----------
     taken, _ = fcfs_merge(tabs)
@@ -247,7 +258,7 @@ def main():
             taken, comps, mode, S, mo,
             "FCFS combo: components simulated on their own datasets, one "
             "slot, first signal wins · fills costed as " + fee_note,
-            open_pos=open_positions)
+            open_pos=open_positions, fee=fee_used, fee_side=fee_side)
 
     # ---------- causal walk-forward sibling ----------
     step = a.step_days * _DAY_NS
@@ -294,7 +305,8 @@ def main():
             "trades — this IS the honest number)",
             chained, comps, mode, S2, mo2,
             "FCFS combo walk-forward: roster re-earned every fold from "
-            "past-only trades · fills costed as " + fee_note)
+            "past-only trades · fills costed as " + fee_note,
+            fee=fee_used, fee_side=fee_side)
 
     json.dump(dict(strategy="fcfsx", mode=mode, method="fcfs",
                    pair=(comps[0]["pair"] if len({c["pair"] for c in comps}) == 1
@@ -306,7 +318,7 @@ def main():
                              "artifact; panel refuses adoption"),
                    metrics=H2, holdout=H2, evaluated=folds,
                    fee_mode=a.fee_mode, fee_pct_per_side=a.fee,
-                   fee_note=fee_note,
+                   fee_note=fee_note, fee_per_side=fee_used, fee_side=fee_side,
                    generated=time.strftime("%Y-%m-%d %H:%M")),
               open(os.path.join(run_dir, "best_config.json"), "w"),
               indent=1, default=float)

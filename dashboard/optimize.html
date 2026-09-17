@@ -413,6 +413,7 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
       <th data-k="mode">mode</th>
       <th data-k="method">regime</th>
       <th data-k="algo">settings</th>
+      <th data-k="fee_per_side" title="commission this run's SEARCH costed every fill at, per side, and which side of the book it assumed. MEXC prices fees per symbol and the rates come from fees.json (futures taker is currently 0.08%/side, observed from real fills; maker is 0). For a high-frequency genome this is not a detail — the same parameters can be profitable at 0 and ruinous at 0.08%. Runs from before 2026-09-17 didn't record it.">fees</th>
       <th data-k="last_run">last run</th>
       <th data-k="evaluated">evaluated</th>
       <th data-k="runtime_s">compute</th>
@@ -944,6 +945,7 @@ function renderRuns(){
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
       <td class="kv" style="font-size:11.5px">${optChips(r)}${componentsChip(r)}</td>
+      <td>${feeCell(r)}</td>
       <td class="kv">${r.last_run||''}</td>
       <td>${(r.evaluated||0).toLocaleString()}</td>
       <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
@@ -983,6 +985,7 @@ function renderRuns(){
       <td><span class="badge ${r.mode==='lev'?'b-red':'b-green'}">${r.mode||'?'}</span>${pairPill(r.pair, r.market_data, r.timeframe)}</td>
       <td>${r.method||''}</td>
       <td class="kv" style="font-size:11.5px">${optChips(r)}${componentsChip(r)}</td>
+      <td>${feeCell(r)}</td>
       <td class="kv">${r.last_run||''}</td>
       <td>${(r.evaluated||0).toLocaleString()}</td>
       <td class="kv">${r.runtime_s!=null ? (r.runtime_s>=5400 ? (r.runtime_s/3600).toFixed(1)+' h' : Math.round(r.runtime_s/60)+' min') : '—'}</td>
@@ -1478,6 +1481,23 @@ async function routerJob(kind){
   const r = await api('jobs/router', d);
   $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));
   if(typeof refreshJobs==='function') refreshJobs();
+}
+function feeCell(r){
+  // what the run's search costed each fill at. Blank for anything published
+  // before fee tracking (2026-09-17) rather than guessing today's rate —
+  // showing the current number for an old run would be a lie.
+  const f = r.fee_per_side;
+  if(f == null) return `<span class="kv" title="not recorded — this run predates fee tracking (2026-09-17). Re-run it to fill this in.">—</span>`;
+  const side = r.fee_side || 'taker';
+  const pct = +(100*f).toFixed(4);
+  const tip = side==='maker'
+      ? 'MAKER rate from fees.json — only honest if the strategy really rests its orders and they fill'
+      : side==='manual'
+      ? 'MANUAL rate, set when this was built — overrides fees.json'
+      : 'TAKER rate from fees.json — what a market entry/exit actually pays';
+  const cls = f===0 ? 'b-amber' : (side==='manual' ? 'b-blue' : '');
+  return `<span class="badge ${cls}" title="${tip}">${pct}%</span>`
+       + `<span class="kv" style="margin-left:4px">${side}</span>`;
 }
 function fcFee(){
   // FCFS fee controls -> job body. A manual %/side wins over the market/limit
