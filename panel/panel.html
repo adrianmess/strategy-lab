@@ -130,6 +130,10 @@ details.term > pre{margin-top:4px}
   <label>poll s</label><input id="sPoll">
   <label>webhook</label><input class="wide" id="sHook">
   <label>emergency exit at adverse % <span class="note">(blank = off)</span></label><input id="sEmerg">
+  <label title="on position open, rest a reduce-only limit at the engine's projected profit target — fills as MAKER (0 fee) at the exact target; re-placed when the target decays. Applies on next trader start."><input type="checkbox" id="sRtp" style="width:auto"> resting TP</label>
+  <label title="open positions with a POST-ONLY limit at the live price instead of a taker market order (futures only). Unfilled after the timeout: chase with market (keeps every backtest trade) or skip the trade. Applies on next trader start."><input type="checkbox" id="sLimEnt" style="width:auto"> maker entries</label>
+  <label>entry timeout s</label><input id="sLeTo" style="width:55px" placeholder="75">
+  <label>on timeout</label><select id="sLeChase"><option value="market">chase market</option><option value="cancel">skip trade</option></select>
   <button class="primary" onclick="saveSettings()">Save</button>
   <span class="note" id="sMsg"></span>
 </div>
@@ -1100,6 +1104,10 @@ async function loadSettings(){
   const c = await fetch('/api/trader_config?file='+$('sFile').value).then(r=>r.json());
   $('sEquity').value = c.equity_usdt; $('sPoll').value = c.poll_seconds;
   $('sHook').value = c.webhook_url; $('sEmerg').value = c.emergency_exit_adverse ? (100*c.emergency_exit_adverse) : '';
+  $('sRtp').checked = !!c.resting_tp;
+  $('sLimEnt').checked = !!c.limit_entry;
+  $('sLeTo').value = c.limit_entry_timeout_s || '';
+  $('sLeChase').value = ['market','cancel'].includes(c.limit_entry_on_timeout) ? c.limit_entry_on_timeout : 'market';
 }
 async function deleteConfig(){
   const file = $('sFile').value;
@@ -1128,7 +1136,10 @@ async function saveSettings(){
   const r = await fetch('/api/trader_config?file='+$('sFile').value, {method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({equity_usdt:+$('sEquity').value, poll_seconds:+$('sPoll').value,
-      webhook_url:$('sHook').value, emergency_exit_adverse: em?(+em/100):null})}).then(r=>r.json());
+      webhook_url:$('sHook').value, emergency_exit_adverse: em?(+em/100):null,
+      resting_tp: $('sRtp').checked, limit_entry: $('sLimEnt').checked,
+      limit_entry_timeout_s: (+$('sLeTo').value || 75),
+      limit_entry_on_timeout: $('sLeChase').value})}).then(r=>r.json());
   $('sMsg').textContent = r.ok ? 'saved ✓ (restart trader to apply)' : (r.error||'error');
 }
 async function runBacktest(){

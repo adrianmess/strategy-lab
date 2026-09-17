@@ -640,6 +640,8 @@ def status():
         api_account=cfg.get("api_account", "mexc1"),
         mode=cfg.get("mode"), method=cfg.get("method"),
         equity_usdt=cfg.get("equity_usdt"),
+        resting_tp=bool(cfg.get("resting_tp")),
+        limit_entry=bool(cfg.get("limit_entry")),
         candidate=cfg.get("candidate"),
         position=(_pos or None),
         positions=_prows,
@@ -6195,7 +6197,10 @@ def trader_config():
     cfg = json.load(open(path))
     allowed = {"equity_usdt", "webhook_url", "poll_seconds",
                "emergency_exit_adverse", "dry_run", "symbol",
-               "api_account", "execution"}
+               "api_account", "execution",
+               # maker-order features (fcfs runner reads them at start)
+               "resting_tp", "limit_entry", "limit_entry_timeout_s",
+               "limit_entry_on_timeout", "limit_entry_offset_bps"}
     changed = {k: v for k, v in d.items() if k in allowed}
     import shutil
     shutil.copy(path, path + ".bak." + time.strftime("%Y%m%d_%H%M%S"))

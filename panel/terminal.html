@@ -1990,7 +1990,9 @@ function renderCards(){
           '<div class="mini">'+(s.config||'')+'</div>'+
           '<div class="mini">'+(comps?('FCFS router · '+comps+' components · '+
             (s.cascade?'CASCADE (capital pool'+(s.cascade_free!=null?', free $'+(+s.cascade_free).toFixed(0):'')+')':'one shared slot')):
-            ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+' '+
+            ('strategy '+(s.method||'')))+' · equity $'+(s.equity_usdt||'?')+
+            (s.resting_tp?' · <span class="tag" title="resting reduce-only limit at each position\'s projected target — maker exit (0 fee)">TP-limit</span>':'')+
+            (s.limit_entry?' · <span class="tag" title="post-only limit entries — maker fills; unfilled orders chase market / skip per config">maker-entry</span>':'')+' '+
             infoBtn(s.cascade?'instances.cascade':'concepts.router')+'</div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (s.running
