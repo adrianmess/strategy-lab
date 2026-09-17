@@ -1458,6 +1458,47 @@ def _fees_refresh():
                         taker=float(d.get("takerFeeRate") or 0))
                 except Exception:
                     pass
+            # RECONCILE against actual fills: MEXC's public takerFeeRate is
+            # NOT what the account pays — 2026-09-17 it claimed SUI 0% and
+            # HYPE 0.02% while both accounts were charged 0.08%/side on every
+            # taker fill (fee / (vol × contractSize × price)). Observed rate
+            # wins when it's higher, so engines never model fees below what
+            # the exchange demonstrably charges.
+            try:
+                if AT not in sys.path:
+                    sys.path.insert(0, AT)
+                from mexc_api import MexcFuturesAPI
+                for acct in ("mexc1", "mexc2"):
+                    try:
+                        fapi = MexcFuturesAPI(account=acct)
+                    except Exception:
+                        continue
+                    for pr in _TD_HIST_PAIRS:
+                        sym = f"{pr}_USDT"
+                        try:
+                            cs = _contract_size(sym)
+                            if not cs:
+                                continue
+                            obs = None
+                            for dl in (fapi.order_deals(sym, page_size=8)
+                                       or [])[:8]:
+                                if not dl.get("taker"):
+                                    continue
+                                n = (float(dl.get("vol") or 0) * cs
+                                     * float(dl.get("price") or 0))
+                                fee = float(dl.get("fee") or 0)
+                                if n > 0 and fee > 0:
+                                    r_ = fee / n
+                                    obs = max(obs or 0.0, round(r_, 6))
+                            if obs and 0 < obs < 0.01:
+                                cur = doc["fut"].setdefault(pr, {})
+                                if obs > float(cur.get("taker") or 0):
+                                    cur["taker"] = obs
+                                    cur["taker_observed"] = True
+                        except Exception:
+                            pass
+            except Exception:
+                pass
             try:
                 if AT not in sys.path:
                     sys.path.insert(0, AT)
