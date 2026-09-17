@@ -131,6 +131,7 @@ def component_trades(comp, times, bucket, mode):
     Sets comp['liq_full'] — a component that LIQUIDATES in full history is
     ineligible for routing: its simulation (and trade table) simply ends at
     the liq, so the router would route to a ghost."""
+    os.environ["LAB_TRADE_CAP"] = "0"   # full table, not the display tail
     e = BT.run_single(comp["path"])
     comp["liq_full"] = bool(e["stats"]["liq"])
     rows = []

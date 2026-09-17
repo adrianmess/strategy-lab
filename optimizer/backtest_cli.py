@@ -738,8 +738,15 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
 def build_entry(tr, eq, months, mdd, liq, curve, label_extra, open_positions=None):
     g = np.log(max(eq, 1e-9) / 1000.0) / max(months, 1e-9)
     tl = []
+    # The published trade list is a DISPLAY tail — backtests.js would be
+    # enormous otherwise. But the router collectors (metax/metax2/pairx/fcfsx)
+    # consume entry["trades"] as the component's COMPLETE trade table, and a
+    # 1m scalper makes 8k+ trades, so the tail silently cut those combos down
+    # to the last ~8 months of a 27-month history (2026-09-17). They now set
+    # LAB_TRADE_CAP=0 to get everything; the publish path keeps the tail.
+    _cap = int(os.environ.get("LAB_TRADE_CAP") or 2000)
     if len(tr):
-        for _, r in tr.tail(2000).iterrows():
+        for _, r in (tr if _cap <= 0 else tr.tail(_cap)).iterrows():
             tl.append(dict(entry_t=str(r.get("entry_t", "")), exit_t=str(r.get("exit_t", "")),
                            dir=("long" if r["dir"] > 0 else "short"),
                            entry=float(r["entry"]), exit=float(r["exit"]),

@@ -93,6 +93,7 @@ def mine(top_k=3):
 def collect(coin, cands, out_path):
     """Subprocess entry: simulate each candidate on THIS pair's data."""
     import backtest_cli as BT
+    os.environ["LAB_TRADE_CAP"] = "0"   # full table, not the display tail
     tabs = {}
     for g, d, fn, strat in cands:
         path = os.path.join(RUNS, d, fn)

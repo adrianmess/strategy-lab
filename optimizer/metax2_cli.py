@@ -84,6 +84,10 @@ def collect(cands_path, out_path):
     homogeneous so no mixing can occur. Mode-aware: lev components keep
     their per-trade leverage and futures fees."""
     import backtest_cli as BT
+    # we need EVERY trade, not the 2000-row display tail the publish path
+    # keeps — a 1m scalper makes 8k+ and the tail quietly truncated combos
+    # to their last few months of history (2026-09-17)
+    os.environ["LAB_TRADE_CAP"] = "0"
     cands = json.load(open(cands_path))
     tabs = {}
     for g, d, fn, strat in cands:
