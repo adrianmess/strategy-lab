@@ -221,8 +221,8 @@ button.rtradd.on{opacity:1;filter:none;background:rgba(88,166,255,.25);
         <option value="none">holdout: none</option>
         <option value="notnone">any holdout (exclude none)</option>
       </select></label>
-    <label style="margin-left:10px;cursor:pointer" title="only show backtests whose source run belongs to a sweep family that passed ALL 5 holdout types without liquidating">
-      <input type="checkbox" id="fGaunt" onchange="saveBtFilters()" title="only families that passed EVERY holdout type their sweep judged (manual sweeps: 5 types; gamut families: 3-5 — train-only legs don't count)"> ✓ all holdouts</label>
+    <label style="margin-left:10px;cursor:pointer" title="TWO conditions, both required: (1) the entry's sweep family passed EVERY holdout type it judged, and (2) this entry's OWN genome passed its out-of-sample holdout (a ✓ in the OOS column). Train-only hN legs and train-best entries from legs that only passed on their OOS-best genome are therefore hidden — the family passing does not mean THIS config was validated.">
+      <input type="checkbox" id="fGaunt" onchange="saveBtFilters()" title="family passed every holdout type its sweep judged (manual sweeps: 5 types; gamut families: 3-5 — train-only legs don't count) AND this entry's own OOS verdict is ✓"> ✓ all holdouts</label>
     <label class="hint" title="only backtests created ON or AFTER this date">created from
       <input id="fFrom" type="date" onchange="saveBtFilters()" onclick="openCal(this)"
              style="margin-left:4px;cursor:pointer"></label>
@@ -1219,9 +1219,16 @@ function render(){
   if(fWin > 0) order = order.filter(i=>{const w=(BT[i].stats||{}).win; return w!=null && 100*w >= fWin;});
   if(document.getElementById('fGaunt').checked)
     order = order.filter(i=>{const g=gauntOf(BT[i].name);
-      // every holdout type the family SWEPT must pass (3+ judged types —
-      // manual sweeps have 5, gamut families 3-5; hN legs don't count)
-      return g && g.full && g.have>=3 && g.passed===g.have;});
+      // 1. every holdout type the family SWEPT must pass (3+ judged types —
+      //    manual sweeps have 5, gamut families 3-5; hN legs don't count)
+      if(!(g && g.full && g.have>=3 && g.passed===g.have)) return false;
+      // 2. ...AND this entry's own genome must carry a clean out-of-sample
+      //    verdict. The family check alone admitted exactly the entries you
+      //    trust least: the hN (train-only) leg, which has no holdout of its
+      //    own and shows "—", and the train-best _full of a leg that passed
+      //    only on its OOS-best genome, which shows "✕". Family-passed does
+      //    not mean THIS config was validated. (2026-09-17)
+      return oosInfo(BT[i]).v === 'P';});
   const fInstV = document.getElementById('fInst').value;
   if(fInstV !== 'all'){
     const runs = instRunsFor(fInstV);
