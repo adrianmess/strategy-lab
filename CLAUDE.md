@@ -69,5 +69,7 @@ ssh -i ~/.ssh/lab_auto_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=no
 - Market data refresh must go through
   `adaptive_trader/research/update_data.py` (it clears engine caches — stale
   caches silently simulate old windows).
-- AWS EC2 fleet: torn down 2026-08-15, nothing billable remains. Rebuild
-  guide: `docs/EC2_OFFLOAD_RUNBOOK.md`.
+- AWS EC2 fleet: torn down 2026-09-16 after gamut_gspot_newpairs +
+  gamut_gorig_mh12 completed (results verified on the mini first). Nothing
+  billable remains — only the free `gamut-ssh` SG and `gamut-key` key pair
+  were kept for the next rebuild. Rebuild guide: `docs/EC2_OFFLOAD_RUNBOOK.md`.
