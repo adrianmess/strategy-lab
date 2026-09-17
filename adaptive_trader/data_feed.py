@@ -166,7 +166,15 @@ def _fetch(symbol: str, interval: str, start: int, end: int,
     if not d["time"]:
         return pd.DataFrame(columns=["t", "open", "high", "low", "close", "volume"])
     df = pd.DataFrame({
-        "t": pd.to_datetime(d["time"], unit="s", utc=True).tz_localize(None),
+        # .astype ns: pandas 2 keeps to_datetime(unit="s") in a coarser
+        # datetime64 unit, but every engine converts t -> ms assuming ns
+        # (t.astype(int64)//10**6). The coarse unit silently fed macdx
+        # SECONDS as "milliseconds": its hour/minute cooldown timers then
+        # never expired and the live host produced ZERO entries while the
+        # backtest traded (MEX 2 Lev, 2026-09-17). Research parquets are ns,
+        # so normalizing here makes live bars byte-identical to research.
+        "t": pd.to_datetime(d["time"], unit="s", utc=True).tz_localize(None)
+             .astype("datetime64[ns]"),
         "open": d["open"], "high": d["high"], "low": d["low"],
         "close": d["close"], "volume": d["vol"],
     })
