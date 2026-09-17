@@ -335,6 +335,11 @@ details{margin:8px 0} summary{cursor:pointer;color:var(--blue);font-weight:600}
         <span style="display:flex;gap:4px">
         <input id="fcName" placeholder="name (auto)" style="width:110px">
         <input id="fcMaxDD" type="number" step="5" min="0" max="100" placeholder="DD cap %" style="width:72px" title="OPTIONAL drawdown cap for the PASS/FAIL verdict. Empty = no cap (default): components trade isolated at their own leverage, so combo-level drawdown can't cause a liquidation — dd is still measured and reported either way. Set e.g. 50 to also require max MTM drawdown ≤ 50% for a PASS.">
+        <select id="fcFeeMode" title="How every fill is costed. MARKET charges the TAKER rate from fees.json (what a market entry/exit actually pays — currently 0.08%/side on MEXC futures, observed from real fills). LIMIT charges the MAKER rate (currently 0 on futures) — only honest if the strategy really rests its orders. Custom overrides both.">
+          <option value="market">market fills (taker)</option>
+          <option value="limit">limit fills (maker)</option>
+        </select>
+        <input id="fcFee" type="number" step="0.01" min="0" max="1" placeholder="fee %/side" style="width:80px" title="OPTIONAL manual commission in PERCENT PER SIDE (0.08 = 8bp). Overrides the market/limit choice and fees.json entirely. Leave blank to use the live rate for the selected order type.">
         <button class="small" onclick="routerJob('fcfsx')">Build</button></span></div>
       <span class="kv" id="routerMsg"></span>
     </div>
@@ -997,7 +1002,7 @@ function renderRuns(){
           : `<span class="badge b-amber">no WF</span>`}
         <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_fcfs_full')}" title="full-history FCFS replay (parameter-free merge; component choice is the hindsight)">bt full ↗</a>
         <a class="kv" style="text-decoration:none" href="backtests.html?sel=${encodeURIComponent(r.name+'_fcfs_wf')}" title="causal walk-forward sibling — the honest number">bt WF ↗</a>
-        <button class="small" title="FULL evidence-chain refresh on the candle data currently on disk: first re-runs EVERY component's own backtests (their _full and _oosbest_full entries — these go stale after a data refresh), then re-simulates the combo itself (same components, same name; overwrites _fcfs_full/_fcfs_wf and re-issues the verdict). One job in the Jobs section; with many components it takes a while." onclick="routerRunJob('fcfsx_rerun','${r.name}')">Re-run</button>
+        <button class="small" title="FULL evidence-chain refresh on the candle data currently on disk: first re-runs EVERY component's own backtests (their _full and _oosbest_full entries — these go stale after a data refresh), then re-simulates the combo itself (same components, same name; overwrites _fcfs_full/_fcfs_wf and re-issues the verdict). Reuses the fee basis the combo was built with (market/limit or manual %/side). One job in the Jobs section; with many components it takes a while." onclick="routerRunJob('fcfsx_rerun','${r.name}')">Re-run</button>
         <button class="small" title="reproduction command (exact component list included)" onclick="routerCmd('${r.name}','${r.mode}','${r.method}',0,'fcfsx')">Cmd</button>
         <button class="star${r.best?' on':''}" title="${r.best?'unmark as best':'mark as best'}" onclick="markRun('${r.name}',${r.best?'false':'true'})">${r.best?'★':'☆'}</button>
         ${rateStars(r.name, r.rating)}
@@ -1468,10 +1473,19 @@ async function routerJob(kind){
     d.name=$('fcName').value.trim()||'fcfs_'+new Date().toISOString().slice(5,10).replace('-','');
     const md=+($('fcMaxDD').value||0);
     if(md>0) d.maxdd=md/100;
+    Object.assign(d, fcFee());
   }
   const r = await api('jobs/router', d);
   $('routerMsg').textContent = r.id ? `building ${d.name} — watch the Jobs section; the run appears in Runs with a WF badge when done` : ('error: '+(r.error||''));
   if(typeof refreshJobs==='function') refreshJobs();
+}
+function fcFee(){
+  // FCFS fee controls -> job body. A manual %/side wins over the market/limit
+  // choice; both end up as fcfsx_cli flags (server-side _fee_args).
+  const out = {fee_mode: ($('fcFeeMode')||{}).value || 'market'};
+  const v = ($('fcFee')||{}).value;
+  if(v !== undefined && String(v).trim() !== '') out.fee = +v;
+  return out;
 }
 async function adoptFcfs(run){
   if(!confirm(`Adopt FCFS combo "${run}" for the live trader?\n\nThis writes its own config file (config_fcfs_….json) with every component embedded, starting as DRY-RUN. Nothing trades until you add the instance, start it, and explicitly flip it live.`)) return;

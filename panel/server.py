@@ -6657,6 +6657,27 @@ def run_story():
     return jsonify(story=open(sp).read())
 
 
+def _fee_args(d):
+    """FCFS combo fee controls -> fcfsx_cli flags. 'fee' is PERCENT per side
+    (matching the Backtests page's what-if box) and wins over 'fee_mode'
+    (market = taker, limit = maker, both read per-coin from fees.json)."""
+    out = []
+    fm = (d.get("fee_mode") or "").lower()
+    if fm in ("market", "limit"):
+        out += ["--fee-mode", fm]
+    fee = d.get("fee")
+    if fee not in (None, ""):
+        try:
+            v = float(fee)
+        except (TypeError, ValueError):
+            return out, f"fee must be a number (percent per side), got {fee!r}"
+        if not 0.0 <= v < 1.0:
+            return out, (f"fee is PERCENT per side and must be 0..1 "
+                         f"(0.08 = 8bp), got {v}")
+        out += ["--fee", repr(v)]
+    return out, None
+
+
 @app.route("/api/jobs/router", methods=["POST"])
 def job_router():
     """Launch router/combo builders as panel jobs: metax (single-dataset
@@ -6763,6 +6784,17 @@ def job_router():
             _md = 0
         if 0 < _md <= 1:
             cmd += ["--max-dd", str(_md)]
+        # a re-run reproduces the combo, so it inherits the fee basis it was
+        # BUILT with unless the caller says otherwise
+        if not d.get("fee_mode") and d.get("fee") in (None, ""):
+            if b.get("fee_mode"):
+                d["fee_mode"] = b["fee_mode"]
+            if b.get("fee_pct_per_side") is not None:
+                d["fee"] = b["fee_pct_per_side"]
+        _fa, _err = _fee_args(d)          # refresh_combo passes these through
+        if _err:
+            return jsonify(error=_err), 400
+        cmd += _fa
     elif kind == "fcfsx":
         runs_sel = [r for r in (d.get("runs") or []) if r]
         if len(runs_sel) < 2:
@@ -6779,6 +6811,10 @@ def job_router():
             _md = 0
         if 0 < _md <= 1:
             cmd += ["--max-dd", str(_md)]
+        _fa, _err = _fee_args(d)
+        if _err:
+            return jsonify(error=_err), 400
+        cmd += _fa
     else:
         return jsonify(error=f"unknown router kind '{kind}'"), 400
     return jsonify(id=spawn("router", name, cmd, OPT))

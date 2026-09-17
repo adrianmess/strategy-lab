@@ -156,7 +156,30 @@ def main():
                          "(0 = OFF, the default: components trade isolated at "
                          "their own leverage, so combo dd cannot cause a "
                          "liquidation — it is reported but not judged)")
+    ap.add_argument("--fee-mode", choices=["market", "limit"], default="market",
+                    help="which side of the book to cost every fill at: "
+                         "market = TAKER (what a market entry/exit pays, the "
+                         "default), limit = MAKER (resting orders; MEXC "
+                         "futures maker is currently 0). Rates come from "
+                         "fees.json per coin.")
+    ap.add_argument("--fee", type=float, default=None,
+                    help="manual commission in PERCENT PER SIDE (e.g. 0.08). "
+                         "Overrides --fee-mode and fees.json entirely.")
     a = ap.parse_args()
+
+    # the collect subprocesses inherit this environment; fees_live reads both
+    os.environ["LAB_FEE_SIDE"] = "maker" if a.fee_mode == "limit" else "taker"
+    if a.fee is not None:
+        if not 0.0 <= a.fee < 1.0:
+            sys.exit(f"--fee is PERCENT per side (0..1), got {a.fee}")
+        os.environ["LAB_FEE_OVERRIDE"] = repr(a.fee / 100.0)
+        fee_note = f"manual fee {a.fee:g}%/side"
+    else:
+        os.environ.pop("LAB_FEE_OVERRIDE", None)
+        fee_note = (f"{a.fee_mode} orders "
+                    f"({'maker' if a.fee_mode == 'limit' else 'taker'} rate "
+                    f"from fees.json)")
+    print(f"costing fills as: {fee_note}", flush=True)
 
     names = [x.strip() for x in a.runs.split(",") if x.strip()]
     if len(names) < 2:
@@ -223,7 +246,8 @@ def main():
             "component CHOICE is hindsight; believe the _fcfs_wf sibling)",
             taken, comps, mode, S, mo,
             "FCFS combo: components simulated on their own datasets, one "
-            "slot, first signal wins", open_pos=open_positions)
+            "slot, first signal wins · fills costed as " + fee_note,
+            open_pos=open_positions)
 
     # ---------- causal walk-forward sibling ----------
     step = a.step_days * _DAY_NS
@@ -270,7 +294,7 @@ def main():
             "trades — this IS the honest number)",
             chained, comps, mode, S2, mo2,
             "FCFS combo walk-forward: roster re-earned every fold from "
-            "past-only trades")
+            "past-only trades · fills costed as " + fee_note)
 
     json.dump(dict(strategy="fcfsx", mode=mode, method="fcfs",
                    pair=(comps[0]["pair"] if len({c["pair"] for c in comps}) == 1
@@ -281,6 +305,8 @@ def main():
                              live_replication="NOT YET SUPPORTED — research "
                              "artifact; panel refuses adoption"),
                    metrics=H2, holdout=H2, evaluated=folds,
+                   fee_mode=a.fee_mode, fee_pct_per_side=a.fee,
+                   fee_note=fee_note,
                    generated=time.strftime("%Y-%m-%d %H:%M")),
               open(os.path.join(run_dir, "best_config.json"), "w"),
               indent=1, default=float)

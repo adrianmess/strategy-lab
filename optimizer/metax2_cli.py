@@ -28,6 +28,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RUNS = os.path.join(HERE, "runs")
 DASH = os.path.join(os.path.dirname(HERE), "dashboard")
 SPOT_COMM = 0.0005
+sys.path.insert(0, os.path.join(os.path.dirname(HERE),
+                                "adaptive_trader", "research2"))
+try:      # live exchange rates (fees.json), per coin and per maker/taker
+    from fees_live import per_side as _fee_per_side
+except Exception:       # keep the historic constants if fees_live is missing
+    def _fee_per_side(mode, coin=None, side=None):
+        return 0.0004 if mode == "lev" else SPOT_COMM
+
+
+def _fee_side():
+    """What the rate above represents, for the collect log line."""
+    if os.environ.get("LAB_FEE_OVERRIDE"):
+        return "manual"
+    return (os.environ.get("LAB_FEE_SIDE") or "taker").lower()
+
+
 MAX_HOLD_D = 7.0
 _DAY_NS = 86_400_000_000_000
 ALL_PAIRS = ["sol", "btc", "eth", "doge", "xrp", "sui"]
@@ -92,8 +108,16 @@ def collect(cands_path, out_path):
     tabs = {}
     for g, d, fn, strat in cands:
         cfg_path = os.path.join(RUNS, d, fn)
-        mode = (json.load(open(cfg_path)).get("mode") or "spot")
-        comm = 0.0004 if mode == "lev" else SPOT_COMM
+        _b = json.load(open(cfg_path))
+        mode = (_b.get("mode") or "spot")
+        # the rate used to live here as a hardcoded 0.0004, while fees.json
+        # (panel-refreshed, and OBSERVED from order_deals) says futures taker
+        # is 0.0008 — every combo was charged half what the account pays, and
+        # the what-if fee box could not reach this path at all (2026-09-17)
+        _coin = (_b.get("pair") or "").split("_")[0]
+        comm = _fee_per_side(mode, _coin)
+        print(f"  fee {100 * comm:.4f}%/side ({_fee_side()}) for "
+              f"{_coin or '?'} {mode}", flush=True)
         try:
             e = BT.run_single(cfg_path)
         except SystemExit as ex:

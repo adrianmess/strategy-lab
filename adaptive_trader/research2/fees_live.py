@@ -31,10 +31,16 @@ def _doc():
     return _cache["doc"]
 
 
-def per_side(mode, coin=None):
-    """Taker rate per fill for mode ('lev'|'spot'), per coin when known.
-    LAB_FEE_OVERRIDE (fraction/side, e.g. '0.0008') wins over everything —
-    set per re-run job from the Backtests page's fee box for what-if runs."""
+def per_side(mode, coin=None, side=None):
+    """Commission per fill for mode ('lev'|'spot'), per coin when known.
+
+    side='taker' (market orders — the default, and what a market entry/exit
+    actually pays) or 'maker' (resting limit orders; MEXC futures maker is
+    currently 0). Omit it and LAB_FEE_SIDE decides, so a whole simulation can
+    be costed as maker without threading the argument everywhere.
+    LAB_FEE_OVERRIDE (fraction/side, e.g. '0.0008') wins over both — that is
+    the Backtests page's what-if fee box and the combo builder's manual rate.
+    """
     ov = os.environ.get("LAB_FEE_OVERRIDE")
     if ov:
         try:
@@ -43,13 +49,18 @@ def per_side(mode, coin=None):
                 return v
         except ValueError:
             pass
+    side = (side or os.environ.get("LAB_FEE_SIDE") or "taker").lower()
+    if side not in ("taker", "maker"):
+        side = "taker"
     coin = ((coin or os.environ.get("LAB_COIN") or "").upper()
             .replace("_USDT", "").replace("USDT", ""))
     d = _doc()
     if d:
         m = d.get("fut" if mode == "lev" else "spot") or {}
         r = m.get(coin) or {}
-        v = r.get("taker")
+        v = r.get(side)
         if v is not None and 0.0 <= float(v) < 0.01:
             return float(v)
+    # no maker number on file: a maker fill is never dearer than a taker one,
+    # so the taker fallback is the conservative answer for both
     return _FALLBACK["lev" if mode == "lev" else "spot"]
