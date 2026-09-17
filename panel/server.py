@@ -4726,7 +4726,9 @@ def bt_rerun():
     """Re-run ONE published entry on the most recently downloaded market
     data and replace it in the store (same machinery as the bulk refresh).
     Runs as a panel job so it shows under Jobs and the page auto-reloads."""
-    name = (request.get_json(force=True) or {}).get("name") or ""
+    _d = request.get_json(force=True) or {}
+    name = _d.get("name") or ""
+    fee_args = _fee_override_args(_d)
     p = os.path.join(REPO, "dashboard", "backtests.js")
     txt = open(p).read()
     entries = json.JSONDecoder().raw_decode(txt[txt.index("=") + 1:].lstrip())[0]
@@ -4742,12 +4744,25 @@ def bt_rerun():
     os.makedirs(sd, exist_ok=True)
     shard = os.path.join(sd, f"one_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
     json.dump([item], open(shard, "w"))
-    jid = spawn("backtest", f"re-run {name} on current data",
+    jid = spawn("backtest", f"re-run {name} on current data"
+                + (f" @fee {fee_args[1]}/side" if fee_args else ""),
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
                  "--shard", shard, "--procs", "1",
-                 "--hub", "http://localhost:8800"], REPO)
+                 "--hub", "http://localhost:8800"] + fee_args, REPO)
     return jsonify(ok=True, id=jid)
+
+
+def _fee_override_args(d):
+    """['--fee', '<frac>'] when the request carries a valid what-if fee
+    (FRACTION per side, 0..1%); [] otherwise."""
+    try:
+        f = float(d.get("fee"))
+        if 0.0 <= f < 0.01:
+            return ["--fee", repr(f)]
+    except (TypeError, ValueError):
+        pass
+    return []
 
 
 def _rerun_item(e):
@@ -4888,13 +4903,15 @@ def bt_rerun_router():
     shard = os.path.join(sd,
                          f"rtr_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
     json.dump(items, open(shard, "w"))
+    fee_args = _fee_override_args(d)
     jid = spawn("backtest",
                 f"re-run router {label}: {len(items)} component backtests "
-                "on current data",
+                "on current data"
+                + (f" @fee {fee_args[1]}/side" if fee_args else ""),
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
                  "--shard", shard, "--procs", "4",
-                 "--hub", "http://localhost:8800"], REPO)
+                 "--hub", "http://localhost:8800"] + fee_args, REPO)
     return jsonify(ok=True, id=jid, n=len(items),
                    entries=[i["name"] for i in items], missing=missing)
 

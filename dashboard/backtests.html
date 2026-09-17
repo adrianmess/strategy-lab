@@ -160,7 +160,8 @@ button.rtradd.on{opacity:1;filter:none;background:rgba(88,166,255,.25);
     <label class="hint" title="pick a router/combo and see ONLY the backtests it was built from — its component runs, plus the router's own entries. The component list comes from the router run's best_config.json.">router
       <select id="fRtrOf" onchange="rtrOfChanged()" style="margin-left:4px;max-width:260px">
         <option value="">all</option>
-      </select></label><button onclick="rerunRouter()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px" title="re-run the backtest of EVERY component strategy of the selected router against the most recently downloaded market data (one job; entries are replaced as they finish — watch the progress bar under 'active now'). Any strategy that liquidates — now or in any earlier run — shows in red.">↻ re-run all components</button><button onclick="rerunTraded()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px;border-color:var(--amber)" title="re-run the EXACT strategies your running trader instances are using right now (each component's run + the candidate it actually trades, read from the live configs — no saved list to drift out of date). The one check that answers: am I trading something that liquidates on current data?">↻ re-run TRADED strategies</button>
+      </select></label><label class="hint" style="margin-left:6px" title="fee override for ALL re-run buttons on this page: commission PER SIDE in percent (taker, charged on notional — e.g. 0.08 = MEXC's real futures taker rate). Blank = the live per-pair rates from fees.json, which now reconcile hourly against your actual charged fills. The job label shows the override so entries are traceable.">re-run fee
+      <input id="rrFeePct" type="number" step="0.01" min="0" max="0.99" placeholder="live" style="width:52px" onchange="localStorage.setItem('btRrFee', this.value)">%/side</label><button onclick="rerunRouter()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px" title="re-run the backtest of EVERY component strategy of the selected router against the most recently downloaded market data (one job; entries are replaced as they finish — watch the progress bar under 'active now'). Any strategy that liquidates — now or in any earlier run — shows in red.">↻ re-run all components</button><button onclick="rerunTraded()" style="padding:2px 9px;font-size:11.5px;cursor:pointer;border-radius:6px;border-color:var(--amber)" title="re-run the EXACT strategies your running trader instances are using right now (each component's run + the candidate it actually trades, read from the live configs — no saved list to drift out of date). The one check that answers: am I trading something that liquidates on current data?">↻ re-run TRADED strategies</button>
     <label class="hint" title="routers/combos are the composed entries (MetaX, MetaX2, PairX, FCFS) — everything else is a single-strategy run">routers
       <select id="fRouters" onchange="saveBtFilters()" style="margin-left:4px">
         <option value="all">all</option>
@@ -759,12 +760,16 @@ function rrBarUpd(){
   document.getElementById('rrCount').textContent = RRSEL.size + ' selected for re-run';
 }
 function clearRrSel(){ RRSEL.clear(); rrBarUpd(); render(); }
+function rrFee(){   // what-if fee for ALL re-run flows: %/side -> fraction
+  const v = parseFloat((document.getElementById('rrFeePct')||{}).value);
+  return (isFinite(v) && v>0 && v<1) ? v/100 : undefined;
+}
 async function rerunSelected(){
   if(!RRSEL.size) return;
   if(!confirm(`Re-run ${RRSEL.size} backtest(s) against the most recently downloaded market data?\n\nOne job for the whole batch — each entry is REPLACED as it finishes (progress bar under "active now"). Anything that liquidates — now or in any earlier run — shows in red.`)) return;
   const r = await fetch('/api/backtests/rerun_router', {method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({names:[...RRSEL], label:`${RRSEL.size} hand-picked entries`})}).then(x=>x.json());
+    body:JSON.stringify({names:[...RRSEL], label:`${RRSEL.size} hand-picked entries`, fee:rrFee()})}).then(x=>x.json());
   alert(r.ok ? `Started: ${r.n} backtest(s) queued.`+
         (r.missing&&r.missing.length?`\n\nNo genome (skipped): ${r.missing.join(', ')}`:'')
       : ('error: '+(r.error||'')));
@@ -1399,7 +1404,7 @@ async function rerunRtrSel(){
   if(!confirm(`Re-run the backtests of the ${RTRSEL.length} component(s) in the Router components list${label?` (“${label}”)`:''}\n\nagainst the most recently downloaded market data?\n\nEach entry is REPLACED as it finishes (a progress bar appears under "active now"). Strategies that liquidate, now or in any earlier run, show in red.`)) return;
   const r = await fetch('/api/backtests/rerun_router', {method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({names:[...RTRSEL], label})}).then(x=>x.json());
+    body:JSON.stringify({names:[...RTRSEL], label, fee:rrFee()})}).then(x=>x.json());
   alert(r.ok ? `Started: ${r.n} component backtest(s) queued.`+
         (r.missing&&r.missing.length?`\n\nNot published (skipped): ${r.missing.join(', ')}`:'')
       : ('error: '+(r.error||'')));
@@ -1408,7 +1413,7 @@ async function rerunRtrSel(){
 async function rerunTraded(){
   if(!confirm(`Re-run the backtests of the EXACT strategies your running instances are trading right now\n(every component's run + the candidate it actually uses, read live from the trader configs)\n\nagainst the most recently downloaded market data?\n\nEntries are replaced as they finish (progress bar under "active now"). Anything that liquidates — now or in any earlier run — shows in red, and traded entries carry the TRADING badge.`)) return;
   const r = await fetch('/api/backtests/rerun_router', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({instance:'all'})}).then(x=>x.json());
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({instance:'all', fee:rrFee()})}).then(x=>x.json());
   alert(r.ok ? `Started: ${r.n} traded-component backtest(s) queued.`+
         (r.missing&&r.missing.length?`\n\nNo published entry for: ${r.missing.join(', ')}`:'')
       : ('error: '+(r.error||'')));
@@ -1419,7 +1424,7 @@ async function rerunRouter(){
   if(!run){ alert('Pick a router in the "router" filter first — its components are what get re-run.'); return; }
   if(!confirm(`Re-run the backtests of ALL component strategies of\n\n  ${run}\n\nagainst the most recently downloaded market data?\n\nEach component entry is REPLACED as it finishes (several minutes total — a progress bar appears under "active now"). Strategies that liquidate, now or in any earlier run, show in red.`)) return;
   const r = await fetch('/api/backtests/rerun_router', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({run})}).then(x=>x.json());
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({run, fee:rrFee()})}).then(x=>x.json());
   alert(r.ok ? `Started: ${r.n} component backtest(s) queued.`+
         (r.missing&&r.missing.length?`\n\nNo published entries found for: ${r.missing.join(', ')}`:'')
       : ('error: '+(r.error||'')));
@@ -1430,7 +1435,7 @@ async function rerunThis(){
   const e = BT[sel];
   if(!confirm(`Re-run "${e.name}" against the most recently downloaded market data?\n\nThe entry is REPLACED when the job finishes (1–5 min; watch the active-jobs banner). Tip: use "Refresh market data" on the Control panel first if you want data through right now.`)) return;
   const r = await fetch('/api/backtests/rerun', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:e.name})}).then(x=>x.json());
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:e.name, fee:rrFee()})}).then(x=>x.json());
   alert(r.ok ? 'Re-run started — the list reloads automatically when it completes.' : ('error: '+(r.error||'')));
 }
 function optimizeThis(){
@@ -1577,6 +1582,7 @@ function renderTrades(e){
 }
 document.getElementById('maeTh').oninput = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
 document.getElementById('maeBasis').onchange = ()=>{ if(sel!=null) renderTrades(BT[sel]); };
+document.getElementById('rrFeePct').value = localStorage.getItem('btRrFee') || '';
 { // display-timezone setting: persisted, applies to every backtest's trades
   const z = document.getElementById('tzSel');
   z.value = ['utc','pt','local'].includes(localStorage.getItem('btTz'))

@@ -32,7 +32,17 @@ def _doc():
 
 
 def per_side(mode, coin=None):
-    """Taker rate per fill for mode ('lev'|'spot'), per coin when known."""
+    """Taker rate per fill for mode ('lev'|'spot'), per coin when known.
+    LAB_FEE_OVERRIDE (fraction/side, e.g. '0.0008') wins over everything —
+    set per re-run job from the Backtests page's fee box for what-if runs."""
+    ov = os.environ.get("LAB_FEE_OVERRIDE")
+    if ov:
+        try:
+            v = float(ov)
+            if 0.0 <= v < 0.01:
+                return v
+        except ValueError:
+            pass
     coin = ((coin or os.environ.get("LAB_COIN") or "").upper()
             .replace("_USDT", "").replace("USDT", ""))
     d = _doc()

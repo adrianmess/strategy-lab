@@ -104,7 +104,12 @@ def main():
     ap.add_argument("--one")
     ap.add_argument("--procs", type=int, default=6)
     ap.add_argument("--hub", default="http://admns-Mac-mini.local:8800")
+    ap.add_argument("--fee", default=None,
+                    help="override commission (fraction PER SIDE, e.g. "
+                         "0.0008) — what-if re-runs; blank = live fees.json")
     a = ap.parse_args()
+    if a.fee:      # children read it via fees_live.per_side
+        os.environ["LAB_FEE_OVERRIDE"] = str(float(a.fee))
     if a.one:
         run_one(a.one, a.hub)
         return
