@@ -275,10 +275,11 @@ def _core(t_ms, o, h, l, c,
                 if c[i] <= entry_price * (1 - pt):
                     pend_exit = 0
 
-    open_pos = np.zeros(6)
+    open_pos = np.zeros(7)
     if pos != 0:
         open_pos[0] = pos; open_pos[1] = entry_idx; open_pos[2] = entry_price
         open_pos[3] = qty; open_pos[4] = lev_used; open_pos[5] = 1.0
+        open_pos[6] = sys_    # which system holds it — exit_proj needs it
     return trades[:nt], equity, liquidated, open_pos
 
 
@@ -314,5 +315,29 @@ def run_fast(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
             op = dict(dir=int(_op[0]), entry_idx=int(_op[1]), entry=float(_op[2]),
                       qty=float(_op[3]), lev=float(_op[4]),
                       entry_t=str(pre["t"][int(_op[1])]))
+            # projected close — replicates the core's per-bar profit-target
+            # branch at the LAST bar (targets decay after N minutes), so the
+            # live runner can rest a reduce-only limit there (resting_tp)
+            try:
+                d_ = int(_op[0])
+                sysx = int(_op[6]) if len(_op) > 6 else 0
+                r_now = int(np.asarray(regime, dtype=np.int64)[-1])
+                tm_now = float(pre["t_ms"][-1])
+                et = float(pre["t_ms"][int(_op[1])])
+                Pm = np.asarray(P, dtype=np.float64)
+                base, e1, e2, t1, t2 = (
+                    ((3, 4, 5, 6, 7) if sysx == 0 else (20, 21, 22, 23, 24))
+                    if d_ > 0 else
+                    ((13, 14, 15, 16, 17) if sysx == 0
+                     else (25, 26, 27, 28, 29)))
+                pt = Pm[r_now, base]
+                if tm_now >= et + Pm[r_now, t2] * 60000:
+                    pt = Pm[r_now, e2]
+                elif tm_now >= et + Pm[r_now, t1] * 60000:
+                    pt = Pm[r_now, e1]
+                tp = float(_op[2]) * (1 + pt if d_ > 0 else 1 - pt)
+                op["exit_proj"] = dict(tp=float(tp), sl=None, kind="target")
+            except Exception:
+                pass
         return df, eq, bool(liq), op
     return df, eq, bool(liq)

@@ -73,6 +73,55 @@ class PairExec:
     def close(self):
         return self.ex.close_position()
 
+    # ---- resting reduce-only take-profit (config: resting_tp) ----
+    def place_tp(self, direction, qty, price):
+        """Rest a close-side limit at `price`. Returns order id, 'dry' in
+        dry-run, None on failure/unsupported (webhook executor)."""
+        if self.cfg.get("dry_run"):
+            return "dry"
+        fn = getattr(self.ex, "place_tp", None)
+        if fn is None:
+            return None
+        try:
+            return (fn(qty, price) if self.cfg.get("mode") == "spot"
+                    else fn(qty, price, direction))
+        except Exception:
+            return None
+
+    def cancel_tp(self, order_id):
+        if order_id in (None, "dry"):
+            return True
+        fn = getattr(self.ex, "cancel_tp", None)
+        try:
+            return bool(fn(order_id)) if fn else False
+        except Exception:
+            return False
+
+    def tp_state(self, order_id):
+        """'open' | 'filled' | 'gone' | None (unknown) for a resting TP.
+        Futures: on the book = open; off the book + position flat = filled;
+        off the book + still held = gone (externally cancelled). Spot: the
+        order's own status."""
+        if order_id == "dry":
+            return "open"
+        try:
+            if self.cfg.get("mode") == "spot":
+                st = (self.ex.tp_status(order_id) or {})
+                s = str(st.get("status") or "").upper()
+                if s in ("NEW", "PARTIALLY_FILLED"):
+                    return "open"
+                if s == "FILLED":
+                    return "filled"
+                return "gone" if s else None
+            oo = self.ex.api.open_orders(self.cfg["symbol"]) or []
+            if any(str(o.get("orderId")) == str(order_id) for o in oo):
+                return "open"
+            held = any(float(p.get("holdVol") or 0) > 0 for p in
+                       (self.ex.api.open_positions(self.cfg["symbol"]) or []))
+            return "gone" if held else "filled"
+        except Exception:
+            return None
+
 
 # ---------------- host management ----------------
 class Host:
@@ -318,6 +367,11 @@ def main_fcfs(cfg, live):
     def do_close(pos, reason, px=None):
         if pos is None or pos not in positions:
             return
+        # cancel the resting TP FIRST so it cannot double-fire against the
+        # market close below; a cancel on an already-filled order no-ops
+        if pos.get("tp_order_id"):
+            ex_for(pos["symbol"]).cancel_tp(pos["tp_order_id"])
+            pos["tp_order_id"] = None
         res = ex_for(pos["symbol"]).close()
         log.info("CLOSE %s (%s): %s", comp_label(pos["comp"]), reason,
                  (res or {}).get("status"))
@@ -372,6 +426,12 @@ def main_fcfs(cfg, live):
                 log.info("manual close: %d other virtual trade(s) marked "
                          "skipped — nothing auto-joins; use Adopt to switch",
                          n_extra)
+        if reason == "resting_tp_fill" and pos.get("mirror_entry_t"):
+            # the exchange closed us at the target but the VIRTUAL trade may
+            # still be open — mark it skipped so late-join can't re-enter the
+            # same trade we just banked (only THIS trade; nothing else)
+            state.setdefault("late_skips", {})[str(pos["comp"])] = \
+                pos["mirror_entry_t"]
         if pos.get("auto"):
             # anti-churn memory for the standing auto-adopt rule: the same
             # virtual trade is only re-adopted >=1% below this exit
@@ -393,6 +453,57 @@ def main_fcfs(cfg, live):
             log.info("CASCADE paper close: margin %.2f r=%+.2f%% -> free "
                      "%.2f", m, 100 * r, state["cascade_free"])
         save(); tell_flat()
+
+    # ---- resting reduce-only TP limits (config: resting_tp, default off) --
+    # When ON, every open position keeps ONE close-side limit resting at the
+    # engine's projected profit target (exit_proj.tp, refreshed per bar —
+    # macdx/v6/v7 targets DECAY over time, so the order is cancel/replaced
+    # when the target moves). Fills are MAKER (0 fee on MEXC futures) at the
+    # exact target instead of taker at the next bar open.
+    rtp_on = bool(cfg.get("resting_tp"))
+    RTP_EPS = float(cfg.get("resting_tp_eps", 0.0005))
+    if rtp_on:
+        log.info("RESTING TP ON: close-side limits at each position's "
+                 "projected target (re-placed when it moves >%.2f%%)",
+                 100 * RTP_EPS)
+
+    def rtp_sync(pos):
+        """Place/refresh the resting TP for one position."""
+        if not rtp_on or pos not in positions:
+            return
+        tp = float((pos.get("exit_proj") or {}).get("tp") or 0)
+        ep = float(pos.get("entry_price") or 0)
+        if tp <= 0 or ep <= 0:
+            return
+        # sanity: a target on the WRONG side of entry would close at a loss
+        # the moment it rests — refuse and log rather than trade it
+        if (tp <= ep) if pos.get("dir", 1) > 0 else (tp >= ep):
+            if not pos.get("_tp_side_warned"):
+                pos["_tp_side_warned"] = True
+                log.warning("resting TP for %s skipped: projected target "
+                            "%.6g is on the wrong side of entry %.6g "
+                            "(decayed below entry?) — engine exit will "
+                            "handle this trade", comp_label(pos["comp"]),
+                            tp, ep)
+            return
+        cur = pos.get("tp_px")
+        if pos.get("tp_order_id") and cur and abs(tp - cur) / cur <= RTP_EPS:
+            return                       # unchanged — leave the order alone
+        ex = ex_for(pos["symbol"])
+        if pos.get("tp_order_id"):
+            ex.cancel_tp(pos["tp_order_id"])
+            pos["tp_order_id"] = None
+        oid = ex.place_tp(int(pos.get("dir") or 1), pos["qty"], tp)
+        if oid:
+            pos["tp_order_id"], pos["tp_px"] = oid, float(tp)
+            pos.pop("_tp_side_warned", None)
+            log.info("RESTING TP %s: %s qty %s @ %.6g (order %s)",
+                     comp_label(pos["comp"]),
+                     "SELL" if pos.get("dir", 1) > 0 else "BUY",
+                     pos["qty"], tp, oid)
+        else:
+            pos.pop("tp_px", None)
+        save()
 
     # arbitration: same-bar ties resolved by component order (backtest rule)
     pending_opens = []   # [(bar_t, comp_i, dir, lev, px, group_key, src)]
@@ -537,6 +648,7 @@ def main_fcfs(cfg, live):
             auto=(src == "auto"),
             armed_close_pct=(float(close_pct) if close_pct is not None
                              else None),
+            exit_proj=row.get("exit_proj"),
             opened_at=time.strftime("%Y-%m-%d %H:%M:%S"),
             opened_ms=int(time.time() * 1000))
         if free is not None:            # dry-run cascade paper accounting
@@ -557,6 +669,7 @@ def main_fcfs(cfg, live):
                comp=comp_label(ci) + " (adopted)",
                live=(not cfg["dry_run"]))
         save(); tell_flat()
+        rtp_sync(posn)
         return True
 
     # ---- ARMED shadow rules: adopt automatically when a chosen shadow's
@@ -929,6 +1042,7 @@ def main_fcfs(cfg, live):
                             # shadow/save cadence
                             if me.get("exit_proj") is not None:
                                 pos["exit_proj"] = me.get("exit_proj")
+                                rtp_sync(pos)
                             # backfill the virtual entry price for positions
                             # opened before it was recorded (late-joins under
                             # the old code): powers the "virtual: ±x%" line
@@ -1040,6 +1154,32 @@ def main_fcfs(cfg, live):
                 px = h.last_px if h else None
                 if not px:
                     continue
+                # ---- resting TP bookkeeping (fills happen exchange-side) --
+                if rtp_on and pos.get("tp_order_id") and pos.get("tp_px"):
+                    _tp = float(pos["tp_px"])
+                    _hit = (px >= _tp) if pos.get("dir", 1) > 0 else (px <= _tp)
+                    if pos["tp_order_id"] == "dry":
+                        if _hit:      # paper fill at the exact target price
+                            log.info("RESTING TP paper-fill %s @ %.6g",
+                                     comp_label(pos["comp"]), _tp)
+                            do_close(pos, "resting_tp_fill", _tp)
+                            continue
+                    elif _hit or now - float(pos.get("tp_checked", 0)) > 45:
+                        pos["tp_checked"] = now
+                        st_ = ex_for(pos["symbol"]).tp_state(pos["tp_order_id"])
+                        if st_ == "filled":
+                            log.info("RESTING TP FILLED %s @ %.6g (maker)",
+                                     comp_label(pos["comp"]), _tp)
+                            pos["tp_order_id"] = None
+                            do_close(pos, "resting_tp_fill", _tp)
+                            continue
+                        if st_ == "gone":
+                            log.warning("resting TP order vanished but %s is "
+                                        "still held — re-placing on next bar",
+                                        pos["symbol"])
+                            pos["tp_order_id"] = None
+                            pos.pop("tp_px", None)
+                            save()
                 adverse = (px / pos["entry_price"] - 1.0) * pos["dir"]
                 if mode == "lev":
                     liq_dist = 1.0 / max(pos["lev"], 1e-9) - 0.008

@@ -309,6 +309,37 @@ class APIExecutor:
                     raise
         return 0.0, None
 
+    # ---- exchange-side take-profit (resting CLOSE-side limit = reduce-only
+    # in MEXC's two-way position model; fills as MAKER at the target) ----
+    def place_tp(self, qty, price, direction=1):
+        if self.cfg["dry_run"]:
+            self.log.info("[DRY RUN] would place resting TP: close %s x %s "
+                          "@ %.6g", "long" if direction > 0 else "short",
+                          qty, price)
+            return "dry"
+        try:
+            from mexc_api import CLOSE_LONG, CLOSE_SHORT
+            side = CLOSE_LONG if direction > 0 else CLOSE_SHORT
+            oid = self.api.place_limit(self.cfg["symbol"], side, qty, price)
+            self.log.info("TP limit placed: side %s vol %s @ %.6g (order %s)",
+                          side, qty, price, oid)
+            return oid
+        except Exception as e:
+            self.log.error("TP limit place FAILED: %s", e)
+            return None
+
+    def cancel_tp(self, order_id):
+        if order_id in (None, "dry"):
+            return True
+        try:
+            self.api.cancel_orders([order_id])
+            self.log.info("TP limit cancelled (order %s)", order_id)
+            return True
+        except Exception as e:
+            self.log.warning("TP cancel failed (order %s): %s — may already "
+                             "be filled/gone", order_id, e)
+            return False
+
     def close_position(self):
         if self.cfg["dry_run"]:
             self.log.info("[DRY RUN] would API-close all %s positions",
