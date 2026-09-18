@@ -75,6 +75,13 @@ def main():
     ap.add_argument("--out-dir", default=os.path.join(REPO, "dashboard",
                                                       "bt_refresh"))
     ap.add_argument("--prefix", default="fee_shard")
+    ap.add_argument("--fee-side", choices=["taker", "maker", "both"],
+                    default="both",
+                    help="taker = market fills (the conservative number, and "
+                         "the primary stats either way); maker = resting "
+                         "limits; both = run each entry twice and carry the "
+                         "maker result alongside as a bracket. 'both' doubles "
+                         "the runtime.")
     ap.add_argument("--all", action="store_true",
                     help="include entries whose fee is already current "
                          "(a full re-run rather than only the stale ones)")
@@ -113,7 +120,9 @@ def main():
             skipped["filtered"] += 1
             continue
         coin = (e.get("pair") or "").split("_")[0]
-        want = per_side(mode, coin)
+        taker = per_side(mode, coin, "taker")
+        maker = per_side(mode, coin, "maker")
+        want = maker if a.fee_side == "maker" else taker
         have = e.get("fee_per_side")
         # 1e-9 guards float noise; anything at or above today's rate is fine
         if not a.all and have is not None and float(have) >= want - 1e-9:
@@ -123,11 +132,16 @@ def main():
         if not g:
             skipped["no_genome"] += 1
             continue
-        items.append(dict(name=e["name"], pair=e.get("pair"), timeframe=tf,
-                          mode=mode, method=e.get("method"),
-                          strategy=e.get("strategy"), kind=e.get("kind"),
-                          opt=e.get("opt"), genome=g,
-                          fee_was=have, fee_now=want))
+        item = dict(name=e["name"], pair=e.get("pair"), timeframe=tf,
+                    mode=mode, method=e.get("method"),
+                    strategy=e.get("strategy"), kind=e.get("kind"),
+                    opt=e.get("opt"), genome=g,
+                    fee_was=have, fee_now=want,
+                    fee_side=("maker" if a.fee_side == "maker" else "taker"))
+        if a.fee_side == "both" and abs(maker - taker) > 1e-12:
+            item["fee_alt_rate"] = maker
+            item["fee_alt_side"] = "maker"
+        items.append(item)
 
     # heaviest first so a shard's long pole starts early and the tail is short
     items.sort(key=lambda x: -((x.get("opt") or {}).get("evaluated") or 0))
@@ -151,10 +165,13 @@ def main():
     for p, k in paths:
         print(f"  {p}  ({k} items)")
     if items:
-        secs = 6.8 * len(items)
-        print(f"\n~{secs / 3600:.1f} core-hours total "
-              f"(~6.8s each); at 8 procs that's "
-              f"{secs / 3600 / 8:.1f}h, at 12 procs {secs / 3600 / 12:.1f}h")
+        per = 6.8 * (2 if a.fee_side == "both" else 1)
+        secs = per * len(items)
+        print(f"\nfee basis: {a.fee_side}"
+              + (" (each entry simulated twice)" if a.fee_side == "both" else ""))
+        print(f"~{secs / 3600:.1f} core-hours total (~{per:.1f}s each); "
+              f"at 8 procs {secs / 3600 / 8:.1f}h, "
+              f"at 12 procs {secs / 3600 / 12:.1f}h")
 
 
 if __name__ == "__main__":

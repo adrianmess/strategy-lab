@@ -758,8 +758,17 @@ function feeCell(e){
       ? 'MANUAL rate, set when this was built — overrides fees.json'
       : 'TAKER rate from fees.json — what a market entry/exit actually pays';
   const cls = f===0 ? 'warn' : '';
-  return `<span class="${cls}" title="${tip}">${pct}%</span>`
-       + `<span class="hint" style="margin-left:4px">${side}</span>`;
+  let out = `<span class="${cls}" title="${tip}">${pct}%</span>`
+          + `<span class="hint" style="margin-left:4px">${side}</span>`;
+  // the other side of the book, when the re-cost ran both: same genome, same
+  // data, only the commission differs — the bracket reality sits inside
+  const alt = e.fee_alt;
+  if(alt && alt.monthly_growth_pct != null){
+    const g = alt.monthly_growth_pct, ap = +(100*alt.per_side).toFixed(4);
+    out += `<div class="hint" style="margin-top:2px" title="the SAME backtest costed at the ${alt.side} rate (${ap}%/side): ${fp(g)}/mo, max DD ${(100*(alt.maxdd_mtm??0)).toFixed(0)}%, win ${(100*(alt.win??0)).toFixed(0)}%${alt.liq?' — LIQUIDATED':''}. Real execution lands between this and the figure above.">`
+         + `${alt.side} <span class="${g>=0?'pos':'neg'}">${fp(g)}</span>${alt.liq?' <span class="neg">LIQ</span>':''}</div>`;
+  }
+  return out;
 }
 let GAUNT = {};
 fetch('/api/gauntlet').then(r=>r.json()).then(g=>{ GAUNT=g||{}; render(); }).catch(()=>{});

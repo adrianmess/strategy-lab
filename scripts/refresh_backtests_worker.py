@@ -84,6 +84,35 @@ def run_one(path, hub):
     except (TypeError, ValueError):
         pass
     e = BT.run_single(cfgp)
+
+    # ---- second pass at the OTHER side of the book ----------------------
+    # Every run_single_* does `from wf2 import ... FUT_COMM, SPOT_COMM`
+    # INSIDE the function, so the module attribute is re-read on each call
+    # and setting it here is enough — no second process, no numba recompile.
+    # Taker/taker is the primary (conservative, and what a market order
+    # pays); maker/maker rides along as the optimistic bracket.
+    alt = None
+    _alt_rate = it.get("fee_alt_rate")
+    if _alt_rate is not None:
+        try:
+            import wf2
+            _keep = (wf2.FUT_COMM, wf2.SPOT_COMM)
+            if it["mode"] == "spot":
+                wf2.SPOT_COMM = float(_alt_rate)
+            else:
+                wf2.FUT_COMM = float(_alt_rate)
+            os.environ["LAB_FEE_OVERRIDE"] = repr(float(_alt_rate))
+            e2 = BT.run_single(cfgp)
+            s2 = e2.get("stats") or {}
+            alt = dict(side=it.get("fee_alt_side") or "maker",
+                       per_side=float(_alt_rate),
+                       monthly_growth_pct=s2.get("monthly_growth_pct"),
+                       total_mult=s2.get("total_mult"), n=s2.get("n"),
+                       maxdd_mtm=s2.get("maxdd_mtm"), win=s2.get("win"),
+                       liq=s2.get("liq"))
+            wf2.FUT_COMM, wf2.SPOT_COMM = _keep
+        except Exception as _ex:
+            print(f"  alt-fee pass failed for {it['name']}: {_ex}", flush=True)
     # gap metadata: the publish path attaches this, run_single's return may
     # not — without it the dashboard's gaps column shows "unknown" even
     # though segmentation/contamination-skipping WAS active (it always is;
@@ -101,6 +130,9 @@ def run_one(path, hub):
         # carry the fee basis through, or the re-costed entry lands back on
         # the dashboard indistinguishable from the stale one it replaced
         fee_per_side=e.get("fee_per_side"), fee_side=e.get("fee_side"),
+        # headline numbers only — the full curve/trades would double a
+        # 165MB store for a bracket you only ever read as one figure
+        fee_alt=alt,
         curve=(e.get("curve") or [])[-400:],
         trades=(e.get("trades") or [])[-400:],
         open_positions=e.get("open_positions") or [],
