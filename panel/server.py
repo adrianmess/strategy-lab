@@ -1056,6 +1056,12 @@ _TD_HIST_PAIRS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "SUI", "HYPE", "LINK",
                   # spot-only additions 2026-09-07 (gamut candidates)
                   "ENA", "PUMP", "BNB", "PONS", "DGAI", "LTC", "DASH",
                   "LIT", "ADA"]
+# MEXC's API futures schedule (announced 2026-05-28, effective 2026-06-01):
+# maker 0.06% / taker 0.08%, and it explicitly OVERRIDES the web/app rates,
+# 0-fee events and MX discounts. The public contract/detail endpoint reports
+# the WEB rates, which is why it advertises 0% maker — not what an API fill
+# pays. Observed fills win over this; this wins over contract/detail.
+API_MAKER, API_TAKER = 0.0006, 0.0008
 _FUT_SIDES = {1: "Buy Long", 2: "Close Short", 3: "Sell Short",
               4: "Close Long"}
 _FUT_OSTATE = {1: "Uninformed", 2: "Uncompleted", 3: "Completed",
@@ -1455,9 +1461,13 @@ def _fees_refresh():
                     d = (_rq.get("https://contract.mexc.com/api/v1/contract/"
                                  "detail", params=dict(symbol=f"{pr}_USDT"),
                                  timeout=10).json().get("data") or {})
+                    # contract/detail reports the WEB rates; we trade by API,
+                    # which has its own dearer schedule that overrides them
                     doc["fut"][pr] = dict(
-                        maker=float(d.get("makerFeeRate") or 0),
-                        taker=float(d.get("takerFeeRate") or 0))
+                        maker=max(float(d.get("makerFeeRate") or 0), API_MAKER),
+                        taker=max(float(d.get("takerFeeRate") or 0), API_TAKER),
+                        web_maker=float(d.get("makerFeeRate") or 0),
+                        web_taker=float(d.get("takerFeeRate") or 0))
                 except Exception:
                     pass
             # RECONCILE against actual fills: MEXC's public takerFeeRate is
@@ -1481,22 +1491,39 @@ def _fees_refresh():
                             cs = _contract_size(sym)
                             if not cs:
                                 continue
-                            obs = None
-                            for dl in (fapi.order_deals(sym, page_size=8)
-                                       or [])[:8]:
-                                if not dl.get("taker"):
-                                    continue
+                            # reconcile BOTH sides. Only taker was checked
+                            # before, so maker stayed at the advertised 0 —
+                            # but an actual maker fill on 2026-09-17 was
+                            # charged 0.06%, matching MEXC's separate API
+                            # futures schedule (0.06 maker / 0.08 taker,
+                            # effective 2026-06-01, which overrides the web
+                            # rates and every promo). Free maker execution was
+                            # never on the table.
+                            obs = {"taker": None, "maker": None}
+                            for dl in (fapi.order_deals(sym, page_size=20)
+                                       or [])[:20]:
+                                side = "taker" if dl.get("taker") else "maker"
                                 n = (float(dl.get("vol") or 0) * cs
                                      * float(dl.get("price") or 0))
                                 fee = float(dl.get("fee") or 0)
                                 if n > 0 and fee > 0:
                                     r_ = fee / n
-                                    obs = max(obs or 0.0, round(r_, 6))
-                            if obs and 0 < obs < 0.01:
-                                cur = doc["fut"].setdefault(pr, {})
-                                if obs > float(cur.get("taker") or 0):
-                                    cur["taker"] = obs
-                                    cur["taker_observed"] = True
+                                    obs[side] = max(obs[side] or 0.0,
+                                                    round(r_, 6))
+                            cur = doc["fut"].setdefault(pr, {})
+                            for side in ("taker", "maker"):
+                                v = obs[side]
+                                if v and 0 < v < 0.01 and \
+                                        v > float(cur.get(side) or 0):
+                                    cur[side] = v
+                                    cur[f"{side}_observed"] = True
+                            # no maker fill on this symbol yet: the published
+                            # API schedule still beats the web 0% we'd
+                            # otherwise inherit
+                            if not cur.get("maker_observed") and \
+                                    float(cur.get("maker") or 0) < API_MAKER:
+                                cur["maker"] = API_MAKER
+                                cur["maker_source"] = "mexc api schedule"
                         except Exception:
                             pass
             except Exception:

@@ -495,7 +495,13 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
     """Backtest a V7 (engine3, full-param) candidate."""
     import optimizer2 as O
     from engine3 import run3
-    from wf2 import mtm_curve
+    # FUT_COMM/SPOT_COMM come from fees.json via fees_live. This path used to
+    # hardcode 0.0004/0.0005 while every OTHER run_single_* read them, so a v7
+    # backtest silently ignored the fee entirely: re-running one at 0.02%,
+    # 0.08% and 0.16%/side produced byte-identical equity (2026-09-17). It
+    # also made LAB_FEE_OVERRIDE — the what-if fee box and the re-cost
+    # workers — a no-op for every v7 entry.
+    from wf2 import mtm_curve, FUT_COMM, SPOT_COMM
     from adaptive import slice_pre
     cand, method, mode = cfg["cand"], cfg["method"], cfg["cand"]["mode"]
     G = O.load_g3()
@@ -527,7 +533,7 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
             eq0 = eq
             tr, eq, liq, op = run3(sp, P, regime=reg[w0:b], warmup=a - w0,
                                    initial_capital=eq,
-                                   commission=0.0004 if mode == "lev" else 0.0005,
+                                   commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                    use_sl=(mode == "spot" or bool(cand.get("lev_stops"))),
                                    dyn_liq=(mode == "lev"),
                                    return_open=True,

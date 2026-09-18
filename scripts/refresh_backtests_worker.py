@@ -71,6 +71,18 @@ def run_one(path, hub):
         g["strategy"] = ((g.get("cand") or {}).get("strategy")
                          or it.get("strategy"))
     json.dump(g, open(cfgp, "w"))
+    # The fee the shard was built against wins over whatever fees.json this
+    # machine happens to have. An off-box worker's copy drifts: the MacBook's
+    # was three weeks stale and still held MEXC's advertised WEB rates, so a
+    # re-cost run there would have simulated every strategy at 0.0000%/side —
+    # worse than the error we were fixing (2026-09-17). An explicit --fee
+    # still wins over both.
+    _fee = it.get("fee_now")
+    try:
+        if _fee is not None and 0 <= float(_fee) < 0.01:
+            os.environ.setdefault("LAB_FEE_OVERRIDE", repr(float(_fee)))
+    except (TypeError, ValueError):
+        pass
     e = BT.run_single(cfgp)
     # gap metadata: the publish path attaches this, run_single's return may
     # not — without it the dashboard's gaps column shows "unknown" even
@@ -86,6 +98,9 @@ def run_one(path, hub):
         kind=it.get("kind"), opt=it.get("opt"),
         strategy=e.get("strategy"), config=e.get("config"),
         stats=e.get("stats"), monthly=e.get("monthly"),
+        # carry the fee basis through, or the re-costed entry lands back on
+        # the dashboard indistinguishable from the stale one it replaced
+        fee_per_side=e.get("fee_per_side"), fee_side=e.get("fee_side"),
         curve=(e.get("curve") or [])[-400:],
         trades=(e.get("trades") or [])[-400:],
         open_positions=e.get("open_positions") or [],
