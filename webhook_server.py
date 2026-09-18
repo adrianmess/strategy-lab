@@ -1705,6 +1705,13 @@ if __name__ == "__main__":
                         help='Proxy auth username (or MEXC_PROXY_USERNAME)')
     parser.add_argument('--proxy-password', default=os.environ.get('MEXC_PROXY_PASSWORD'),
                         help='Proxy auth password (or MEXC_PROXY_PASSWORD)')
+    parser.add_argument('--proxy-port', type=int,
+                        default=(int(os.environ['MEXC_PROXY_PORT'])
+                                 if os.environ.get('MEXC_PROXY_PORT') else None),
+                        help='Which port of adaptive_trader/proxy_pool.json the '
+                             'browser should use (one stable exit IP — changing '
+                             'it logs the MEXC session out). Default: the pool\'s '
+                             '"browser_port", else its last port.')
     parser.add_argument('--block-heavy', dest='block_heavy', action='store_true', default=None,
                         help='Abort image/media/font requests to save proxy bandwidth '
                              '(default: on when a proxy is set; captcha/login always exempt)')
@@ -1728,10 +1735,41 @@ if __name__ == "__main__":
         if args.proxy_password:
             PROXY["password"] = args.proxy_password
     else:
+        # Preferred: the SHARED pool (adaptive_trader/proxy_pool.json) — the
+        # same credentials mexc_api uses, so the browser can't rot while the
+        # API path keeps working. That is exactly what happened: the legacy
+        # proxy_config.json credentials stopped authenticating, the browser
+        # had no route to the internet, and startup died with "Browser
+        # initialization failed" (2026-09-17).
+        #
+        # ONE stable port per browser, because switching exit IPs logs the
+        # MEXC session out and forces a fresh captcha login. Order: --proxy-port
+        # / MEXC_PROXY_PORT, then the pool's "browser_port", then the LAST port
+        # in the pool (the first ones belong to mexc1/mexc2's API traffic).
+        _pool_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "adaptive_trader", "proxy_pool.json")
+        if os.path.exists(_pool_path):
+            try:
+                with open(_pool_path) as _f:
+                    _pl = json.load(_f)
+                _ports = [int(p) for p in (_pl.get("ports") or [])]
+                _want = args.proxy_port or _pl.get("browser_port")
+                _port = (int(_want) if _want and int(_want) in _ports
+                         else (_ports[-1] if _ports else None))
+                if _port and _pl.get("host"):
+                    PROXY = dict(server=f"http://{_pl['host']}:{_port}")
+                    if _pl.get("username"):
+                        PROXY["username"] = _pl["username"]
+                    if _pl.get("password"):
+                        PROXY["password"] = _pl["password"]
+                    logger.info(f"Proxy from the shared pool: {_pl['host']}:"
+                                f"{_port} (browser keeps this ONE exit IP)")
+            except Exception as _e:
+                logger.error(f"Could not read {_pool_path}: {_e}")
         # Fallback: proxy_config.json next to this file (gitignored).
         _pc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "proxy_config.json")
-        if os.path.exists(_pc_path):
+        if PROXY is None and os.path.exists(_pc_path):
             try:
                 with open(_pc_path) as _f:
                     _pc = json.load(_f)
