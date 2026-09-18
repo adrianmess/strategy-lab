@@ -74,25 +74,37 @@ class PairExec:
         return self.ex.open_position(direction, lev, price,
                                      margin_cap=margin_cap)
 
-    def entry_state(self, order_id, direction):
+    def entry_state(self, order_id, direction, tries=1):
         """('resting'|'filled'|'gone', holdVol, holdAvgPrice) or None
         (unknown). Filled = a position in our direction is actually held —
-        the runner enforces one position per symbol, so the hold IS ours."""
+        the runner enforces one position per symbol, so the hold IS ours.
+
+        'gone' is the dangerous verdict: it tells the caller to forget a real
+        order. Fills settle ASYNCHRONOUSLY on MEXC, so a single position read
+        taken moments after placing or cancelling can legitimately show
+        nothing while the fill is in flight — which is how 6,363 SUI got
+        opened, declared 'gone' 7s later and left untracked (2026-09-17).
+        `tries` re-reads before conceding; the timeout path uses it."""
         if order_id == "dry":
             return ("resting", None, None)
-        try:
-            oo = self.ex.api.open_orders(self.cfg["symbol"]) or []
-            if any(str(o.get("orderId")) == str(order_id) for o in oo):
-                return ("resting", None, None)
-            want = 1 if direction > 0 else 2
-            for p in (self.ex.api.open_positions(self.cfg["symbol"]) or []):
-                if (int(p.get("positionType") or 0) == want
-                        and float(p.get("holdVol") or 0) > 0):
-                    return ("filled", float(p["holdVol"]),
-                            float(p.get("holdAvgPrice") or 0) or None)
-            return ("gone", None, None)
-        except Exception:
-            return None
+        last = None
+        for i in range(max(1, tries)):
+            if i:
+                time.sleep(0.6 * i)        # same settle budget as _confirm_fill
+            try:
+                oo = self.ex.api.open_orders(self.cfg["symbol"]) or []
+                if any(str(o.get("orderId")) == str(order_id) for o in oo):
+                    return ("resting", None, None)
+                want = 1 if direction > 0 else 2
+                for p in (self.ex.api.open_positions(self.cfg["symbol"]) or []):
+                    if (int(p.get("positionType") or 0) == want
+                            and float(p.get("holdVol") or 0) > 0):
+                        return ("filled", float(p["holdVol"]),
+                                float(p.get("holdAvgPrice") or 0) or None)
+                last = ("gone", None, None)
+            except Exception:
+                last = None
+        return last
 
     def close(self):
         return self.ex.close_position()
@@ -589,12 +601,39 @@ def main_fcfs(cfg, live):
 
     def _entry_timeout(pe, why=""):
         exx = ex_for(pe["symbol"])
-        exx.cancel_tp(pe["oid"])              # same cancel endpoint
+        cancelled = exx.cancel_tp(pe["oid"])   # same cancel endpoint
         if pe["oid"] != "dry":
-            # the cancel may have raced a fill — adopt whatever is held
-            st_ = exx.entry_state(pe["oid"], pe["dir"])
+            # NEVER drop a pending entry we haven't proven is dead. The old
+            # code cancelled, glanced once at the positions and dropped it
+            # regardless — so a cancel that silently failed left a live
+            # post-only order on the book that the runner had forgotten.
+            # It filled seconds later: 6,363 SUI, no TP, no stop, no
+            # tracking, found only because the price happened to run our
+            # way (2026-09-17).
+            st_ = exx.entry_state(pe["oid"], pe["dir"], tries=3)
             if st_ and st_[0] == "filled":
                 _entry_filled(pe, st_[1], st_[2])
+                return
+            if st_ is None or st_[0] == "resting":
+                # still on the book, or the exchange won't answer — keep
+                # tracking and try again next round rather than abandon it
+                pe["cancel_fails"] = int(pe.get("cancel_fails", 0)) + 1
+                pe["checked"] = time.time()
+                if pe["cancel_fails"] in (1, 3, 10):
+                    log.error("ENTRY LIMIT %s: cancel did NOT take (attempt "
+                              "%d, cancelled=%s, state=%s) — the order may "
+                              "still be LIVE on the exchange; keeping it "
+                              "tracked", comp_label(pe["comp"]),
+                              pe["cancel_fails"], cancelled,
+                              (st_ or ("unknown",))[0])
+                if pe["cancel_fails"] == 3:
+                    try:
+                        notify("order_failed", component="fcfs-runner",
+                               detail=(f"{pe['symbol']} entry limit "
+                                       f"{pe['oid']} will not cancel and is "
+                                       f"still live — CHECK THE ACCOUNT"))
+                    except Exception:
+                        pass
                 return
         pending_entries.remove(pe)
         _pe_refund(pe)
