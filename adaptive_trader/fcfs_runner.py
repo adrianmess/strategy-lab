@@ -1102,6 +1102,7 @@ def main_fcfs(cfg, live):
     # arriving (> 4 bar intervals) — that is the actionable failure.
     HB_EVERY = 900
     last_hb = time.time()
+    _silent_said = {}          # group -> last time we warned it was silent
     last_bar_at = {}      # group key -> (bar label, epoch received)
     bars_seen = [0]
     while True:
@@ -1468,8 +1469,21 @@ def main_fcfs(cfg, live):
             # watchdog: a silent host while we hold ITS position is a hazard
             for _g in {p.get("group") for p in positions}:
                 h = hosts.get(_g)
-                if h and h.alive() and time.time() - h.last_seen > 300:
-                    log.warning("host %s silent >5min while positioned", _g)
+                if not (h and h.alive()):
+                    continue
+                # last_seen starts at 0.0, so a host that has not produced its
+                # first bar yet reads as ~1.8e9 seconds silent and this fired
+                # EVERY loop through the ~60s backfill — 11 warnings in 9s on
+                # a restart, drowning the real thing. Age from START until the
+                # first bar arrives, and log at most once a minute.
+                _since = h.last_seen or h.started_at
+                if not _since or time.time() - _since <= 300:
+                    continue
+                if time.time() - _silent_said.get(_g, 0) < 60:
+                    continue
+                _silent_said[_g] = time.time()
+                log.warning("host %s silent >%.0fmin while positioned", _g,
+                            (time.time() - _since) / 60)
 
             # periodic heartbeat + stale-feed detection
             if now - last_hb >= HB_EVERY:

@@ -1328,10 +1328,10 @@ def _manual_close_alert(prev, cur):
         return
     errtxt = " ".join((prev.get("errors") or []) + (cur.get("errors") or []))
 
-    def keys(o):
+    def keys(o, manual_only=True):
         ks = {}
         for r in o.get("rows") or []:
-            if r.get("src"):
+            if manual_only and r.get("src"):
                 continue                      # bot-held: not ours
             if r.get("market") == "fut":
                 ks[(r["account"], "fut", r["symbol"])] = r
@@ -1339,8 +1339,15 @@ def _manual_close_alert(prev, cur):
                 ks[(r["account"], "spot", r["asset"])] = r
         return ks
     cur_k = keys(cur)
+    # A holding can leave the MANUAL set two ways: it was closed, or a trader
+    # started and claimed it. Only the first is a close. While a trader is
+    # stopped its position looks unowned, so on every restart-while-positioned
+    # the row went manual -> bot-held and this fired a phantom
+    # "SOL_USDT closed 8.3 @ 105.41" while the position sat untouched
+    # (2026-09-17 23:55). Presence in the FULL row set is the real test.
+    cur_all = keys(cur, manual_only=False)
     for k, r in keys(prev).items():
-        if k in cur_k:
+        if k in cur_k or k in cur_all:
             continue
         acct, mkt, name = k
         if f"{acct} {mkt}" in errtxt:
