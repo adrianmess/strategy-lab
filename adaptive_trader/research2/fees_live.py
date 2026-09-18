@@ -16,7 +16,15 @@ import os
 
 _P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                   os.pardir, "fees.json")
-_FALLBACK = {"lev": 0.0004, "spot": 0.0005}
+# Used only when fees.json is missing or has no entry for the coin — which
+# is the normal state on an off-box worker. These are MEXC's published API
+# schedules, NOT the web rates: futures API is its own dearer schedule
+# (0.06/0.08, effective 2026-06-01, overriding web rates and promos), while
+# spot API keeps the standard spot rates (0% maker / 0.05% taker). The old
+# single 0.0004 for lev was half the real futures taker, so a machine
+# without fees.json quietly modelled every futures strategy at half cost.
+_FALLBACK = {("lev", "taker"): 0.0008, ("lev", "maker"): 0.0006,
+             ("spot", "taker"): 0.0005, ("spot", "maker"): 0.0}
 _cache = {"mt": None, "doc": None}
 
 
@@ -61,6 +69,4 @@ def per_side(mode, coin=None, side=None):
         v = r.get(side)
         if v is not None and 0.0 <= float(v) < 0.01:
             return float(v)
-    # no maker number on file: a maker fill is never dearer than a taker one,
-    # so the taker fallback is the conservative answer for both
-    return _FALLBACK["lev" if mode == "lev" else "spot"]
+    return _FALLBACK[("lev" if mode == "lev" else "spot", side)]

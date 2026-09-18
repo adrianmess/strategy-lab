@@ -1062,6 +1062,10 @@ _TD_HIST_PAIRS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "SUI", "HYPE", "LINK",
 # the WEB rates, which is why it advertises 0% maker — not what an API fill
 # pays. Observed fills win over this; this wins over contract/detail.
 API_MAKER, API_TAKER = 0.0006, 0.0008
+# Spot API is a DIFFERENT and much cheaper schedule: it keeps the standard
+# spot rates, 0% maker / 0.05% taker. Per notional that is a 0.10% taker
+# round trip against futures' 0.16%, and a spot maker fill is free.
+SPOT_API_MAKER, SPOT_API_TAKER = 0.0, 0.0005
 _FUT_SIDES = {1: "Buy Long", 2: "Close Short", 3: "Sell Short",
               4: "Close Long"}
 _FUT_OSTATE = {1: "Uninformed", 2: "Uncompleted", 3: "Completed",
@@ -1538,9 +1542,17 @@ def _fees_refresh():
                         r = ((api._signed("GET", "/api/v3/tradeFee",
                                           {"symbol": f"{pr}USDT"}) or {})
                              .get("data") or {})
+                        _mk = float(r.get("makerCommission") or 0)
+                        _tk = float(r.get("takerCommission") or 0)
+                        # Spot API keeps the STANDARD spot schedule (0% maker
+                        # / 0.05% taker) — much cheaper than the futures API
+                        # schedule. But a few symbols report a 0% taker promo
+                        # (XRP, DASH as of 2026-09-17), and promos are exactly
+                        # what an API schedule overrides, so floor the taker
+                        # unless a real fill proves otherwise.
                         doc["spot"][pr] = dict(
-                            maker=float(r.get("makerCommission") or 0),
-                            taker=float(r.get("takerCommission") or 0))
+                            maker=_mk, taker=max(_tk, SPOT_API_TAKER),
+                            web_taker=_tk)
                     except Exception:
                         pass
             except Exception:
