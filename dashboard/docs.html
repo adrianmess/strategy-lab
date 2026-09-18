@@ -49,7 +49,7 @@ th{color:var(--dim)}
   <b>Jump to:</b>
   <a href="#workflow">Workflow</a><a href="#live">Running live</a><a href="#strategies">Strategies</a><a href="#modes">Modes</a>
   <a href="#regimes">Regime methods</a><a href="#holdout">Holdout modes</a><a href="#combine">Combining runs</a><a href="#routers">Routers & honesty tiers</a><a href="#optimizers">Optimizers</a><a href="#params">Parameters</a>
-  <a href="#metrics">Metrics</a><a href="#gaps">Data & gaps</a><a href="#ai">AI advisor</a><a href="#risk">Risk & honesty</a>
+  <a href="#metrics">Metrics</a><a href="#fees">Fees</a><a href="#gaps">Data & gaps</a><a href="#ai">AI advisor</a><a href="#risk">Risk & honesty</a>
 </div>
 
 <h2 id="workflow">The workflow (start here)</h2>
@@ -189,7 +189,7 @@ th{color:var(--dim)}
 
 <h2 id="metrics">Metrics</h2>
 <dl>
-<dt>growth/mo</dt><dd>Compounded monthly growth of closed-trade equity. Excludes funding fees; assumes full-equity reinvestment.</dd>
+<dt>growth/mo</dt><dd>Compounded monthly growth of closed-trade equity. Assumes full-equity reinvestment. Net of trading fees at the rate shown in the <b>fees</b> column — see <a href="#fees">Fees</a>, which is the single biggest lever on a high-turnover result — but <b>excludes funding</b>.</dd>
 <dt>score</dt><dd>What the optimizer maximizes: mean monthly log-growth minus 0.25× its standard deviation, so one lucky month can't win. Feasibility gates must pass first.</dd>
 <dt>max DD (MTM)</dt><dd>Worst peak-to-trough of <b>mark-to-market</b> equity — open positions count at current price. The honest drawdown; closed-trade equity hides pain in no-stop mode.</dd>
 <dt>worst excursion (MAE)</dt><dd>The most any single trade went against you before it exited.</dd>
@@ -197,6 +197,22 @@ th{color:var(--dim)}
 <dt>holdout</dt><dd>Performance on data after <code>train-end</code>, which the search never touched. The single most trustworthy number a run produces.</dd>
 <dt>win rate</dt><dd>Careful: in no-stop lev mode every trade that closes is a winner by construction (losers either liquidate or are still open) — near-100% win rate is a property of the exit style, not proof of edge.</dd>
 </dl>
+
+<h2 id="fees">Fees (the number that decides most results)</h2>
+<div class="warn"><b>MEXC charges API trading on a different, dearer schedule than the website</b>, and that schedule overrides web rates, 0-fee promotions and MX discounts. Everything here trades by API, so the web rates shown on mexc.com do not apply to us.</div>
+<table>
+<tr><th>per side</th><th>maker (resting limit)</th><th>taker (market)</th><th>taker round trip</th><th>maker round trip</th></tr>
+<tr><td><b>futures API</b></td><td>0.06%</td><td>0.08%</td><td>0.160% of notional</td><td>0.120%</td></tr>
+<tr><td><b>spot API</b></td><td>0.00%</td><td>0.05%</td><td>0.100% of notional</td><td><b>0.000%</b></td></tr>
+</table>
+<p>Two consequences worth internalising. <b>Spot is the cheap venue</b> — a spot strategy filled entirely on resting limits pays literally nothing, while the futures equivalent still pays 0.12%. And <b>leverage multiplies the fee along with the edge</b>: a 10x futures round trip costs 1.6% <i>of your margin</i>, so a strategy must clear that before it has made a cent. This is why high-frequency leveraged genomes are the first to die under honest costs.</p>
+<p>Rates live in <code>adaptive_trader/fees.json</code>, refreshed hourly by the panel and reconciled against the rates your account was actually charged per fill (both sides). The public <code>contract/detail</code> endpoint reports the <i>web</i> schedule — it advertises 0% maker — so it is kept only as <code>web_maker</code>/<code>web_taker</code> for reference and never used to cost a simulation.</p>
+<dl>
+<dt>the <b>fees</b> column on the Backtests page</dt><dd>What this entry's simulation charged per fill, and which side of the book it assumed. A dash means the entry predates fee tracking (2026-09-18) and <b>its numbers should not be trusted</b> — re-run it.</dd>
+<dt>the second line under it</dt><dd>The same backtest costed at the other side of the book. Taker is the primary figure because it is what a market order actually pays; maker is the optimistic bracket. Real execution lands between them, and for a high-turnover strategy the two can have opposite signs.</dd>
+<dt>what is <b>not</b> modelled</dt><dd><b>Funding</b>, charged every 8 hours on perpetuals — negligible on a scalp, material on a multi-day hold. Also no slippage beyond the fee and no order-book impact: the live trader caps size against book depth, the backtest does not.</dd>
+</dl>
+<div class="warn"><b>History matters as much as fees.</b> A newly listed pair can produce a spectacular backtest from two months of data and forty trades. Apply a minimum-history floor (12 months is a sensible default) before reading any leaderboard — the top of an unfiltered list is usually young-pair noise rather than edge.</div>
 
 <h2 id="gaps">Data & gap handling</h2>
 <p>Source: CoinAPI, MEXC SOL/USDT perp, 3-minute + 1-minute bars, Nov 2023 → now. Known holes: <b>Jun–Nov 2024</b> (~5 months), ~1 week Dec 2023, ~4 days Nov 2025.</p>

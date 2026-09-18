@@ -1,5 +1,45 @@
 # Strategy Lab — Session Handoff
-Updated: 2026-08-02 (EC2 offload live). Paste into a new session to resume. Keep this file updated as work progresses.
+Updated: 2026-09-18 (fee correction + corpus re-cost). Paste into a new session to resume. Keep this file updated as work progresses.
+
+## 2026-09-18 — THE FEE CORRECTION (read this before trusting any old number)
+
+**Every backtest published before today was costed at a fee that never existed.** MEXC runs a separate, dearer schedule for API trading which overrides web rates and promos: futures API **0.06% maker / 0.08% taker** (effective 2026-06-01), spot API keeps the standard **0% maker / 0.05% taker**. The `contract/detail` endpoint we trusted reports the WEB rates — that is why it advertised 0% maker and 0-2bp taker. Round trip per notional: futures 0.160% taker-taker / 0.120% maker-maker; spot 0.100% / **0.000%**.
+
+Three separate defects stacked on top of that:
+1. **`run_single_v7` hardcoded `commission=0.0004/0.0005`** while every other `run_single_*` read `fees_live`. v7 backtests were *blind* to fees — the same genome at 0.02%, 0.08% and 0.16%/side produced byte-identical equity, and the what-if fee box was a no-op for them. (Fixed 72fc187.)
+2. **`metax2_cli.collect` hardcoded 0.0004** AND consumed `entry["trades"]`, which `build_entry` truncates to the last 2000 rows for display. Combos of high-frequency components were silently built from the last ~8 months of a 31-month history, and their walk-forward saw 2 folds instead of 15. (Fixed via `LAB_TRADE_CAP`, e4a4ed6/72fc187.)
+3. The hourly fee refresh only reconciled **taker** fills, so maker stayed at the advertised 0.
+
+**Corpus re-costed 2026-09-18 01:27–03:57** (MacBook, 12 procs, 58,062/58,066, 4 numba-segfault failures). Entries now carry `fee_per_side`/`fee_side` plus `fee_alt` = the same run at the other side of the book. Results: 74% positive at taker (80% at maker), 13% liquidate, **5.7% are profitable only on maker fills**. Median net bps/trade 55.2 → 44.4. Positive-at-taker by family: macdx 85%, scalpx2 70%, v7 66%.
+
+Quality funnel: 58,082 re-costed → 43,036 positive → 42,688 no liq → 32,501 DD≤50% → 18,500 passed own holdout → 17,765 ≥30 trades → **17,329 with ≥12 months of history**. Of those, **~16,000 are SPOT and only ~1,150 leveraged** — the honest fee gutted the leveraged book, which follows from spot being on the cheap schedule with no leverage multiplier on the fee.
+
+⚠ **Young-pair trap:** the raw leaderboard is topped by `pons1m` at 3,245%/mo. PONS has **2.1 months** of data (DGAI 0.8) and those runs have 30-40 trades. 485 PONS entries exist. Always apply a `months >= 12` floor.
+
+⚠ The searches were mis-costed too (they read `fees.json`, which held the web rates), so the genomes were **mis-selected**, not merely mis-measured. Re-costing is measurement; a re-search at 8bp is the repair. gorig_mh12 was 6,048 specs / 339 core-hours (~24h at 14 procs on the mini, ~6h on a rebuilt EC2 fleet).
+
+### Live-trading bugs found and fixed (all real money)
+- **Untracked position (SUI, 2026-09-17).** `place_limit` returned `{'orderId':..,'ts':..}` and callers stored the dict, so `cancel_orders` died on `int()` and `entry_state` could never match its own resting order. A post-only entry was declared "gone" 7s after placing, filled anyway, and left 6,363 SUI (~$470 margin) with no TP, no stop and no tracking. Fixed in 936c781 + cd5b9ca: real order ids, `entry_state` re-reads (fills settle asynchronously), and a pending entry is never dropped without proof it is dead — a failed cancel now keeps tracking, logs, and fires `order_failed` on the third attempt.
+- **Resting TPs never placed.** TP prices weren't snapped to the contract tick, so MEXC rejected every one with `code=2015` and the exit fell through to a market close (opened maker, closed taker). Prices now round to `priceUnit` — away from the market for a TP, into the book for a post-only entry. (936c781.)
+- **Phantom "position closed" on every restart-while-positioned.** The manual-position detector only tracks holdings no trader claims; a restart moves a row bot→manual→bot and the re-attribution read as a close. Fired a false `SOL_USDT closed 8.3 @ 105.41` while the position sat untouched. (ac6b08c.)
+- **`host silent >5min` false alarm** — `last_seen` starts at 0.0, so a host that hadn't produced its first bar read as ~1.8e9 seconds silent and warned every loop through the ~60s backfill. Now ages from host start, throttled to once a minute. (ac6b08c.)
+
+### Playwright execution — DECIDED AGAINST (2026-09-18)
+Explored because web fees are far cheaper, then dropped on ToS grounds: MEXC's Risk Control Guideline 5.2 bars unauthorized automated order placement and it is **not** an API-vs-browser distinction. The executor was repaired along the way (missing `quart`; dead `proxy_config.json` credentials → now reads the shared pool, one pinned port) and the profile is account-keyed so instances on one account share a login — but it is **stood down and not to be used for trading**. All four instances are `execution: "api"`.
+
+### Infrastructure notes
+- **Proxy latency to MEXC** (measured): direct 116ms warm on the contract API; the good pool ports ~170-186ms; **10005 (92.113.163.79) and 10007 (213.109.170.25) are European and ~620ms** — avoid. Cold connect through a proxy is ~700ms vs 209ms direct, so connection reuse matters more than port choice.
+- **Re-cost pipeline:** `scripts/build_fee_shard.py` (stale-only, genome embedded, `--fee-side taker|maker|both`, resumable by construction) → `scripts/refresh_backtests_worker.py` on the MacBook → `/api/backtests/submit` on the mini (queued, folded once a minute). Driver: `scripts/run_recost.sh 12`. Panel key in `~/.strategy_lab_panel_key` (600).
+- **fseventsd was at 4GB** with the mini 12.2GB into swap, 134 days uptime. Cause: Time Machine reconciling a 104GB working tree hourly with **nothing excluded** (98GB `optimizer/runs`, a 344MB `backtests.js` rewritten per publish) onto a destination 87% full. Fix is `tmutil addexclusion` on the derived dirs + a reboot; a bigger disk fixes the backup depth, not the RAM. NOT DONE.
+- **Data limits worth knowing:** CVD and VRVP in `scalp_engine.py` are *candle-derived proxies* (whole-bar volume signed by bar direction; POC from close prices), not order-flow. No open interest anywhere. Funding is not modelled. `trades_count` is populated for only 4% of rows.
+
+### Outstanding
+1. **80 routers/combos not re-costed** — they need the combo path (`fcfsx_rerun` / `refresh_combo.py`), not the shard path. A bulk "re-run all combos at current fees" job was never built.
+2. Re-search a gamut campaign at honest fees (the actual repair).
+3. Spot **maker entries** — spot has resting TPs but `limit_entry` is futures-only. Spot maker/maker is a *zero* fee round trip, by far the best return on effort left.
+4. Time Machine exclusions + reboot on the mini.
+5. MEX 2 Lev is STOPPED. Before re-enabling maker/maker, raise `limit_entry_timeout_s` from 5s (Cascade uses 75s) — 5s on a 1m strategy sends almost every entry down the cancel path.
+
 
 ## CLOSED: EC2 fleet #2 (2026-08-10 → 2026-08-15)
 FULLY TORN DOWN 2026-08-15 ~18:45 PDT after sp3w_0814 completed 945/945 (whole lev+spot gauntlet matrix now done). Verified via console: both persistent spot requests cancelled (sir-qdh7gy4m, sir-t99qkafm) with instances terminated (i-0654136d4694c7ef9, i-0dcfada687ccff1dc), BOTH ELASTIC IPs RELEASED (3.133.195.5, 3.15.93.224), 0 volumes, 0 snapshots. NOTHING BILLABLE REMAINS. Mini sync loops SFX2/SFX3 stopped; ec2-fleet-monitor scheduled task deleted. All 945 sp3w run dirs verified on the mini hub before teardown.
