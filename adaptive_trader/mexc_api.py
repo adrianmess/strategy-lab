@@ -38,6 +38,20 @@ TYPE_POST_ONLY = 2          # maker-only: cancelled instead of crossing
 TYPE_MARKET = 5
 ISOLATED, CROSS = 1, 2
 
+# contract/detail is static per symbol — fetch once per process
+_DETAIL = {}
+
+
+def _order_id(res):
+    """The order id out of whatever /order/create answered with: the id
+    itself, or {'orderId': ..., 'ts': ...}. None when there is no id."""
+    if isinstance(res, dict):
+        for k in ("orderId", "order_id", "id"):
+            if res.get(k) is not None:
+                return res[k]
+        return None
+    return res
+
 
 def _load_proxies(account=None):
     """Dedicated pool first (adaptive_trader/proxy_pool.json): each account
@@ -206,11 +220,21 @@ class MexcFuturesAPI:
     def place_limit(self, symbol, side, vol, price, leverage=None,
                     open_type=ISOLATED, otype=TYPE_LIMIT):
         """LIMIT order (rests on the book until filled or cancelled).
-        otype=TYPE_POST_ONLY makes it maker-only."""
-        return self._post("/api/v1/private/order/create", dict(
-            symbol=symbol, price=float(price), vol=float(vol),
+        otype=TYPE_POST_ONLY makes it maker-only.
+
+        Returns the ORDER ID. The endpoint answers with
+        {'orderId': ..., 'ts': ...} and callers stored that dict whole as the
+        id, so every later cancel_orders([dict]) died on int() — a resting
+        order the runner believed it had cancelled (2026-09-17). The price is
+        snapped to the contract's tick here too: MEXC rejects an unrounded
+        price with code 2015, which is what silently killed every resting TP.
+        """
+        res = self._post("/api/v1/private/order/create", dict(
+            symbol=symbol, price=self.round_price(symbol, price),
+            vol=float(vol),
             leverage=(int(leverage) if leverage else None), side=int(side),
             type=int(otype), openType=open_type))
+        return _order_id(res)
 
     def open_orders(self, symbol=None, page_size=50):
         """Resting (unfilled) futures orders."""
@@ -219,9 +243,63 @@ class MexcFuturesAPI:
                          {"page_num": 1, "page_size": int(page_size)}) or []
 
     def cancel_orders(self, ids):
-        """Cancel futures orders by id list."""
-        return self._post("/api/v1/private/order/cancel",
-                          [int(i) for i in ids])
+        """Cancel futures orders by id list. Tolerates raw create-responses
+        as well as ids — a cancel that throws leaves a live order resting."""
+        out = []
+        for i in ids:
+            oid = _order_id(i)
+            if oid is None:
+                raise ValueError(f"cancel_orders: no order id in {i!r}")
+            out.append(int(oid))
+        return self._post("/api/v1/private/order/cancel", out)
+
+    # ---------------- contract metadata (public, direct — no proxy) ----------
+    def contract_detail(self, symbol):
+        """Cached /contract/detail for one symbol. Public endpoint, so it
+        goes DIRECT like klines do; only private calls need the proxy."""
+        d = _DETAIL.get(symbol)
+        if d is None:
+            r = requests.get("https://contract.mexc.com/api/v1/contract/detail",
+                             params={"symbol": symbol}, timeout=10)
+            d = (r.json().get("data") or {}) if r.ok else {}
+            if isinstance(d, list):          # some builds answer with a list
+                d = next((x for x in d if x.get("symbol") == symbol), {})
+            _DETAIL[symbol] = d
+        return d
+
+    def price_unit(self, symbol):
+        """Tick size for the symbol's price, or None when unknown."""
+        d = self.contract_detail(symbol)
+        for k in ("priceUnit", "priceStep", "tickSize"):
+            v = d.get(k)
+            try:
+                if v and float(v) > 0:
+                    return float(v)
+            except (TypeError, ValueError):
+                pass
+        sc = d.get("priceScale")
+        try:
+            if sc is not None:
+                return 10.0 ** -int(sc)
+        except (TypeError, ValueError):
+            pass
+        return None
+
+    def round_price(self, symbol, price, direction=0):
+        """Snap `price` to the contract's tick. direction>0 rounds UP, <0
+        DOWN, 0 to nearest — a take-profit rounds AWAY from the market so the
+        rounding can never make the target worse than the engine asked for.
+        Unknown tick: return the price untouched rather than guess."""
+        px = float(price)
+        tick = self.price_unit(symbol)
+        if not tick or tick <= 0:
+            return px
+        import math as _m
+        n = px / tick
+        n = (_m.ceil(n) if direction > 0
+             else _m.floor(n) if direction < 0 else round(n))
+        # tick can be 0.0001 — float division leaves 1.3005000000000002
+        return round(n * tick, 12)
 
     def close_position(self, symbol, price=None):
         """Close every open position on the symbol with market orders."""

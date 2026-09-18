@@ -276,6 +276,11 @@ class APIExecutor:
                 side = OPEN_LONG if direction > 0 else OPEN_SHORT
                 ot = (TYPE_POST_ONLY if entry_limit.get("post_only", True)
                       else TYPE_LIMIT)
+                # snap INTO the book (long down, short up): rounding the
+                # other way can cross the spread, and a post-only that would
+                # cross is cancelled outright rather than filled
+                lpx = self.api.round_price(cfg["symbol"], lpx,
+                                           -1 if direction > 0 else 1)
                 oid = self.api.place_limit(cfg["symbol"], side, qty, lpx,
                                            leverage=lev_i, otype=ot)
                 self.log.info("OPEN limit resting: %s %d @ %.6g lev %d "
@@ -350,6 +355,11 @@ class APIExecutor:
         try:
             from mexc_api import CLOSE_LONG, CLOSE_SHORT
             side = CLOSE_LONG if direction > 0 else CLOSE_SHORT
+            # snap AWAY from the market (long TP up, short TP down) so the
+            # tick rounding can never sell cheaper / buy dearer than the
+            # engine's target. Unrounded prices are rejected: code 2015.
+            price = self.api.round_price(self.cfg["symbol"], price,
+                                         1 if direction > 0 else -1)
             oid = self.api.place_limit(self.cfg["symbol"], side, qty, price)
             self.log.info("TP limit placed: side %s vol %s @ %.6g (order %s)",
                           side, qty, price, oid)
