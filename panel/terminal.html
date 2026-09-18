@@ -3627,6 +3627,20 @@ function renderCfg(){
         '<input id="cEmerg" style="width:110px" value="' + em + '"></div>'+
     '</div>'+
     '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">'+
+      '<div class="mini" style="margin-bottom:8px"><b>Execution</b> — how this instance places orders</div>'+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">'+
+        '<div>' + lab('order path') +
+          '<select id="cExec" style="min-width:210px">'+
+            '<option value="api"' + (c.execution!=='browser'?' selected':'') +
+              '>MEXC API (taker 0.08% / maker 0.06%)</option>'+
+            '<option value="browser"' + (c.execution==='browser'?' selected':'') +
+              '>Playwright browser (web fee rates)</option>'+
+          '</select></div>'+
+        '<div class="mini" style="max-width:300px">MEXC prices API trading '+
+          'separately, and it overrides web promos. The browser path needs '+
+          'that account\'s executor running and logged in.</div>'+
+      '</div></div>'+
+    '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">'+
       '<div class="mini" style="margin-bottom:8px"><b>Maker orders</b> — off by default, futures only</div>'+
       '<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;cursor:pointer" '+
         'title="on position open, rest a reduce-only limit at the engine\'s projected profit target — fills as MAKER (0 fee) at the exact target, re-placed when the target decays">'+
@@ -3660,6 +3674,7 @@ function saveCfg(btn){
   var em = v('cEmerg');
   var body = {
     webhook_url: v('cHook'),
+    execution: (v('cExec') === 'browser' ? 'browser' : 'api'),
     emergency_exit_adverse: em ? (+em/100) : null,
     resting_tp: ck('cRtp'), limit_entry: ck('cLimEnt'),
     limit_entry_timeout_s: (+v('cLeTo') || 75),

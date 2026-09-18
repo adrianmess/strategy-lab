@@ -350,6 +350,7 @@ BLOCK_HEAVY = None    # abort image/media/font requests to save proxy bandwidth;
 # Cache configuration
 CACHE_DIR = None
 CACHE_FILE = None
+PROFILE_KEY = None    # account (shared profile) or instance_<id> (legacy)
 
 # Cache data structure
 cache_data = {
@@ -358,15 +359,23 @@ cache_data = {
     "last_symbol": None
 }
 
-def initialize_instance_config(instance_id, port):
-    """Initialize instance-specific configuration."""
-    global INSTANCE_ID, PORT, CACHE_DIR, CACHE_FILE
+def initialize_instance_config(instance_id, port, account=None):
+    """Initialize instance-specific configuration.
+
+    `account` (mexc1/mexc2) keys the browser PROFILE and cache instead of the
+    instance id, so every instance on one MEXC account shares one login,
+    one cookie jar and one warm cache. Chromium takes a SingletonLock on a
+    profile directory, so a shared profile also means a shared browser
+    process — the panel starts at most one executor per account and points
+    that account's instances at it."""
+    global INSTANCE_ID, PORT, CACHE_DIR, CACHE_FILE, PROFILE_KEY
 
     INSTANCE_ID = instance_id
     PORT = port
+    PROFILE_KEY = account or f"instance_{instance_id}"
 
-    # Set up instance-specific cache directory
-    CACHE_DIR = os.path.join("cache", f"instance_{instance_id}")
+    # Cache follows the profile: an account-keyed executor keeps one cache
+    CACHE_DIR = os.path.join("cache", PROFILE_KEY)
     CACHE_FILE = os.path.join(CACHE_DIR, "webhook_cache.pkl")
 
     # Ensure cache directory exists
@@ -417,8 +426,9 @@ async def initialize_browser():
     else:
         logger.info("Running without uBlock Origin extension")
 
-    # Use an instance-specific directory for Chrome user data
-    user_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "chrome_user_data", f"instance_{INSTANCE_ID}"))
+    # Profile keyed by ACCOUNT when the panel passed one (shared login/cache
+    # across that account's instances), else the legacy per-instance dir
+    user_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "chrome_user_data", PROFILE_KEY))
     if not os.path.exists(user_data_dir):
         os.makedirs(user_data_dir)
 
@@ -1705,6 +1715,11 @@ if __name__ == "__main__":
                         help='Proxy auth username (or MEXC_PROXY_USERNAME)')
     parser.add_argument('--proxy-password', default=os.environ.get('MEXC_PROXY_PASSWORD'),
                         help='Proxy auth password (or MEXC_PROXY_PASSWORD)')
+    parser.add_argument('--account', default=None,
+                        help='MEXC account this executor serves (mexc1/mexc2). '
+                             'Keys the browser profile and cache, so every '
+                             'instance on the account shares ONE login and one '
+                             'cache. Omit for the legacy per-instance profile.')
     parser.add_argument('--proxy-port', type=int,
                         default=(int(os.environ['MEXC_PROXY_PORT'])
                                  if os.environ.get('MEXC_PROXY_PORT') else None),
@@ -1720,7 +1735,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Initialize instance configuration
-    initialize_instance_config(args.instance, args.port)
+    initialize_instance_config(args.instance, args.port, args.account)
 
     if args.debug:
         DEBUG_MODE = True

@@ -4370,6 +4370,16 @@ def _sync_webhook_url(port, cfg_files=None):
             changed.append(f)
     return changed
 
+def _inst_account(I):
+    """The MEXC account an instance's config trades on."""
+    try:
+        c = json.load(open(os.path.join(AT, I["trader"].get("config")
+                                        or I.get("cfg") or "")))
+        return c.get("api_account") or "mexc1"
+    except Exception:
+        return None
+
+
 @app.route("/api/webhook/start", methods=["POST"])
 def webhook_start():
     i, I = _inst()
@@ -4377,6 +4387,30 @@ def webhook_start():
     if wh["proc"] is not None and wh["proc"].poll() is None:
         return jsonify(error=f"{_iname(i)}: executor already running"), 400
     d = request.get_json(force=True) or {}
+    # ONE executor per ACCOUNT: the browser profile is account-keyed so the
+    # instances on an account share a login and a cache, and Chromium locks a
+    # profile directory — a second browser on the same profile cannot start.
+    # So if this account already has an executor up, JOIN it instead of
+    # spawning: point this instance's config at that port and record it.
+    acct = _inst_account(I)
+    if acct:
+        for j, J in instances.items():
+            if j == i or _inst_account(J) != acct:
+                continue
+            jp = J["webhook"]
+            if jp["proc"] is not None and jp["proc"].poll() is None:
+                port = jp.get("port")
+                changed = _sync_webhook_url(port, [I["cfg"]])
+                I["port"] = port
+                wh.update(proc=None, started=jp.get("started"), port=port,
+                          headless=jp.get("headless"), shared_with=j)
+                _save_instances()
+                return jsonify(
+                    ok=True, instance=i, port=port, shared_with=_iname(j),
+                    configs_updated=changed,
+                    note=(f"{_iname(j)} is already running the {acct} browser "
+                          f"on port {port} — joined it instead of starting a "
+                          f"second one. One account, one browser, one login."))
     want = int(d.get("port", I["port"] or 5001))
     if want == 5000:
         want = 5001   # port 5000 is reserved by macOS AirPlay; never use it
@@ -4409,6 +4443,8 @@ def webhook_start():
     changed = _sync_webhook_url(port, only_mine)
     log = _webhook_log(i)
     cmd = [sys.executable, "webhook_server.py", "--instance", i, "--port", str(port)]
+    if acct:
+        cmd += ["--account", acct]     # account-keyed profile + cache
     if d.get("headless"):
         cmd.append("--headless")
     with open(log, "w") as lf:   # truncate so status reads only THIS run's log
