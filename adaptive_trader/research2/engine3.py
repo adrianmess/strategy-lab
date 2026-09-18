@@ -435,5 +435,20 @@ def get_pres3(cache="engine3_pre.pkl"):
             except OSError: pass
     from common import load_segments
     pres = [precompute3(g, d1) for g, d1 in load_segments()]
-    pickle.dump(pres, open(cache, "wb"))
+    # atomic: this file is ~190MB and shared by every process on the same
+    # (coin, market, tf). A plain open(...,"wb") truncates on open, so a
+    # concurrent reader loads a half-written pickle and segfaults inside
+    # numpy rather than raising — the macOS crash popups and rc -11 retries
+    # during the 2026-09-18 cold-cache re-cost.
+    tmp = f"{cache}.tmp{os.getpid()}"
+    try:
+        with open(tmp, "wb") as f:
+            pickle.dump(pres, f)
+        os.replace(tmp, cache)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     return pres

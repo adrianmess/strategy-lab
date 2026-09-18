@@ -68,6 +68,31 @@ TEST_DAYS = 28
 TREND_VARIANTS = [None, 2.0]
 
 # ---------------- global data (loaded once; fork-inherited) ----------------
+def _dump_atomic(obj, path):
+    """Pickle to a per-PID temp file, then os.replace into place.
+
+    These caches are shared by every process that touches the same
+    (coin, market, tf), and `pickle.dump(obj, open(path, "wb"))` truncates
+    the target the instant it opens. With N workers cold-starting, one
+    child routinely began loading a 190MB cache another was midway through
+    writing — a partial pickle that segfaults inside numpy/numba rather
+    than raising, which is the "Python quit unexpectedly" popup and the
+    rc -11 retries. os.replace is atomic on the same filesystem, so a
+    reader sees either the whole old file or the whole new one.
+    """
+    tmp = f"{path}.tmp{os.getpid()}"
+    try:
+        with open(tmp, "wb") as f:
+            pickle.dump(obj, f)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _cache_path(fn):
     """Pickle cache location. WF2_CACHE_DIR (set by the optimizer CLI) makes the
     heavy precompute caches shared across runs instead of per-run-dir.
@@ -111,7 +136,7 @@ def load_globals(need=("v6", "scalpx")):
             for tz in TREND_VARIANTS:
                 pa = [make_adaptive_pre(p, trend_block_z=tz) for p in pres]
                 v6.append(pa)  # list over segments of (q, f)
-            pickle.dump(v6, open(_cache_path("v6_variants.pkl"), "wb"))
+            _dump_atomic(v6, _cache_path("v6_variants.pkl"))
         _G["v6"] = v6
         _G["regimes_v6"] = {m: [make_regimes(f, m)[0] for _, f in v6[0]] for m in REGIME_METHODS}
         _G["nreg"] = {m: make_regimes(v6[0][0][1], m)[1] for m in REGIME_METHODS}
@@ -137,7 +162,7 @@ def load_globals(need=("v6", "scalpx")):
                 pre = scalp_precompute2(g)
                 f = regime_features(pre)
                 sc2.append((pre, f))
-            pickle.dump(sc2, open(cp, "wb"))
+            _dump_atomic(sc2, cp)
         _G["scalp2"] = sc2
         _G["regimes_sc2"] = {m: [make_regimes(f, m)[0] for _, f in sc2] for m in REGIME_METHODS}
         _G.setdefault("nreg", {m: make_regimes(sc2[0][1], m)[1] for m in REGIME_METHODS})
@@ -157,7 +182,7 @@ def load_globals(need=("v6", "scalpx")):
                 pre = scalp_precompute(g)
                 f = regime_features(pre)
                 sc.append((pre, f))
-            pickle.dump(sc, open(_cache_path("scalp_pre.pkl"), "wb"))
+            _dump_atomic(sc, _cache_path("scalp_pre.pkl"))
         _G["scalp"] = sc
         _G["regimes_sc"] = {m: [make_regimes(f, m)[0] for _, f in sc] for m in REGIME_METHODS}
         _G.setdefault("nreg", {m: make_regimes(sc[0][1], m)[1] for m in REGIME_METHODS})
@@ -174,7 +199,7 @@ def load_globals(need=("v6", "scalpx")):
             segs = segs or load_segments()
             from rocx_engine import precompute_rocx
             rx = [precompute_rocx(g, d1) for g, d1 in segs]
-            pickle.dump(rx, open(_cache_path("rocx_pre.pkl"), "wb"))
+            _dump_atomic(rx, _cache_path("rocx_pre.pkl"))
         _G["rocx"] = rx
     if "macdx" in need and "macdx" not in _G:
         mx = None
@@ -189,7 +214,7 @@ def load_globals(need=("v6", "scalpx")):
             segs = segs or load_segments()
             from macdx_engine import MACDX_DEFAULTS, precompute_macdx
             mx = [precompute_macdx(g, d1, MACDX_DEFAULTS) for g, d1 in segs]
-            pickle.dump(mx, open(_cache_path("macdx_pre2.pkl"), "wb"))
+            _dump_atomic(mx, _cache_path("macdx_pre2.pkl"))
         _G["macdx"] = mx
     return _G
 
