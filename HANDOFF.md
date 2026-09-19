@@ -1,5 +1,45 @@
 # Strategy Lab — Session Handoff
-Updated: 2026-09-18 (fee correction + corpus re-cost). Paste into a new session to resume. Keep this file updated as work progresses.
+Updated: 2026-09-19 (honest-fee re-search live on EC2). Paste into a new session to resume. Keep this file updated as work progresses.
+
+## ACTIVE: gamut_hfee_mh12 — the honest-fee re-search (started 2026-09-19 ~01:30)
+
+The repair for the mis-selection described below: the whole gorig_mh12 grid
+(**6,048 specs**) re-searched at the fees the account actually pays.
+
+- **Two spot fleets, us-east-2, c6a.48xlarge (192 vCPU) @ ~$2.14/hr each.**
+  Fleet A `fleet-fda5eac3-cdaa-4323-a248-db510203551f` → 3.18.175.194 walks
+  the plan **forward**; fleet B `fleet-86a78879-2ce6-4ebc-8b77-5926b9d38845`
+  → 3.147.0.190 walks it **reverse** (meet-in-the-middle, no coordination).
+  Both `maintain` + capacity-optimized. Elastic IPs
+  `eipalloc-0d3e03edac7a09d73` / `eipalloc-0ea3329a3aafd250f`.
+- **FEE GUARD** in both boot scripts: a box whose `fees.json` still carries
+  MEXC's advertised web rates refuses to start a worker, rather than burning
+  hours reproducing the exact error this campaign replaces.
+- Sync loop on the mini pulls finished dirs into `optimizer/runs`;
+  `box_autoteardown.sh` self-terminates each box when its side is done.
+- The SSH key for the boxes (`~/.ssh/gamut-key.pem`) lives **on the mini**,
+  not the MacBook — hop through the mini. The MacBook has no `aws` binary on
+  PATH but the module works: `python3 -m awscli ...`.
+
+⚠ **The 95%-idle trap (2026-09-19, cost real money).** `optimizer/gamut_limits.json`
+is machine-local but lives *in the repo*, so the mini's `{"cores": 10}` rode
+inside `repo.tgz` to both boxes. `gamut_worker.budget()` treats that file as
+AUTHORITATIVE over `--jobs`, so two 192-vCPU boxes ran **one** search at 10
+procs — load ~6, 95% idle, full spot price, for hours. The only symptom was
+one line in `worker.log`. Fixed in 9b42225: the boot scripts rewrite the file
+from `nproc` and the worker now prints a CORE BUDGET WARNING. **Verify every
+new box** — healthy 192-vCPU box is `{"cores": 238}`, ~250 legs, load 170-185.
+Edits apply live; never restart a worker for it.
+
+Note: box B's `worker.log` stamps read UTC because the worker parent started
+before `timedatectl`; its child processes and all published run entries are
+LA time, so the results are not skewed — only that one log is +7h.
+
+### Combos re-costed
+`scripts/rerun_combos.py` completed all **20** runnable fcfsx combos on the
+mini (progress in `optimizer/rerun_combos.done`, resumable). Combos can't use
+the shard path — no single genome — so each goes through `refresh_combo.py`,
+which re-backtests every component and re-runs the merge + causal walk-forward.
 
 ## 2026-09-18 — THE FEE CORRECTION (read this before trusting any old number)
 
@@ -34,8 +74,8 @@ Explored because web fees are far cheaper, then dropped on ToS grounds: MEXC's R
 - **Data limits worth knowing:** CVD and VRVP in `scalp_engine.py` are *candle-derived proxies* (whole-bar volume signed by bar direction; POC from close prices), not order-flow. No open interest anywhere. Funding is not modelled. `trades_count` is populated for only 4% of rows.
 
 ### Outstanding
-1. **80 routers/combos not re-costed** — they need the combo path (`fcfsx_rerun` / `refresh_combo.py`), not the shard path. A bulk "re-run all combos at current fees" job was never built.
-2. Re-search a gamut campaign at honest fees (the actual repair).
+1. ~~80 routers/combos not re-costed~~ — DONE 2026-09-19 via `scripts/rerun_combos.py` (20 runnable combos; the rest were missing components).
+2. ~~Re-search a gamut campaign at honest fees~~ — RUNNING, see `gamut_hfee_mh12` at the top of this file.
 3. Spot **maker entries** — spot has resting TPs but `limit_entry` is futures-only. Spot maker/maker is a *zero* fee round trip, by far the best return on effort left.
 4. Time Machine exclusions + reboot on the mini.
 5. MEX 2 Lev is STOPPED. Before re-enabling maker/maker, raise `limit_entry_timeout_s` from 5s (Cascade uses 75s) — 5s on a 1m strategy sends almost every entry down the cancel path.
