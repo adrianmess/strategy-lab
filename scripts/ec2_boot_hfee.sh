@@ -24,6 +24,14 @@ if [ $? -ne 0 ]; then
 fi
 
 J=$(( $(nproc) / 11 )); [ "$J" -lt 4 ] && J=4
+
+# CORE BUDGET — must be sized for THIS box. optimizer/gamut_limits.json is a
+# machine-local file that ships in the repo bundle, and the mini's copy says
+# {"cores": 10}. budget() in gamut_worker treats that file as AUTHORITATIVE
+# over --jobs, so a 192-vCPU box inherited a 10-core cap and ran ONE search at
+# ~5% utilisation while costing full spot price (2026-09-19). Rewrite it from
+# nproc on every boot: jobs x the plan's 14 procs per search.
+echo "{\"cores\": $(( J * 14 ))}" > ~/strategy-lab/optimizer/gamut_limits.json
 tmux has-session -t keeper 2>/dev/null || tmux new-session -d -s keeper 'sleep infinity'
 tmux has-session -t gamut 2>/dev/null || tmux new-session -d -s gamut \
   ". ~/venv/bin/activate && cd ~/strategy-lab/optimizer && python3 gamut_worker.py --plan campaigns/$CAMP/plan.json --jobs $J 2>&1 | tee -a ~/worker.log"

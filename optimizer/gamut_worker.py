@@ -162,6 +162,26 @@ def main():
     print(f"worker: {n_total} candidate specs, cores={budget() or 'unlimited'}"
           f" -> up to {_j0} concurrent x {_p0} procs", flush=True)
 
+    # gamut_limits.json is MACHINE-LOCAL but lives inside the repo, so it rides
+    # along in any tarball/rsync of the tree. On 2026-09-19 the mini's
+    # {"cores": 10} reached two 192-vCPU EC2 boxes that way; budget() honours
+    # the file over --jobs, so they ran ONE search at ~5% utilisation for hours
+    # at full spot price and the only symptom was the line above. Say it loudly
+    # whenever the budget leaves most of the machine on the table.
+    try:
+        _cpu = os.cpu_count() or 0
+    except Exception:
+        _cpu = 0
+    _b = budget()
+    if _cpu >= 16 and 0 < _b < _cpu // 2:
+        print(f"worker: !! CORE BUDGET WARNING — {LIMITS} caps this box at "
+              f"{_b} cores but it has {_cpu} vCPUs. The limits file OVERRIDES "
+              f"--jobs {a.jobs}. If this file arrived with the repo rather "
+              f"than being set for THIS machine, fix it:\n"
+              f"       echo '{{\"cores\": {max(4, _cpu // 11) * plan_procs}}}' "
+              f"> {LIMITS}\n"
+              f"       (picked up live — no restart needed)", flush=True)
+
     counters = dict(done=0, failed=0, skipped=0)
     MAXTRY = 5
 

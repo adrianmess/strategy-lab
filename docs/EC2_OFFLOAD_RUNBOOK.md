@@ -48,6 +48,22 @@ between boxes and the Mac pulls everything home every 5 minutes.
 - c8a.48xlarge slightly faster when available; c6a.48xlarge the fallback.
 - Worker sizing rule: **jobs = nproc / 11** (each spec runs 14 procs;
   oversubscription measured optimal), min 4.
+- **`--jobs` is NOT what sizes the box — `optimizer/gamut_limits.json` is.**
+  `gamut_worker.budget()` treats that file as authoritative and only falls
+  back to the CLI value when it is absent. The file is machine-local but
+  lives *inside the repo*, so it rides along in `repo.tgz` / any rsync: on
+  2026-09-19 the mini's `{"cores": 10}` reached two 192-vCPU boxes and pinned
+  them to **one** search at ~5% utilisation, at full spot price, for hours.
+  The boot scripts now rewrite it from `nproc` (`cores = jobs x 14`) before
+  starting the worker, and the worker prints a CORE BUDGET WARNING when the
+  budget is under half the box's vCPUs. **Verify on every new box:**
+
+  ```
+  ssh ubuntu@$IP 'cat ~/strategy-lab/optimizer/gamut_limits.json; \
+                  pgrep -fc optimize2_cli; uptime'
+  ```
+  A healthy 192-vCPU box shows `{"cores": 238}`, ~250 legs and load 170-185.
+  Edits to the file are picked up **live** — never restart the worker for it.
 - Full campaign cost: ~$300 total for ~15,500 specs over ~1 week with two
   boxes, vs an estimated 20+ days locally.
 

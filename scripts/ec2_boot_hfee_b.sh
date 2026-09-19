@@ -24,6 +24,11 @@ if [ $? -ne 0 ]; then
 fi
 
 J=$(( $(nproc) / 11 )); [ "$J" -lt 4 ] && J=4
+
+# CORE BUDGET — see the long note in ec2_boot_hfee.sh. optimizer/gamut_limits.json
+# ships in the repo bundle carrying the MINI's cap ({"cores": 10}), and
+# gamut_worker.budget() lets that file override --jobs. Rewrite it from nproc.
+echo "{\"cores\": $(( J * 14 ))}" > ~/strategy-lab/optimizer/gamut_limits.json
 tmux has-session -t keeper 2>/dev/null || tmux new-session -d -s keeper 'sleep infinity'
 tmux has-session -t gamut 2>/dev/null || tmux new-session -d -s gamut \
   ". ~/venv/bin/activate && cd ~/strategy-lab/optimizer && python3 gamut_worker.py --plan campaigns/$CAMP/plan.json --jobs $J --reverse 2>&1 | tee -a ~/worker.log"
