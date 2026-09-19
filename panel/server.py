@@ -166,6 +166,11 @@ def _readopt_orphans():
                             capture_output=True, text=True, timeout=10).stdout
     except Exception:
         return
+    # Two instances pointed at the SAME config would both match the one
+    # running process, so the panel showed three traders alive when two
+    # existed and rendered one real position under both cards
+    # (MEX Lev 1 + Cascade, 2026-09-18). A pid is claimable once.
+    _claimed_pids = set()
     for line in ps.splitlines():
         parts = line.strip().split(None, 6)
         if len(parts) < 7:
@@ -180,10 +185,13 @@ def _readopt_orphans():
             continue
         if "trader.py" in cmd and "TRADER_CONFIG=" in cmd:
             cfg = cmd.split("TRADER_CONFIG=")[1].split()[0]
+            if pid in _claimed_pids:
+                continue          # one process belongs to exactly one instance
             for i, I in instances.items():
                 t = I["trader"]
                 busy = t["proc"] is not None and t["proc"].poll() is None
                 if not busy and I.get("cfg") == cfg:
+                    _claimed_pids.add(pid)
                     t.update(proc=_PidProc(pid, "trader.py"), config=cfg,
                              live=("--live" in cmd), started=started)
                     # it IS running — repair the persisted intent too, so a
@@ -715,6 +723,24 @@ def trader_start():
     # lost its handle (e.g. a ps hiccup latched it as dead) — re-attach it,
     # in whatever live/dry state it truly is, rather than spawn a duplicate
     orphan = _find_trader_proc(cfg_name)
+    if orphan and any(
+            j != i and (J["trader"]["proc"] is not None
+                        and J["trader"]["proc"].poll() is None
+                        and getattr(J["trader"]["proc"], "pid", None) == orphan[0])
+            for j, J in instances.items()):
+        # Another instance already owns that process. Re-attaching here is
+        # how MEX Lev 1 and the Cascade ended up sharing one trader after
+        # both were pointed at the same config: the panel reported three
+        # traders alive with two running, and showed one real position under
+        # both cards (2026-09-18).
+        _owner = next(_iname(j) for j, J in instances.items()
+                      if j != i and getattr(J["trader"]["proc"], "pid", None)
+                      == orphan[0])
+        return jsonify(error=(
+            f"{_iname(i)}: the trader for {cfg_name} is already running and "
+            f"owned by {_owner}. Two instances cannot share one process — "
+            f"they would share a state file. Point this instance at its own "
+            f"config, or stop {_owner} first.")), 409
     if orphan:
         opid, olive, ostarted = orphan
         t.update(proc=_PidProc(opid, "trader.py"), config=cfg_name,
@@ -1317,6 +1343,16 @@ def _positions_all_compute():
 
 
 _MANUAL_PREV = {"out": None}
+# holdings that are NOT positions: MX is held to get the fee discount, not
+# traded, so it must never produce open/close events or land in the trade
+# history. Quote/stable assets likewise.
+NON_POSITION_ASSETS = {"MX", "USDT", "USDC", "USD"}
+# a symbol must be missing from this many CONSECUTIVE snapshots before we
+# call it closed. One partial balance read used to be enough: MX vanished
+# from a single snapshot on 2026-09-18 22:24 and the panel announced
+# "MX_USDT closed 520.366 @ 1.8287" while the tokens sat in the account.
+_MANUAL_GONE = {}
+_GONE_STREAK = 2
 
 
 def _manual_close_alert(prev, cur):
@@ -1336,6 +1372,8 @@ def _manual_close_alert(prev, cur):
             if r.get("market") == "fut":
                 ks[(r["account"], "fut", r["symbol"])] = r
             else:
+                if str(r.get("asset") or "").upper() in NON_POSITION_ASSETS:
+                    continue                  # fee-discount / quote holdings
                 ks[(r["account"], "spot", r["asset"])] = r
         return ks
     cur_k = keys(cur)
@@ -1346,12 +1384,24 @@ def _manual_close_alert(prev, cur):
     # "SOL_USDT closed 8.3 @ 105.41" while the position sat untouched
     # (2026-09-17 23:55). Presence in the FULL row set is the real test.
     cur_all = keys(cur, manual_only=False)
+    # Anything manual-held that is now absent becomes a CANDIDATE. Candidates
+    # are then aged against later snapshots independently of `prev` — ageing
+    # off prev alone never reaches the streak, because by the next poll prev
+    # is the snapshot the row was already missing from.
     for k, r in keys(prev).items():
-        if k in cur_k or k in cur_all:
+        if k not in cur_all:
+            _MANUAL_GONE.setdefault(k, {"n": 0, "row": r})
+    for k in list(_MANUAL_GONE):
+        if k in cur_all:
+            _MANUAL_GONE.pop(k, None)      # it came back: it never left
             continue
         acct, mkt, name = k
         if f"{acct} {mkt}" in errtxt:
+            continue                       # bad read: don't age on it
+        _MANUAL_GONE[k]["n"] += 1
+        if _MANUAL_GONE[k]["n"] < _GONE_STREAK:
             continue
+        r = _MANUAL_GONE.pop(k)["row"]
         sym_key = name if mkt == "fut" else f"{name}_USDT"
         if time.time() - _RECENT_MCLOSE.get((acct, mkt, sym_key), 0) < 120:
             continue            # already announced by the UI action / TP-SL
