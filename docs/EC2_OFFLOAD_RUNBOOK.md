@@ -54,9 +54,26 @@ between boxes and the Mac pulls everything home every 5 minutes.
   lives *inside the repo*, so it rides along in `repo.tgz` / any rsync: on
   2026-09-19 the mini's `{"cores": 10}` reached two 192-vCPU boxes and pinned
   them to **one** search at ~5% utilisation, at full spot price, for hours.
-  The boot scripts now rewrite it from `nproc` (`cores = jobs x 14`) before
-  starting the worker, and the worker prints a CORE BUDGET WARNING when the
-  budget is under half the box's vCPUs. **Verify on every new box:**
+  **`scripts/ec2_size_cores.sh` is now the single owner of that file.** Every
+  `ec2_boot_*.sh` / `box_boot_*.sh` calls it before starting a worker, and
+  cron re-runs it every 10 min so a later `repo.tgz` re-extract can't silently
+  re-cap a running box. It sizes from `nproc` (`jobs = nproc/11`, min 2;
+  `cores = jobs x` the plan's own `--procs`, capped at 1.5x nproc) and the
+  worker additionally prints a CORE BUDGET WARNING when the budget is under
+  half the box's vCPUs.
+
+  It can never slow a machine down: it is **raise-only** (a budget already at
+  or above `nproc/2` is left untouched), and `~/NO_AUTOSIZE` disables it
+  entirely. To throttle a box on purpose use `gamut_ctl.sh cores N` — setting
+  N below half the box creates `NO_AUTOSIZE` for you, and raising it back
+  clears it.
+
+  ```
+  ~/ec2_size_cores.sh --dry-run    # what it would do, changes nothing
+  ~/ec2_size_cores.sh              # apply (picked up live)
+  ```
+
+  **Verify on every new box:**
 
   ```
   ssh ubuntu@$IP 'cat ~/strategy-lab/optimizer/gamut_limits.json; \

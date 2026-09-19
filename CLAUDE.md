@@ -96,6 +96,14 @@ overrides web rates, 0-fee promos and MX discounts:
   `optimizer/campaigns/`; gamut worker budget via `optimizer/gamut_limits.json`
   + `scripts/gamut_ctl.sh` (status|pause|resume|cores N — per-PID signals only,
   NEVER process groups).
+- **`gamut_limits.json` OVERRIDES `--jobs`** and is machine-local while living
+  inside the repo, so it travels in any tarball/rsync of the tree. On EC2 it
+  is owned by `scripts/ec2_size_cores.sh` (every boot script + cron every
+  10 min): sizes from `nproc`, raise-only, disabled by `~/NO_AUTOSIZE`.
+  Never hand-edit it on a box, and never hardcode a core count into a boot
+  script — the mini's `{"cores": 10}` once shipped to two 192-vCPU boxes and
+  left them 95% idle at full spot price. Edits apply LIVE; never restart a
+  worker to change the budget.
 - Gamut machine assignment (Adrian, 2026-09-11): the MacBook runs ONE
   campaign at a time (agent-enforced), and should be given pairs that are
   NOT already being gamutted on other machines (EC2) — only split a pair

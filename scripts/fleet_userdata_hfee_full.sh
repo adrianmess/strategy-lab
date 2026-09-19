@@ -70,7 +70,7 @@ mkdir -p dashboard
 aws s3 sync $B/runs/ ~/strategy-lab/optimizer/runs/ --only-show-errors || true
 
 cd /home/ubuntu
-for f in ec2_boot_hfee.sh ec2_boot_hfee_b.sh box_s3_push.sh box_autoteardown.sh; do
+for f in ec2_boot_hfee.sh ec2_boot_hfee_b.sh box_s3_push.sh box_autoteardown.sh ec2_size_cores.sh; do
   aws s3 cp $B/code/$f ~/$f || true
 done
 cat > ~/boot_dispatch.sh <<'EOF'
@@ -80,10 +80,11 @@ if [ "$D" = "rev" ]; then ~/ec2_boot_hfee_b.sh; else ~/ec2_boot_hfee.sh; fi
 EOF
 chmod +x ~/*.sh
 
-( crontab -l 2>/dev/null | grep -v "boot_dispatch\|box_s3_push\|box_autoteardown"
+( crontab -l 2>/dev/null | grep -v "boot_dispatch\|box_s3_push\|box_autoteardown\|ec2_size_cores"
   echo "@reboot sleep 30 && ~/boot_dispatch.sh"
   echo "*/5 * * * * ~/box_s3_push.sh"
-  echo "*/10 * * * * ~/box_autoteardown.sh" ) | crontab -
+  echo "*/10 * * * * ~/box_autoteardown.sh"
+  echo "*/10 * * * * ~/ec2_size_cores.sh --quiet" ) | crontab -
 
 ~/boot_dispatch.sh
 USERPART

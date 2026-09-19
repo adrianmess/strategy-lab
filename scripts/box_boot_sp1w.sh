@@ -1,6 +1,10 @@
 #!/bin/bash
 # On-box boot for the SPOT 1m merge sweep (campaign sp1w_0814).
 # Direction from ~/m1_direction ("--reverse" or absent = forward).
+# CORE BUDGET — size it from THIS box, never from whatever shipped in
+# the repo bundle. See the header of ec2_size_cores.sh for the incident.
+[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+
 tmux new-session -d -s keeper 'sleep infinity' 2>/dev/null || true
 REV=""
 [ -f "$HOME/m1_direction" ] && REV="$(cat "$HOME/m1_direction")"

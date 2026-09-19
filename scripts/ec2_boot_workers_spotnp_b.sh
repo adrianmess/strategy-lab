@@ -2,6 +2,10 @@
 # BOX B boot for gspot_newpairs: REVERSE worker (meet-in-the-middle).
 export PATH=/usr/bin:/bin:/usr/local/bin:/snap/bin
 J=$(( $(nproc) / 11 )); [ "$J" -lt 4 ] && J=4
+# CORE BUDGET — size it from THIS box, never from whatever shipped in
+# the repo bundle. See the header of ec2_size_cores.sh for the incident.
+[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+
 # reset the live core budget to this machine's width — the AMI's stale
 # {"cores":12} otherwise throttles every fleet replacement (see box A)
 echo "{\"cores\": $(nproc)}" > ~/strategy-lab/optimizer/gamut_limits.json

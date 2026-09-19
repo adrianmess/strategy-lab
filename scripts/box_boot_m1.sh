@@ -2,6 +2,10 @@
 # On-box boot for the m1sweep worker. Ships to ~/boot_m1.sh on each EC2 box.
 # Direction comes from ~/m1_direction (contains "--reverse" or is absent).
 J=$(( $(nproc) / 11 )); [ "$J" -lt 2 ] && J=2
+# CORE BUDGET — size it from THIS box, never from whatever shipped in
+# the repo bundle. See the header of ec2_size_cores.sh for the incident.
+[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+
 REV=""
 [ -f ~/m1_direction ] && REV="$(cat ~/m1_direction)"
 tmux new-session -d -s keeper 'sleep infinity' 2>/dev/null || true

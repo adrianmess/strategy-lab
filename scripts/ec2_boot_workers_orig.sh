@@ -3,6 +3,10 @@
 # max-hold 1 & 2.5, trimmed shape). Idempotent.
 export PATH=/usr/bin:/bin:/usr/local/bin:/snap/bin
 J=$(( $(nproc) / 11 )); [ "$J" -lt 4 ] && J=4
+# CORE BUDGET — size it from THIS box, never from whatever shipped in
+# the repo bundle. See the header of ec2_size_cores.sh for the incident.
+[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+
 echo "{\"cores\": $(nproc)}" > ~/strategy-lab/optimizer/gamut_limits.json
 tmux has-session -t keeper 2>/dev/null || tmux new-session -d -s keeper 'sleep infinity'
 tmux has-session -t gamut 2>/dev/null || tmux new-session -d -s gamut \

@@ -3,6 +3,10 @@
 # recovery). Idempotent; session-existence guards. ~1 spec per 11 vCPUs.
 export PATH=/usr/bin:/bin:/usr/local/bin:/snap/bin
 J=$(( $(nproc) / 11 )); [ "$J" -lt 4 ] && J=4
+# CORE BUDGET — size it from THIS box, never from whatever shipped in
+# the repo bundle. See the header of ec2_size_cores.sh for the incident.
+[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+
 # the live core-budget file OVERRIDES --jobs, and the AMI carries a stale
 # MacBook value ({"cores":12}) — a fleet replacement ran a 192-core box at
 # 12 for hours (2026-09-10). Always reset it to this machine's true width.

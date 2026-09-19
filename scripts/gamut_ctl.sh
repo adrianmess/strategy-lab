@@ -33,6 +33,20 @@ case "${1:-status}" in
       [ -n "$OPTDIR" ] || { echo "ERROR no optimizer dir"; exit 1; }
       printf '{"cores": %d}\n' "$2" > "$LIMITS"
       echo "CORES $2 (applies as running searches finish)"
+      # EC2 boxes run ec2_size_cores.sh from cron to stop the repo bundle's
+      # limits file re-capping them. It is raise-only, so it would undo a
+      # deliberate throttle to under half the box — record the intent here so
+      # it doesn't, and clear it again when the budget is put back up.
+      N=$( (command -v nproc >/dev/null 2>&1 && nproc) \
+           || sysctl -n hw.ncpu 2>/dev/null || echo 0 )
+      if [ "$N" -gt 0 ] 2>/dev/null && [ "$2" -lt $(( N / 2 )) ] 2>/dev/null; then
+        touch "$HOME/NO_AUTOSIZE"
+        echo "AUTOSIZE off (~/NO_AUTOSIZE) — $2 is under half of $N cores;"
+        echo "  raise it back to >= $(( N / 2 )) to re-enable auto-sizing"
+      elif [ -e "$HOME/NO_AUTOSIZE" ]; then
+        rm -f "$HOME/NO_AUTOSIZE"
+        echo "AUTOSIZE on (~/NO_AUTOSIZE cleared)"
+      fi
     else
       echo "CORES $(sed -n 's/.*"cores"[^0-9]*\([0-9]*\).*/\1/p' "$LIMITS" 2>/dev/null)"
     fi

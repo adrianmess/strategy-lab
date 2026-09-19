@@ -28,7 +28,7 @@ rm -f ~/TEARDOWN_FIRED
 
 # refresh the worker + boot scripts in case they changed since the AMI
 aws s3 cp $B/code/gamut_worker.py ~/strategy-lab/optimizer/gamut_worker.py || true
-for f in ec2_boot_hfee.sh ec2_boot_hfee_b.sh box_s3_push.sh box_autoteardown.sh; do
+for f in ec2_boot_hfee.sh ec2_boot_hfee_b.sh box_s3_push.sh box_autoteardown.sh ec2_size_cores.sh; do
   aws s3 cp $B/code/$f ~/$f || true
 done
 chmod +x ~/*.sh
@@ -42,10 +42,11 @@ mkdir -p ~/strategy-lab/dashboard
 [ -f ~/strategy-lab/dashboard/backtests.js ] || \
     echo "window.BACKTESTS = [];" > ~/strategy-lab/dashboard/backtests.js
 
-( crontab -l 2>/dev/null | grep -v "boot_dispatch\|box_s3_push\|box_autoteardown"
+( crontab -l 2>/dev/null | grep -v "boot_dispatch\|box_s3_push\|box_autoteardown\|ec2_size_cores"
   echo "@reboot sleep 30 && ~/boot_dispatch.sh"
   echo "*/5 * * * * ~/box_s3_push.sh"
-  echo "*/10 * * * * ~/box_autoteardown.sh" ) | crontab -
+  echo "*/10 * * * * ~/box_autoteardown.sh"
+  echo "*/10 * * * * ~/ec2_size_cores.sh --quiet" ) | crontab -
 
 ~/boot_dispatch.sh
 USERPART

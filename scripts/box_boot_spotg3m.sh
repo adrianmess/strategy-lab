@@ -6,6 +6,10 @@
 set -u
 cd "$HOME/strategy-lab/optimizer" || exit 1
 
+# CORE BUDGET — size it from THIS box, never from whatever shipped in
+# the repo bundle. See the header of ec2_size_cores.sh for the incident.
+[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+
 tmux kill-session -t spg 2>/dev/null
 pkill -f "gamut_worker.py --plan" 2>/dev/null
 sleep 2
