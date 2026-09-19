@@ -16,7 +16,28 @@ done
   [ -d "$d" ] && OPTDIR="$d" && break
 done
 LIMITS="$OPTDIR/gamut_limits.json"
-tree(){ local p; for p in "$@"; do echo "$p"; tree $(pgrep -P "$p" 2>/dev/null); done; }
+# Descend the process tree from ONE ps snapshot. The old version recursed
+# with a `pgrep -P` per node: on a 192-vCPU box running 17 searches that is
+# 250+ forks, each scanning a huge process table under load ~160, so `status`
+# took ~27s — past the panel's 20s probe timeout, which made both healthy EC2
+# boxes show "unreachable" on the progress page (2026-09-19). Now one fork.
+tree(){
+  [ $# -gt 0 ] || return 0
+  ps -Ao pid=,ppid= 2>/dev/null | awk -v roots="$*" '
+    { kid[$2] = kid[$2] " " $1 }
+    END {
+      n = split(roots, q, " ")
+      for (i = 1; i <= n; i++)
+        if (q[i] != "") { out[q[i]] = 1; stack[++top] = q[i] }
+      while (top > 0) {
+        p = stack[top--]
+        m = split(kid[p], c, " ")
+        for (j = 1; j <= m; j++)
+          if (c[j] != "" && !(c[j] in out)) { out[c[j]] = 1; stack[++top] = c[j] }
+      }
+      for (p in out) print p
+    }'
+}
 # only real python workers — chained shell watchers ("while pgrep …") also
 # match the pattern but are not workers
 ROOTS=""

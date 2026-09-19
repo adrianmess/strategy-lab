@@ -35,6 +35,37 @@ Note: box B's `worker.log` stamps read UTC because the worker parent started
 before `timedatectl`; its child processes and all published run entries are
 LA time, so the results are not skewed — only that one log is +7h.
 
+⚠ **"unreachable" on the progress page usually means SLOW, not down.**
+`gamut_ctl.sh status` recursed with a `pgrep -P` per process — 250+ forks on a
+box running 17 searches at load 160, taking **27s**, past the panel's 20s ssh
+timeout. Both healthy boxes showed red. `tree()` now walks one `ps` snapshot
+in awk (**27s → 2.9s**), the panel allows 45s, and a probe that does time out
+renders as amber "busy — no reply" instead of red.
+
+### Three machines on this campaign (MacBook joined 2026-09-19 15:48)
+The MacBook runs it too, at **10 cores** (`gamut_limits.json` `{"cores": 10}`
+→ 1 search x 10 procs, leaving 6 of its 16 for Adrian). It works from a
+**rotated plan**, `campaigns/gamut_hfee_mh12/plan_mid.json` (= `specs[3024:] +
+specs[:3024]`), so it starts ~2,900 specs clear of box A's forward front and
+box B's reverse front instead of fighting either. The rotated plan sits in the
+SAME campaign dir on purpose: `pdir` comes from the plan's dirname, so it
+shares `worker_state.json` and sees the peer files.
+
+`scripts/mac_gamut_peer.sh` (loop every 5 min, started with nohup — `crontab -`
+hangs on this Mac) makes it a real peer: pushes its `worker_state.json` to
+S3 as `worker_state_<host>.json`, pulls the boxes' states down as
+`worker_state_peer_*.json`, and rsyncs its finished runs to the mini (nothing
+pulls FROM the MacBook, unlike the boxes). **This is not optional bookkeeping:**
+running workers only consult done-markers at startup, so mid-campaign the only
+thing preventing two machines from searching the same spec is
+`worker_state_peer_*.json`. Verified in all directions — both boxes hold
+`worker_state_peer_Mac.json`.
+
+Two MacBook-specific traps the script handles: there is no `aws` binary (use
+`python3 -m awscli`), and `box_s3_push.sh`'s wholesale `s3 sync optimizer/runs`
+would push ~27k dirs / 53GB from here, so every transfer is filtered to the
+campaign prefix.
+
 ### Combos re-costed
 `scripts/rerun_combos.py` completed all **20** runnable fcfsx combos on the
 mini (progress in `optimizer/rerun_combos.done`, resumable). Combos can't use

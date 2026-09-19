@@ -7026,9 +7026,15 @@ def _gctl(sys_d, action, arg=None):
                "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
                "-o", "ConnectTimeout=8", sys_d["ssh"],
                "bash -s", action] + extra
+        # 45s, not 20: `status` on a 192-vCPU box running 17 searches used to
+        # take ~27s, so every probe timed out and both healthy EC2 boxes read
+        # "unreachable" (2026-09-19). gamut_ctl.sh now does it in ~3s, but the
+        # headroom stays — a busy box being slow is not a box being down.
         r = subprocess.run(cmd, stdin=open(_GCTL), capture_output=True,
-                           text=True, timeout=20)
+                           text=True, timeout=45)
         return r.stdout
+    except subprocess.TimeoutExpired:
+        return "STATE timeout"
     except Exception as e:
         return f"ERROR {e}"
 
@@ -7089,7 +7095,9 @@ def gamut_workers():
             d.update(_parse_gctl(_gctl(s, "status")))
             out.append(d)
         ts = [threading.Thread(target=probe, args=(s,)) for s in systems]
-        [t.start() for t in ts]; [t.join(timeout=25) for t in ts]
+        # must outlast _gctl's own 45s, or a slow box is dropped from the
+        # table entirely rather than reported as slow
+        [t.start() for t in ts]; [t.join(timeout=50) for t in ts]
         base = dict(systems=sorted(out, key=lambda x: x["name"]))
         _GW_CACHE.update(t=time.time(), data=base)
     # per-request assembly: self-reported workers + viewer identification

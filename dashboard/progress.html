@@ -201,8 +201,11 @@ const STBADGE = {
   running:    ['#3fb950', 'RUNNING'],
   paused:     ['#d29922', 'PAUSED'],
   idle:       ['#8b949e', 'idle'],
+  timeout:    ['#d29922', 'busy — no reply'],
   unreachable:['#f85149', 'unreachable'],
 };
+// 'timeout' is deliberately NOT red: the machine answered its ssh but its
+// status probe ran long, which on a fully loaded box means busy, not down.
 // ---- which machine is the BROWSER on? Stored in localStorage so it
 // survives IP changes (DHCP, network moves). The server's is_viewer flag
 // (client-address match) only SEEDS it on first visit; after that the
@@ -242,7 +245,8 @@ async function loadWorkers(fresh){
       : (s.state === 'running'
       ? `<button onclick="ctlWorker('${s.id}','pause',this)" title="freeze this machine's gamut worker + its searches in place (no work lost)${lagNote}">⏸ pause</button>`
       : `<button onclick="ctlWorker('${s.id}','resume',this)" title="continue exactly where it was frozen${lagNote}">▶ resume</button>`);
-    const cores = (s.state === 'unreachable') ? '<span class="mut">—</span>'
+    const cores = (s.state === 'unreachable' || s.state === 'timeout')
+      ? '<span class="mut">—</span>'
       : `<input type="number" min="1" max="512" value="${s.cores ?? ''}"
            placeholder="${s.nproc ? 'all ' + s.nproc : 'all'}" style="width:62px"
            title="${s.nproc ? 'this machine has ' + s.nproc + ' processors. ' : ''}Set the total gamut budget, then press Apply — running searches finish first."
