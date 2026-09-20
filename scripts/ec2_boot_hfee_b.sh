@@ -24,9 +24,28 @@ if [ $? -ne 0 ]; then
 fi
 
 J=$(( $(nproc) / 11 )); [ "$J" -lt 4 ] && J=4
-# CORE BUDGET — size it from THIS box, never from whatever shipped in
-# the repo bundle. See the header of ec2_size_cores.sh for the incident.
-[ -x ~/ec2_size_cores.sh ] && ~/ec2_size_cores.sh
+# CORE BUDGET — size from THIS box, never from whatever shipped in the repo
+# bundle. Self-sufficient ON PURPOSE: a spot replacement boots from the LAUNCH
+# TEMPLATE's embedded user-data, which is a SNAPSHOT — updating the copy in S3
+# does not change what a replacement runs. On 2026-09-19/20 both boxes were
+# replaced, came back without ~/ec2_size_cores.sh, the old `[ -x ... ] &&`
+# guard skipped SILENTLY, and they ran ~17h and ~3h at 1/17th capacity at full
+# spot price. So: fetch the sizer, and if that fails size inline anyway —
+# never fall through to the inherited value.
+[ -x ~/ec2_size_cores.sh ] || aws s3 cp \
+    s3://gamut-sync-637309463295/code/ec2_size_cores.sh \
+    ~/ec2_size_cores.sh >/dev/null 2>&1
+chmod +x ~/ec2_size_cores.sh 2>/dev/null
+if [ -x ~/ec2_size_cores.sh ]; then
+  ~/ec2_size_cores.sh
+else
+  echo "{\"cores\": $(( J * 14 ))}" > ~/strategy-lab/optimizer/gamut_limits.json
+  echo "[$(date '+%F %T')] size_cores MISSING — wrote cores=$(( J * 14 )) inline" \
+    >> ~/boot_workers.log
+fi
+# self-heal every 10 min regardless of what the launch template installed
+( crontab -l 2>/dev/null | grep -v ec2_size_cores
+  echo "*/10 * * * * ~/ec2_size_cores.sh --quiet" ) | crontab -
 
 
 tmux has-session -t keeper 2>/dev/null || tmux new-session -d -s keeper 'sleep infinity'

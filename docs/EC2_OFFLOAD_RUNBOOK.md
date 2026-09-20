@@ -62,6 +62,27 @@ between boxes and the Mac pulls everything home every 5 minutes.
   worker additionally prints a CORE BUDGET WARNING when the budget is under
   half the box's vCPUs.
 
+  ⚠ **A launch template's user-data is a SNAPSHOT — updating the copy in S3
+  changes nothing.** The first version of this fix put the sizer in S3 and in
+  `fleet_userdata_hfee.sh`, but the live templates kept their old embedded
+  user-data. Both boxes were spot-replaced overnight (2026-09-19 20:50 and
+  2026-09-20 10:51), booted without `~/ec2_size_cores.sh`, the boot script's
+  `[ -x ... ] &&` guard skipped **silently**, and they ran 17h and 3h at 1/17th
+  capacity — the identical failure, one day later. Fixes, in order of what
+  actually saves you:
+  1. `ec2_boot_hfee*.sh` now **fetch the sizer themselves** and size inline if
+     the fetch fails, so a boot never falls through to the inherited value.
+     The boot scripts are pulled fresh from S3 on every boot, so this works
+     regardless of what the template contains.
+  2. They also install the self-heal cron themselves.
+  3. Templates `gamut-hfee-A`/`-B` bumped to **v3** (latest *and* default;
+     both fleets use `$Latest`). After editing `fleet_userdata_*.sh` you MUST
+     `create-launch-template-version` + `modify-launch-template
+     --default-version` or the change reaches nothing.
+
+  Never write `[ -x ~/thing ] && ~/thing` for something load-bearing at boot —
+  it turns a missing file into silent 95% idle rather than a failure.
+
   It can never slow a machine down: it is **raise-only** (a budget already at
   or above `nproc/2` is left untouched), and `~/NO_AUTOSIZE` disables it
   entirely. To throttle a box on purpose use `gamut_ctl.sh cores N` — setting

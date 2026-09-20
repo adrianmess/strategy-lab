@@ -31,6 +31,21 @@ from `nproc` and the worker now prints a CORE BUDGET WARNING. **Verify every
 new box** — healthy 192-vCPU box is `{"cores": 238}`, ~250 legs, load 170-185.
 Edits apply live; never restart a worker for it.
 
+⚠⚠ **IT RECURRED ON 2026-09-20 — and the reason is the real lesson.** Both
+boxes were spot-replaced overnight (A at 09-19 20:50, B at 09-20 10:51) and
+came back capped at 10 again, running **17h and 3h at 1/17th capacity**. The
+fix had gone into S3 and into `fleet_userdata_hfee.sh`, but **a launch
+template's user-data is a snapshot** — the live templates still held the old
+copy, so replacements never downloaded `ec2_size_cores.sh`, and the boot
+script's `[ -x ~/ec2_size_cores.sh ] &&` guard skipped it **silently**. The
+CORE BUDGET WARNING did fire in `worker.log`; nothing was watching it.
+Now: the boot scripts fetch the sizer themselves (and size inline if that
+fails), install the self-heal cron themselves, and templates `gamut-hfee-A/-B`
+are at **v3**, latest and default. After editing any `fleet_userdata_*.sh`,
+`create-launch-template-version` + `modify-launch-template --default-version`
+or the edit reaches nothing. And never `[ -x file ] && file` for anything
+load-bearing at boot — it converts a missing file into silent 95% idle.
+
 Note: box B's `worker.log` stamps read UTC because the worker parent started
 before `timedatectl`; its child processes and all published run entries are
 LA time, so the results are not skewed — only that one log is +7h.
