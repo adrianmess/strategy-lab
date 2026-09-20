@@ -19,6 +19,32 @@ def load(path):
     return val, dirty
 
 
+def stamp_risk(e):
+    """Stamp lev_x + sl_class, exactly as the panel does at fold time.
+
+    The panel classifies every entry it folds (server.py, risk_of), but
+    entries arriving through THIS path never went through the panel, so they
+    landed with sl_class=None — invisible to the Backtests page's risk filter,
+    which tests sl_class explicitly. That silently hid the entire EC2 output:
+    on 2026-09-20 all 2,357 gamut_hfee_mh12 entries were unclassified, so a
+    9x-leveraged macdx config showed neither 'SL' nor 'stopless' and matched
+    neither side of the filter. Anything the classifier cannot judge (router
+    and combo entries with no single config) correctly stays None.
+    """
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "..", "panel"))
+        from bt_risk import risk_of
+        lv, slc = risk_of(e)
+        if lv:
+            e["lev_x"] = lv
+        if slc:
+            e["sl_class"] = slc
+    except Exception:
+        pass                              # never let this block a merge
+    return e
+
+
 def main():
     from prune_backtests import prune_entry, split_entry, stamp_opt
     remote_p = sys.argv[1]
@@ -39,7 +65,7 @@ def main():
         if e.get("name") in tomb:
             continue                     # deleted by the user — stay deleted
         if e.get("name") not in have:
-            local.append(split_entry(stamp_opt(prune_entry(e))))
+            local.append(split_entry(stamp_opt(prune_entry(stamp_risk(e)))))
             have.add(e.get("name"))
             added += 1
     # per-run payload copies (runs/<run>/bts/<entry>.json) arrive with the
@@ -53,7 +79,7 @@ def main():
             continue
         if nm not in have:
             try:
-                local.append(split_entry(stamp_opt(prune_entry(json.load(open(p))))))
+                local.append(split_entry(stamp_opt(prune_entry(stamp_risk(json.load(open(p)))))))
                 have.add(nm)
                 added += 1
             except Exception:

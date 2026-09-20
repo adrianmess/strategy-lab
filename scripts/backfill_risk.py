@@ -17,6 +17,35 @@ from bt_risk import risk_of                                  # noqa: E402
 BTJS = os.path.join(REPO, "dashboard", "backtests.js")
 
 
+DETAIL = os.path.join(REPO, "dashboard", "bt_detail")
+
+
+def _with_config(e):
+    """risk_of needs `config`, but entries are slimmed AT INGEST — the config
+    lives in bt_detail/<name>.json and the list entry keeps only scalars. So a
+    plain risk_of() over the store cannot classify anything already slimmed:
+    the first backfill pass left 640 entries unstamped, 378 of the first 400
+    of which had their config sitting in bt_detail all along. Borrow it for
+    the classification only; the entry itself stays slim.
+    """
+    if e.get("config"):
+        return e
+    p = os.path.join(DETAIL, f"{e.get('name')}.json")
+    if not os.path.exists(p):
+        return e
+    try:
+        d = json.load(open(p))
+    except Exception:
+        return e
+    if not isinstance(d, dict) or not d.get("config"):
+        return e
+    merged = dict(e)
+    merged["config"] = d["config"]
+    if not merged.get("stats") and d.get("stats"):
+        merged["stats"] = d["stats"]
+    return merged
+
+
 def main():
     with open(BTJS + ".lock", "w") as lk:
         fcntl.flock(lk, fcntl.LOCK_EX)
@@ -29,7 +58,7 @@ def main():
             if e.get("lev_x") and e.get("sl_class"):
                 continue
             try:
-                lv, slc = risk_of(e)
+                lv, slc = risk_of(_with_config(e))
             except Exception:
                 continue
             ch = False
