@@ -264,8 +264,13 @@ body.masked .amt:hover{filter:none}
           <option value="bot">bot only</option>
           <option value="manual">manual only</option>
         </select>
-        <select id="cumAcct" onchange="setCumAcct(this.value)" title="filter THIS chart by account (spot + futures wallets of that account) — the list follows the accounts configured in the panel">
+        <select id="cumAcct" onchange="setCumAcct(this.value)" title="filter THIS chart by account — the list follows the accounts configured in the panel">
           <option value="">all accounts</option>
+        </select>
+        <select id="cumMode" onchange="setCumMode(this.value)" title="spot trades measured against the spot wallet, futures trades against the futures wallet — or both together against the whole account">
+          <option value="">spot + futures</option>
+          <option value="spot">spot only</option>
+          <option value="lev">futures only</option>
         </select>
         <span class="seg" style="margin-left:6px" title="curve: one step per closed trade · calendar: realized P&amp;L and trade count per day">
           <button id="cumViewCurve" onclick="setCumView('curve')">curve</button>
@@ -664,11 +669,14 @@ function loadAll(){
 }
 
 var EQ = {total: 0};
+var EQW = {total: {spot: 0, lev: 0}};   // per-account {spot, lev} split of EQ
 // instant paint: last known equity, so Dietz %s and the Equity KPI don't
 // wait on the (slow) accounts call and re-render once it lands
 try{
   var _eqs = JSON.parse(localStorage.getItem('slEqSnap')||'null');
   if(_eqs && _eqs.total > 0) EQ = _eqs;
+  var _eqw = JSON.parse(localStorage.getItem('slEqwSnap')||'null');
+  if(_eqw && _eqw.total) EQW = _eqw;
 }catch(e){}
 
 // Return on the balance you STARTED the period with: realized / (equity now
@@ -1173,7 +1181,19 @@ function countedEvents(){
 
 var CUMACCT = localStorage.getItem('slCumAcct') || '';
 var CUMVIEW = localStorage.getItem('slCumView') || 'curve';   // 'curve' | 'calendar'
+var CUMMODE = localStorage.getItem('slCumMode') || '';        // '' | 'spot' | 'lev'
 var CALM = null;   // calendar month on screen {y, m}; null = the current month
+function setCumMode(v){
+  CUMMODE = (v === 'spot' || v === 'lev') ? v : '';
+  localStorage.setItem('slCumMode', CUMMODE);
+  renderChart();
+}
+// equity denominator for a scope: one account or all, one wallet or both
+function scopeEquity(acct, mode){
+  if(!mode) return acct ? (EQ[acct] || 0) : (EQ.total || 0);
+  var w = acct ? (EQW[acct] || {}) : (EQW.total || {});
+  return w[mode] || 0;
+}
 function acctFilter(){
   // active account scope: hidden and ignored under "manual only"
   return ORIGIN === 'manual' ? '' : CUMACCT;
@@ -1198,15 +1218,16 @@ function renderChart(){
       '<div class="mini" style="padding:40px 0;text-align:center">loading trade history…</div>';
     return;
   }
+  var ms = document.getElementById('cumMode');
+  if(ms) ms.value = CUMMODE;
   var ev = countedEvents().filter(function(e){
-    return !acct || e.account === acct; });
+    return (!acct || e.account === acct) && (!CUMMODE || e.mode === CUMMODE); });
   // the account filter is hidden and ignored ONLY under "manual only"; under
   // "bot only" it applies, and the label must say so — it used to read
   // "bot trades only, both accounts" while the numbers were mexc2's alone
-  var scopeTxt = ORIGIN === 'manual'
-    ? 'manual trades only &middot; all accounts, all wallets'
-    : (ORIGIN === 'bot' ? 'bot trades only' : 'bot + manual') + ' &middot; ' +
-      (acct ? acct + ' (spot + futures wallets)' : 'all accounts, all wallets');
+  var walletTxt = CUMMODE === 'spot' ? 'spot wallet' : CUMMODE === 'lev' ? 'futures wallet' : 'spot + futures wallets';
+  var scopeTxt = (ORIGIN === 'manual' ? 'manual trades only' : ORIGIN === 'bot' ? 'bot trades only' : 'bot + manual') +
+    ' &middot; ' + (ORIGIN !== 'manual' && acct ? acct : 'all accounts') + ', ' + walletTxt;
   var bc = document.getElementById('cumViewCurve'), bk = document.getElementById('cumViewCal');
   if(bc) bc.className = CUMVIEW === 'calendar' ? '' : 'on';
   if(bk) bk.className = CUMVIEW === 'calendar' ? 'on' : '';
@@ -1257,12 +1278,18 @@ function _dkey(d){ return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.get
 // `fromTs` through today, for one account ('' = all combined). Used by the
 // calendar AND the history page, so a trade's "% of account" there sums to
 // the calendar's day figure exactly.
-function dayOpenings(ev, acct, fromTs){
+function dayOpenings(ev, acct, fromTs, mode){
+  // mode '' = whole account (spot + futures); 'spot' | 'lev' = that wallet
+  // alone. Per-wallet needs the spot <-> futures transfers, which /api/flows
+  // carries as zero-sum pairs tagged `wallet` (a flow without the tag — an
+  // older cached snapshot — is a spot flow: deposits and account-to-account
+  // transfers all land in spot on MEXC).
   var byDay = {}, flowByDay = {};
   ev.forEach(function(e){ var k = _dkey(new Date(e.t)); byDay[k] = (byDay[k] || 0) + e.pnl; });
-  FLOWS.filter(function(f){ return !acct || f.account === acct; })
+  FLOWS.filter(function(f){
+    return (!acct || f.account === acct) && (!mode || (f.wallet || 'spot') === mode); })
        .forEach(function(f){ var k = _dkey(new Date(f.t)); flowByDay[k] = (flowByDay[k] || 0) + f.usdt; });
-  var running = acct ? (EQ[acct] || 0) : (EQ.total || 0);
+  var running = scopeEquity(acct, mode);
   var start = {};
   var d = new Date(); d.setHours(0, 0, 0, 0);
   var first = new Date(fromTs); first.setHours(0, 0, 0, 0);
@@ -1275,7 +1302,7 @@ function dayOpenings(ev, acct, fromTs){
   return start;
 }
 function calOpenings(ev, acct, y, m){
-  return dayOpenings(ev, acct, new Date(y, m, 1).getTime());
+  return dayOpenings(ev, acct, new Date(y, m, 1).getTime(), CUMMODE);
 }
 // Per-trade "% of account": the trade's realized P&L on the balance ITS
 // account opened that day with. Adrian's ask (2026-09-21): the per-position
@@ -1285,14 +1312,19 @@ function calOpenings(ev, acct, y, m){
 // day's rows here reproduces the calendar cell.
 var _ACCT_OPEN = null;    // {acct: {dayKey: opening}} — rebuilt per render
 function acctPct(e){
+  // per (account, wallet): a spot trade against the spot wallet's opening
+  // balance that day, a futures trade against the futures wallet's
   if(e.pnl == null || !e.account) return null;
+  var mode = e.mode === 'lev' ? 'lev' : e.mode === 'spot' ? 'spot' : '';
+  var key = e.account + '|' + mode;
   if(!_ACCT_OPEN) _ACCT_OPEN = {};
-  if(!_ACCT_OPEN[e.account]){
-    var mine = countedEvents().filter(function(x){ return x.account === e.account; });
+  if(!_ACCT_OPEN[key]){
+    var mine = countedEvents().filter(function(x){
+      return x.account === e.account && (!mode || x.mode === mode); });
     var from = mine.length ? mine[0].t : e.t;
-    _ACCT_OPEN[e.account] = dayOpenings(mine, e.account, Math.min(from, e.t));
+    _ACCT_OPEN[key] = dayOpenings(mine, e.account, Math.min(from, e.t), mode);
   }
-  var st = _ACCT_OPEN[e.account][_dkey(new Date(e.t))];
+  var st = _ACCT_OPEN[key][_dkey(new Date(e.t))];
   return (st != null && st > 0) ? 100 * e.pnl / st : null;
 }
 function renderCalendar(ev, scopeTxt){
@@ -1537,6 +1569,7 @@ function renderAccounts(){
     _ACCT_BUSY = false;
     if(!accs || !accs.length){ el.innerHTML = '<span class="mini">no API keys configured</span>'; return; }
     EQ = {total: 0};
+    EQW = {total: {spot: 0, lev: 0}};
     el.innerHTML = accs.filter(function(a){ return !a.skipped; }).map(function(a, ix){
       var inst = INSTS.filter(function(x){
         var p = PERF[x.id], s = STATUS[x.id];
@@ -1580,6 +1613,11 @@ function renderAccounts(){
         (futMargin > 0.005 ? ' (margin '+futMargin.toFixed(2)+')' : '');
       EQ[a.account] = eq;
       EQ.total += eq;
+      // per-WALLET split of the same denominator, for the Overview's
+      // spot / futures filter: a futures day is judged against the futures
+      // wallet, not the whole account
+      EQW[a.account] = {spot: spotEq, lev: futEq};
+      EQW.total.spot += spotEq; EQW.total.lev += futEq;
       return '<div style="'+(ix?'border-top:1px solid var(--line);padding-top:13px;margin-top:13px':'')+'">'+
         '<div class="rowsb"><b>'+a.account+'</b><span style="display:flex;gap:6px">'+
         '<span class="tag '+(mode==='spot'?'spot':'lev')+'">'+
@@ -1619,7 +1657,8 @@ function renderAccounts(){
         '</div>'+
         '<div class="bar g" style="margin-top:8px"><i style="width:100%"></i></div></div>';
     }).join('');
-    try{ localStorage.setItem('slEqSnap', JSON.stringify(EQ)); }catch(e){}
+    try{ localStorage.setItem('slEqSnap', JSON.stringify(EQ));
+         localStorage.setItem('slEqwSnap', JSON.stringify(EQW)); }catch(e){}
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
     renderChart();    // the account dropdown + calendar day % follow the accounts list
@@ -1848,7 +1887,7 @@ function renderHistory(){
             var ap = ig ? null : acctPct(e);
             return '<td class="n '+(ig?'dim':(e.pct==null?'dim':cls(e.pct)))+'" style="font-weight:600'+
               (ig?';text-decoration:line-through':'')+'"'+
-              (ap==null ? '' : ' title="'+(ap>=0?'+':'')+ap.toFixed(2)+'% of the account\'s opening balance that day"')+'>'+
+              (ap==null ? '' : ' title="'+(ap>=0?'+':'')+ap.toFixed(2)+'% of the '+(e.mode==='lev'?'futures':'spot')+' wallet\'s opening balance that day"')+'>'+
               (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>';
           })()+
           '<td class="n '+(ig?'dim':cls(e.pnl))+'"'+(ig?' style="text-decoration:line-through"':'')+'>'+

@@ -3707,6 +3707,42 @@ def _internal_flows(out, usdt_value):
                                      coin=coin, kind="internal_in",
                                      tranId=tid, resolved_by=how))
 
+    # ---- WALLET dimension (2026-09-21) --------------------------------------
+    # Everything above moves money in or out of an ACCOUNT, and on MEXC all of
+    # it lands in the spot wallet: deposits, withdrawals and account-to-account
+    # transfers. Money then moves spot <-> futures INSIDE the account, which
+    # changes nothing at account level but is exactly what the Overview needs
+    # to measure a futures day's P&L against the futures wallet rather than
+    # the whole account (Adrian: "separated by Spot vs Leveraged for each
+    # account"). Each successful transfer_record becomes a PAIR of flows that
+    # nets to zero per account — so every consumer that sums flows by account
+    # (the Daily card, the Dietz %, TWR) is unaffected, and one that filters
+    # by `wallet` gets the per-wallet picture. Legacy consumers that ignore
+    # `wallet` keep working; a flow without it is a spot flow.
+    for f in out["flows"]:
+        f.setdefault("wallet", "spot")
+    for acct in accts:
+        for r in fut_xfer.get(acct) or []:
+            if str(r.get("state") or "").upper() != "SUCCESS":
+                continue
+            try:
+                a = float(r.get("amount") or 0)
+                rt = int(r.get("createTime") or 0)
+            except Exception:
+                continue
+            if a <= 0 or not rt:
+                continue
+            typ = str(r.get("type") or "").upper()
+            if typ not in ("IN", "OUT"):
+                continue
+            cur = str(r.get("currency") or r.get("asset") or "USDT").upper()
+            v = a if cur in ("USDT", "USDC", "USD1") else usdt_value(apis.get(acct), cur, a)
+            sgn = 1 if typ == "IN" else -1          # IN = spot -> futures
+            out["flows"].append(dict(account=acct, t=rt, usdt=round(sgn * v, 2),
+                                     coin=cur, wallet="lev", kind="wallet_in" if sgn > 0 else "wallet_out"))
+            out["flows"].append(dict(account=acct, t=rt, usdt=round(-sgn * v, 2),
+                                     coin=cur, wallet="spot", kind="wallet_out" if sgn > 0 else "wallet_in"))
+
 
 _PERF_BUSY = set()             # (acct, mode) refreshes in flight
 _PERF_LOCK = threading.Lock()
