@@ -3580,6 +3580,23 @@ def _flows_compute_inner():
                 pass                              # key may lack permission
         except Exception as e:
             out.setdefault("errors", []).append(f"{acct}: {str(e)[:80]}")
+    # ---- INTERNAL (account-to-account) transfers -------------------------
+    # 2026-09-20 20:01: 700 USDT went mexc1 -> mexc2 as a MEXC internal
+    # transfer. It is in neither deposit nor withdrawal history, so mexc1's
+    # capital base read $700 too high (its Dietz base went negative and the
+    # % vanished) and mexc2's $700 too low. MEXC hands BOTH parties the same
+    # record with both emails masked identically, so the direction has to be
+    # inferred:
+    #   1. panel/flow_overrides.json  {tranId: {"from": "mexc1", "to": "mexc2"}}
+    #   2. the sender moved the money futures -> spot just before (an OUT in
+    #      its futures transfer_record within 30 min of ≥ the amount), or the
+    #      receiver moved it spot -> futures just after (an IN)
+    #   3. otherwise the transfer is reported under "unresolved" and left out
+    #      of the flows, and the Overview asks for the override.
+    try:
+        _internal_flows(out, usdt_value)
+    except Exception as e:
+        out.setdefault("errors", []).append(f"internal transfers: {str(e)[:80]}")
     out["flows"].sort(key=lambda f: f["t"])
     rst = _pnl_reset()
     if rst:
@@ -3589,6 +3606,106 @@ def _flows_compute_inner():
                         if f.get("t", 0) >= rst.get(f.get("account"), 0)]
     _FLOWS_CACHE["all"] = (now, out)
     return out
+
+
+_FLOW_OVERRIDES = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "flow_overrides.json")
+_INTERNAL_WINDOW_MS = 30 * 60 * 1000
+
+
+def _internal_flows(out, usdt_value):
+    from mexc_api import MexcSpotAPI, MexcFuturesAPI
+    accts = ("mexc1", "mexc2")
+    try:
+        overrides = json.load(open(_FLOW_OVERRIDES))
+    except Exception:
+        overrides = {}
+    seen = {}            # tranId -> {rec, accounts:set}
+    fut_xfer = {}        # acct -> [futures<->spot transfer records]
+    apis = {}
+    for acct in accts:
+        try:
+            apis[acct] = MexcSpotAPI(account=acct)
+            for r in apis[acct].internal_transfer_history(limit=50):
+                if str(r.get("status") or "").upper() != "SUCCESS":
+                    continue
+                tid = str(r.get("tranId") or r.get("clientId") or "")
+                if not tid:
+                    continue
+                s = seen.setdefault(tid, {"rec": r, "accounts": set()})
+                s["accounts"].add(acct)
+        except Exception as e:
+            out.setdefault("errors", []).append(f"{acct} internal: {str(e)[:60]}")
+        try:
+            fut_xfer[acct] = MexcFuturesAPI(account=acct).transfer_records(50)
+        except Exception:
+            fut_xfer[acct] = []
+
+    def _fut_hint(acct, amt, t, direction):
+        """True if `acct`'s futures wallet moved ~amt OUT to spot shortly
+        BEFORE t (a sender staging the money) or IN from spot shortly AFTER
+        t (a receiver putting it to work)."""
+        for r in fut_xfer.get(acct) or []:
+            if str(r.get("state") or "").upper() != "SUCCESS":
+                continue
+            try:
+                a = float(r.get("amount") or 0)
+                rt = int(r.get("createTime") or 0)
+            except Exception:
+                continue
+            if a < amt * 0.98:
+                continue
+            typ = str(r.get("type") or "").upper()
+            if direction == "from" and typ == "OUT" and 0 <= t - rt <= _INTERNAL_WINDOW_MS:
+                return True
+            if direction == "to" and typ == "IN" and 0 <= rt - t <= _INTERNAL_WINDOW_MS:
+                return True
+        return False
+
+    for tid, s in seen.items():
+        r = s["rec"]
+        coin = str(r.get("asset") or "").upper()
+        try:
+            amt = float(r.get("amount") or 0)
+            t = int(r.get("timestamp") or 0)
+        except Exception:
+            continue
+        if amt <= 0:
+            continue
+        v = usdt_value(apis.get(next(iter(s["accounts"]))), coin, amt)
+        parties = sorted(s["accounts"])
+        src = dst = None
+        ov = overrides.get(tid) or {}
+        if ov.get("from") in accts or ov.get("to") in accts:
+            src, dst = ov.get("from"), ov.get("to")
+            how = "override"
+        else:
+            senders = [a for a in parties if _fut_hint(a, amt, t, "from")]
+            receivers = [a for a in parties if _fut_hint(a, amt, t, "to")]
+            if len(senders) == 1:
+                src = senders[0]
+                dst = (receivers[0] if len(receivers) == 1 else
+                       ([a for a in parties if a != src] or [None])[0])
+            elif len(receivers) == 1:
+                dst = receivers[0]
+                src = ([a for a in parties if a != dst] or [None])[0]
+            how = "futures-transfer hint"
+        if src is None and dst is None:
+            out.setdefault("unresolved", []).append(dict(
+                tranId=tid, coin=coin, amount=amt, usdt=round(v, 2), t=t,
+                accounts=parties,
+                hint=("seen from " + " and ".join(parties) +
+                      " — add {\"" + tid + "\": {\"from\": \"…\", \"to\": \"…\"}}"
+                      " to panel/flow_overrides.json")))
+            continue
+        if src in accts:
+            out["flows"].append(dict(account=src, t=t, usdt=-round(v, 2),
+                                     coin=coin, kind="internal_out",
+                                     tranId=tid, resolved_by=how))
+        if dst in accts:
+            out["flows"].append(dict(account=dst, t=t, usdt=round(v, 2),
+                                     coin=coin, kind="internal_in",
+                                     tranId=tid, resolved_by=how))
 
 
 _PERF_BUSY = set()             # (acct, mode) refreshes in flight

@@ -237,6 +237,7 @@ body.masked .amt:hover{filter:none}
 
   <section class="view on" id="v-overview"><div class="wrap">
     <div class="g4" id="kpis"></div>
+    <div id="flowWarn"></div>
     <div class="g2">
       <div class="card"><h3>Cumulative realized P&amp;L — 30d <button class="info" title="what is this? (opens docs)" onclick="openInfo('overview.cum')">i</button> <span class="mini">all wallets
         <select id="originSel" onchange="setOrigin(this.value)" title="filter every P&amp;L aggregate by trade origin">
@@ -1173,6 +1174,16 @@ function loadFlows(){
     FLOWS = (d && d.flows) || [];
     try{ localStorage.setItem('slFlowSnap',
       JSON.stringify({flows:FLOWS, at:Date.now()})); }catch(e){}
+    // an internal (account-to-account) transfer whose direction could not be
+    // inferred is left OUT of the capital math until it is recorded in
+    // panel/flow_overrides.json — say so, or the % silently drifts
+    var un = (d && d.unresolved) || [], fw = document.getElementById('flowWarn');
+    if(fw) fw.innerHTML = un.length ? '<div class="card" style="border-color:var(--amber)"><div class="body mini">'+
+      '<b style="color:var(--amber)">'+un.length+' internal transfer'+(un.length>1?'s':'')+' with unknown direction</b> — '+
+      'left out of the capital base until recorded in <code>panel/flow_overrides.json</code>: '+
+      un.map(function(u){ return '<div style="margin-top:4px">'+new Date(u.t).toLocaleString()+' · '+u.amount+' '+u.coin+
+        ' · seen from '+(u.accounts||[]).join(' + ')+' · <code>{"'+u.tranId+'": {"from": "…", "to": "…"}}</code></div>'; }).join('')+
+      '</div></div>' : '';
     renderDaily(); renderKpis();
   }).catch(function(){});
 }

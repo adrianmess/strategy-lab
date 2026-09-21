@@ -140,7 +140,18 @@ Explored because web fees are far cheaper, then dropped on ToS grounds: MEXC's R
   no P&L event; likely the 09-17 SUI incident or an internal transfer), so
   the % silently fell back to money. Now falls back to "% on balance at
   window start", marked ≈ with the reason as tooltip; empty windows say "no
-  closes" instead of a bare +0.00%. **The ~$590 gap itself is unexplained.**
+  closes" instead of a bare +0.00% (reverted to +0.00% on Adrian's call).
+  **The gap was a 700 USDT MEXC internal transfer mexc1 → mexc2 (09-20
+  20:01)** — in neither deposit nor withdrawal history. `/api/flows` now
+  reads `/api/v3/capital/transfer/internal` for both accounts; direction
+  comes from `panel/flow_overrides.json` `{tranId: {from, to}}`, else from
+  the futures↔spot `transfer_record` (sender staged an OUT within 30 min
+  before / receiver an IN after), else the transfer is listed under
+  `unresolved` and the Overview shows an amber card asking for the override.
+- `mexc_api` fails over to another pool port when the pinned proxy cannot
+  reach MEXC (ConnectionError always; ReadTimeout only for GET/DELETE — a
+  POST that read-timed out may have filled and is surfaced, never resent).
+  Running traders pick it up at their next restart.
 - Terminal Progress "Running" showed `[object Object],…` (it is a list).
 - The MacBook gamut worker has been SIGSTOPped (state T, "paused" on the
   Progress page) since ~14:07 on 09-20 — mid-search at 84%. Not touched.

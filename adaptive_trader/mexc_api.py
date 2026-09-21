@@ -266,6 +266,16 @@ class MexcFuturesAPI:
                          {"symbol": symbol, "page_num": 1,
                           "page_size": int(page_size)}) or []
 
+    def transfer_records(self, page_size=50):
+        """Transfers between THIS account's futures wallet and its spot
+        ('MAIN') wallet, newest first: [{type: IN|OUT, amount, currency,
+        state, createTime}]. Not external money — used by the panel's flow
+        reader to tell which side of an internal account-to-account
+        transfer was the sender."""
+        d = self._get("/api/v1/private/account/transfer_record",
+                      {"page_num": 1, "page_size": int(page_size)}) or {}
+        return d.get("resultList") or []
+
     def history_orders(self, symbol=None, page_size=50):
         """Historical futures orders — filled/cancelled, newest first
         (MEXC 'Order & Trade History')."""
@@ -484,6 +494,17 @@ class MexcSpotAPI:
         from urllib.parse import quote
         return self._signed("POST", "/api/v3/capital/deposit/address",
                             {"coin": coin, "network": quote(network, safe="")})
+
+    def internal_transfer_history(self, limit=50):
+        """MEXC account-to-account ('internal') transfers involving THIS
+        account: [{tranId, asset, amount, fromAccount, toAccount, status,
+        timestamp}]. These appear in NEITHER deposit nor withdrawal history
+        (2026-09-20: 700 USDT mexc1 -> mexc2 was invisible to /api/flows).
+        Both parties get the same record with both emails masked alike, so
+        direction is not in the payload."""
+        d = self._signed("GET", "/api/v3/capital/transfer/internal",
+                         {"limit": int(limit)})
+        return (d or {}).get("data") or []
 
     def withdraw_history(self, coin=None, limit=20):
         """Recent withdrawals (status 7 = success)."""
