@@ -66,6 +66,12 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 .info{width:13px;height:13px;border-radius:50%;border:1px solid var(--line);background:none;color:var(--dim);
   font-size:9px;line-height:11px;cursor:pointer;padding:0;flex:none;vertical-align:top;position:relative;top:1px;align-self:flex-start;font-style:italic;font-family:Georgia,serif}
 .info:hover{color:var(--cyan);border-color:var(--cyan)}
+/* card headers are space-between flex rows: title, info button, controls.
+   With three children the info button was the middle one and got centred
+   in the leftover space — drifting further from its title the wider the
+   page. margin-right:auto pins it beside the title and pushes only the
+   controls to the right. */
+.card>h3 .info{margin-right:auto}
 #docVeil{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:69;display:none}
 #docDrawer{position:fixed;top:0;right:-430px;width:min(400px,92vw);height:100vh;background:var(--panel);
   border-left:1px solid var(--line);transition:right .22s ease;z-index:70;display:flex;flex-direction:column;
