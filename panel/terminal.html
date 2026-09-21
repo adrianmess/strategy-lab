@@ -1253,7 +1253,11 @@ function _dkey(d){ return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.get
 // realized and its deposits/withdrawals. A day's % is its P&L on the balance
 // it OPENED with, so this agrees with the Daily card and never judges an
 // early day against money it didn't have yet.
-function calOpenings(ev, acct, y, m){
+// dayOpenings(acct, fromTs) -> {dayKey: opening balance} for every day from
+// `fromTs` through today, for one account ('' = all combined). Used by the
+// calendar AND the history page, so a trade's "% of account" there sums to
+// the calendar's day figure exactly.
+function dayOpenings(ev, acct, fromTs){
   var byDay = {}, flowByDay = {};
   ev.forEach(function(e){ var k = _dkey(new Date(e.t)); byDay[k] = (byDay[k] || 0) + e.pnl; });
   FLOWS.filter(function(f){ return !acct || f.account === acct; })
@@ -1261,7 +1265,7 @@ function calOpenings(ev, acct, y, m){
   var running = acct ? (EQ[acct] || 0) : (EQ.total || 0);
   var start = {};
   var d = new Date(); d.setHours(0, 0, 0, 0);
-  var first = new Date(y, m, 1);
+  var first = new Date(fromTs); first.setHours(0, 0, 0, 0);
   for(var guard = 0; d >= first && guard < 4000; guard++){
     var k = _dkey(d);
     var s = running - (byDay[k] || 0) - (flowByDay[k] || 0);
@@ -1269,6 +1273,27 @@ function calOpenings(ev, acct, y, m){
     d.setDate(d.getDate() - 1);
   }
   return start;
+}
+function calOpenings(ev, acct, y, m){
+  return dayOpenings(ev, acct, new Date(y, m, 1).getTime());
+}
+// Per-trade "% of account": the trade's realized P&L on the balance ITS
+// account opened that day with. Adrian's ask (2026-09-21): the per-position
+// % (entry → exit) let four ~58%-of-equity trades read as "7.31%" for a day
+// the account actually made 4.29% on. Denominators are reconstructed from
+// the same counted events the calendar uses, per account, so summing a
+// day's rows here reproduces the calendar cell.
+var _ACCT_OPEN = null;    // {acct: {dayKey: opening}} — rebuilt per render
+function acctPct(e){
+  if(e.pnl == null || !e.account) return null;
+  if(!_ACCT_OPEN) _ACCT_OPEN = {};
+  if(!_ACCT_OPEN[e.account]){
+    var mine = countedEvents().filter(function(x){ return x.account === e.account; });
+    var from = mine.length ? mine[0].t : e.t;
+    _ACCT_OPEN[e.account] = dayOpenings(mine, e.account, Math.min(from, e.t));
+  }
+  var st = _ACCT_OPEN[e.account][_dkey(new Date(e.t))];
+  return (st != null && st > 0) ? 100 * e.pnl / st : null;
 }
 function renderCalendar(ev, scopeTxt){
   var now = new Date();
@@ -1598,6 +1623,7 @@ function renderAccounts(){
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
     renderChart();    // the account dropdown + calendar day % follow the accounts list
+    renderHistory();  // its "% of account" column needs the same equity
     var rs = document.getElementById('rstAcct');
     if(rs) syncAcctSelect(rs, 'both', 'all accounts', rs.value || 'both');
   }).catch(function(){
@@ -1774,22 +1800,36 @@ function renderHistory(){
   var nIgn = rows.length - live.length;
   var net = live.reduce(function(a,e){ return a+e.pnl; }, 0);
   var wins = live.filter(function(e){ return e.pnl > 0; }).length;
-  var withPct = live.filter(function(e){ return e.pct != null; });
-  var avg = withPct.length
-    ? withPct.reduce(function(a,e){ return a+e.pct; }, 0) / withPct.length : null;
+  _ACCT_OPEN = null;   // equity/flows may have moved since the last render
+  // per-ACCOUNT sums of the "% of account" column. Never added across
+  // accounts — a % of mexc1's ~$1k and a % of mexc2's ~$3.4k are not the
+  // same unit (the first cut of this showed "+70% of account" for the
+  // all-accounts view). Within one day a sum equals the calendar cell;
+  // across days it is additive, not compounded.
+  var sumByAcct = {};
+  live.forEach(function(e){
+    var p = acctPct(e);
+    if(p == null) return;
+    sumByAcct[e.account] = (sumByAcct[e.account] || 0) + p;
+  });
+  var sumTxt = Object.keys(sumByAcct).sort().map(function(a){
+    var p = sumByAcct[a];
+    return (Object.keys(sumByAcct).length > 1 ? a + ' ' : '') +
+      '<b class="'+cls(p)+'">' + (p>=0?'+':'') + p.toFixed(2) + '%</b>';
+  }).join(' &middot; ');
   var ignNet = rows.filter(function(e){ return e.ignored; })
                    .reduce(function(a,e){ return a+e.pnl; }, 0);
   document.getElementById('hCount').innerHTML = live.length + ' closes &middot; net ' +
     '<b class="'+cls(net)+'">'+amt(money(net))+'</b>' +
     (live.length ? ' &middot; ' + Math.round(100*wins/live.length) + '% win' : '') +
-    (avg == null ? '' : ' &middot; <span title="mean of the per-trade P&amp;L % column — each trade on its own position size, not on account equity">avg/trade <b class="'+cls(avg)+'">' +
-      (avg>=0?'+':'') + avg.toFixed(2) + '%</b></span>') +
+    (!sumTxt ? '' : ' &middot; <span title="sum of the P&amp;L % of account column, per account (never added across accounts — different denominators). Within one day this equals the calendar\'s figure for that day; across several days it is a simple sum, not compounded.">'+
+      sumTxt + ' of account</span>') +
     (nIgn ? ' &middot; <span class="warn">' + nIgn + ' excluded (' + money(ignNet) +
       ' not counted)</span>' : '');
   document.getElementById('hist').innerHTML = rows.length
     ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Origin</th><th>Symbol</th><th>Side</th>'+
       '<th class="n">Entry</th><th class="n">Exit</th>'+
-      '<th class="n" title="each trade\'s return on ITS OWN position size (entry → exit, net of fees). Not a share of the account — positions are usually a fraction of equity and re-use the same capital, so these do not add up to a day\'s account return. For that, see the Daily P&amp;L card or the calendar on Overview.">P&amp;L % <span class="mini" style="font-weight:400">of position</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
+      '<th class="n" title="each trade\'s realized P&amp;L as a share of the balance its ACCOUNT opened that day with — the same basis as the Daily P&amp;L card and the Overview calendar, so a day\'s rows add up to that day\'s calendar cell. Hover a value for the trade\'s own entry → exit move.">P&amp;L % <span class="mini" style="font-weight:400">of account</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(e){
         var px = function(v){ return v == null ? '—' : (+v).toPrecision(6); };
         var ig = e.ignored;
@@ -1814,9 +1854,17 @@ function renderHistory(){
           '<td>'+(e.side ? '<span class="tag '+(e.side==='LONG'?'g':'live')+'">'+e.side+
             (e.lev && e.lev > 1 ? ' '+e.lev+'x' : '')+'</span>' : '')+'</td>'+
           '<td class="n">'+px(e.entry)+'</td><td class="n">'+px(e.exit)+'</td>'+
-          '<td class="n '+(ig?'dim':(e.pct==null?'dim':cls(e.pct)))+'" style="font-weight:600'+
-            (ig?';text-decoration:line-through':'')+'">'+
-            (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>'+
+          (function(){
+            var ap = ig ? null : acctPct(e);
+            var posTxt = e.pct == null ? '' : 'position: '+(e.pct>=0?'+':'')+e.pct.toFixed(2)+'% (entry → exit, net of fees)';
+            return '<td class="n '+(ig?'dim':(ap==null?'dim':cls(ap)))+'" style="font-weight:600'+
+              (ig?';text-decoration:line-through':'')+'" title="'+
+              (ap==null ? 'no opening balance known for this account on this day (equity or flows not loaded yet)'
+                        : (ap>=0?'+':'')+ap.toFixed(2)+'% of the account\'s opening balance that day')+
+              (posTxt ? ' — '+posTxt : '')+'">'+
+              (ap==null ? (e.pct==null ? '—' : '<span class="dim">'+(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%*</span>')
+                        : (ap>=0?'+':'')+ap.toFixed(2)+'%')+'</td>';
+          })()+
           '<td class="n '+(ig?'dim':cls(e.pnl))+'"'+(ig?' style="text-decoration:line-through"':'')+'>'+
             amt(money(e.pnl))+'</td>'+
           '<td class="n"><button class="btn sm" onclick="toggleIgnore(\''+e.id+'\','+(!ig)+
