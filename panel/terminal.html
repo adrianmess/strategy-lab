@@ -115,13 +115,22 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 /* P&L calendar (Overview → cumulative card, "calendar" view) */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .cal .dow{text-align:center;font-size:10.5px;color:var(--dim);letter-spacing:.1em;padding:2px 0 4px}
-.cal .d{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:82px;
+.cal .d{border:1px solid var(--line);border-radius:8px;padding:11px 10px 8px;min-height:82px;position:relative;overflow:hidden;
   background:var(--panel2);display:flex;flex-direction:column;gap:2px}
 .cal .d.blank{border-color:transparent;background:transparent}
 .cal .d.pos{background:color-mix(in srgb,var(--up) 9%,var(--panel2));border-color:color-mix(in srgb,var(--up) 22%,var(--line))}
 .cal .d.neg{background:color-mix(in srgb,var(--down) 10%,var(--panel2));border-color:color-mix(in srgb,var(--down) 24%,var(--line))}
 .cal .d.today{box-shadow:0 0 0 1.5px var(--up)}
 .cal .d.future{opacity:.45}
+/* "was a bot running that day" — hairlines along the top edge of the cell,
+   one per bot in scope, midnight → midnight. Cyan while running, the cell's
+   own grey where not. Deliberately NOT red/green: status must never read
+   as a result. The P&L below is untouched. */
+.cal .d .up{position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:1px;padding:0}
+.cal .d .up i{display:block;height:2px;background:#2a323d;position:relative;overflow:hidden;font-style:normal}
+.cal .d .up i b{position:absolute;top:0;bottom:0;background:var(--cyan);opacity:.85}
+.cal .d .up i b.dry{opacity:.4}
+.cal .d .off{font-size:11px;color:var(--dim)}
 .cal .d .n{font-size:11px;color:var(--dim)}
 .cal .d .v{font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
 .cal .d .v.up{color:var(--up)}.cal .d .v.dn{color:var(--down)}
@@ -1333,9 +1342,68 @@ function acctPct(e){
   var st = _ACCT_OPEN[key][_dkey(new Date(e.t))];
   return (st != null && st > 0) ? 100 * e.pnl / st : null;
 }
+// ---- bot uptime for the calendar ("was it running that day?") ----------
+// /api/trader_uptime reconstructs each instance's running windows from its
+// stdout log (start banners + 'stopped by user'; a start with no stop means
+// the previous process died). Refreshed every 5 min; the calendar draws one
+// hairline per bot in the current scope along the top edge of every cell.
+var UPTIME = null, _uptimeAt = 0, _uptimeBusy = false;
+function loadUptime(){
+  if(_uptimeBusy || Date.now() - _uptimeAt < 300000) return;
+  _uptimeBusy = true;
+  API('trader_uptime').then(function(d){
+    UPTIME = d && d.instances ? d : UPTIME; _uptimeAt = Date.now(); _uptimeBusy = false;
+    if(CUMVIEW === 'calendar') renderChart();
+  }).catch(function(){ _uptimeBusy = false; });
+}
+function _instScope(id){
+  // account + market of an instance, as the rest of the page resolves it
+  var p = PERF[id] || {}, st = STATUS[id] || {};
+  return {account: p.account || st.api_account, mode: p.mode || st.mode};
+}
+function _fmtHM(ms){ var d = new Date(ms); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+// per bot in scope: running segments within [d0, d1) as fractions of the
+// day, plus the off-hours and a human list of windows for the tooltip
+function uptimeForDay(d0, d1, acct, mode){
+  if(!UPTIME) return null;
+  var now = UPTIME.now || Date.now();
+  var end = Math.min(d1, now);
+  if(end <= d0) return null;                       // whole day in the future
+  var bots = [];
+  UPTIME.instances.forEach(function(I){
+    var sc = _instScope(I.id);
+    if(acct && sc.account !== acct) return;
+    if(mode && sc.mode !== mode) return;
+    var w = I.windows || [];
+    if(!w.length) return;
+    var first = w[0].start;
+    if(first >= end) return;                       // bot did not exist yet that day
+    var segs = [], offMs = 0, notes = [], cursor = Math.max(d0, first), dry = false;
+    var todays = w.filter(function(x){ return x.start < end && (x.end == null || x.end > d0); })
+                  .sort(function(a,b){ return a.start - b.start; });
+    todays.forEach(function(x){
+      var s = Math.max(x.start, d0), e = Math.min(x.end == null ? end : x.end, end);
+      if(s > cursor){ offMs += s - cursor; notes.push(_fmtHM(cursor)+'–'+_fmtHM(s)+' off'); }
+      if(e > s){ segs.push({a:(s-d0)/(d1-d0), b:(e-d0)/(d1-d0), dry:!x.live}); if(!x.live) dry = true; }
+      cursor = Math.max(cursor, e);
+      if(x.end != null && x.end < end && x.end_reason === 'died') notes.push(_fmtHM(x.end)+' died');
+    });
+    if(cursor < end){ offMs += end - cursor; notes.push(_fmtHM(cursor)+'–'+(end === now ? 'now' : _fmtHM(end))+' off'); }
+    // a bot that is not running NOW and did not run at all that day is
+    // parked / out of service, not "down" — leave it off that day entirely,
+    // or a deliberately stopped instance would stamp "off all day" on every
+    // cell forever (MEX Lev Cascade, parked since 09-18)
+    if(!I.running && !segs.length) return;
+    bots.push({name: I.name, segs: segs, offH: offMs / 3600000, notes: notes, dry: dry,
+               allDay: segs.length === 0 && first < d0});
+  });
+  return bots.length ? bots : null;
+}
 function renderCalendar(ev, scopeTxt){
   var now = new Date();
   var y = CALM ? CALM.y : now.getFullYear(), m = CALM ? CALM.m : now.getMonth();
+  loadUptime();
+  var acctScope = acctFilter(), modeScope = CUMMODE;
   var mo = document.getElementById('calMonth');
   if(mo) mo.textContent = new Date(y, m, 1).toLocaleString(undefined, {month:'long', year:'numeric'});
   var byDay = {}, tot = 0, n = 0, greenDays = 0, redDays = 0;
@@ -1360,7 +1428,26 @@ function renderCalendar(ev, scopeTxt){
     if(b){ cls += b.pnl >= 0 ? ' pos' : ' neg'; if(b.pnl >= 0) greenDays++; else redDays++; }
     if(day === todayKey) cls += ' today';
     if(new Date(y, m, day) > now && day !== todayKey) cls += ' future';
-    h += '<div class="'+cls+'"><span class="n">'+day+'</span>';
+    // uptime hairlines + a plain "off N h" line — never coloured, so it can't
+    // be mistaken for the day's result
+    var d0 = new Date(y, m, day).getTime(), d1 = new Date(y, m, day + 1).getTime();
+    var bots = uptimeForDay(d0, d1, acctScope, modeScope);
+    var upHtml = '', offHtml = '', tip = '';
+    if(bots){
+      upHtml = '<span class="up">' + bots.map(function(bt){
+        return '<i>' + bt.segs.map(function(s){
+          return '<b'+(s.dry?' class="dry"':'')+' style="left:'+(100*s.a).toFixed(2)+'%;width:'+(100*(s.b-s.a)).toFixed(2)+'%"></b>'; }).join('') + '</i>';
+      }).join('') + '</span>';
+      var offTot = bots.reduce(function(a,bt){ return a + bt.offH; }, 0);
+      var allDay = bots.filter(function(bt){ return bt.allDay; });
+      if(allDay.length && allDay.length === bots.length) offHtml = 'no bot running';
+      else if(allDay.length) offHtml = allDay.map(function(bt){ return bt.name; }).join(', ') + ' off all day';
+      else if(offTot >= 1/60) offHtml = 'off ' + (offTot < 1 ? Math.round(offTot*60)+' min' : offTot.toFixed(1)+' h');
+      tip = bots.map(function(bt){
+        return bt.name + ': ' + (bt.notes.length ? bt.notes.join(', ') : 'ran all day') + (bt.dry ? ' (dry run)' : '');
+      }).join('\n');
+    }
+    h += '<div class="'+cls+'"'+(tip ? ' title="'+tip.replace(/"/g,'&quot;')+'"' : '')+'>'+upHtml+'<span class="n">'+day+'</span>';
     if(b){
       var st = open[y + '-' + (m+1) + '-' + day];
       var pct = (st != null && st > 0) ? 100 * b.pnl / st : null;
@@ -1378,6 +1465,7 @@ function renderCalendar(ev, scopeTxt){
         h += '<span class="v '+dir+'">'+calMoney(b.pnl)+'</span>'+
              '<span class="c"><span class="'+dir+'" style="font-weight:600">'+p+'</span> &middot; '+trades+'</span>';
     }
+    if(offHtml) h += '<span class="off">'+offHtml+'</span>';
     h += '</div>';
   }
   h += '</div>';

@@ -4878,6 +4878,91 @@ def campaign_stop():
 
 
 # ---------------- instances ----------------
+_UPTIME_CACHE = {}    # instance id -> (log mtime, size, windows)
+_UPTIME_RE_TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")
+
+
+def _trader_windows(i):
+    """Running windows for one instance, reconstructed from its stdout log.
+
+    Every start writes 'FCFS live adapter starting ... dry_run=X'; every clean
+    stop writes 'stopped by user'. A start with no stop before it means the
+    previous process died (crash, kill, machine reboot) — its end is taken
+    as the last line it logged. Returns [{start, end|None, live, end_reason}]
+    with epoch-ms times. Cached on the log's (mtime, size).
+    """
+    log = os.path.join(JOBS_DIR, "trader_stdout.log" if i == "1"
+                       else f"trader_stdout_i{i}.log")
+    try:
+        st = os.stat(log)
+    except OSError:
+        return []
+    key = (st.st_mtime, st.st_size)
+    hit = _UPTIME_CACHE.get(i)
+    if hit and hit[0] == key:
+        return hit[1]
+    wins, cur, last_ts = [], None, None
+    try:
+        with open(log, errors="ignore") as f:
+            for ln in f:
+                m = _UPTIME_RE_TS.match(ln)
+                if not m:
+                    continue
+                try:
+                    t = int(time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")) * 1000)
+                except Exception:
+                    continue
+                if "live adapter starting" in ln:
+                    if cur is not None:
+                        cur["end"] = last_ts
+                        cur["end_reason"] = "died"
+                        wins.append(cur)
+                    dr = re.search(r"dry_run=(\w+)", ln)
+                    cur = dict(start=t, end=None, end_reason=None,
+                               live=not (dr and dr.group(1) == "True"))
+                elif "stopped by user" in ln:
+                    if cur is not None:
+                        cur["end"] = t
+                        cur["end_reason"] = "stopped"
+                        wins.append(cur)
+                        cur = None
+                last_ts = t
+    except Exception:
+        return []
+    if cur is not None:
+        # still open in the log: only genuinely running if the process is up
+        I = instances.get(i) or {}
+        p = (I.get("trader") or {}).get("proc")
+        if p is not None and p.poll() is None:
+            wins.append(cur)
+        else:
+            cur["end"] = last_ts
+            cur["end_reason"] = "died"
+            wins.append(cur)
+    _UPTIME_CACHE[i] = (key, wins)
+    return wins
+
+
+@app.route("/api/trader_uptime")
+def trader_uptime():
+    """Per-instance running windows since ?since=<epoch ms> (default 45d),
+    for the Overview calendar's 'was the bot running that day' bar."""
+    try:
+        since = int(request.args.get("since") or 0)
+    except Exception:
+        since = 0
+    if not since:
+        since = int((time.time() - 45 * 86400) * 1000)
+    out = []
+    for i, I in sorted(instances.items(), key=lambda kv: int(kv[0])):
+        wins = [w for w in _trader_windows(i) if (w["end"] is None or w["end"] >= since)]
+        p = (I.get("trader") or {}).get("proc")
+        out.append(dict(id=i, name=I.get("name") or f"Instance {i}",
+                        running=(p is not None and p.poll() is None),
+                        windows=wins))
+    return jsonify(instances=out, now=int(time.time() * 1000))
+
+
 @app.route("/api/instances")
 def instances_list():
     out = []
