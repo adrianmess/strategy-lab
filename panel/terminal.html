@@ -264,10 +264,8 @@ body.masked .amt:hover{filter:none}
           <option value="bot">bot only</option>
           <option value="manual">manual only</option>
         </select>
-        <select id="cumAcct" onchange="setCumAcct(this.value)" title="filter THIS chart by account (spot + futures wallets of that account)">
-          <option value="">both accounts</option>
-          <option value="mexc1">mexc1 only</option>
-          <option value="mexc2">mexc2 only</option>
+        <select id="cumAcct" onchange="setCumAcct(this.value)" title="filter THIS chart by account (spot + futures wallets of that account) — the list follows the accounts configured in the panel">
+          <option value="">all accounts</option>
         </select>
         <span class="seg" style="margin-left:6px" title="curve: one step per closed trade · calendar: realized P&amp;L and trade count per day">
           <button id="cumViewCurve" onclick="setCumView('curve')">curve</button>
@@ -355,8 +353,7 @@ body.masked .amt:hover{filter:none}
         <input type="checkbox" id="hShowIgn" checked onchange="renderHistory()"> show excluded</label>
       <span class="mini" id="hCount"></span>
       <span style="margin-left:auto;display:flex;gap:6px;align-items:center;padding-left:14px;border-left:1px solid var(--line)">
-        <select id="rstAcct"><option value="both">both accounts</option>
-          <option value="mexc1">mexc1 only</option><option value="mexc2">mexc2 only</option></select>
+        <select id="rstAcct" title="which account(s) the fresh start applies to — the list follows the accounts configured in the panel"><option value="both">all accounts</option></select>
         <button class="btn sm" onclick="resetPnl(this)" title="fresh start: hides ALL P&L, trade history and flows before this moment from every view — the balance now becomes the new baseline. The exchange keeps everything; undoable with the restore link that appears while a reset is active.">Reset P&amp;L — fresh start</button>
         <a id="rstUndo" style="display:none;color:var(--cyan);cursor:pointer;font-size:12px" onclick="undoPnlReset(this)" title="remove the reset cutoffs — the full history reappears everywhere">restore history</a>
         <button class="info" title="what is this? (opens docs)" onclick="openInfo('history.reset')">i</button>
@@ -1068,9 +1065,40 @@ function setOrigin(v){
   renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
 }
 var PNL_RESET = {};   // account -> 'YYYY-MM-DD HH:MM' fresh-start cutoffs
+
+// ---- the accounts this panel knows about — the ONE source for every
+// per-account selector. Union of the accounts card (EQ, from the API keys
+// configured on the mini) and whatever a running instance reports, so a
+// newly added account shows up everywhere without touching this file.
+// Selectors used to hardcode mexc1/mexc2: a third account would have been
+// invisible to the cumulative card and calendar, and a "both accounts"
+// P&L reset would have silently skipped it.
+function knownAccounts(){
+  var s = {};
+  Object.keys(EQ).forEach(function(k){ if(k !== 'total') s[k] = 1; });
+  INSTS.forEach(function(x){
+    var a = (PERF[x.id] || {}).account || (STATUS[x.id] || {}).api_account;
+    if(a) s[a] = 1;
+  });
+  return Object.keys(s).sort();
+}
+// (re)build an account <select>: one "all" option + "<acct> only" per
+// account. Rebuilds only when the list changes; returns the value to keep
+// (the previous one, or "all" if that account no longer exists).
+function syncAcctSelect(sel, allValue, allLabel, cur){
+  if(!sel) return cur;
+  var accts = knownAccounts();
+  var html = '<option value="'+allValue+'">'+allLabel+'</option>' +
+    accts.map(function(a){ return '<option value="'+a+'">'+a+' only</option>'; }).join('');
+  if(sel._sig !== html){ sel._sig = html; sel.innerHTML = html; }
+  if(cur && cur !== allValue && accts.indexOf(cur) < 0) cur = allValue;
+  sel.value = cur;
+  return cur;
+}
 function _rstAccts(){
-  var v = (document.getElementById('rstAcct')||{}).value || 'both';
-  return v === 'both' ? ['mexc1','mexc2'] : [v];
+  var sel = document.getElementById('rstAcct');
+  var v = syncAcctSelect(sel, 'both', 'all accounts', (sel || {}).value || 'both');
+  return v === 'both' ? knownAccounts() : [v];
 }
 function resetPnl(btn){
   var accts = _rstAccts();
@@ -1158,9 +1186,13 @@ function renderChart(){
   // under "manual only" the account dropdown hides and is ignored (both
   // accounts, as before the filter existed); under "bot only" and the
   // combined view it applies — to this chart AND the Realized KPIs
-  var acct = acctFilter();
   var sel = document.getElementById('cumAcct');
   if(sel) sel.style.display = ORIGIN === 'manual' ? 'none' : '';
+  // options follow the accounts the panel knows about; a remembered account
+  // that no longer exists falls back to "all"
+  var kept = syncAcctSelect(sel, '', 'all accounts', CUMACCT);
+  if(kept !== CUMACCT){ CUMACCT = kept; localStorage.setItem('slCumAcct', kept); }
+  var acct = acctFilter();
   if(PNLE === null){
     document.getElementById('bigchart').innerHTML =
       '<div class="mini" style="padding:40px 0;text-align:center">loading trade history…</div>';
@@ -1172,9 +1204,9 @@ function renderChart(){
   // "bot only" it applies, and the label must say so — it used to read
   // "bot trades only, both accounts" while the numbers were mexc2's alone
   var scopeTxt = ORIGIN === 'manual'
-    ? 'manual trades only &middot; both accounts, all wallets'
+    ? 'manual trades only &middot; all accounts, all wallets'
     : (ORIGIN === 'bot' ? 'bot trades only' : 'bot + manual') + ' &middot; ' +
-      (acct ? acct + ' (spot + futures wallets)' : 'both accounts, all wallets');
+      (acct ? acct + ' (spot + futures wallets)' : 'all accounts, all wallets');
   var bc = document.getElementById('cumViewCurve'), bk = document.getElementById('cumViewCal');
   if(bc) bc.className = CUMVIEW === 'calendar' ? '' : 'on';
   if(bk) bk.className = CUMVIEW === 'calendar' ? 'on' : '';
@@ -1565,7 +1597,9 @@ function renderAccounts(){
     try{ localStorage.setItem('slEqSnap', JSON.stringify(EQ)); }catch(e){}
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
-    if(CUMVIEW === 'calendar') renderChart();   // and the calendar's day %
+    renderChart();    // the account dropdown + calendar day % follow the accounts list
+    var rs = document.getElementById('rstAcct');
+    if(rs) syncAcctSelect(rs, 'both', 'all accounts', rs.value || 'both');
   }).catch(function(){
     _ACCT_BUSY = false;
     el.innerHTML = '<span class="mini down">could not read accounts</span>';
