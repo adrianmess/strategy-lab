@@ -605,6 +605,7 @@ function cycleDisplay(){
   DISPLAY = DISPLAY === 'both' ? 'money' : (DISPLAY === 'money' ? 'pct' : 'both');
   localStorage.setItem('slDisplay', DISPLAY);
   syncToggles(); renderKpis(); renderInsts(); renderCards(); renderDaily();
+  renderChart();   // the P&L calendar honours DISPLAY too
 }
 function toggleMask(){
   MASK = !MASK;
@@ -1203,9 +1204,35 @@ function calNav(dir){
   renderChart();
 }
 function calMoney(v){
-  // matches the reference layout: +$122.65 / $-96.28
+  // matches the reference layout: +$122.65 / $-96.28 — wrapped in amt() so
+  // the MASK toggle hides it like every other money figure
   var a = Math.abs(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-  return v >= 0 ? '+$' + a : '$-' + a;
+  return amt(v >= 0 ? '+$' + a : '$-' + a);
+}
+function calPct(p){ return p == null ? null : (p >= 0 ? '+' : '') + p.toFixed(2) + '%'; }
+function _dkey(d){ return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate(); }
+// Opening balance of every day from the 1st of (y, m) through today, for the
+// calendar's account scope — the SAME reconstruction the Daily P&L card uses
+// (dailySeries): walk the current balance backwards, subtracting each day's
+// realized and its deposits/withdrawals. A day's % is its P&L on the balance
+// it OPENED with, so this agrees with the Daily card and never judges an
+// early day against money it didn't have yet.
+function calOpenings(ev, acct, y, m){
+  var byDay = {}, flowByDay = {};
+  ev.forEach(function(e){ var k = _dkey(new Date(e.t)); byDay[k] = (byDay[k] || 0) + e.pnl; });
+  FLOWS.filter(function(f){ return !acct || f.account === acct; })
+       .forEach(function(f){ var k = _dkey(new Date(f.t)); flowByDay[k] = (flowByDay[k] || 0) + f.usdt; });
+  var running = acct ? (EQ[acct] || 0) : (EQ.total || 0);
+  var start = {};
+  var d = new Date(); d.setHours(0, 0, 0, 0);
+  var first = new Date(y, m, 1);
+  for(var guard = 0; d >= first && guard < 4000; guard++){
+    var k = _dkey(d);
+    var s = running - (byDay[k] || 0) - (flowByDay[k] || 0);
+    start[k] = s; running = s;
+    d.setDate(d.getDate() - 1);
+  }
+  return start;
 }
 function renderCalendar(ev, scopeTxt){
   var now = new Date();
@@ -1220,9 +1247,11 @@ function renderCalendar(ev, scopeTxt){
     var b = byDay[k] || (byDay[k] = {pnl:0, n:0});
     b.pnl += e.pnl; b.n++; tot += e.pnl; n++;
   });
+  var open = calOpenings(ev, acctFilter(), y, m);
   var first = new Date(y, m, 1).getDay();
   var days = new Date(y, m + 1, 0).getDate();
   var todayKey = (y === now.getFullYear() && m === now.getMonth()) ? now.getDate() : -1;
+  var twr = 1, twrOk = false;   // month return = daily returns compounded
   var h = '<div class="cal">';
   ['S','M','T','W','T','F','S'].forEach(function(s){ h += '<div class="dow">'+s+'</div>'; });
   for(var i = 0; i < first; i++) h += '<div class="d blank"></div>';
@@ -1234,14 +1263,33 @@ function renderCalendar(ev, scopeTxt){
     if(new Date(y, m, day) > now && day !== todayKey) cls += ' future';
     h += '<div class="'+cls+'"><span class="n">'+day+'</span>';
     if(b){
-      h += '<span class="v '+(b.pnl >= 0 ? 'up' : 'dn')+'">'+calMoney(b.pnl)+'</span>'+
-           '<span class="c">'+b.n+' trade'+(b.n === 1 ? '' : 's')+'</span>';
+      var st = open[y + '-' + (m+1) + '-' + day];
+      var pct = (st != null && st > 0) ? 100 * b.pnl / st : null;
+      if(pct != null){ twr *= (1 + pct / 100); twrOk = true; }
+      var dir = b.pnl >= 0 ? 'up' : 'dn';
+      var p = calPct(pct), trades = b.n + ' trade' + (b.n === 1 ? '' : 's');
+      // honours the header $ / % toggle exactly like fig(): % alone when it
+      // asks for %, money alone when it asks for money, both otherwise —
+      // and money as the fallback whenever a % cannot be computed
+      if(DISPLAY === 'pct' && p != null)
+        h += '<span class="v '+dir+'">'+p+'</span><span class="c">'+trades+'</span>';
+      else if(DISPLAY === 'money' || p == null)
+        h += '<span class="v '+dir+'">'+calMoney(b.pnl)+'</span><span class="c">'+trades+'</span>';
+      else
+        h += '<span class="v '+dir+'">'+calMoney(b.pnl)+'</span>'+
+             '<span class="c"><span class="'+dir+'" style="font-weight:600">'+p+'</span> &middot; '+trades+'</span>';
     }
     h += '</div>';
   }
   h += '</div>';
   var totCls = tot >= 0 ? 'color:var(--up)' : 'color:var(--down)';
-  h += '<div class="mini" style="margin-top:8px"><b style="'+totCls+'">'+calMoney(tot)+'</b> this month &middot; '+
+  var mp = twrOk ? calPct(100 * (twr - 1)) : null;
+  var totTxt;
+  if(DISPLAY === 'pct' && mp != null) totTxt = '<b style="'+totCls+'">'+mp+'</b>';
+  else if(DISPLAY === 'money' || mp == null) totTxt = '<b style="'+totCls+'">'+calMoney(tot)+'</b>';
+  else totTxt = '<b style="'+totCls+'">'+calMoney(tot)+'</b> / <b style="'+totCls+'">'+mp+'</b>';
+  h += '<div class="mini" style="margin-top:8px">'+totTxt+
+       '<span title="each day is measured on the balance it opened with (deposits and withdrawals excluded), and the month is those daily returns compounded — a time-weighted return, immune to deposit/withdrawal timing"> this month</span> &middot; '+
        n+' close'+(n === 1 ? '' : 's')+' &middot; '+greenDays+' green / '+redDays+' red day'+(redDays === 1 ? '' : 's')+
        ' &middot; '+scopeTxt+'</div>';
   document.getElementById('bigchart').innerHTML = h;
@@ -1513,6 +1561,7 @@ function renderAccounts(){
     try{ localStorage.setItem('slEqSnap', JSON.stringify(EQ)); }catch(e){}
     renderKpis();     // percentages need the equity that just arrived
     renderDaily();    // and so does the daily series
+    if(CUMVIEW === 'calendar') renderChart();   // and the calendar's day %
   }).catch(function(){
     _ACCT_BUSY = false;
     el.innerHTML = '<span class="mini down">could not read accounts</span>';
