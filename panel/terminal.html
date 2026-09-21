@@ -1168,9 +1168,13 @@ function renderChart(){
   }
   var ev = countedEvents().filter(function(e){
     return !acct || e.account === acct; });
-  var scopeTxt = (ORIGIN ? ORIGIN+' trades only, both accounts' : 'bot + manual')+
-    (ORIGIN ? '' : ' &middot; '+
-      (acct ? acct+' (spot + futures)' : 'both accounts, all wallets'));
+  // the account filter is hidden and ignored ONLY under "manual only"; under
+  // "bot only" it applies, and the label must say so — it used to read
+  // "bot trades only, both accounts" while the numbers were mexc2's alone
+  var scopeTxt = ORIGIN === 'manual'
+    ? 'manual trades only &middot; both accounts, all wallets'
+    : (ORIGIN === 'bot' ? 'bot trades only' : 'bot + manual') + ' &middot; ' +
+      (acct ? acct + ' (spot + futures wallets)' : 'both accounts, all wallets');
   var bc = document.getElementById('cumViewCurve'), bk = document.getElementById('cumViewCal');
   if(bc) bc.className = CUMVIEW === 'calendar' ? '' : 'on';
   if(bk) bk.className = CUMVIEW === 'calendar' ? 'on' : '';
