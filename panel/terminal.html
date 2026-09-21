@@ -1782,14 +1782,14 @@ function renderHistory(){
   document.getElementById('hCount').innerHTML = live.length + ' closes &middot; net ' +
     '<b class="'+cls(net)+'">'+amt(money(net))+'</b>' +
     (live.length ? ' &middot; ' + Math.round(100*wins/live.length) + '% win' : '') +
-    (avg == null ? '' : ' &middot; avg <b class="'+cls(avg)+'">' +
-      (avg>=0?'+':'') + avg.toFixed(2) + '%</b>') +
+    (avg == null ? '' : ' &middot; <span title="mean of the per-trade P&amp;L % column — each trade on its own position size, not on account equity">avg/trade <b class="'+cls(avg)+'">' +
+      (avg>=0?'+':'') + avg.toFixed(2) + '%</b></span>') +
     (nIgn ? ' &middot; <span class="warn">' + nIgn + ' excluded (' + money(ignNet) +
       ' not counted)</span>' : '');
   document.getElementById('hist').innerHTML = rows.length
     ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Origin</th><th>Symbol</th><th>Side</th>'+
       '<th class="n">Entry</th><th class="n">Exit</th>'+
-      '<th class="n">P&amp;L %</th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
+      '<th class="n" title="each trade\'s return on ITS OWN position size (entry → exit, net of fees). Not a share of the account — positions are usually a fraction of equity and re-use the same capital, so these do not add up to a day\'s account return. For that, see the Daily P&amp;L card or the calendar on Overview.">P&amp;L % <span class="mini" style="font-weight:400">of position</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(e){
         var px = function(v){ return v == null ? '—' : (+v).toPrecision(6); };
         var ig = e.ignored;
