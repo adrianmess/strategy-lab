@@ -1801,35 +1801,22 @@ function renderHistory(){
   var net = live.reduce(function(a,e){ return a+e.pnl; }, 0);
   var wins = live.filter(function(e){ return e.pnl > 0; }).length;
   _ACCT_OPEN = null;   // equity/flows may have moved since the last render
-  // per-ACCOUNT sums of the "% of account" column. Never added across
-  // accounts — a % of mexc1's ~$1k and a % of mexc2's ~$3.4k are not the
-  // same unit (the first cut of this showed "+70% of account" for the
-  // all-accounts view). Within one day a sum equals the calendar cell;
-  // across days it is additive, not compounded.
-  var sumByAcct = {};
-  live.forEach(function(e){
-    var p = acctPct(e);
-    if(p == null) return;
-    sumByAcct[e.account] = (sumByAcct[e.account] || 0) + p;
-  });
-  var sumTxt = Object.keys(sumByAcct).sort().map(function(a){
-    var p = sumByAcct[a];
-    return (Object.keys(sumByAcct).length > 1 ? a + ' ' : '') +
-      '<b class="'+cls(p)+'">' + (p>=0?'+':'') + p.toFixed(2) + '%</b>';
-  }).join(' &middot; ');
+  var withPct = live.filter(function(e){ return e.pct != null; });
+  var avg = withPct.length
+    ? withPct.reduce(function(a,e){ return a+e.pct; }, 0) / withPct.length : null;
   var ignNet = rows.filter(function(e){ return e.ignored; })
                    .reduce(function(a,e){ return a+e.pnl; }, 0);
   document.getElementById('hCount').innerHTML = live.length + ' closes &middot; net ' +
     '<b class="'+cls(net)+'">'+amt(money(net))+'</b>' +
     (live.length ? ' &middot; ' + Math.round(100*wins/live.length) + '% win' : '') +
-    (!sumTxt ? '' : ' &middot; <span title="sum of the P&amp;L % of account column, per account (never added across accounts — different denominators). Within one day this equals the calendar\'s figure for that day; across several days it is a simple sum, not compounded.">'+
-      sumTxt + ' of account</span>') +
+    (avg == null ? '' : ' &middot; <span title="mean of the per-trade P&amp;L % column — each trade on its own position size">avg/trade <b class="'+cls(avg)+'">' +
+      (avg>=0?'+':'') + avg.toFixed(2) + '%</b></span>') +
     (nIgn ? ' &middot; <span class="warn">' + nIgn + ' excluded (' + money(ignNet) +
       ' not counted)</span>' : '');
   document.getElementById('hist').innerHTML = rows.length
     ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Origin</th><th>Symbol</th><th>Side</th>'+
       '<th class="n">Entry</th><th class="n">Exit</th>'+
-      '<th class="n" title="each trade\'s realized P&amp;L as a share of the balance its ACCOUNT opened that day with — the same basis as the Daily P&amp;L card and the Overview calendar, so a day\'s rows add up to that day\'s calendar cell. Hover a value for the trade\'s own entry → exit move.">P&amp;L % <span class="mini" style="font-weight:400">of account</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
+      '<th class="n" title="each trade\'s return on its own position size (entry → exit, net of fees). Hover a value to also see it as a share of the account\'s balance that day.">P&amp;L % <span class="mini" style="font-weight:400">of position</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(e){
         var px = function(v){ return v == null ? '—' : (+v).toPrecision(6); };
         var ig = e.ignored;
@@ -1855,15 +1842,14 @@ function renderHistory(){
             (e.lev && e.lev > 1 ? ' '+e.lev+'x' : '')+'</span>' : '')+'</td>'+
           '<td class="n">'+px(e.entry)+'</td><td class="n">'+px(e.exit)+'</td>'+
           (function(){
+            // shown: the trade's own entry → exit return (of position).
+            // hover: the same P&L as a share of the account's opening
+            // balance that day — the calendar's basis — for cross-reference
             var ap = ig ? null : acctPct(e);
-            var posTxt = e.pct == null ? '' : 'position: '+(e.pct>=0?'+':'')+e.pct.toFixed(2)+'% (entry → exit, net of fees)';
-            return '<td class="n '+(ig?'dim':(ap==null?'dim':cls(ap)))+'" style="font-weight:600'+
-              (ig?';text-decoration:line-through':'')+'" title="'+
-              (ap==null ? 'no opening balance known for this account on this day (equity or flows not loaded yet)'
-                        : (ap>=0?'+':'')+ap.toFixed(2)+'% of the account\'s opening balance that day')+
-              (posTxt ? ' — '+posTxt : '')+'">'+
-              (ap==null ? (e.pct==null ? '—' : '<span class="dim">'+(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%*</span>')
-                        : (ap>=0?'+':'')+ap.toFixed(2)+'%')+'</td>';
+            return '<td class="n '+(ig?'dim':(e.pct==null?'dim':cls(e.pct)))+'" style="font-weight:600'+
+              (ig?';text-decoration:line-through':'')+'"'+
+              (ap==null ? '' : ' title="'+(ap>=0?'+':'')+ap.toFixed(2)+'% of the account\'s opening balance that day"')+'>'+
+              (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>';
           })()+
           '<td class="n '+(ig?'dim':cls(e.pnl))+'"'+(ig?' style="text-decoration:line-through"':'')+'>'+
             amt(money(e.pnl))+'</td>'+
