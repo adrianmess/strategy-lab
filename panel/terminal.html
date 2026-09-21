@@ -115,22 +115,17 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 /* P&L calendar (Overview → cumulative card, "calendar" view) */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .cal .dow{text-align:center;font-size:10.5px;color:var(--dim);letter-spacing:.1em;padding:2px 0 4px}
-.cal .d{border:1px solid var(--line);border-radius:8px;padding:11px 10px 8px;min-height:82px;position:relative;overflow:hidden;
+.cal .d{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:82px;
   background:var(--panel2);display:flex;flex-direction:column;gap:2px}
 .cal .d.blank{border-color:transparent;background:transparent}
 .cal .d.pos{background:color-mix(in srgb,var(--up) 9%,var(--panel2));border-color:color-mix(in srgb,var(--up) 22%,var(--line))}
 .cal .d.neg{background:color-mix(in srgb,var(--down) 10%,var(--panel2));border-color:color-mix(in srgb,var(--down) 24%,var(--line))}
 .cal .d.today{box-shadow:0 0 0 1.5px var(--up)}
 .cal .d.future{opacity:.45}
-/* "was a bot running that day" — hairlines along the top edge of the cell,
-   one per bot in scope, midnight → midnight. Cyan while running, the cell's
-   own grey where not. Deliberately NOT red/green: status must never read
-   as a result. The P&L below is untouched. */
-.cal .d .up{position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:1px;padding:0}
-.cal .d .up i{display:block;height:2px;background:#2a323d;position:relative;overflow:hidden;font-style:normal}
-.cal .d .up i b{position:absolute;top:0;bottom:0;background:var(--cyan);opacity:.85}
-.cal .d .up i b.dry{opacity:.4}
-.cal .d .off{font-size:11px;color:var(--dim)}
+/* "was a bot running that day" — one plain line of text under the P&L,
+   e.g. "bot off 5.1 h" / "2 bots off all day". Red by request; it never
+   replaces or restyles the P&L figures themselves. */
+.cal .d .off{font-size:11px;color:var(--down)}
 .cal .d .n{font-size:11px;color:var(--dim)}
 .cal .d .v{font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
 .cal .d .v.up{color:var(--up)}.cal .d .v.dn{color:var(--down)}
@@ -1345,8 +1340,8 @@ function acctPct(e){
 // ---- bot uptime for the calendar ("was it running that day?") ----------
 // /api/trader_uptime reconstructs each instance's running windows from its
 // stdout log (start banners + 'stopped by user'; a start with no stop means
-// the previous process died). Refreshed every 5 min; the calendar draws one
-// hairline per bot in the current scope along the top edge of every cell.
+// the previous process died). Refreshed every 5 min; the calendar prints a
+// one-line 'bot off …' note in any day a bot in scope was not running.
 var UPTIME = null, _uptimeAt = 0, _uptimeBusy = false;
 function loadUptime(){
   if(_uptimeBusy || Date.now() - _uptimeAt < 300000) return;
@@ -1428,26 +1423,28 @@ function renderCalendar(ev, scopeTxt){
     if(b){ cls += b.pnl >= 0 ? ' pos' : ' neg'; if(b.pnl >= 0) greenDays++; else redDays++; }
     if(day === todayKey) cls += ' today';
     if(new Date(y, m, day) > now && day !== todayKey) cls += ' future';
-    // uptime hairlines + a plain "off N h" line — never coloured, so it can't
-    // be mistaken for the day's result
+    // 'bot off 5.1 h' / '2 bots off all day' under the P&L (Adrian's pick):
+    // plain text, red; the P&L figures themselves are never touched
     var d0 = new Date(y, m, day).getTime(), d1 = new Date(y, m, day + 1).getTime();
     var bots = uptimeForDay(d0, d1, acctScope, modeScope);
-    var upHtml = '', offHtml = '', tip = '';
+    var offHtml = '', tip = '';
     if(bots){
-      upHtml = '<span class="up">' + bots.map(function(bt){
-        return '<i>' + bt.segs.map(function(s){
-          return '<b'+(s.dry?' class="dry"':'')+' style="left:'+(100*s.a).toFixed(2)+'%;width:'+(100*(s.b-s.a)).toFixed(2)+'%"></b>'; }).join('') + '</i>';
-      }).join('') + '</span>';
-      var offTot = bots.reduce(function(a,bt){ return a + bt.offH; }, 0);
-      var allDay = bots.filter(function(bt){ return bt.allDay; });
-      if(allDay.length && allDay.length === bots.length) offHtml = 'no bot running';
-      else if(allDay.length) offHtml = allDay.map(function(bt){ return bt.name; }).join(', ') + ' off all day';
-      else if(offTot >= 1/60) offHtml = 'off ' + (offTot < 1 ? Math.round(offTot*60)+' min' : offTot.toFixed(1)+' h');
+      // a bot counts as "off" if it missed 15+ min (a restart blip is not an
+      // outage). One bot: say how long. Several: just the count — summing
+      // hours across bots gives "34 h" in a 24 h day; the hover has details.
+      var down = bots.filter(function(bt){ return bt.allDay || bt.offH >= 0.25; });
+      if(down.length === 1){
+        var bt = down[0];
+        offHtml = bt.allDay ? 'bot off all day'
+                : 'bot off ' + (bt.offH < 1 ? Math.round(bt.offH*60)+' min' : bt.offH.toFixed(1)+' h');
+      } else if(down.length > 1){
+        offHtml = down.every(function(bt){ return bt.allDay; }) ? 'bots off all day' : down.length + ' bots off';
+      }
       tip = bots.map(function(bt){
         return bt.name + ': ' + (bt.notes.length ? bt.notes.join(', ') : 'ran all day') + (bt.dry ? ' (dry run)' : '');
       }).join('\n');
     }
-    h += '<div class="'+cls+'"'+(tip ? ' title="'+tip.replace(/"/g,'&quot;')+'"' : '')+'>'+upHtml+'<span class="n">'+day+'</span>';
+    h += '<div class="'+cls+'"'+(tip ? ' title="'+tip.replace(/"/g,'&quot;')+'"' : '')+'><span class="n">'+day+'</span>';
     if(b){
       var st = open[y + '-' + (m+1) + '-' + day];
       var pct = (st != null && st > 0) ? 100 * b.pnl / st : null;
