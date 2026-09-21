@@ -743,13 +743,9 @@ function renderKpis(){
   var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
   var p1 = dietzPctSafe(d1, 1, acct), p7 = dietzPctSafe(d7, 7, acct),
       p30 = dietzPctSafe(d30, 30, acct);
-  // a window with no closes shows "no closes" rather than a bare +0.00%,
-  // which read as a broken card under an account filter
-  function val(d, p, w){
-    return w.n ? fig(d, p.pct, p.approx)
-               : '<span class="dim" title="no closed trades in this window' +
-                 (lbl ? ' (' + lbl.replace(/^ · /, '') + ')' : '') + '">no closes</span>';
-  }
+  // an empty window shows a bare +0.00% (Adrian's call, 2026-09-21); the
+  // trade count in the subtitle says why
+  function val(d, p, w){ return fig(d, p.pct, p.approx); }
   document.getElementById('kpis').innerHTML =
     kpi('Realized 24h', val(d1, p1, w1),
         w1.n + ' trades · % on avg capital at risk' + lbl, d1, 'overview.kpis') +

@@ -85,6 +85,72 @@ def _load_proxies(account=None):
         return None
 
 
+# ---------------- proxy failover ----------------
+# 2026-09-19 01:21-01:25: MEX2 Spot's FCFS close of ETH failed four times in a
+# row — the account read through its pinned port got "Tunnel connection
+# failed: 503" and a read timeout — and only went through on the 5th minute
+# (~0.35% worse). Every pool exit IP is whitelisted on every key, so a request
+# that could not even reach MEXC can simply be re-sent through another port.
+#
+# SAFETY RULE: fail over only when the request provably never reached MEXC
+# (ConnectionError: proxy tunnel refused/503, DNS, connect timeout), or when it
+# is idempotent (GET). A POST that READ-timed out may have executed — an order
+# resent on another port could fill twice — so those are surfaced, not retried.
+_EU_PORTS = {10005, 10007}        # ~450ms slower exits — never a failover target
+
+
+def _alt_proxies(account, current):
+    """A different pool port than `current`, for one retry. None if the pool
+    has no other usable port."""
+    try:
+        pc = json.load(open(os.path.join(HERE, "proxy_pool.json")))
+        ports = [int(p) for p in pc["ports"]]
+    except Exception:
+        return None
+    cur = None
+    try:
+        cur = int(str((current or {}).get("https", "")).rsplit(":", 1)[1])
+    except Exception:
+        pass
+    cands = [p for p in ports if p != cur and p not in _EU_PORTS] or \
+            [p for p in ports if p != cur]
+    if not cands:
+        return None
+    # deterministic per account so mexc1 and mexc2 don't both pile onto the
+    # same spare port when a shared upstream blip hits them together
+    import zlib
+    p = cands[zlib.crc32((account or "").encode()) % len(cands)]
+    url = f"http://{pc['username']}:{pc['password']}@{pc['host']}:{p}"
+    return {"http": url, "https": url}
+
+
+def _send_with_failover(api, send, retry_on_timeout, what=""):
+    """send(proxies) -> requests.Response, tried once more on another pool
+    port if the first attempt never reached MEXC (or timed out and
+    `retry_on_timeout` says the call is idempotent)."""
+    try:
+        return send(api.proxies)
+    except (requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout) as e:
+        # ConnectTimeout is both; a ReadTimeout on a non-idempotent call must
+        # NOT be resent (the order may have gone through)
+        if (isinstance(e, requests.exceptions.Timeout)
+                and not isinstance(e, requests.exceptions.ConnectTimeout)
+                and not retry_on_timeout):
+            raise
+        alt = _alt_proxies(api.account, api.proxies)
+        if not alt or not api.proxies:
+            raise
+        try:
+            port = alt["https"].rsplit(":", 1)[1]
+            print(f"[mexc_api] {api.account}: {type(e).__name__} on the pinned "
+                  f"proxy for {what or 'request'} — retrying once via port "
+                  f"{port}", flush=True)
+        except Exception:
+            pass
+        return send(alt)
+
+
 def load_account(account=None):
     """Multi-account keys file:
       { "default": "mexc1",
@@ -134,18 +200,24 @@ class MexcFuturesAPI:
     def _get(self, path, params=None):
         params = {k: v for k, v in (params or {}).items() if v is not None}
         pstr = "&".join(f"{k}={params[k]}" for k in sorted(params))
-        r = requests.get(BASE + path, params=params,
-                         headers=self._headers(pstr),
-                         proxies=self.proxies, timeout=self.timeout)
+        r = _send_with_failover(
+            self, lambda px: requests.get(BASE + path, params=params,
+                                          headers=self._headers(pstr),
+                                          proxies=px, timeout=self.timeout),
+            retry_on_timeout=True, what=f"GET {path}")
         return self._out(r)
 
     def _post(self, path, body):
         if isinstance(body, dict):
             body = {k: v for k, v in body.items() if v is not None}
         raw = json.dumps(body)
-        r = requests.post(BASE + path, data=raw,
-                          headers=self._headers(raw),
-                          proxies=self.proxies, timeout=self.timeout)
+        # orders: fail over only if the request never reached MEXC; a read
+        # timeout is surfaced (the order may have executed)
+        r = _send_with_failover(
+            self, lambda px: requests.post(BASE + path, data=raw,
+                                           headers=self._headers(raw),
+                                           proxies=px, timeout=self.timeout),
+            retry_on_timeout=False, what=f"POST {path}")
         return self._out(r)
 
     @staticmethod
@@ -343,9 +415,14 @@ class MexcSpotAPI:
         qs = "&".join(f"{k}={params[k]}" for k in params)
         sig = hmac.new(self.sk.encode(), qs.encode(), hashlib.sha256).hexdigest()
         url = f"{BASE}{path}?{qs}&signature={sig}"
-        r = requests.request(method, url,
-                             headers={"X-MEXC-APIKEY": self.ak},
-                             proxies=self.proxies, timeout=self.timeout)
+        # GET/DELETE are idempotent -> may be resent on a read timeout;
+        # POST (orders) only when the request never reached MEXC
+        r = _send_with_failover(
+            self, lambda px: requests.request(method, url,
+                                              headers={"X-MEXC-APIKEY": self.ak},
+                                              proxies=px, timeout=self.timeout),
+            retry_on_timeout=(method.upper() != "POST"),
+            what=f"{method.upper()} {path}")
         try:
             j = r.json()
         except Exception:
