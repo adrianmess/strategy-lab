@@ -7857,7 +7857,11 @@ def runs2():
     # Optimize page polls this while jobs run, so concurrent rescans were
     # stacking up and saturating a core. A 20s snapshot is plenty fresh for
     # a list of finished runs.
-    _lim_key = request.args.get("lim", "")
+    # the TTL key must carry `bt` too: keyed on lim alone, a targeted ?bt=
+    # lookup within 20s of a normal page poll was served the cached 1500-row
+    # payload instead of its matches — which is the exact failure the ?bt=
+    # branch below exists to avoid.
+    _lim_key = (request.args.get("lim", ""), request.args.get("bt", ""))
     _hit = _RUNS2_TTL.get(_lim_key)
     if _hit and time.time() - _hit[0] < 20 and not request.args.get("fresh"):
         return jsonify(_hit[1])
@@ -8056,6 +8060,35 @@ def runs2():
         _R2C["d"][d] = [_key, _static]
         _R2C["dirty"] = True
         out.append(e)
+    # TARGETED LOOKUP (?bt=name1,name2): resolve specific BACKTEST names to the
+    # runs that produced them. "build a router with these" on the Backtests page
+    # needs exactly this, and without it the page fell back to ?lim=0 — a 289MB
+    # response that the browser then hashed and JSON.parsed, so the button just
+    # appeared dead (2026-09-20). Same matching rule the page uses: the run's
+    # backtest_flags first, else the longest run name the backtest name starts
+    # with. Returns only the matches, so the response is a few KB.
+    _bt = [s.strip() for s in (request.args.get("bt") or "").split(",") if s.strip()]
+    if _bt:
+        want = set(_bt)
+        picked, by_name = {}, {}
+        for e in out:
+            nm = e.get("name") or ""
+            for f in (e.get("backtest_flags") or []):
+                if f.get("backtest") in want:
+                    picked[id(e)] = e
+            if nm:
+                by_name[nm] = e
+        for bn in want:
+            if any(f.get("backtest") == bn
+                   for e in picked.values()
+                   for f in (e.get("backtest_flags") or [])):
+                continue
+            cands = [n for n in by_name if bn.startswith(n)]
+            if cands:
+                e = by_name[max(cands, key=len)]
+                picked[id(e)] = e
+        return jsonify(_scrub(list(picked.values())))
+
     # LIMIT: with ~9k runs the full list is heavy; default to the newest
     # 1500 by activity plus everything running/trading/marked/rated.
     try:

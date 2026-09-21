@@ -699,12 +699,12 @@ async function applyCombineFromBacktests(_names){
     if(r){ if(!runs.includes(r.name)) runs.push(r.name); }
     else missing.push(bn);
   }
-  if((!runs.length || missing.length) && !RUNS_ALL){
-    // sources may be older than the quick newest-1500 window — fetch ALL runs once
-    $('cmbMsg').textContent = 'sources not in the quick list — loading the full run list…';
-    RUNS_ALL = true; _runsHash = '';
-    await refreshRuns();
-    return applyCombineFromBacktests(names);
+  if((!runs.length || missing.length) && !_cmbRetried){
+    // sources may be older than the quick newest-1500 window — ask the server
+    // for just these runs (never the whole 289MB list)
+    _cmbRetried = true;
+    $('cmbMsg').textContent = 'looking up the source runs…';
+    if(await fetchRunsForBacktests(names)) return applyCombineFromBacktests(names);
   }
   localStorage.removeItem('cmbFromBt');
   if(!runs.length){ $('cmbMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
@@ -731,6 +731,23 @@ async function applyCombineFromBacktests(_names){
     + ' — launch fields set from the sources; pick merge/breed, then Arm combine';
   document.querySelector('.cmbRun').scrollIntoView({behavior:'smooth', block:'center'});
 }
+let _mxRetried = false, _cmbRetried = false;
+// Resolve backtest names -> their source runs WITHOUT pulling every run.
+// The old path set RUNS_ALL and refetched /api/runs2?lim=0: a 289MB response
+// that the page then hashed and JSON.parsed, so "build a router with these"
+// looked like it did nothing (2026-09-20). The server does the same matching
+// and returns only the matches.
+async function fetchRunsForBacktests(names){
+  try{
+    const r = await fetch('/api/runs2?bt=' + encodeURIComponent(names.join(',')));
+    if(!r.ok) return false;
+    const rows = await r.json();
+    if(!Array.isArray(rows) || !rows.length) return false;
+    const have = new Set(RUNS.map(x=>x.name));
+    rows.forEach(x=>{ if(!have.has(x.name)){ RUNS.push(x); have.add(x.name); } });
+    return true;
+  }catch(e){ return false; }
+}
 async function applyMxFromBacktests(_names){
   let names = Array.isArray(_names) ? _names : null;
   if(!names){
@@ -745,11 +762,10 @@ async function applyMxFromBacktests(_names){
     if(r){ if(!runs.includes(r.name)) runs.push(r.name); }
     else missing.push(bn);
   }
-  if((!runs.length || missing.length) && !RUNS_ALL){
-    $('routerMsg').textContent = 'sources not in the quick list — loading the full run list…';
-    RUNS_ALL = true; _runsHash = '';
-    await refreshRuns();
-    return applyMxFromBacktests(names);
+  if((!runs.length || missing.length) && !_mxRetried){
+    _mxRetried = true;
+    $('routerMsg').textContent = 'looking up the source runs…';
+    if(await fetchRunsForBacktests(names)) return applyMxFromBacktests(names);
   }
   localStorage.removeItem('mxFromBt');
   if(!runs.length){ $('routerMsg').textContent = 'no source runs found for the selected backtests (deleted runs?)'; return; }
