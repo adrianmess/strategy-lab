@@ -119,6 +119,34 @@ Explored because web fees are far cheaper, then dropped on ToS grounds: MEXC's R
 - **fseventsd was at 4GB** with the mini 12.2GB into swap, 134 days uptime. Cause: Time Machine reconciling a 104GB working tree hourly with **nothing excluded** (98GB `optimizer/runs`, a 344MB `backtests.js` rewritten per publish) onto a destination 87% full. Fix is `tmutil addexclusion` on the derived dirs + a reboot; a bigger disk fixes the backup depth, not the RAM. NOT DONE.
 - **Data limits worth knowing:** CVD and VRVP in `scalp_engine.py` are *candle-derived proxies* (whole-bar volume signed by bar direction; POC from close prices), not order-flow. No open interest anywhere. Funding is not modelled. `trades_count` is populated for only 4% of rows.
 
+### 2026-09-21 review — what was verified and what changed
+- **Core-budget fix PROVEN on real replacements.** Both boxes were spot-replaced
+  again on 09-21 (03:13 and 07:40 PDT, template v3 via `$Latest`); both booted
+  with the inherited `cores: 10` and self-corrected to 238 within ~60s, BEFORE
+  the worker started (worker.log line 1 says cores=238, zero CORE BUDGET
+  WARNINGs, no healthcheck repair needed). S3 `code/` = repo HEAD for all six
+  box scripts. Healthcheck now ignores "few legs" on a box <10 min old (the
+  03:15 false alarm was a 90-second-old box ramping).
+- **`/api/runs2` rebuilt as a background snapshot.** 45k run dirs made every
+  scan ~24s; the classic Optimize page polls every 15s against a 20s TTL, so
+  nearly every poll (and the first load, and the Backtests→"build a router"
+  handoff, which needs RUNS first) waited a full scan. Now: serve the last
+  snapshot (~0.1s), rebuild single-flight in a thread once it is >20s old,
+  pre-warm at panel start, persist the 328MB mtime cache at most every 5 min.
+  Measured: run list 24s → 0.8s, `?bt=` lookup 5s → 0.04s.
+- **Terminal Overview "Realized" KPIs under an account filter.** mexc1's
+  Modified-Dietz base came out NEGATIVE (equity $1,015 vs $1,435 deposit +
+  $169 realized — ~$590 left mexc1 with no withdrawal in exchange history and
+  no P&L event; likely the 09-17 SUI incident or an internal transfer), so
+  the % silently fell back to money. Now falls back to "% on balance at
+  window start", marked ≈ with the reason as tooltip; empty windows say "no
+  closes" instead of a bare +0.00%. **The ~$590 gap itself is unexplained.**
+- Terminal Progress "Running" showed `[object Object],…` (it is a list).
+- The MacBook gamut worker has been SIGSTOPped (state T, "paused" on the
+  Progress page) since ~14:07 on 09-20 — mid-search at 84%. Not touched.
+- 09-19 01:21–01:25: MEX2 Spot's FCFS ETH close failed 4× on proxy 503 /
+  timeouts and succeeded on the 5th retry (2653.87 → 2644.58, ~0.35% slip).
+
 ### Outstanding
 1. ~~80 routers/combos not re-costed~~ — DONE 2026-09-19 via `scripts/rerun_combos.py` (20 runnable combos; the rest were missing components).
 2. ~~Re-search a gamut campaign at honest fees~~ — RUNNING, see `gamut_hfee_mh12` at the top of this file.

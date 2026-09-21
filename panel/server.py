@@ -7849,22 +7849,126 @@ def _r2c_load():
         _R2C["loaded"] = True
 
 
-_RUNS2_TTL = {}      # lim -> (built_at, payload)
+_RUNS2_TTL = {}      # lim -> (snapshot_at, trimmed payload)
+# One full, scrubbed list of every run, rebuilt in the BACKGROUND.
+#
+# History: /api/runs2 rescanned every run dir on each call behind a 20s TTL.
+# At 45k run dirs (2026-09-21; the hfee campaign adds ~120/hr) a rescan took
+# ~24s: 5 stat() per dir, a failed open() of `rating` per dir, a recursive
+# NaN-scrub of all 45k entries and — whenever a new dir had appeared, i.e.
+# nearly always mid-campaign — an 8s dump of the 328MB mtime cache. The
+# Optimize page polls every 15s, so it waited on a fresh 24s scan on almost
+# every poll and on first load: "runs take forever to appear", and the
+# Backtests-page router handoff (which needs RUNS first) looked dead.
+#
+# Now the request path only ever serves the last snapshot (~0.1s) and kicks a
+# single-flight background rebuild once it is older than 20s. Only the very
+# first call after a panel start builds inline (and startup pre-warms it).
+_RUNS2_SNAP = {"at": 0.0, "out": None}
+_RUNS2_LOCK = threading.Lock()
+_R2C_DUMP_AT = [0.0]
+_R2C_DUMP_EVERY = 300     # persist the mtime cache at most every 5 min
+
+
+def _runs2_refresh_bg():
+    """Kick a background rebuild unless one is already running."""
+    if _RUNS2_LOCK.locked():
+        return
+    threading.Thread(target=_runs2_build, name="runs2-rebuild",
+                     daemon=True).start()
+
+
+def _runs2_build():
+    """Full scan of optimizer/runs -> scrubbed list of every run.
+
+    Single-flight: a caller that had to wait for another build reuses that
+    build's result instead of scanning again.
+    """
+    _t0 = time.time()
+    with _RUNS2_LOCK:
+        if _RUNS2_SNAP["out"] is not None and _RUNS2_SNAP["at"] >= _t0:
+            return _RUNS2_SNAP["out"]
+        try:
+            out = _runs2_scan()
+        except Exception as _e:
+            print(f"[runs2] rebuild failed: {_e!r}", flush=True)
+            return _RUNS2_SNAP["out"] or []
+        _RUNS2_SNAP.update(at=time.time(), out=out)
+        # persist the mtime cache, but not on every rebuild: it is ~330MB
+        # and takes ~8s to write, and mid-campaign every rebuild is dirty
+        if _R2C.get("dirty") and time.time() - _R2C_DUMP_AT[0] > _R2C_DUMP_EVERY:
+            try:
+                _tmp = _R2C_PATH + ".tmp"
+                json.dump(_R2C["d"], open(_tmp, "w"))
+                os.replace(_tmp, _R2C_PATH)
+                _R2C["dirty"] = False
+                _R2C_DUMP_AT[0] = time.time()
+            except Exception:
+                pass
+        return out
+
 
 @app.route("/api/runs2")
 def runs2():
-    # ~27k run directories x 5 stat() each is ~135k syscalls per call; the
-    # Optimize page polls this while jobs run, so concurrent rescans were
-    # stacking up and saturating a core. A 20s snapshot is plenty fresh for
-    # a list of finished runs.
-    # the TTL key must carry `bt` too: keyed on lim alone, a targeted ?bt=
-    # lookup within 20s of a normal page poll was served the cached 1500-row
-    # payload instead of its matches — which is the exact failure the ?bt=
-    # branch below exists to avoid.
-    _lim_key = (request.args.get("lim", ""), request.args.get("bt", ""))
-    _hit = _RUNS2_TTL.get(_lim_key)
-    if _hit and time.time() - _hit[0] < 20 and not request.args.get("fresh"):
+    if _RUNS2_SNAP["out"] is None or request.args.get("fresh"):
+        out = _runs2_build()                     # cold start only (or ?fresh=1)
+    else:
+        out = _RUNS2_SNAP["out"]
+        if time.time() - _RUNS2_SNAP["at"] > 20:
+            _runs2_refresh_bg()
+    snap_at = _RUNS2_SNAP["at"]
+    # TARGETED LOOKUP (?bt=name1,name2): resolve specific BACKTEST names to the
+    # runs that produced them. "build a router with these" on the Backtests page
+    # needs exactly this, and without it the page fell back to ?lim=0 — a 289MB
+    # response that the browser then hashed and JSON.parsed, so the button just
+    # appeared dead (2026-09-20). Same matching rule the page uses: the run's
+    # backtest_flags first, else the longest run name the backtest name starts
+    # with. Returns only the matches, so the response is a few KB.
+    _bt = [s.strip() for s in (request.args.get("bt") or "").split(",") if s.strip()]
+    if _bt:
+        want = set(_bt)
+        picked, by_name = {}, {}
+        for e in out:
+            nm = e.get("name") or ""
+            for f in (e.get("backtest_flags") or []):
+                if f.get("backtest") in want:
+                    picked[id(e)] = e
+            if nm:
+                by_name[nm] = e
+        for bn in want:
+            if any(f.get("backtest") == bn
+                   for e in picked.values()
+                   for f in (e.get("backtest_flags") or [])):
+                continue
+            cands = [n for n in by_name if bn.startswith(n)]
+            if cands:
+                e = by_name[max(cands, key=len)]
+                picked[id(e)] = e
+        return jsonify(list(picked.values()))
+
+    # LIMIT: with ~45k runs the full list is heavy; default to the newest
+    # 1500 by activity plus everything running/trading/marked/rated. The
+    # trimmed payload is memoised per snapshot so several tabs polling at
+    # once share one sort.
+    try:
+        lim = int(request.args.get("lim", 1500))
+    except Exception:
+        lim = 1500
+    _hit = _RUNS2_TTL.get(lim)
+    if _hit and _hit[0] == snap_at:
         return jsonify(_hit[1])
+    if lim and len(out) > lim:
+        keep = [e for e in out if e.get("running") or e.get("trading")
+                or e.get("best") or (e.get("rating") or 0) > 0]
+        _kid = set(map(id, keep))
+        rest = [e for e in out if id(e) not in _kid]
+        rest.sort(key=lambda e: e.get("last_run") or "", reverse=True)
+        out = keep + rest[:max(0, lim - len(keep))]
+    _RUNS2_TTL[lim] = (snap_at, out)
+    return jsonify(out)
+
+
+def _runs2_scan():
     out = []
     runs_dir = os.path.join(OPT, "runs")
     running_names = {j.get("name") for j in jobs.values()
@@ -7914,9 +8018,15 @@ def runs2():
             e = dict(_hit[1])
             e.update(best=os.path.exists(os.path.join(runs_dir, d, "marked_best")),
                      trading=trading_map.get(d), running=(d in running_names))
-            try:
-                e["rating"] = int(open(os.path.join(runs_dir, d, "rating")).read().strip())
-            except Exception:
+            # only ~12 of 45k runs have a rating file: a failed open() per
+            # dir cost 1.8s per scan, a stat() costs a quarter of that
+            _rp = os.path.join(runs_dir, d, "rating")
+            if os.path.exists(_rp):
+                try:
+                    e["rating"] = int(open(_rp).read().strip())
+                except Exception:
+                    e["rating"] = e.get("rating", 0)
+            else:
                 e["rating"] = e.get("rating", 0)
             if d in running_names:
                 prog_p = os.path.join(runs_dir, d, "progress.json")
@@ -8060,58 +8170,7 @@ def runs2():
         _R2C["d"][d] = [_key, _static]
         _R2C["dirty"] = True
         out.append(e)
-    # TARGETED LOOKUP (?bt=name1,name2): resolve specific BACKTEST names to the
-    # runs that produced them. "build a router with these" on the Backtests page
-    # needs exactly this, and without it the page fell back to ?lim=0 — a 289MB
-    # response that the browser then hashed and JSON.parsed, so the button just
-    # appeared dead (2026-09-20). Same matching rule the page uses: the run's
-    # backtest_flags first, else the longest run name the backtest name starts
-    # with. Returns only the matches, so the response is a few KB.
-    _bt = [s.strip() for s in (request.args.get("bt") or "").split(",") if s.strip()]
-    if _bt:
-        want = set(_bt)
-        picked, by_name = {}, {}
-        for e in out:
-            nm = e.get("name") or ""
-            for f in (e.get("backtest_flags") or []):
-                if f.get("backtest") in want:
-                    picked[id(e)] = e
-            if nm:
-                by_name[nm] = e
-        for bn in want:
-            if any(f.get("backtest") == bn
-                   for e in picked.values()
-                   for f in (e.get("backtest_flags") or [])):
-                continue
-            cands = [n for n in by_name if bn.startswith(n)]
-            if cands:
-                e = by_name[max(cands, key=len)]
-                picked[id(e)] = e
-        return jsonify(_scrub(list(picked.values())))
-
-    # LIMIT: with ~9k runs the full list is heavy; default to the newest
-    # 1500 by activity plus everything running/trading/marked/rated.
-    try:
-        lim = int(request.args.get("lim", 1500))
-    except Exception:
-        lim = 1500
-    if lim and len(out) > lim:
-        keep = [e for e in out if e.get("running") or e.get("trading")
-                or e.get("best") or (e.get("rating") or 0) > 0]
-        _kid = set(map(id, keep))
-        rest = [e for e in out if id(e) not in _kid]
-        rest.sort(key=lambda e: e.get("last_run") or "", reverse=True)
-        out = keep + rest[:max(0, lim - len(keep))]
-    if _R2C.pop("dirty", False):
-        try:
-            _tmp = _R2C_PATH + ".tmp"
-            json.dump(_R2C["d"], open(_tmp, "w"))
-            os.replace(_tmp, _R2C_PATH)
-        except Exception:
-            pass
-    _payload = _scrub(out)
-    _RUNS2_TTL[_lim_key] = (time.time(), _payload)
-    return jsonify(_payload)
+    return _scrub(out)
 
 @app.route("/api/runs2/rename", methods=["POST"])
 def runs2_rename():
@@ -8324,6 +8383,9 @@ def backtests_delete():
 
 if __name__ == "__main__":
     print("Control panel: http://127.0.0.1:8800")
+    # pre-warm the run list so the first Optimize page load after a restart
+    # doesn't sit through the one inline scan (~5-25s at 45k runs)
+    _runs2_refresh_bg()
     # PANEL_HOST=0.0.0.0 exposes the panel on the LAN (needed when the hub
     # runs on the mini and is browsed from other machines). No auth — keep it
     # on trusted networks only.

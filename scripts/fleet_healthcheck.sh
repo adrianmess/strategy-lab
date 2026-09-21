@@ -60,6 +60,7 @@ for H in $HOSTS; do
         echo "WORKER=$(pgrep -fc "gamut_worker.py --plan" || echo 0)"
         echo "NOAUTO=$([ -e ~/NO_AUTOSIZE ] && echo yes || echo no)"
         echo "LOAD=$(cut -d" " -f1 /proc/loadavg)"
+        echo "UPS=$(cut -d" " -f1 /proc/uptime | cut -d. -f1)"
       ' 2>/dev/null)
 
   if [ -z "$R" ]; then
@@ -67,8 +68,8 @@ for H in $HOSTS; do
     say "$H unreachable"
     continue
   fi
-  eval "$(echo "$R" | grep -E '^(NPROC|CORES|SIZER|SCRON|LEGS|WORKER|NOAUTO|LOAD)=')"
-  CORES=${CORES:-0}; NPROC=${NPROC:-0}
+  eval "$(echo "$R" | grep -E '^(NPROC|CORES|SIZER|SCRON|LEGS|WORKER|NOAUTO|LOAD|UPS)=')"
+  CORES=${CORES:-0}; NPROC=${NPROC:-0}; UPS=${UPS:-99999}
 
   # ---- repair 1: the sizer itself went missing (the 2026-09-20 cause) ----
   if [ "$SIZER" = "no" ]; then
@@ -110,8 +111,12 @@ for H in $HOSTS; do
   # ---- report-only checks ------------------------------------------------
   [ "${WORKER:-0}" = "0" ] && \
     PROBLEMS="$PROBLEMS\n  $H gamut worker NOT RUNNING (box is up; needs a look)"
-  if [ "${WORKER:-0}" != "0" ] && [ "${LEGS:-0}" -lt 20 ] && [ "$NPROC" -gt 64 ]; then
-    PROBLEMS="$PROBLEMS\n  $H only ${LEGS} search processes on ${NPROC} vCPU (load ${LOAD:-?}) — still ramping, or something is capping it"
+  # a box under 10 min old is still ramping (17 searches start 20s apart, so
+  # ~6 min to full) — 2026-09-21 03:15 flagged a 90-second-old replacement
+  # with legs=4 as a problem; it was at 256 by the next check
+  if [ "${WORKER:-0}" != "0" ] && [ "${LEGS:-0}" -lt 20 ] && [ "$NPROC" -gt 64 ] \
+     && [ "$UPS" -ge 600 ]; then
+    PROBLEMS="$PROBLEMS\n  $H only ${LEGS} search processes on ${NPROC} vCPU (load ${LOAD:-?}) — something is capping it (box is $(( UPS / 60 )) min old, past ramp-up)"
   fi
   say "$H ok — cores=$CORES/$NPROC legs=${LEGS:-?} load=${LOAD:-?} worker=${WORKER:-0}"
 done
