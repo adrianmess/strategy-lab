@@ -1415,7 +1415,7 @@ function renderCalendar(ev, scopeTxt){
   var first = new Date(y, m, 1).getDay();
   var days = new Date(y, m + 1, 0).getDate();
   var todayKey = (y === now.getFullYear() && m === now.getMonth()) ? now.getDate() : -1;
-  var twr = 1, twrOk = false;   // month return = daily returns compounded
+  var monthPos = 0, twrOk = false;   // month = sum of the days' % of position
   var h = '<div class="cal">';
   ['S','M','T','W','T','F','S'].forEach(function(s){ h += '<div class="dow">'+s+'</div>'; });
   for(var i = 0; i < first; i++) h += '<div class="d blank"></div>';
@@ -1450,22 +1450,15 @@ function renderCalendar(ev, scopeTxt){
     }
     h += '<div class="'+cls+'"'+(tip ? ' title="'+tip.replace(/"/g,'&quot;')+'"' : '')+'><span class="n">'+day+'</span>';
     if(b){
-      var st = open[y + '-' + (m+1) + '-' + day];
-      var pct = (st != null && st > 0) ? 100 * b.pnl / st : null;
-      if(pct != null){ twr *= (1 + pct / 100); twrOk = true; }
+      // Adrian (2026-09-22): every day's % is the trades' % OF POSITION
+      // (entry -> exit, summed over the day's closes) — the same figure the
+      // history page shows per trade — never % of account balance. The
+      // opening-balance reconstruction stays for the hover only.
+      var pct = b.pos;
+      if(pct != null){ monthPos += pct; twrOk = true; }
       var dir = b.pnl >= 0 ? 'up' : 'dn';
       var p = calPct(pct), trades = b.n + ' trade' + (b.n === 1 ? '' : 's');
-      // The walk-back can run out of balance before the earliest days of a
-      // wallet's history (MEX Lev 1's futures wallet was ~$30 before the
-      // 09-14 top-up; fees/funding are not in the flows, so 09-10/11
-      // reconstruct below zero). Those days used to silently drop to $.
-      // In % mode show the trades' own % of position instead, marked "pos".
-      var posFallback = false;
-      if(p == null && b.pos != null){ p = calPct(b.pos); posFallback = true; }
-      // honours the header $ / % toggle exactly like fig(): % alone when it
-      // asks for %, money alone when it asks for money, both otherwise —
-      // and money as the fallback whenever a % cannot be computed
-      var posTag = posFallback ? '<span class="c" title="no opening balance could be reconstructed for this day — this is the trades\' % of position (entry→exit), not % of account">of position</span>' : '';
+      var posTag = '';
       if(DISPLAY === 'pct' && p != null)
         h += '<span class="v '+dir+'">'+p+'</span>'+posTag+'<span class="c">'+trades+'</span>';
       else if(DISPLAY === 'money' || p == null)
@@ -1483,13 +1476,13 @@ function renderCalendar(ev, scopeTxt){
   }
   h += '</div>';
   var totCls = tot >= 0 ? 'color:var(--up)' : 'color:var(--down)';
-  var mp = twrOk ? calPct(100 * (twr - 1)) : null;
+  var mp = twrOk ? calPct(monthPos) : null;
   var totTxt;
   if(DISPLAY === 'pct' && mp != null) totTxt = '<b style="'+totCls+'">'+mp+'</b>';
   else if(DISPLAY === 'money' || mp == null) totTxt = '<b style="'+totCls+'">'+calMoney(tot)+'</b>';
   else totTxt = '<b style="'+totCls+'">'+calMoney(tot)+'</b> / <b style="'+totCls+'">'+mp+'</b>';
   h += '<div class="mini" style="margin-top:8px">'+totTxt+
-       '<span title="each day is measured on the balance it opened with (deposits and withdrawals excluded), and the month is those daily returns compounded — a time-weighted return, immune to deposit/withdrawal timing"> this month</span> &middot; '+
+       '<span title="every % is the trades\' % of position (entry → exit) summed for the day; the month is the sum of the days"> this month</span> &middot; '+
        n+' close'+(n === 1 ? '' : 's')+' &middot; '+greenDays+' green / '+redDays+' red day'+(redDays === 1 ? '' : 's')+
        ' &middot; '+scopeTxt+'</div>';
   document.getElementById('bigchart').innerHTML = h;
