@@ -105,6 +105,37 @@ def liq_guard_cfg(cfg):
             float(cfg.get("liq_guard_frac", g.get("frac", 0.25))))
 
 
+def read_book(symbol, mode, limit=100, timeout=8):
+    """Live order book (public endpoint, DIRECT — not the proxy pool):
+    (asks, bids) as [(price, qty)] best-first. Raises on any failure so the
+    caller decides what a missing book means for it."""
+    import requests
+    if mode == "spot":
+        d = requests.get("https://api.mexc.com/api/v3/depth",
+                         params=dict(symbol=symbol.replace("_", ""),
+                                     limit=limit), timeout=timeout).json()
+        asks = [(float(p), float(q)) for p, q in (d.get("asks") or [])]
+        bids = [(float(p), float(q)) for p, q in (d.get("bids") or [])]
+    else:
+        d = (requests.get("https://contract.mexc.com/api/v1/contract/"
+                          f"depth/{symbol}", params=dict(limit=limit),
+                          timeout=timeout).json().get("data") or {})
+        asks = [(float(r[0]), float(r[1])) for r in (d.get("asks") or [])]
+        bids = [(float(r[0]), float(r[1])) for r in (d.get("bids") or [])]
+    return asks, bids
+
+
+def best_bid_ask(symbol, mode, timeout=4):
+    """(best bid, best ask) or None if the book cannot be read."""
+    try:
+        asks, bids = read_book(symbol, mode, limit=5, timeout=timeout)
+        if asks and bids:
+            return bids[0][0], asks[0][0]
+    except Exception:
+        pass
+    return None
+
+
 def depth_cap_notional(symbol, mode, contract_size, bps=5.0, frac=0.25,
                        log=None):
     """LIQUIDITY GUARDRAIL: at most `frac` of the worst-side order-book
@@ -113,22 +144,10 @@ def depth_cap_notional(symbol, mode, contract_size, bps=5.0, frac=0.25,
     (thin pairs like SUI/HYPE bind first; majors effectively never).
     Returns None (no cap) when the book cannot be read: a depth outage must
     not block trading, only the sizing courtesy is lost."""
-    import requests
     try:
-        if mode == "spot":
-            d = requests.get("https://api.mexc.com/api/v3/depth",
-                             params=dict(symbol=symbol.replace("_", ""),
-                                         limit=100), timeout=8).json()
-            asks = [(float(p), float(q)) for p, q in (d.get("asks") or [])]
-            bids = [(float(p), float(q)) for p, q in (d.get("bids") or [])]
-            cs = 1.0
-        else:
-            d = (requests.get("https://contract.mexc.com/api/v1/contract/"
-                              f"depth/{symbol}", params=dict(limit=200),
-                              timeout=8).json().get("data") or {})
-            asks = [(float(r[0]), float(r[1])) for r in (d.get("asks") or [])]
-            bids = [(float(r[0]), float(r[1])) for r in (d.get("bids") or [])]
-            cs = float(contract_size or 1)
+        asks, bids = read_book(symbol, mode,
+                               limit=(100 if mode == "spot" else 200))
+        cs = 1.0 if mode == "spot" else float(contract_size or 1)
         if not asks or not bids:
             return None
         mid = (asks[0][0] + bids[0][0]) / 2
@@ -264,6 +283,30 @@ class APIExecutor:
             # CALLER owns the async lifecycle: fill promotion, timeout,
             # cancel/chase (fcfs_runner pending_entries)
             lpx = float(entry_limit["px"])
+            # ANCHOR ON THE LIVE BOOK, not the last trade. The caller's price
+            # is the last tick +/- an offset; by the time the order lands the
+            # market has often moved a tick past it, and a post-only that
+            # would cross the spread is not filled but CANCELLED outright
+            # (MEXC errorCode 20, POST_ONLY_CANCEL). That is what happened
+            # on 2026-09-17 and again 2026-09-21 (XRP short quoted at 1.5552
+            # with the market already 1.5557): the "maker entry" silently
+            # became a market chase 14s later at a worse price — taker fee
+            # AND slippage. A long rests at the best bid, a short at the best
+            # ask (each less the caller's offset), which cannot cross. If the
+            # book can't be read, the caller's price is used as before.
+            off = float(entry_limit.get("offset") or 0.0)
+            bb = best_bid_ask(cfg["symbol"], "lev")
+            if bb:
+                base = bb[0] if direction > 0 else bb[1]
+                lpx = base * ((1 - off) if direction > 0 else (1 + off))
+                self.log.info("OPEN limit anchored on book: %s bid %.6g / ask "
+                              "%.6g -> %.6g (caller asked %.6g)",
+                              "LONG" if direction > 0 else "SHORT",
+                              bb[0], bb[1], lpx, float(entry_limit["px"]))
+            else:
+                self.log.warning("OPEN limit: book unreadable — resting at the "
+                                 "caller's price %.6g (may be rejected as "
+                                 "post-only if the market moved)", lpx)
             if cfg["dry_run"]:
                 self.log.info("[DRY RUN] would rest OPEN limit: %s %d @ %.6g "
                               "lev %d", "LONG" if direction > 0 else "SHORT",

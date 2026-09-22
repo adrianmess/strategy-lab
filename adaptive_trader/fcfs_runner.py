@@ -1024,10 +1024,17 @@ def main_fcfs(cfg, live):
             if le_on:
                 # maker entry: rest a post-only limit; the pending-entries
                 # loop promotes it to a position on fill (or times it out)
+                # `px` here is only the fallback: the executor anchors the
+                # post-only on the live best bid/ask (a price off the last
+                # tick gets rejected by the exchange the moment the market
+                # moves past it — errorCode 20). ONE attempt: if the resting
+                # order is rejected or unfilled, the pending-entries loop
+                # falls back to a market order; no re-posting.
                 lpx = px_live * (1 - LE_OFF if d > 0 else 1 + LE_OFF)
                 res, qty = ex_for(c["pair"]).open(d, lev, px_live,
                                                   margin_cap=free,
-                                                  entry_limit=dict(px=lpx))
+                                                  entry_limit=dict(px=lpx,
+                                                                   offset=LE_OFF))
                 if (res or {}).get("status") == "resting" and qty:
                     pe = dict(symbol=c["pair"], comp=i, dir=d, lev=lev,
                               qty=qty,

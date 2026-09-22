@@ -110,6 +110,21 @@ Quality funnel: 58,082 re-costed → 43,036 positive → 42,688 no liq → 32,50
 - **Phantom "position closed" on every restart-while-positioned.** The manual-position detector only tracks holdings no trader claims; a restart moves a row bot→manual→bot and the re-attribution read as a close. Fired a false `SOL_USDT closed 8.3 @ 105.41` while the position sat untouched. (ac6b08c.)
 - **`host silent >5min` false alarm** — `last_seen` starts at 0.0, so a host that hadn't produced its first bar read as ~1.8e9 seconds silent and warned every loop through the ~60s backfill. Now ages from host start, throttled to once a minute. (ac6b08c.)
 
+### Maker entries were silently becoming market chases (fixed 2026-09-21)
+`MEX2 LEV - SL` and `MEX Lev 1` took the same XRP short on 09-21; the limit
+instance made +9.29%, the market one +12.50%. Both wins — the gap was the
+ENTRY: the post-only was priced off the last tick (1.5552) while the market
+had ticked to 1.5557, so MEXC cancelled it outright (`errorCode 20`,
+POST_ONLY_CANCEL — a post-only that would cross is rejected, not filled),
+and the runner chased with a market order 14s later at 1.5504: taker fee
+AND slippage. The 09-17 XRP "opened maker, closed taker" report was the
+same thing. Fix: `APIExecutor.open_position` now anchors the post-only on
+the LIVE book (`best_bid_ask()` in trader.py: long at best bid, short at
+best ask, less the offset) and falls back to the caller's price only if the
+book is unreadable. ONE attempt by Adrian's choice — rejected/unfilled →
+market, no re-posting. Verified dry-run against the live book. **Takes
+effect when MEX2 LEV - SL is next restarted** (Adrian does that, confirm-LIVE).
+
 ### Playwright execution — DECIDED AGAINST (2026-09-18)
 Explored because web fees are far cheaper, then dropped on ToS grounds: MEXC's Risk Control Guideline 5.2 bars unauthorized automated order placement and it is **not** an API-vs-browser distinction. The executor was repaired along the way (missing `quart`; dead `proxy_config.json` credentials → now reads the shared pool, one pinned port) and the profile is account-keyed so instances on one account share a login — but it is **stood down and not to be used for trading**. All four instances are `execution: "api"`.
 
