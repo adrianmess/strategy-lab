@@ -21,6 +21,7 @@ from engine3 import get_pres3, run3, vec3
 from regimes import make_regimes, DAY
 from wf2 import mtm_curve
 from adaptive import slice_pre
+import enriched as _E   # opt-in feature gates + funding
 
 # live exchange rates per LAB_COIN when fees.json is present (panel-refreshed)
 from fees_live import per_side as _fee_per_side
@@ -57,6 +58,7 @@ def load_g3():
         print("indicator-length libraries changed (or first build) — "
               "precomputing variants, this can take a few minutes...", flush=True)
     pres = get_pres3(cache=cache)
+    _E.attach_pres(pres)          # enriched features, never cached
     _G3["pres"] = pres
     _G3["regimes"] = {}
     for m in ["none", "vol3", "vol3_7d", "volume3", "trend3", "volXtrend9",
@@ -258,7 +260,9 @@ def eval3(cand, method, t0=None, t1=None, warmup=3000, alt=None, gap_mode=None,
                                    initial_capital=eq, commission=comm,
                                    use_sl=use_sl, dyn_liq=(mode == "lev"),
                                    return_open=True,
-                                   no_entry=(cm[w0:b] if cm is not None else None))
+                                   no_entry=(cm[w0:b] if cm is not None else None),
+                                   **_E.gate_kwargs(sp, reg[w0:b], cand))
+            eq -= _E.charge_funding(tr, sp, mode)
             total_bars += (b - a)
             if len(tr):
                 max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())

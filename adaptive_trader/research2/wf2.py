@@ -25,6 +25,7 @@ from scalp_engine import (scalp_precompute2, run_scalp2, slice_pre2,
                           SCALP2_VARIANTS, SCALP2_DEFAULT_IDX, scalp2_hash,
                           _SCALP2_DEFAULTS)
 from adaptive import make_adaptive_pre, slice_pre
+import enriched as _E   # opt-in feature gates + funding (LAB_FEATURES / LAB_FUNDING)
 from regimes import regime_features, make_regimes, REGIME_METHODS, DAY
 from common import load_segments
 
@@ -216,6 +217,9 @@ def load_globals(need=("v6", "scalpx")):
             mx = [precompute_macdx(g, d1, MACDX_DEFAULTS) for g, d1 in segs]
             _dump_atomic(mx, _cache_path("macdx_pre2.pkl"))
         _G["macdx"] = mx
+    # enriched features (opt-in): attached AFTER the caches load, never
+    # pickled — the engine caches stay valid and classic runs untouched
+    _E.attach_globals(_G)
     return _G
 
 # ---------------- candidate samplers ----------------
@@ -490,6 +494,24 @@ FLAT_FLAG_KEYS = {"eL3", "eS3", "eXL", "eXS", "eL", "eS", "useCvd", "useEma", "r
 FLAT_MENU_KEYS = {"vR": "rsi", "vC": "cvd", "vP": "poc", "vE": "emaS",   # scalpx2
                   "vRoc": "rocx_roc", "vSma": "rocx_sma",                # rocx
                   "vMacd": "macdx_macd"}                                 # macdx
+# enriched gate menus (gObLvl, gCvdLen, ...): options come from the injected
+# space (enriched.inject_space); listed here so mutation treats them as menus
+FLAT_MENU_KEYS.update({k: "enriched" for k in _E.GATE_MENU_KEYS})
+# feature-native families (research2/enriched_engine.py): flowx / poctrend /
+# oisqueeze / absorb ride the macdx segments' base pre + the attached f_* arrays
+from enriched_engine import (ENR_FAMILIES, ENR_MENU_KEYS, ENR_INT_KEYS,
+                             ENR_FLAG_KEYS, MENU_OPTIONS as _ENR_MENUS,
+                             sample_enr, build_P_enr, normalize_enr)
+FLAT_MENU_KEYS.update({k: "enriched_family" for k in ENR_MENU_KEYS})
+FLAT_FLAG_KEYS.update(ENR_FLAG_KEYS)
+
+
+def globals_need(strategy):
+    """Which cached precomputes a strategy family evaluates on."""
+    if strategy in ENR_FAMILIES:
+        return ("v6", "macdx")
+    return {"prime": ("v6",), "macdx": ("v6", "macdx"),
+            "rocx": ("v6", "rocx")}.get(strategy, (strategy,))
 FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
     "prime": dict(rsiL="rsiValLong", rsiS="rsiValShort", ptL="ptLong", a1L="apt1Long",
                   a2L="apt2Long", d1L="dur1Long", d2L="dur2Long", ptS="ptShort",
@@ -507,6 +529,8 @@ FLAT_KEYMAP = {  # candidate key -> param-space key (for mutation ranges)
                   cdPL="cdPL", cdTL="cdTL", a1S="a1S", a2S="a2S",
                   d1S="d1S", d2S="d2S", cdPS="cdPS", cdTS="cdTS"),
     "rocx": dict(lev="leverage", pt="pt", tsl="tsl", rocN="rocN", smaN="smaN"),
+    # enriched families: candidate keys == space keys except lev
+    **{f: dict(lev="leverage") for f in ("flowx", "poctrend", "oisqueeze", "absorb")},
 }
 
 def _normalize_flat(c):
@@ -516,6 +540,8 @@ def _normalize_flat(c):
     # exactly as backtested. (Spot lev is 1.0 and unaffected.)
     if isinstance(c.get("lev"), list):
         c["lev"] = [max(1.0, float(int(x))) for x in c["lev"]]   # floor: never MORE lev than scored
+    if c.get("strategy") in ENR_FAMILIES:
+        return normalize_enr(c)
     if c.get("strategy") == "rocx":
         from rocx_engine import ROCX_ROC_LENGTHS, ROCX_SMA_LENGTHS
         c.setdefault("tslm", [0.0] * len(c["pt"]))   # pre-tslMode candidates
@@ -553,6 +579,11 @@ def _normalize_flat(c):
 def _menu_options_fallback(k):
     """Valid option indices for a variant-menu key when the param space
     doesn't list any (e.g. refine of a cadapt seed with a plain space)."""
+    for _f in _E.GATE_SPECS.values():
+        if k in _f["menus"]:
+            return [float(x) for x in _f["menus"][k]]
+    if k in _ENR_MENUS:
+        return [float(x) for x in _ENR_MENUS[k]]
     if k in ("vR", "vC", "vP", "vE"):
         return list(range(len(SCALP2_VARIANTS[FLAT_MENU_KEYS[k]])))
     if k == "vMacd":
@@ -570,6 +601,7 @@ def _menu_options_fallback(k):
 # ---------------- continuous adaptation (cadapt) for flat families ----------
 FLAT_INT_KEYS = {"vR", "vC", "vP", "vE", "vRoc", "vSma", "vMacd",
                  "rocN", "smaN", "hrb", "tslm"}
+FLAT_INT_KEYS.update(ENR_INT_KEYS); FLAT_INT_KEYS.update(ENR_MENU_KEYS)
 
 def _flat_interp_ends(ends, R):
     """Materialize R per-grade lists from 2-element endpoint lists: continuous
@@ -858,9 +890,7 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
     # OPT-IN lev stops (see optimizer2.eval3): stamped onto evaluated candidates
     if os.environ.get("LEV_STOPS") == "1" and mode == "lev":
         cand["lev_stops"] = True
-    need = {"prime": ("v6",), "macdx": ("v6", "macdx"),
-            "rocx": ("v6", "rocx")}.get(cand["strategy"], (cand["strategy"],))
-    G = load_globals(need)
+    G = load_globals(globals_need(cand["strategy"]))
     R = G["nreg"][method]
     warmup = 3000
     eq = 1000.0
@@ -892,7 +922,9 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                                            commission=comm if mode == "lev" else SPOT_COMM,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
                                            return_open=True,
-                                           no_entry=(cm[w0:b] if cm is not None else None))
+                                           no_entry=(cm[w0:b] if cm is not None else None),
+                                           **_E.gate_kwargs(sp, reg[w0:b], cand))
+                eq -= _E.charge_funding(tr, sp, mode)
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
@@ -928,7 +960,48 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                                              initial_capital=eq,
                                              commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                              no_entry=(cm[w0:b] if cm is not None else None),
-                                             return_open=True)
+                                             return_open=True,
+                                             **_E.gate_kwargs(sp, reg[w0:b], cand))
+                eq -= _E.charge_funding(tr, sp, mode)
+                total_bars += (b - a)
+                if len(tr):
+                    max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
+                                   * _TFM / 1440.0)
+                    held_bars += float((tr["exit_idx"] - tr["entry_idx"]).sum())
+                if op:
+                    op_held = len(sp["c"]) - 1 - op["entry_idx"]
+                    max_hold = max(max_hold, op_held * _TFM / 1440.0)
+                    held_bars += op_held
+                months += (b - a) / (DAY * 30.4)
+                all_tr.append(tr)
+                if mode == "lev" and len(tr):
+                    _, dseg = mtm_curve(tr, sp["c"], initial=eq_before)
+                    mtm_dd = max(mtm_dd, dseg)
+                if liq: liq_any = True; break
+            if liq_any: break
+    elif cand["strategy"] in ENR_FAMILIES:
+        from enriched_engine import run_enr_P
+        P = build_P_enr(cand, R)
+        regs = G["regimes_v6"][method]
+        for pre, reg in zip(G["macdx"], regs):
+            i0, i1 = _clip_indices(pre["t"], t0, t1)
+            i0 = max(i0, warmup)
+            if i1 - i0 < 200: continue
+            cm = contam_for(pre, warmup) if gap_mode == "skip_contaminated" else None
+            ivs = eval_intervals(pre["t"], i0, i1, alt)
+            for a, b in ivs:
+                w0 = max(0, a - warmup)
+                sp = {k: (v[:, w0:b] if isinstance(v, np.ndarray) and v.ndim == 2
+                          else v[w0:b]) for k, v in pre.items()
+                      if isinstance(v, np.ndarray)}
+                eq_before = eq
+                tr, eq, liq, op = run_enr_P(sp, P, cand["strategy"], regime=reg[w0:b],
+                                            warmup=a - w0, initial_capital=eq,
+                                            commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                            no_entry=(cm[w0:b] if cm is not None else None),
+                                            return_open=True,
+                                            **_E.gate_kwargs(sp, reg[w0:b], cand))
+                eq -= _E.charge_funding(tr, sp, mode)
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
@@ -964,7 +1037,9 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                                               initial_capital=eq,
                                               commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                               no_entry=(cm[w0:b] if cm is not None else None),
-                                              return_open=True)
+                                              return_open=True,
+                                              **_E.gate_kwargs(sp, reg[w0:b], cand))
+                eq -= _E.charge_funding(tr, sp, mode)
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())
@@ -1002,16 +1077,18 @@ def eval_config(cand, method, mode, t0, t1, collect_trades=False, alt=None,
                 sp = slice_pre2(pre, w0, b) if sx2 else slice_pre(pre, w0, b)
                 eq_before = eq
                 ne = cm[w0:b] if cm is not None else None
+                gk = _E.gate_kwargs(sp, reg[w0:b], cand)
                 if sx2:
                     tr, eq, liq, op = run_scalp2(sp, P, vidx, regime=reg[w0:b], warmup=a - w0,
                                                  initial_capital=eq, commission=comm,
                                                  liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                                 return_open=True, no_entry=ne)
+                                                 return_open=True, no_entry=ne, **gk)
                 else:
                     tr, eq, liq, op = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
                                                 initial_capital=eq, commission=comm,
                                                 liq_threshold=-1.0 if mode == "lev" else 1e9,
-                                                return_open=True, no_entry=ne)
+                                                return_open=True, no_entry=ne, **gk)
+                eq -= _E.charge_funding(tr, sp, mode)
                 total_bars += (b - a)
                 if len(tr):
                     max_hold = max(max_hold, float((tr["exit_idx"] - tr["entry_idx"]).max())

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Strategy Lab — enriched strategies · layout mockups</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#0b0e11;--panel:#151a21;--panel2:#1b212a;--line:#252c37;--fg:#eaecef;--dim:#848e9c;--accent:#f0b90b;--blue:#4c8dff;--violet:#8b5cf6;--cyan:#22d3ee;--up:#2ebd85;--down:#f6465d;--warn:#f5b544;--hover:#222a35}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.pick{position:sticky;top:0;z-index:5;background:#0f1318;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:14px}
+.pick b{color:var(--accent);letter-spacing:.06em;font-size:11px;text-transform:uppercase}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{background:none;border:0;border-right:1px solid var(--line);color:var(--dim);padding:6px 12px;font:inherit;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;cursor:pointer}
+.seg button:last-child{border-right:0}.seg button.on{color:var(--accent);background:rgba(240,185,11,.13);box-shadow:inset 0 -2px 0 var(--accent)}
+.note{color:var(--dim);font-size:11.5px;margin-left:auto}
+.app{display:grid;grid-template-columns:44px 1fr;min-height:calc(100vh - 44px)}
+.rail{background:#0d1117;border-right:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.rail i{width:26px;height:26px;border-radius:6px;display:block;background:#1b212a;border:1px solid var(--line);font-style:normal;color:var(--dim);font-size:11px;text-align:center;line-height:24px}
+.rail i.on{border-color:var(--accent);color:var(--accent);background:rgba(240,185,11,.13)}
+.rail i.new{border-color:var(--cyan);color:var(--cyan);background:rgba(34,211,238,.10)}
+.top{padding:10px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;background:var(--panel)}
+.top h1{margin:0;font-size:15px}
+.pill{font-size:10.5px;padding:2px 8px;border-radius:9px;border:1px solid var(--line);color:var(--dim)}
+.pill.g{color:var(--up);border-color:rgba(46,189,133,.4)}.pill.c{color:var(--cyan);border-color:rgba(34,211,238,.4)}.pill.v{color:var(--violet);border-color:rgba(139,92,246,.45)}.pill.a{color:var(--accent);border-color:rgba(240,185,11,.4)}.pill.r{color:var(--down);border-color:rgba(246,70,93,.4)}
+.wrap{padding:16px 20px;max-width:1500px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 14px}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:14px}
+.card>h3{margin:0;padding:9px 13px;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
+.card>h3 .mini{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400;font-size:11px}
+.body{padding:12px 13px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+select,input{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font:inherit;font-size:12px}
+.chk{display:inline-flex;gap:5px;align-items:center;padding:4px 9px;border:1px solid var(--line);border-radius:5px;color:var(--dim);font-size:11.5px}
+.chk.on{border-color:var(--cyan);color:var(--cyan);background:rgba(34,211,238,.08)}
+table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--dim);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid #1d232d;vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:hover td{background:var(--hover)}
+.up{color:var(--up)}.dn{color:var(--down)}.dim{color:var(--dim)}
+.feat{display:inline-flex;gap:3px}.feat b{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:.04em}
+.f-ob{background:rgba(76,141,255,.18);color:#8db4ff}.f-cvd{background:rgba(34,211,238,.16);color:var(--cyan)}.f-vp{background:rgba(139,92,246,.18);color:#b49bff}.f-oi{background:rgba(245,181,68,.16);color:var(--warn)}.f-base{background:#252c37;color:var(--dim)}
+.matrix{display:grid;grid-template-columns:200px repeat(15,1fr);gap:3px;font-size:10.5px}
+.matrix .h{color:var(--dim);text-align:center;padding:3px 0;font-weight:600;font-size:9.5px}
+.matrix .r{color:var(--fg);padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.matrix .c{text-align:center;padding:5px 0;border-radius:4px;font-variant-numeric:tabular-nums}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:5px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
+.btn.p{border-color:var(--accent);color:var(--accent)}.btn.sm{padding:3px 8px;font-size:11px}
+.bar{height:6px;background:#252c37;border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--up)}
+.kpi{background:var(--panel2);border-radius:8px;padding:10px 12px}.kpi .l{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}.kpi .v{font-size:20px;font-weight:600;margin-top:2px}
+.hide{display:none}
+.callout{border-left:3px solid var(--cyan);background:rgba(34,211,238,.06);padding:8px 12px;border-radius:0 6px 6px 0;font-size:12px;color:var(--fg);margin-bottom:12px}
+.tog{display:inline-flex;align-items:center;gap:8px;margin-left:auto}
+</style></head><body>
+
+<div class="pick"><b>Mockup</b>
+  <span class="seg"><button id="pA" class="on" onclick="pick('A')">Option A · separate page</button><button id="pB" onclick="pick('B')">Option B · toggle on existing pages</button></span>
+  <span class="note">All numbers are sample data for layout only. Feature codes: <span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b><b class="f-vp">VP</b><b class="f-oi">OI</b></span> · funding is modelled as a cost in every enriched run, not a feature.</span>
+</div>
+
+<!-- ============================ OPTION A ============================ -->
+<div id="optA" class="app">
+  <div class="rail"><i>≡</i><i>◔</i><i>⇅</i><i>△</i><i>▤</i><i class="new" title="new page">◈</i><i>✦</i></div>
+  <div>
+    <div class="top"><h1>Enriched strategies</h1><span class="pill c">new page</span><span class="pill">20 base runs · 300 variants · 4 new families</span>
+      <span class="tog"><span class="dim" style="font-size:11px">data: Binance bulk (OB/CVD/VP/OI) + MEXC funding</span><span class="pill g">synced 12 min ago</span></span></div>
+    <div class="wrap">
+      <div class="tabs"><button class="on" onclick="tabA(0,this)">Backtests</button><button onclick="tabA(1,this)">Feature matrix</button><button onclick="tabA(2,this)">Gamut runners</button><button onclick="tabA(3,this)">New strategies</button><button onclick="tabA(4,this)">Data sources</button></div>
+
+      <div id="A0">
+        <div class="filters">
+          <select><option>all families</option><option>macdx</option><option>v7</option><option>scalpx2</option><option>rocx</option><option>flowx (new)</option></select>
+          <select><option>all pairs</option><option>HYPE</option><option>SOL</option><option>XRP</option><option>SUI</option><option>DOGE</option></select>
+          <span class="chk on">OB</span><span class="chk on">CVD</span><span class="chk">VP</span><span class="chk">OI</span>
+          <select><option>any combo size</option><option>1 feature</option><option>2 features</option><option>3 features</option><option>all 4</option></select>
+          <span class="chk on">beats its base</span><span class="chk">passed OOS</span>
+          <input placeholder="search name…" style="margin-left:auto;width:200px">
+        </div>
+        <div class="card"><h3>Enriched backtests <span class="mini">312 matching · sorted by Δ vs base · same fee/holdout/risk columns as the classic page</span></h3>
+        <table><thead><tr><th>name</th><th>base</th><th>pair</th><th>features</th><th class="n">growth/mo</th><th class="n">Δ vs base</th><th class="n">max DD</th><th class="n">trades</th><th class="n">win</th><th>OOS</th><th>fees</th><th>funding</th></tr></thead><tbody>
+        <tr><td class="mono">enr_sol3m_macdx_volXtrend9+ob+cvd</td><td class="dim mono">s3w_sol3m_macdx_volXtrend9</td><td>SOL 3m <span class="pill">9x</span></td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td class="n up">+52.3%</td><td class="n up">+6.6</td><td class="n">41.2%</td><td class="n">71</td><td class="n">61%</td><td><span class="pill g">passed</span></td><td class="dim">0.08%</td><td><span class="pill">✓</span></td></tr>
+        <tr><td class="mono">enr_sol3m_macdx_volXtrend9+cvd</td><td class="dim mono">s3w_sol3m_macdx_volXtrend9</td><td>SOL 3m <span class="pill">9x</span></td><td><span class="feat"><b class="f-cvd">CVD</b></span></td><td class="n up">+49.1%</td><td class="n up">+3.4</td><td class="n">44.0%</td><td class="n">66</td><td class="n">60%</td><td><span class="pill g">passed</span></td><td class="dim">0.08%</td><td><span class="pill">✓</span></td></tr>
+        <tr><td class="mono">enr_hype1m_v7_vol3+oi</td><td class="dim mono">ghype_hype1m_v7_vol3_cl</td><td>HYPE 1m <span class="pill">3x</span></td><td><span class="feat"><b class="f-oi">OI</b></span></td><td class="n up">+38.8%</td><td class="n up">+2.9</td><td class="n">29.5%</td><td class="n">212</td><td class="n">58%</td><td><span class="pill g">passed</span></td><td class="dim">0.08%</td><td><span class="pill">✓</span></td></tr>
+        <tr><td class="mono">enr_doge1m_scalpx2_trend3+ob+cvd+vp+oi</td><td class="dim mono">m1w_doge1m_scalpx2_trend3</td><td>DOGE 1m <span class="pill">spot</span></td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b><b class="f-vp">VP</b><b class="f-oi">OI</b></span></td><td class="n up">+21.0%</td><td class="n up">+1.2</td><td class="n">18.1%</td><td class="n">340</td><td class="n">63%</td><td><span class="pill a">train-best</span></td><td class="dim">0.05%</td><td><span class="pill dim">n/a spot</span></td></tr>
+        <tr><td class="mono">enr_xrp1m_macdx_vol3+vp</td><td class="dim mono">m1w_xrp1m_macdx_vol3</td><td>XRP 1m <span class="pill">10x</span></td><td><span class="feat"><b class="f-vp">VP</b></span></td><td class="n up">+30.4%</td><td class="n dn">−1.8</td><td class="n">47.9%</td><td class="n">88</td><td class="n">55%</td><td><span class="pill g">passed</span></td><td class="dim">0.08%</td><td><span class="pill">✓</span></td></tr>
+        <tr><td class="mono">flowx_sui1m_absorb_v1</td><td class="dim">— new family</td><td>SUI 1m <span class="pill">5x</span></td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td class="n up">+27.7%</td><td class="n dim">—</td><td class="n">33.0%</td><td class="n">154</td><td class="n">57%</td><td><span class="pill g">passed</span></td><td class="dim">0.08%</td><td><span class="pill">✓</span></td></tr>
+        </tbody></table></div>
+      </div>
+
+      <div id="A1" class="hide">
+        <div class="callout">One row per base run, one column per feature combination. Each cell is growth/month <b>minus the base's</b>, so the question "which data actually helps" is answered by colour. Click a cell to open that backtest.</div>
+        <div class="card"><h3>Feature matrix · Δ growth/mo vs base <span class="mini">green helps · red hurts · grey not run yet</span></h3><div class="body"><div class="matrix" id="mx"></div></div></div>
+      </div>
+
+      <div id="A2" class="hide">
+        <div class="g3">
+          <div class="kpi"><div class="l">specs in campaign</div><div class="v">600</div><div class="dim">300 variants + 300 new-family</div></div>
+          <div class="kpi"><div class="l">complete</div><div class="v">184 <span class="dim" style="font-size:12px">31%</span></div><div class="bar" style="margin-top:6px"><i style="width:31%"></i></div></div>
+          <div class="kpi"><div class="l">workers</div><div class="v">3</div><div class="dim">mini 8c · MacBook 10c · EC2 (none)</div></div>
+        </div>
+        <div class="card" style="margin-top:14px"><h3>Gamut runner · enriched <span class="mini">same worker/budget machinery as the classic gamut, separate campaign namespace <span class="mono">enr_*</span></span></h3>
+          <div class="body">
+            <div class="filters"><span class="dim">base set</span><select><option>top per family × pair (20)</option><option>custom…</option></select>
+              <span class="dim">features</span><span class="chk on">singles (4)</span><span class="chk on">pairs (6)</span><span class="chk on">triples (4)</span><span class="chk on">all four (1)</span>
+              <span class="dim">holdouts</span><select><option>hA2508 · hL7 · hO2411 · hN</option></select>
+              <span class="dim">fees</span><select><option>taker 0.08%</option><option>maker 0.06%</option></select>
+              <button class="btn p" style="margin-left:auto">Build plan (600 specs)</button><button class="btn">Launch on mini</button><button class="btn">Launch on MacBook</button></div>
+            <table><thead><tr><th>campaign</th><th>base</th><th class="n">specs</th><th class="n">done</th><th>workers</th><th>started</th><th></th></tr></thead><tbody>
+            <tr><td class="mono">enr_top20_0922</td><td>macdx·v7·scalpx2·rocx × 5 pairs</td><td class="n">300</td><td class="n">184</td><td>mini, MacBook</td><td class="dim">09-22 14:10</td><td><button class="btn sm">pause</button></td></tr>
+            <tr><td class="mono">enr_newfam_0922</td><td>flowx·poctrend·oisqueeze·absorb × 5 pairs</td><td class="n">300</td><td class="n">0</td><td class="dim">queued</td><td class="dim">—</td><td><button class="btn sm">start</button></td></tr>
+            </tbody></table></div></div>
+      </div>
+
+      <div id="A3" class="hide">
+        <div class="g2">
+          <div class="card"><h3>flowx <span class="pill c">new</span><span class="mini">order-flow momentum</span></h3><div class="body">CVD slope + book imbalance must agree with price before entry; exits on CVD divergence. Uses <span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span>, optional <span class="feat"><b class="f-oi">OI</b></span> filter.</div></div>
+          <div class="card"><h3>poctrend <span class="pill c">new</span><span class="mini">value-area pullbacks</span></h3><div class="body">Trend filter, entries on pullbacks to the rolling POC / value-area edge, targets at the opposite edge. Uses <span class="feat"><b class="f-vp">VP</b></span>, optional <span class="feat"><b class="f-cvd">CVD</b></span> confirmation.</div></div>
+          <div class="card"><h3>oisqueeze <span class="pill c">new</span><span class="mini">positioning breakouts</span></h3><div class="body">OI build-up during price compression → breakout in the direction the book leans; funding skew as a contrarian filter. Uses <span class="feat"><b class="f-oi">OI</b><b class="f-ob">OB</b></span>.</div></div>
+          <div class="card"><h3>absorb <span class="pill c">new</span><span class="mini">absorption reversals</span></h3><div class="body">Heavy CVD against price with no follow-through (the book absorbing) → fade. Uses <span class="feat"><b class="f-cvd">CVD</b><b class="f-ob">OB</b><b class="f-vp">VP</b></span>.</div></div>
+        </div>
+        <div class="callout">Each new family gets the same treatment as the bases: searched per pair (HYPE, SOL, XRP, SUI, DOGE), at honest fees, through the same holdouts — and its own feature-ablation row in the matrix so we know which inputs it actually depends on.</div>
+      </div>
+
+      <div id="A4" class="hide">
+        <div class="card"><h3>Data sources <span class="mini">Binance USD-M bulk datasets aligned to MEXC candles by timestamp · MEXC funding history</span></h3>
+        <table><thead><tr><th>pair</th><th>trades (CVD, VP)</th><th>book depth ±1–5%</th><th>OI / L-S ratio (5m)</th><th>MEXC funding</th><th>feature history</th><th>status</th></tr></thead><tbody>
+        <tr><td>HYPE</td><td>2025-05-30 →</td><td>2025-05-30 →</td><td>2025-05-30 →</td><td>2025-05 →</td><td>16 months</td><td><span class="pill g">synced</span></td></tr>
+        <tr><td>SOL</td><td>2022-01 →</td><td>2024-05-18 →</td><td>2023-04 →</td><td>2023 →</td><td>28 months (book-limited)</td><td><span class="pill g">synced</span></td></tr>
+        <tr><td>XRP</td><td>2021-05 →</td><td>2024-05-17 →</td><td>2023-04 →</td><td>2023 →</td><td>28 months (book-limited)</td><td><span class="pill g">synced</span></td></tr>
+        <tr><td>SUI</td><td>2024-09-13 →</td><td>2024-09-13 →</td><td>2024-09-14 →</td><td>2024-09 →</td><td>24 months</td><td><span class="pill g">synced</span></td></tr>
+        <tr><td>DOGE</td><td>2021-11 →</td><td>2024-05-17 →</td><td>2023-04 →</td><td>2023 →</td><td>28 months (book-limited)</td><td><span class="pill a">syncing 61%</span></td></tr>
+        </tbody></table></div>
+        <div class="callout">Features are precomputed once per pair into <span class="mono">features/&lt;pair&gt;_&lt;tf&gt;.parquet</span> and joined to candles at backtest time, so the engines stay fast. A run outside a feature's history is refused, not silently zero-filled.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ OPTION B ============================ -->
+<div id="optB" class="app hide">
+  <div class="rail"><i>≡</i><i>◔</i><i>⇅</i><i>△</i><i class="on">▤</i><i>✦</i></div>
+  <div>
+    <div class="top"><h1>Backtests</h1><span class="pill">64,272 indexed</span>
+      <span class="tog"><span class="dim" style="font-size:11px">strategy set</span><span class="seg"><button>Classic</button><button class="on">Enriched</button></span></span></div>
+    <div class="wrap">
+      <div class="callout">Same page, same table, same filters. The <b>Classic | Enriched</b> switch (top right) swaps which corpus the page shows and adds a row of sub-tabs for the enriched set. The Optimize page gets the identical switch, and in Enriched mode its gamut runner builds <span class="mono">enr_*</span> campaigns.</div>
+      <div class="tabs"><button class="on">All enriched</button><button>By feature</button><button>By base strategy</button><button>New families</button><button>Matrix</button></div>
+      <div class="filters">
+        <select><option>all modes</option></select><select><option>any verdict</option></select><select><option>newest first</option></select>
+        <span class="chk on">OB</span><span class="chk on">CVD</span><span class="chk">VP</span><span class="chk">OI</span><span class="chk on">beats its base</span>
+        <input placeholder="search name…" style="margin-left:auto;width:200px"><button class="btn">Search</button>
+      </div>
+      <div class="card"><h3>Published backtests · enriched <span class="mini">312 matching — the classic columns plus base, features and Δ</span></h3>
+        <table><thead><tr><th></th><th>name</th><th>verdict</th><th>pair</th><th>features</th><th class="n">growth/mo</th><th class="n">Δ base</th><th class="n">max DD</th><th class="n">trades</th><th class="n">win</th></tr></thead><tbody>
+        <tr><td>☐</td><td class="mono">enr_sol3m_macdx_volXtrend9+ob+cvd<div class="dim" style="font-size:10.5px">base s3w_sol3m_macdx_volXtrend9</div></td><td><span class="pill g">Passed</span></td><td>SOL 3m <span class="pill">9x</span></td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td class="n up">+52.3%</td><td class="n up">+6.6</td><td class="n">41.2%</td><td class="n">71</td><td class="n">61%</td></tr>
+        <tr><td>☐</td><td class="mono">enr_hype1m_v7_vol3+oi<div class="dim" style="font-size:10.5px">base ghype_hype1m_v7_vol3_cl</div></td><td><span class="pill g">Passed</span></td><td>HYPE 1m <span class="pill">3x</span></td><td><span class="feat"><b class="f-oi">OI</b></span></td><td class="n up">+38.8%</td><td class="n up">+2.9</td><td class="n">29.5%</td><td class="n">212</td><td class="n">58%</td></tr>
+        <tr><td>☐</td><td class="mono">enr_xrp1m_macdx_vol3+vp<div class="dim" style="font-size:10.5px">base m1w_xrp1m_macdx_vol3</div></td><td><span class="pill g">Passed</span></td><td>XRP 1m <span class="pill">10x</span></td><td><span class="feat"><b class="f-vp">VP</b></span></td><td class="n up">+30.4%</td><td class="n dn">−1.8</td><td class="n">47.9%</td><td class="n">88</td><td class="n">55%</td></tr>
+        <tr><td>☐</td><td class="mono">flowx_sui1m_absorb_v1<div class="dim" style="font-size:10.5px">new family</div></td><td><span class="pill g">Passed</span></td><td>SUI 1m <span class="pill">5x</span></td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td class="n up">+27.7%</td><td class="n dim">—</td><td class="n">33.0%</td><td class="n">154</td><td class="n">57%</td></tr>
+        </tbody></table></div>
+      <div class="card"><h3>Optimize page in Enriched mode <span class="mini">what the switch does there</span></h3><div class="body">
+        <div class="filters"><span class="seg"><button>Classic</button><button class="on">Enriched</button></span><span class="dim">gamut runner</span><select><option>base: top per family × pair (20)</option></select><span class="chk on">singles</span><span class="chk on">pairs</span><span class="chk on">triples</span><span class="chk on">all four</span><button class="btn p" style="margin-left:auto">Build plan (600)</button><button class="btn">Launch</button></div>
+        <div class="dim">The run list below it filters to <span class="mono">enr_*</span> runs, the Routers &amp; combos section can mix classic and enriched components, and the Data sources status moves into the existing Settings page.</div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function pick(o){document.getElementById('optA').classList.toggle('hide',o!=='A');document.getElementById('optB').classList.toggle('hide',o!=='B');document.getElementById('pA').classList.toggle('on',o==='A');document.getElementById('pB').classList.toggle('on',o==='B');}
+function tabA(i,btn){for(var k=0;k<5;k++)document.getElementById('A'+k).classList.toggle('hide',k!==i);[...btn.parentNode.children].forEach(function(b){b.classList.toggle('on',b===btn);});}
+// feature matrix (sample)
+var combos=['OB','CVD','VP','OI','OB+CVD','OB+VP','OB+OI','CVD+VP','CVD+OI','VP+OI','OB+CVD+VP','OB+CVD+OI','OB+VP+OI','CVD+VP+OI','all 4'];
+var rows=['macdx · SOL 3m','macdx · XRP 1m','v7 · HYPE 1m','v7 · SUI 3m','scalpx2 · DOGE 1m','scalpx2 · SOL 1m','rocx · XRP 3m','flowx · SUI 1m (new)'];
+var seed=7;function rnd(){seed=(seed*9301+49297)%233280;return seed/233280;}
+var mx=document.getElementById('mx');mx.innerHTML='<div></div>'+combos.map(function(c){return '<div class="h">'+c+'</div>';}).join('');
+rows.forEach(function(r){mx.innerHTML+='<div class="r">'+r+'</div>'+combos.map(function(){var v=(rnd()*12-4);var na=rnd()<0.12;var bg=na?'#1b212a':(v>=0?'rgba(46,189,133,'+(0.12+Math.min(v,8)/8*0.5)+')':'rgba(246,70,93,'+(0.12+Math.min(-v,4)/4*0.5)+')');return '<div class="c" style="background:'+bg+'">'+(na?'<span class="dim">·</span>':(v>=0?'+':'')+v.toFixed(1))+'</div>';}).join('');});
+</script>
+</body></html>

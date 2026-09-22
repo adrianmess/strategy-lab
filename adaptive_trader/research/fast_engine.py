@@ -116,7 +116,7 @@ def _core(t_ms, o, h, l, c,
           regime,            # int32 per bar
           P,                 # (n_regimes, NP) param matrix
           warmup, initial_capital, commission,
-          use_sl, liq_threshold, no_entry, bph):
+          use_sl, liq_threshold, no_entry, bph, no_long, no_short):
     """Returns trade array + final equity + liquidation flag.
     trade row: [entry_idx, exit_idx, dir, system(0=3m,1=cross), entry, exit,
                 qty, net, mae, reason(0=pt,1=sl,2=liq), lev]
@@ -213,17 +213,19 @@ def _core(t_ms, o, h, l, c,
         actXL = (tm - cdStartXL) < P[r, 45] * 60000
 
         long3m = (P[r, 38] > 0 and rsiL[i] < P[r, 0] and macdL[i] < P[r, 1] * c[i]
-                  and bbPctL[i] < P[r, 2] and emaLongUp[i] > 0 and not actL)
+                  and bbPctL[i] < P[r, 2] and emaLongUp[i] > 0 and not actL
+                  and no_long[i] == 0)
         short3m = (P[r, 39] > 0 and rsiL[i] > P[r, 10] and macdL[i] > P[r, 11] * c[i]
-                   and bbPctL[i] > P[r, 12] and emaShortDown[i] > 0 and not actS)
+                   and bbPctL[i] > P[r, 12] and emaShortDown[i] > 0 and not actS
+                   and no_short[i] == 0)
         gapBars = P[r, 32] * bph
         canL = (i - lastLongBarX) > gapBars
         canS = (i - lastShortBarX) > gapBars
         longX = (P[r, 40] > 0 and xUp[i] > 0 and xMacd[i] < P[r, 31]
                  and histRising[i] > 0 and (P[r, 46] <= 0 or xHist[i] > 0)
-                 and not actXL and canL)
+                 and not actXL and canL and no_long[i] == 0)
         shortX = (P[r, 41] > 0 and xDn[i] > 0 and xMacd[i] > P[r, 30]
-                  and not actXS and canS)
+                  and not actXS and canS and no_short[i] == 0)
 
         if pos == 0:
             lev = P[r, 37]
@@ -284,7 +286,8 @@ def _core(t_ms, o, h, l, c,
 
 
 def run_fast(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
-             commission=0.0004, use_sl=True, liq_threshold=0.12, return_open=False, no_entry=None):
+             commission=0.0004, use_sl=True, liq_threshold=0.12, return_open=False, no_entry=None,
+             no_long=None, no_short=None):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
@@ -302,7 +305,9 @@ def run_fast(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
                         regime.astype(np.int32), P.astype(np.float64),
                         warmup, initial_capital, commission,
                         1 if use_sl else 0, liq_threshold, no_entry,
-                        60.0 / float(os.environ.get("LAB_TF", "3")))
+                        60.0 / float(os.environ.get("LAB_TF", "3")),
+                        np.asarray(no_long if no_long is not None else np.zeros(n, dtype=np.int8), dtype=np.int8),
+                        np.asarray(no_short if no_short is not None else np.zeros(n, dtype=np.int8), dtype=np.int8))
     cols = ["entry_idx", "exit_idx", "dir", "system", "entry", "exit",
             "qty", "net", "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)

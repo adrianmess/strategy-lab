@@ -40,6 +40,7 @@ def contamination_mask(t, warmup):
 
 ORIGINAL_STRATEGIES = ("v5_original", "prime_original", "macdx_original",
                        "rocx_original")
+ENR_FAMILIES = ("flowx", "poctrend", "oisqueeze", "absorb")
 
 def original_defaults(strategy, mode):
     """Every pine input of the ORIGINAL script, unmodified logic, single set."""
@@ -238,6 +239,7 @@ def run_single_rocx_opt(cfg, oos_start=None, holdout_days=None,
     from wf2 import (load_globals, build_P_rocx, mtm_curve, contamination_mask,
                      eval_intervals, FUT_COMM, SPOT_COMM)
     from rocx_engine import run_rocx_P
+    import enriched as _E
     cand = cfg["cand"]
     mode = cfg.get("mode", "spot")
     method = cfg.get("method", "vol3")
@@ -272,7 +274,9 @@ def run_single_rocx_opt(cfg, oos_start=None, holdout_days=None,
                                          initial_capital=eq,
                                          commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                          no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
-                                         return_open=True)
+                                         return_open=True,
+                                         **_E.gate_kwargs(sp, reg[w0:b], cand))
+            eq -= _E.charge_funding(tr, sp, mode)
             if op:
                 is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
                 if is_end or not holdout_days:
@@ -315,6 +319,7 @@ def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
     from wf2 import (load_globals, build_P_macdx, mtm_curve, contamination_mask,
                      eval_intervals, FUT_COMM, SPOT_COMM)
     from macdx_engine import run_macdx_P
+    import enriched as _E
     cand = cfg["cand"]
     mode = cfg.get("mode", "spot")
     method = cfg.get("method", "vol3")
@@ -349,7 +354,9 @@ def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
                                           initial_capital=eq,
                                           commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                           no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
-                                          return_open=True)
+                                          return_open=True,
+                                          **_E.gate_kwargs(sp, reg[w0:b], cand))
+            eq -= _E.charge_funding(tr, sp, mode)
             if op:
                 is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
                 if is_end or not holdout_days:
@@ -386,6 +393,89 @@ def run_single_macdx_opt(cfg, oos_start=None, holdout_days=None,
                                               else f"from {oos_start}"),
                                         config=cand, opt=opt_settings(cfg)))
 
+
+
+def run_single_enr(cfg, oos_start=None, holdout_days=None,
+                         gap_mode="skip_contaminated"):
+    """Full backtest of an OPTIMIZED enriched-family candidate (flowx /
+    poctrend / oisqueeze / absorb): macdx segments + attached f_* arrays."""
+    from wf2 import (load_globals, build_P_enr, mtm_curve, contamination_mask,
+                     eval_intervals, FUT_COMM, SPOT_COMM)
+    from enriched_engine import run_enr_P
+    import enriched as _E
+    cand = cfg["cand"]
+    mode = cfg.get("mode", "spot")
+    method = cfg.get("method", "vol3")
+    G = load_globals(("v6", "macdx"))
+    R = G["nreg"][method]
+    P = build_P_enr(cand, R)
+    fam = cand["strategy"]
+    regs = G["regimes_v6"][method]
+    warmup = 3000
+    eq = 1000.0
+    trades, curve, open_positions = [], [], []
+    mdd = 0.0; months = 0.0; liq_any = False
+    suppressed = 0
+    n_segs = len(G["macdx"])
+    for si, (pre, reg) in enumerate(zip(G["macdx"], regs)):
+        t = pre["t"]
+        seg_mask = (contamination_mask(t, warmup)
+                    if gap_mode == "skip_contaminated" else None)
+        if seg_mask is not None:
+            suppressed += int(seg_mask.sum())
+        i0 = warmup if oos_start is None else max(warmup, int(np.searchsorted(t, np.datetime64(oos_start))))
+        i1 = len(t)
+        if i1 - i0 < 200:
+            continue
+        ivs = [(i0, i1)] if not holdout_days else eval_intervals(t, i0, i1,
+                dict(days=holdout_days, part="holdout"))
+        for iv_i, (a, b) in enumerate(ivs):
+            w0 = max(0, a - warmup)
+            sp = {k: (v[:, w0:b] if getattr(v, "ndim", 1) == 2 else v[w0:b])
+                  for k, v in pre.items() if isinstance(v, np.ndarray)}
+            eq0 = eq
+            tr, eq, liq, op = run_enr_P(sp, P, fam, regime=reg[w0:b], warmup=a - w0,
+                                          initial_capital=eq,
+                                          commission=FUT_COMM if mode == "lev" else SPOT_COMM,
+                                          no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                          return_open=True,
+                                          **_E.gate_kwargs(sp, reg[w0:b], cand))
+            eq -= _E.charge_funding(tr, sp, mode)
+            if op:
+                is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
+                if is_end or not holdout_days:
+                    mark = float(sp["c"][-1])
+                    open_positions.append(dict(
+                        dir=("long" if op["dir"] > 0 else "short"),
+                        entry_t=op["entry_t"], entry=op["entry"],
+                        lev=op["lev"], mark=mark, as_of=str(sp["t"][-1])[:16],
+                        unreal=float(op["qty"] * (mark - op["entry"]) * op["dir"]),
+                        move_pct=float((mark / op["entry"] - 1) * op["dir"]),
+                        at=("end of data" if is_end else "data-gap boundary (dropped, not counted)")))
+            months += (b - a) / ((1440 / float(os.environ.get('LAB_TF', '3'))) * 30.4)
+            if len(tr):
+                m, d = mtm_curve(tr, sp["c"], initial=eq0)
+                mdd = max(mdd, d)
+                step = max(1, len(m) // 500)
+                if curve and curve[-1]["eq"] is not None:
+                    curve.append(dict(t="(data gap)", eq=None))
+                for x, v in zip(pd.to_datetime(sp["t"][::step]), m[::step]):
+                    if np.isfinite(v):
+                        curve.append(dict(t=str(x), eq=float(v)))
+                trades.append(tr)
+            if liq:
+                liq_any = True
+                break
+        if liq_any:
+            break
+    tr = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+    return build_entry(tr, eq, months, mdd, liq_any, curve, open_positions=open_positions,
+                       label_extra=dict(gap_mode=gap_mode, suppressed_bars=suppressed,
+                                        strategy=fam, mode=mode, method=method,
+                                        kind=(f"alternating holdout ({holdout_days:g}d blocks)" if holdout_days
+                                              else "full-history (in-sample fit)" if oos_start is None
+                                              else f"from {oos_start}"),
+                                        config=cand, opt=opt_settings(cfg)))
 
 def run_single_original(cfg, oos_start=None, holdout_days=None,
                         gap_mode="skip_contaminated"):
@@ -503,6 +593,7 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
     # workers — a no-op for every v7 entry.
     from wf2 import mtm_curve, FUT_COMM, SPOT_COMM
     from adaptive import slice_pre
+    import enriched as _E
     cand, method, mode = cfg["cand"], cfg["method"], cfg["cand"]["mode"]
     G = O.load_g3()
     regs_list, R = G["regimes"][method]
@@ -537,7 +628,9 @@ def run_single_v7(cfg, oos_start=None, holdout_days=None, gap_mode="skip_contami
                                    use_sl=(mode == "spot" or bool(cand.get("lev_stops"))),
                                    dyn_liq=(mode == "lev"),
                                    return_open=True,
-                                   no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
+                                   no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                   **_E.gate_kwargs(sp, reg[w0:b], cand))
+            eq -= _E.charge_funding(tr, sp, mode)
             if op:
                 is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
                 if is_end or not holdout_days:
@@ -620,6 +713,27 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
         os.environ["LAB_COIN"] = _coin
         os.environ["LAB_MARKET"] = _mkt
         os.environ["LAB_TF"] = _tf
+    # Enriched runs (order-book / CVD / volume-profile / OI gates, funding
+    # cost) record their provenance in the config. Pin the same env so the
+    # globals attach the same feature frame the search used; a classic
+    # config clears it so an enriched process never bleeds into a plain run.
+    if os.environ.get("LAB_DATA_PINNED") != "1":
+        _feats = ",".join(cfg.get("features") or [])
+        _fund = "1" if cfg.get("funding") else ""
+        _prevf = os.environ.get("LAB_FEATURES", "")
+        _prevu = os.environ.get("LAB_FUNDING", "")
+        if (_feats, _fund) != (_prevf, _prevu):
+            import sys as _sys
+            _W = _sys.modules.get("wf2")
+            _O = _sys.modules.get("optimizer2")
+            if (_W is not None and getattr(_W, "_G", None)) or \
+                    (_O is not None and getattr(_O, "_G3", None)):
+                raise SystemExit(
+                    f"config wants features={_feats or '-'} funding={_fund or '0'} "
+                    f"but this process already loaded data with features="
+                    f"{_prevf or '-'} funding={_prevu or '0'} — run it in a fresh process")
+        os.environ["LAB_FEATURES"] = _feats
+        os.environ["LAB_FUNDING"] = _fund
     cand = cfg.get("cand")
     if not cand:
         raise SystemExit("This run produced NO surviving candidate (see its report) — "
@@ -636,6 +750,9 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
     if cfg.get("strategy") in ORIGINAL_STRATEGIES:
         return run_single_original(cfg, oos_start, holdout_days=holdout_days,
                                    gap_mode=gap_mode)
+    if cfg.get("strategy") in ENR_FAMILIES or cand.get("strategy") in ENR_FAMILIES:
+        return run_single_enr(cfg, oos_start, holdout_days=holdout_days,
+                              gap_mode=gap_mode)
     if cfg.get("strategy") == "macdx" or cand.get("strategy") == "macdx":
         return run_single_macdx_opt(cfg, oos_start, holdout_days=holdout_days,
                                     gap_mode=gap_mode)
@@ -649,6 +766,7 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
     from scalp_engine import run_scalp, run_scalp2, slice_pre2
     from adaptive import slice_pre
     from regimes import DAY
+    import enriched as _E
     G = load_globals(("v6",) if strategy == "prime" else (strategy,))
     R = G["nreg"][method]
     sx2 = strategy == "scalpx2"
@@ -690,7 +808,8 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
                                              commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                              liq_threshold=-1.0 if mode == "lev" else 1e9,
                                              return_open=True,
-                                             no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
+                                             no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                            **_E.gate_kwargs(sp, reg[w0:b], cand))
             elif v6like:
                 tr, eq, liq, op = run_fast(sp, P, regime=reg[w0:b], warmup=a - w0,
                                            initial_capital=eq,
@@ -698,14 +817,17 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
                                            commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                            liq_threshold=-1.0 if mode == "lev" else 1e9,
                                            return_open=True,
-                                           no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
+                                           no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                            **_E.gate_kwargs(sp, reg[w0:b], cand))
             else:
                 tr, eq, liq, op = run_scalp(sp, P, regime=reg[w0:b], warmup=a - w0,
                                             initial_capital=eq,
                                             commission=FUT_COMM if mode == "lev" else SPOT_COMM,
                                             liq_threshold=-1.0 if mode == "lev" else 1e9,
                                             return_open=True,
-                                            no_entry=(seg_mask[w0:b] if seg_mask is not None else None))
+                                            no_entry=(seg_mask[w0:b] if seg_mask is not None else None),
+                                            **_E.gate_kwargs(sp, reg[w0:b], cand))
+            eq -= _E.charge_funding(tr, sp, mode)
             if op:
                 is_end = (si == n_segs - 1 and iv_i == len(ivs) - 1)
                 if is_end or not holdout_days:

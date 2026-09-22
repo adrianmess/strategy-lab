@@ -97,11 +97,165 @@ def build_plan(cfg):
     return specs
 
 
+ENRICHED_FEATURES = ("ob", "cvd", "vp", "oi")
+NEW_FAMILIES = ("flowx", "poctrend", "oisqueeze", "absorb")
+_DROP_FLAGS = {"--name": 1, "--procs": 1, "--total": 1, "--resume-from": 1,
+               "--merge-mode": 1, "--batch": 1, "--features": 1,
+               "--base-run": 1, "--hours": 1}
+_DROP_BARE = {"--funding"}
+
+
+def feature_combos(feats, max_k=None, explicit=None):
+    """Every non-empty subset of `feats` in canonical order (15 for four),
+    or the explicit list of combos when the config names them."""
+    feats = [f for f in ENRICHED_FEATURES if f in set(feats)]
+    if explicit:
+        out = []
+        for c in explicit:
+            c = [f for f in ENRICHED_FEATURES if f in set(c)]
+            if c and c not in out:
+                out.append(c)
+        return out
+    out = []
+    for k in range(1, (max_k or len(feats)) + 1):
+        out += [list(c) for c in itertools.combinations(feats, k)]
+    return out
+
+
+def combo_tag(combo):
+    return "_".join(combo)
+
+
+def base_run_cmd(base):
+    """Reconstruct the optimizer command that produced a classic run, minus
+    the flags the enriched variant overrides. Source of truth is the LAST
+    launch in runs/<base>/launch.json (keeps --space/--sticky-oos/--anchor/
+    --lev-stops exactly as run); best_config.json is the fallback."""
+    import shlex
+    rd = os.path.join(RUNS, base)
+    lp = os.path.join(rd, "launch.json")
+    toks = None
+    if os.path.exists(lp):
+        try:
+            launches = json.load(open(lp))
+            cmd = (launches[-1] or {}).get("cmd") or ""
+            toks = shlex.split(cmd)
+            if toks and toks[0].endswith("python3"):
+                toks = toks[1:]
+            if toks and toks[0].endswith("optimize2_cli.py"):
+                toks = toks[1:]
+        except Exception:
+            toks = None
+    if not toks:
+        b = json.load(open(os.path.join(rd, "best_config.json")))
+        toks = ["--strategy", b["strategy"], "--mode", b["mode"],
+                "--method", b["method"], "--algo", b.get("algo") or "genetic",
+                "--symbol", (b.get("pair") or "SOL_USDT").split("_")[0].lower(),
+                "--tf", str(b.get("timeframe") or "3m").rstrip("m"),
+                "--gap-mode", b.get("gap_mode") or "skip_contaminated",
+                "--max-dd", str(b.get("max_dd") or 0.5),
+                "--max-hold-days", str(b.get("max_hold_days") or 5),
+                "--scoring", b.get("scoring") or "classic"]
+        if b.get("train_end"):
+            toks += ["--train-end", b["train_end"]]
+        if b.get("holdout_days"):
+            toks += ["--holdout-days", str(b["holdout_days"])]
+        if b.get("holdout_before"):
+            toks += ["--holdout-before", b["holdout_before"]]
+        if b.get("holdout_between"):
+            toks += ["--holdout-between", b["holdout_between"]]
+        if b.get("holdout_outside"):
+            toks += ["--holdout-outside", b["holdout_outside"]]
+        if (b.get("cand") or {}).get("lev_stops"):
+            toks.append("--lev-stops")
+        if (b.get("cand") or {}).get("cadapt"):
+            toks.append("--cadapt")
+    out, i = [], 0
+    while i < len(toks):
+        t = toks[i]
+        if t in _DROP_FLAGS:
+            i += 1 + _DROP_FLAGS[t]
+            continue
+        if t in _DROP_BARE:
+            i += 1
+            continue
+        if "=" in t and t.split("=")[0] in _DROP_FLAGS:
+            i += 1
+            continue
+        out.append(t)
+        i += 1
+    coin = tf = None
+    for j, t in enumerate(out):
+        if t == "--symbol" and j + 1 < len(out):
+            coin = out[j + 1].lower()
+        if t == "--tf" and j + 1 < len(out):
+            tf = int(out[j + 1])
+    return out, (coin or "sol"), (tf or 3)
+
+
+def build_plan_enriched(cfg):
+    """ENRICHED gamut: (a) every base run x every feature combo, funding on
+    (a cost, not a feature); (b) the new feature-native families across the
+    configured pairs/tfs/modes/methods/scorings/holdouts, always with every
+    feature they need. Same spec shape as build_plan so the workers, the
+    progress page and the panel need no special casing."""
+    e = cfg["enriched"]
+    feats = e.get("features") or list(ENRICHED_FEATURES)
+    combos = feature_combos(feats, e.get("max_combo"), e.get("combos"))
+    funding = bool(e.get("funding", True))
+    total = int(e.get("total") or cfg.get("total", 60000))
+    procs = str(cfg.get("procs", 14))
+    specs = []
+    # (a) derived variants, base-major so a base's 15 variants finish together
+    for base in e.get("base_runs") or []:
+        try:
+            toks, coin, tf = base_run_cmd(base)
+        except Exception as ex:
+            print(f"base run {base}: cannot reconstruct command ({ex}) — skipped",
+                  flush=True)
+            continue
+        for combo in combos:
+            name = f"enr_{base}__{combo_tag(combo)}"[:78]
+            cmd = [sys.executable, "optimize2_cli.py"] + toks + [
+                "--procs", procs, "--batch", "100", "--total", str(total),
+                "--features", ",".join(combo), "--base-run", base,
+                "--name", name]
+            if funding:
+                cmd.append("--funding")
+            specs.append(dict(name=name, coin=coin, tf=tf, cmd=cmd,
+                              status="pending",
+                              enriched=dict(base_run=base, features=combo,
+                                            funding=funding, kind="derived")))
+    # (b) new families: a normal gamut grid with every feature attached
+    fams = [f for f in (e.get("new_families") or []) if f in NEW_FAMILIES]
+    if fams:
+        sub = dict(cfg, strategies=fams)
+        sub.setdefault("pairs", []); sub.setdefault("tfs", [3])
+        sub.setdefault("algos", ["genetic"]); sub.setdefault("modes", ["lev"])
+        sub.setdefault("methods", ["vol3"]); sub.setdefault("scorings", ["classic"])
+        sub.setdefault("max_dds", [0.5]); sub.setdefault("max_holds", [1])
+        sub.setdefault("holdouts", [{"kind": "none"}])
+        sub["totals"] = [total]
+        for s in build_plan(sub):
+            s["name"] = f"enr_{s['name']}"[:78]
+            s["cmd"][s["cmd"].index("--name") + 1] = s["name"]
+            s["cmd"] += ["--features", ",".join(feats)]
+            if funding:
+                s["cmd"].append("--funding")
+            fam = s["cmd"][s["cmd"].index("--strategy") + 1]
+            s["enriched"] = dict(base_run=None, features=list(feats),
+                                 funding=funding, kind="new", family=fam)
+            specs.append(s)
+    return specs
+
+
 def report(pdir, plan):
     lines = [f"# Gamut {plan['config']['name']} — report",
              f"updated {time.strftime('%Y-%m-%d %H:%M')}",
              "", "Ranked by honest holdout %/mo (OOS-best preferred, no liq).", ""]
-    for coin in plan["config"]["pairs"]:
+    coins = list(plan["config"].get("pairs") or [])
+    coins += sorted({s["coin"] for s in plan["specs"]} - set(coins))
+    for coin in coins:
         rows = []
         for s in plan["specs"]:
             if s["coin"] != coin or s["status"] != "done":
@@ -202,7 +356,7 @@ def main():
     if os.path.exists(plan_p):
         print("existing plan found — resuming it", flush=True)
     else:
-        specs = build_plan(cfg)
+        specs = build_plan_enriched(cfg) if cfg.get("enriched") else build_plan(cfg)
         json.dump(dict(config=cfg, specs=specs,
                        made=time.strftime("%Y-%m-%d %H:%M")),
                   open(plan_p, "w"), indent=1)

@@ -212,7 +212,7 @@ def _core3(t_ms, o, h, l, c,
            xz_all, xup_all, xdn_all, xhist_all, hist_all,
            cd1, cd3, trend,
            regime, P, warmup, initial_capital, commission,
-           use_sl, dyn_liq, no_entry, bph):
+           use_sl, dyn_liq, no_entry, bph, no_long, no_short):
     n = len(c)
     equity = initial_capital
     pos = 0; pend = 0; pend_sys = 0
@@ -296,10 +296,11 @@ def _core3(t_ms, o, h, l, c,
         blockShort = trend[i] > P[r, 52]
 
         long3m = (P[r, 40] > 0 and rsiv < P[r, 0] and mz < P[r, 2]
-                  and bbv < P[r, 4] and emaup_all[vu, i] > 0 and not actL)
+                  and bbv < P[r, 4] and emaup_all[vu, i] > 0 and not actL
+                  and no_long[i] == 0)
         short3m = (P[r, 41] > 0 and rsiv > P[r, 1] and mz > P[r, 3]
                    and bbv > P[r, 5] and emadn_all[vd, i] > 0 and not actS
-                   and not blockShort)
+                   and not blockShort and no_short[i] == 0)
         gapBars = P[r, 36] * bph
         canL = (i - lastXL) > gapBars
         canS = (i - lastXS) > gapBars
@@ -307,9 +308,10 @@ def _core3(t_ms, o, h, l, c,
         longX = (P[r, 42] > 0 and xup_all[vx, i] > 0 and xz < P[r, 7]
                  and hist_all[hist_row, i] > 0
                  and (P[r, 44] <= 0 or xhist_all[vx, i] > 0)
-                 and not actXL and canL)
+                 and not actXL and canL and no_long[i] == 0)
         shortX = (P[r, 43] > 0 and xdn_all[vx, i] > 0 and xz > P[r, 6]
-                  and not actXS and canS and not blockShort)
+                  and not actXS and canS and not blockShort
+                  and no_short[i] == 0)
 
         if pos == 0:
             lev = P[r, 39]
@@ -369,7 +371,7 @@ def _core3(t_ms, o, h, l, c,
 
 def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
          commission=0.0004, use_sl=True, dyn_liq=True, return_open=False,
-         no_entry=None):
+         no_entry=None, no_long=None, no_short=None):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
@@ -386,7 +388,9 @@ def run3(pre, P, regime=None, warmup=3000, initial_capital=1000.0,
                          regime.astype(np.int32), P.astype(np.float64),
                          warmup, initial_capital, commission,
                          1 if use_sl else 0, 1 if dyn_liq else 0, no_entry,
-                         60.0 / float(os.environ.get("LAB_TF", "3")))
+                         60.0 / float(os.environ.get("LAB_TF", "3")),
+                         np.asarray(no_long if no_long is not None else np.zeros(n, dtype=np.int8), dtype=np.int8),
+                         np.asarray(no_short if no_short is not None else np.zeros(n, dtype=np.int8), dtype=np.int8))
     cols = ["entry_idx", "exit_idx", "dir", "system", "entry", "exit",
             "qty", "net", "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)

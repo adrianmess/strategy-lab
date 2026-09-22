@@ -85,7 +85,7 @@ MAXT = 30000
 def _scalp_core(o, h, l, c, rsi, cvdUp, cvdDn, aboveCvd, belowCvd,
                 emaBull, emaBear, poc, regime, P,
                 warmup, initial_capital, commission,
-                liq_threshold, no_entry):
+                liq_threshold, no_entry, no_long, no_short):
     """trade row: [entry_idx, exit_idx, dir, entry, exit, qty, net, mae,
                    reason(0=tp,1=sl,2=liq,3=eod), lev]"""
     n = len(c)
@@ -187,10 +187,10 @@ def _scalp_core(o, h, l, c, rsi, cvdUp, cvdDn, aboveCvd, belowCvd,
         r = regime[i]
         longCond = P[r, 6] > 0 and rsi[i] < P[r, 4] and c[i] > poc[i] and (
             (P[r, 8] > 0 and aboveCvd[i] > 0 and cvdUp[i] > 0)
-            or (P[r, 9] > 0 and emaBull[i] > 0))
+            or (P[r, 9] > 0 and emaBull[i] > 0)) and no_long[i] == 0
         shortCond = P[r, 7] > 0 and rsi[i] > P[r, 3] and c[i] < poc[i] and (
             (P[r, 8] > 0 and belowCvd[i] > 0 and cvdDn[i] > 0)
-            or (P[r, 9] > 0 and emaBear[i] > 0))
+            or (P[r, 9] > 0 and emaBear[i] > 0)) and no_short[i] == 0
         if longCond:
             pend = 1
             pend_tp = c[i] * (1 + P[r, 0])
@@ -212,7 +212,7 @@ def _scalp_core(o, h, l, c, rsi, cvdUp, cvdDn, aboveCvd, belowCvd,
 
 def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
               commission=0.0004, liq_threshold=1e9, return_open=False,
-              no_entry=None):
+              no_entry=None, no_long=None, no_short=None):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
@@ -224,7 +224,9 @@ def run_scalp(pre, P, regime=None, warmup=1300, initial_capital=100.0,
                               pre["cvdUp"], pre["cvdDn"], pre["aboveCvd"], pre["belowCvd"],
                               pre["emaBull"], pre["emaBear"], pre["poc"],
                               regime.astype(np.int32), P.astype(np.float64),
-                              warmup, initial_capital, commission, liq_threshold, no_entry)
+                              warmup, initial_capital, commission, liq_threshold, no_entry,
+                              np.asarray(no_long if no_long is not None else np.zeros(n, dtype=np.int8), dtype=np.int8),
+                              np.asarray(no_short if no_short is not None else np.zeros(n, dtype=np.int8), dtype=np.int8))
     cols = ["entry_idx", "exit_idx", "dir", "entry", "exit", "qty", "net",
             "mae", "reason", "lev"]
     df = pd.DataFrame(tr, columns=cols)
@@ -342,7 +344,7 @@ def slice_pre2(pre, i0, i1):
 
 def run_scalp2(pre2, P, vidx, regime=None, warmup=1300, initial_capital=100.0,
                commission=0.0004, liq_threshold=1e9, return_open=False,
-               no_entry=None):
+               no_entry=None, no_long=None, no_short=None):
     """vidx: (R, 4) int array of variant indexes [rsi, cvd, poc, emaS] per regime."""
     n = len(pre2["c"])
     if regime is None:
@@ -360,4 +362,4 @@ def run_scalp2(pre2, P, vidx, regime=None, warmup=1300, initial_capital=100.0,
     return run_scalp(pre, P, regime=regime, warmup=warmup,
                      initial_capital=initial_capital, commission=commission,
                      liq_threshold=liq_threshold, return_open=return_open,
-                     no_entry=no_entry)
+                     no_entry=no_entry, no_long=no_long, no_short=no_short)

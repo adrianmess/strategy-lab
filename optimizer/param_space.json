@@ -2414,5 +2414,564 @@
     ]
    ]
   }
+ },
+ "flowx": {
+  "continuous": {
+   "tpL": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpL",
+    "doc": "take profit, longs (fraction)",
+    "order": 0
+   },
+   "tpS": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpS",
+    "doc": "take profit, shorts",
+    "order": 1
+   },
+   "slL": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slL",
+    "doc": "stop loss, longs (0 = off)",
+    "order": 2
+   },
+   "slS": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slS",
+    "doc": "stop loss, shorts",
+    "order": 3
+   },
+   "minT": {
+    "range": [
+     1.0,
+     45.0
+    ],
+    "label": "minT",
+    "doc": "cooldown between orders (minutes)",
+    "order": 4
+   },
+   "maxH": {
+    "range": [
+     0.0,
+     72.0
+    ],
+    "label": "maxH",
+    "doc": "time stop (hours, 0 = off)",
+    "order": 5
+   },
+   "leverage": {
+    "range": [
+     1.2,
+     10.0
+    ],
+    "label": "Leverage",
+    "doc": "Position leverage (lev mode).",
+    "order": 6
+   },
+   "zIn": {
+    "range": [
+     0.3,
+     2.5
+    ],
+    "label": "zIn",
+    "doc": "CVD z-score that must be crossed to enter",
+    "order": 7
+   },
+   "zOut": {
+    "range": [
+     0.0,
+     2.0
+    ],
+    "label": "zOut",
+    "doc": "structure exit when flow flips past -zOut",
+    "order": 8
+   },
+   "obMin": {
+    "range": [
+     0.0,
+     0.5
+    ],
+    "label": "obMin",
+    "doc": "min book imbalance agreeing with the trade",
+    "order": 9
+   }
+  },
+  "menus": {
+   "vCvdE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0,
+     3.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2",
+     "3"
+    ],
+    "doc": "CVD z lookback (20/60/120/300)"
+   },
+   "vObE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2"
+    ],
+    "doc": "book depth level (1/2/5%)"
+   }
+  },
+  "flags": {
+   "eL": {
+    "label": "Longs on/off",
+    "doc": "Sampled on/off in lev mode."
+   },
+   "eS": {
+    "label": "Shorts on/off",
+    "doc": "Sampled on/off in lev mode."
+   }
+  }
+ },
+ "poctrend": {
+  "continuous": {
+   "tpL": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpL",
+    "doc": "take profit, longs (fraction)",
+    "order": 0
+   },
+   "tpS": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpS",
+    "doc": "take profit, shorts",
+    "order": 1
+   },
+   "slL": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slL",
+    "doc": "stop loss, longs (0 = off)",
+    "order": 2
+   },
+   "slS": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slS",
+    "doc": "stop loss, shorts",
+    "order": 3
+   },
+   "minT": {
+    "range": [
+     1.0,
+     45.0
+    ],
+    "label": "minT",
+    "doc": "cooldown between orders (minutes)",
+    "order": 4
+   },
+   "maxH": {
+    "range": [
+     0.0,
+     72.0
+    ],
+    "label": "maxH",
+    "doc": "time stop (hours, 0 = off)",
+    "order": 5
+   },
+   "leverage": {
+    "range": [
+     1.2,
+     10.0
+    ],
+    "label": "Leverage",
+    "doc": "Position leverage (lev mode).",
+    "order": 6
+   },
+   "brk": {
+    "range": [
+     0.0,
+     0.01
+    ],
+    "label": "brk",
+    "doc": "close must clear POC by this fraction",
+    "order": 7
+   },
+   "fail": {
+    "range": [
+     0.0,
+     0.01
+    ],
+    "label": "fail",
+    "doc": "structure exit when back through POC by this",
+    "order": 8
+   },
+   "cfm": {
+    "range": [
+     1,
+     10
+    ],
+    "label": "cfm",
+    "doc": "consecutive bars beyond POC before entering",
+    "order": 9,
+    "integer": true
+   }
+  },
+  "menus": {
+   "vVpE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2"
+    ],
+    "doc": "POC lookback (120/300/600 min)"
+   },
+   "vCvdE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0,
+     3.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2",
+     "3"
+    ],
+    "doc": "CVD z lookback for the flow filter"
+   }
+  },
+  "flags": {
+   "useFlow": {
+    "label": "useFlow",
+    "doc": "require CVD z agreeing with the breakout"
+   },
+   "eL": {
+    "label": "Longs on/off",
+    "doc": "Sampled on/off in lev mode."
+   },
+   "eS": {
+    "label": "Shorts on/off",
+    "doc": "Sampled on/off in lev mode."
+   }
+  }
+ },
+ "oisqueeze": {
+  "continuous": {
+   "tpL": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpL",
+    "doc": "take profit, longs (fraction)",
+    "order": 0
+   },
+   "tpS": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpS",
+    "doc": "take profit, shorts",
+    "order": 1
+   },
+   "slL": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slL",
+    "doc": "stop loss, longs (0 = off)",
+    "order": 2
+   },
+   "slS": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slS",
+    "doc": "stop loss, shorts",
+    "order": 3
+   },
+   "minT": {
+    "range": [
+     1.0,
+     45.0
+    ],
+    "label": "minT",
+    "doc": "cooldown between orders (minutes)",
+    "order": 4
+   },
+   "maxH": {
+    "range": [
+     0.0,
+     72.0
+    ],
+    "label": "maxH",
+    "doc": "time stop (hours, 0 = off)",
+    "order": 5
+   },
+   "leverage": {
+    "range": [
+     1.2,
+     10.0
+    ],
+    "label": "Leverage",
+    "doc": "Position leverage (lev mode).",
+    "order": 6
+   },
+   "oiThr": {
+    "range": [
+     0.002,
+     0.05
+    ],
+    "label": "oiThr",
+    "doc": "OI change over the window that marks crowding",
+    "order": 7
+   },
+   "pxThr": {
+    "range": [
+     0.0,
+     0.02
+    ],
+    "label": "pxThr",
+    "doc": "price move against the crowd over the window",
+    "order": 8
+   },
+   "brkN": {
+    "range": [
+     3,
+     48
+    ],
+    "label": "brkN",
+    "doc": "bars of high/low the squeeze must break",
+    "order": 9,
+    "integer": true
+   },
+   "oiOut": {
+    "range": [
+     0.0,
+     0.05
+    ],
+    "label": "oiOut",
+    "doc": "structure exit when 30-min OI change <= -oiOut",
+    "order": 10
+   }
+  },
+  "menus": {
+   "vOiE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2"
+    ],
+    "doc": "OI window (30m / 1h / 4h)"
+   },
+   "vObE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2"
+    ],
+    "doc": "unused"
+   }
+  },
+  "flags": {
+   "eL": {
+    "label": "Longs on/off",
+    "doc": "Sampled on/off in lev mode."
+   },
+   "eS": {
+    "label": "Shorts on/off",
+    "doc": "Sampled on/off in lev mode."
+   }
+  }
+ },
+ "absorb": {
+  "continuous": {
+   "tpL": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpL",
+    "doc": "take profit, longs (fraction)",
+    "order": 0
+   },
+   "tpS": {
+    "range": [
+     0.003,
+     0.03
+    ],
+    "label": "tpS",
+    "doc": "take profit, shorts",
+    "order": 1
+   },
+   "slL": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slL",
+    "doc": "stop loss, longs (0 = off)",
+    "order": 2
+   },
+   "slS": {
+    "range": [
+     0.004,
+     0.04
+    ],
+    "label": "slS",
+    "doc": "stop loss, shorts",
+    "order": 3
+   },
+   "minT": {
+    "range": [
+     1.0,
+     45.0
+    ],
+    "label": "minT",
+    "doc": "cooldown between orders (minutes)",
+    "order": 4
+   },
+   "maxH": {
+    "range": [
+     0.0,
+     72.0
+    ],
+    "label": "maxH",
+    "doc": "time stop (hours, 0 = off)",
+    "order": 5
+   },
+   "leverage": {
+    "range": [
+     1.2,
+     10.0
+    ],
+    "label": "Leverage",
+    "doc": "Position leverage (lev mode).",
+    "order": 6
+   },
+   "zAbs": {
+    "range": [
+     0.5,
+     3.0
+    ],
+    "label": "zAbs",
+    "doc": "one-sided flow z that must be absorbed",
+    "order": 7
+   },
+   "nLow": {
+    "range": [
+     3,
+     30
+    ],
+    "label": "nLow",
+    "doc": "no new low/high over this many bars",
+    "order": 8,
+    "integer": true
+   },
+   "obMin": {
+    "range": [
+     0.0,
+     0.5
+    ],
+    "label": "obMin",
+    "doc": "book must lean toward the reversal",
+    "order": 9
+   },
+   "dist": {
+    "range": [
+     0.0,
+     0.01
+    ],
+    "label": "dist",
+    "doc": "price must be beyond POC by this fraction",
+    "order": 10
+   }
+  },
+  "menus": {
+   "vCvdE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0,
+     3.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2",
+     "3"
+    ],
+    "doc": "CVD z lookback"
+   },
+   "vObE": {
+    "options": [
+     0.0,
+     1.0,
+     2.0
+    ],
+    "labels": [
+     "0",
+     "1",
+     "2"
+    ],
+    "doc": "book depth level"
+   }
+  },
+  "flags": {
+   "eL": {
+    "label": "Longs on/off",
+    "doc": "Sampled on/off in lev mode."
+   },
+   "eS": {
+    "label": "Shorts on/off",
+    "doc": "Sampled on/off in lev mode."
+   }
+  }
  }
 }

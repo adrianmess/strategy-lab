@@ -108,7 +108,8 @@ MAX_TRADES = 60000
 
 @njit(cache=True)
 def _core_rocx(o, h, l, c, roc_stack, sma_stack, is_new45,
-               regime, P, warmup, initial_capital, commission, no_entry):
+               regime, P, warmup, initial_capital, commission, no_entry,
+               no_long):
     """trade row: [entry_idx, exit_idx, dir, entry, exit, qty, net, mae,
     reason(0=TP, 1=trail stop, 2=LIQ), lev]"""
     n = len(c)
@@ -184,7 +185,8 @@ def _core_rocx(o, h, l, c, roc_stack, sma_stack, is_new45,
         if i - smaN >= 0 and not np.isnan(sma_stack[vS, i]) \
                 and not np.isnan(sma_stack[vS, i - smaN]):
             sma_ok = sma_stack[vS, i] > sma_stack[vS, i - smaN]
-        signal = (P[r, 7] > 0 and is_new45[i] == 1 and roc_ok and sma_ok)
+        signal = (P[r, 7] > 0 and is_new45[i] == 1 and roc_ok and sma_ok
+                  and no_long[i] == 0)      # enriched direction gate
 
         mark_eq = eq
         if pos != 0:
@@ -225,7 +227,8 @@ def _core_rocx(o, h, l, c, roc_stack, sma_stack, is_new45,
 
 
 def run_rocx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
-               commission=0.0, no_entry=None, return_open=False):
+               commission=0.0, no_entry=None, return_open=False,
+               no_long=None, no_short=None):
     n = len(pre["c"])
     if regime is None:
         regime = np.zeros(n, dtype=np.int32)
@@ -235,7 +238,8 @@ def run_rocx_P(pre, P, regime=None, warmup=0, initial_capital=1000.0,
         pre["roc_stack"], pre["sma_stack"], pre["is_new45"],
         np.asarray(regime, dtype=np.int32), np.asarray(P, dtype=np.float64),
         int(warmup), float(initial_capital), float(commission),
-        np.asarray(ne, dtype=np.int8))
+        np.asarray(ne, dtype=np.int8),
+        np.asarray(no_long if no_long is not None else np.zeros(n, dtype=np.int8), dtype=np.int8))
     t = pre["t"]
     tr = pd.DataFrame(arr, columns=["entry_idx", "exit_idx", "dir", "entry",
                                     "exit", "qty", "net", "mae", "reason", "lev"])

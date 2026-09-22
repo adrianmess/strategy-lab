@@ -81,8 +81,7 @@ def worker(args):
         return _apply_anchor(res, payload, space, strategy)
     # flat-candidate strategies (prime / v6 / scalpx / macdx) via the wf2 engine
     import wf2 as W
-    G = W.load_globals({"prime": ("v6",), "macdx": ("v6", "macdx"),
-                        "rocx": ("v6", "rocx")}.get(strategy, (strategy,)))
+    G = W.load_globals(W.globals_need(strategy))
     R = G["nreg"][payload["method"]]
     strip = lambda res: [(s, c, {k: v for k, v in m.items() if k != "trades"})
                          for s, c, m in res]
@@ -105,13 +104,24 @@ def worker(args):
     sampler = {"v6": W.sample_v6, "prime": W.sample_prime, "macdx": W.sample_macdx,
                "rocx": W.sample_rocx,
                "scalpx2": W.sample_scalpx2}.get(strategy, W.sample_scalpx)
+    if strategy in W.ENR_FAMILIES:
+        sampler = W.sample_enr(strategy)
     if payload.get("cadapt"):
         base_sampler = sampler
         sampler = lambda rng, R, mode, space: \
             W.sample_flat_ends(rng, R, mode, space, base_sampler)
+    import enriched as _E
     out = []
     for _ in range(payload["n"]):
         c = sampler(rng, R, payload["mode"], space)
+        if strategy in W.ENR_FAMILIES:
+            pass                          # feature-native: no gate params
+        elif c.get("cadapt"):
+            # gates live on the two endpoints like every other param
+            _E.ensure_gates(c["ends"], rng, 2)
+            c = W.make_flat_cadapt(c["ends"], R)
+        else:
+            _E.ensure_gates(c, rng, R)
         m = W.eval_config(c, payload["method"], payload["mode"],
                           payload["t0"], payload["t1"], alt=payload["alt"],
                           gap_mode=payload["gap_mode"], scoring=payload["scoring"])
@@ -604,6 +614,7 @@ def run_crossfit(args, space, R, per_regime, flat, anchor_cand=None):
     out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
     out["timeframe"] = _tf_tag()
+    _enriched_tags(out)
     out["fee_per_side"], out["fee_side"] = _fee_tags(out.get("mode"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print(f"\nCROSS-FIT WINNER ({winner['origin']}): "
@@ -645,6 +656,19 @@ def _market_tag():
 
 def _tf_tag():
     return os.environ.get("LAB_TF", "3") + "m"
+
+def _enriched_tags(d):
+    """Stamp enriched provenance: which feature gates were searched, whether
+    funding was charged, and the classic run this was derived from. A
+    classic run gets features=[] / funding=false so a missing key still
+    means 'pre-enriched entry'."""
+    import enriched as _E
+    d["features"] = sorted(_E.enabled(), key=_E.FEATURES.index)
+    d["funding"] = _E.funding_on()
+    br = os.environ.get("LAB_BASE_RUN") or ""
+    if br:
+        d["base_run"] = br
+    return d
 
 
 def _fee_tags(mode):
@@ -689,7 +713,9 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", default="v7",
                     choices=["v7", "prime7", "v6", "scalpx", "scalpx2", "prime",
-                             "macdx", "rocx"])
+                             "macdx", "rocx",
+                             # enriched (feature-native) families
+                             "flowx", "poctrend", "oisqueeze", "absorb"])
     ap.add_argument("--algo", default="genetic",
                     choices=["random", "genetic", "refine", "crossfit"])
     ap.add_argument("--mode", required=True, choices=["lev", "spot"])
@@ -706,6 +732,20 @@ def main():
                          "lengths are in BARS, so a 50-EMA on 1m is a "
                          "different (faster) indicator than on 3m — that's "
                          "the point of testing timeframes")
+    ap.add_argument("--features", default="",
+                    help="ENRICHED search: comma list of ob,cvd,vp,oi. Adds "
+                         "per-regime entry gates on the Binance-derived order "
+                         "book imbalance / CVD z-score / volume-profile POC "
+                         "distance / open-interest change to the family's "
+                         "space (research/features/<coin>_<tf>min.parquet "
+                         "must exist — build with enriched_features.py)")
+    ap.add_argument("--funding", action="store_true",
+                    help="ENRICHED cost: charge MEXC funding on every perp "
+                         "trade at the 00/08/16 UTC settlements it spans "
+                         "(data/funding_<coin>.json). Spot: no-op")
+    ap.add_argument("--base-run", default="",
+                    help="provenance only: the classic run this enriched "
+                         "search was derived from (stamped on best_config)")
     ap.add_argument("--data-market", default="auto",
                     choices=["auto", "spot", "perp"],
                     help="which venue's historic candles to research on. "
@@ -851,6 +891,33 @@ def main():
     os.environ["LAB_MARKET"] = mkt
     os.environ["LAB_TF"] = str(args.tf)
     print(f"CHART DATA: {mkt} candles, {args.tf}-minute bars", flush=True)
+    # ---- enriched features / funding: env BEFORE any engine import so the
+    # globals attach the feature frame (and the mp workers inherit it) ----
+    import enriched as _E
+    args._features = [f for f in _E.FEATURES
+                      if f in {x.strip().lower() for x in args.features.split(",")}]
+    if args.strategy in ("flowx", "poctrend", "oisqueeze", "absorb"):
+        # feature-native families read every feature directly (no gates)
+        args._features = list(_E.FEATURES)
+        args.features = ",".join(args._features)
+    _bad = {x.strip().lower() for x in args.features.split(",") if x.strip()} \
+        - set(_E.FEATURES)
+    if _bad:
+        sys.exit(f"--features: unknown {sorted(_bad)}; choose from {_E.FEATURES}")
+    os.environ["LAB_FEATURES"] = ",".join(args._features)
+    os.environ["LAB_FUNDING"] = "1" if args.funding else ""
+    os.environ["LAB_BASE_RUN"] = args.base_run or ""
+    if args._features or args.funding:
+        try:
+            _c0, _c1, _cov = _E.coverage(args.symbol.lower(), args.tf)
+        except Exception as _e:
+            sys.exit(f"ENRICHED: no feature frame for {args.symbol.upper()} "
+                     f"{args.tf}m — build it first with enriched_features.py "
+                     f"build/assemble ({_e})")
+        print(f"ENRICHED: features={args._features or '-'} funding="
+              f"{'on' if args.funding else 'off'} | frame covers "
+              f"{str(_c0)[:10]}..{str(_c1)[:10]} ({_cov:.0%} of bars); bars "
+              f"outside coverage never enter", flush=True)
     # ---- holdout window modes ----
     # after date | before date | between dates | outside dates | alternating
     args._houtside = None
@@ -929,7 +996,9 @@ def main():
             resume_from=([s.strip() for s in args.resume_from.split(",") if s.strip()]
                          if args.resume_from else []),
             merge_mode=(args.merge_mode if args.resume_from
-                        and "," in args.resume_from else None)))
+                        and "," in args.resume_from else None),
+            features=list(args._features), funding=bool(args.funding),
+            base_run=(args.base_run or None)))
         json.dump(launches, open("launch.json", "w"), indent=1)
     except Exception as _e:
         print(f"launch.json not written: {_e}", flush=True)
@@ -960,6 +1029,12 @@ def main():
         print("parameter space: SPOT ranges "
               f"({args.strategy}@spot in param_space.json)", flush=True)
     space = space or _sp_all.get(args.strategy) or {}
+    if not space and args.strategy in ("flowx", "poctrend", "oisqueeze", "absorb"):
+        # the family's built-in ranges when the space file predates it
+        from enriched_engine import space_section as _enr_space
+        space = _enr_space(args.strategy)
+        print(f"parameter space: built-in {args.strategy} ranges "
+              f"(enriched_engine.space_section)", flush=True)
     # per-pair range overlay (saved defaults): scales %-denominated thresholds
     # by the pair's volatility vs SOL and raw-unit params (macdx mMinS/mMaxL)
     # by the pair's MACD magnitude. Generated by gen_pair_spaces.py.
@@ -1017,14 +1092,18 @@ def main():
         if n_wide:
             print(f"1m grids: {n_wide} variant menus widened to include "
                   f"3x-scaled (time-equivalent) indicator lengths", flush=True)
+    if args._features and args.strategy not in ("flowx", "poctrend", "oisqueeze", "absorb"):
+        space = _E.inject_space(space, args._features)
+        print(f"ENRICHED: gate parameters added to the search space: "
+              f"{[k for k in _E.GATE_KEYS if k in space['continuous'] or k in space['menus']]}",
+              flush=True)
     flat = args.strategy not in ("v7", "prime7")
 
     if flat:
         # shared precompute caches (instead of per-run copies)
         os.environ.setdefault("WF2_CACHE_DIR", os.path.join(B.OPT_DIR, "cache"))
         import wf2 as W
-        G = W.load_globals({"prime": ("v6",), "macdx": ("v6", "macdx"),
-                            "rocx": ("v6", "rocx")}.get(args.strategy, (args.strategy,)))
+        G = W.load_globals(W.globals_need(args.strategy))
         R = G["nreg"][args.method]
         if args.single_set:
             print("note: --single-set applies to V7 only; "
@@ -1454,6 +1533,7 @@ def main():
     out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
     out["timeframe"] = _tf_tag()
+    _enriched_tags(out)
     out["fee_per_side"], out["fee_side"] = _fee_tags(out.get("mode"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
     print("\nBEST -> runs/%s/best_config.json" % args.name)
@@ -1580,6 +1660,7 @@ def main():
                     hb["pair"] = _pair_tag()
                     hb["market_data"] = _market_tag()
                     hb["timeframe"] = _tf_tag()
+                    _enriched_tags(hb)
                     json.dump(hb, open("holdout_best_config.json", "w"),
                               indent=1, default=float)
                     out["holdout_best"] = dict(rank=1, holdout=holdouts[0],
@@ -1600,6 +1681,7 @@ def main():
             hb["pair"] = _pair_tag()
             hb["market_data"] = _market_tag()
             hb["timeframe"] = _tf_tag()
+            _enriched_tags(hb)
             json.dump(hb, open("holdout_best_config.json", "w"), indent=1, default=float)
             out["holdout_best"] = dict(rank=best_h + 1, holdout=holdouts[best_h])
             print(f"\nOOS-BEST is pool rank #{best_h+1} -> saved to holdout_best_config.json")
@@ -1629,6 +1711,7 @@ def main():
                 hb["pair"] = _pair_tag()
                 hb["market_data"] = _market_tag()
                 hb["timeframe"] = _tf_tag()
+                _enriched_tags(hb)
                 json.dump(hb, open("holdout_best_config.json", "w"), indent=1,
                           default=float)
                 out["holdout_best"] = dict(rank=0, holdout=st["holdout"],
@@ -1651,6 +1734,7 @@ def main():
         out["pair"] = _pair_tag()
     out["market_data"] = _market_tag()
     out["timeframe"] = _tf_tag()
+    _enriched_tags(out)
     out["fee_per_side"], out["fee_side"] = _fee_tags(out.get("mode"))
     json.dump(out, open("best_config.json", "w"), indent=1, default=float)
 

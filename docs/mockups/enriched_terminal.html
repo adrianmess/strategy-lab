@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Enriched strategies — terminal UI mockup (full parity)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#0b0e11;--panel:#151a21;--panel2:#1b212a;--line:#252c37;--fg:#eaecef;--dim:#848e9c;--accent:#f0b90b;--blue:#4c8dff;--violet:#8b5cf6;--cyan:#22d3ee;--up:#2ebd85;--down:#f6465d;--warn:#f5b544;--hover:#222a35}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.app{display:grid;grid-template-columns:44px 1fr;min-height:100vh}
+.rail{background:#0d1117;border-right:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;align-items:center;gap:6px;position:sticky;top:0;height:100vh}
+.rail i{width:26px;height:26px;border-radius:6px;display:block;background:#1b212a;border:1px solid var(--line);font-style:normal;color:var(--dim);font-size:11px;text-align:center;line-height:24px}
+.rail i.on{border-color:var(--accent);color:var(--accent);background:rgba(240,185,11,.13)}
+.top{padding:9px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;background:var(--panel);position:sticky;top:0;z-index:4}
+.top h1{margin:0;font-size:15px}
+.pill{font-size:10.5px;padding:2px 8px;border-radius:9px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill.g{color:var(--up);border-color:rgba(46,189,133,.4)}.pill.c{color:var(--cyan);border-color:rgba(34,211,238,.4)}.pill.v{color:var(--violet);border-color:rgba(139,92,246,.45)}.pill.a{color:var(--accent);border-color:rgba(240,185,11,.4)}.pill.r{color:var(--down);border-color:rgba(246,70,93,.4)}
+.tag{font-size:9.5px;padding:1px 6px;border-radius:4px;background:#252c37;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.tag.spot{background:rgba(46,189,133,.15);color:var(--up)}.tag.lev{background:rgba(139,92,246,.18);color:#b49bff}.tag.live{background:rgba(246,70,93,.15);color:var(--down)}
+.wrap{padding:14px 20px;max-width:1600px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 14px;position:sticky;top:44px;background:var(--bg);z-index:3}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent)}
+.tabs .cnt{color:var(--dim);font-weight:400;margin-left:4px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:14px}
+.card>h3{margin:0;padding:9px 13px;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card>h3 .info{width:13px;height:13px;border-radius:50%;border:1px solid var(--line);background:none;color:var(--dim);font-size:9px;line-height:11px;padding:0;font-style:italic;font-family:Georgia,serif;margin-right:auto}
+.card>h3 .mini{text-transform:none;letter-spacing:0;font-weight:400;font-size:11px}
+.body{padding:12px 13px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.row .l{color:var(--dim);font-size:11px;min-width:64px}
+select,input,textarea{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font:inherit;font-size:12px}
+input[type=number]{width:80px}
+.chk{display:inline-flex;gap:5px;align-items:center;padding:3px 8px;border:1px solid var(--line);border-radius:5px;color:var(--dim);font-size:11px;cursor:pointer}
+.chk.on{border-color:var(--cyan);color:var(--cyan);background:rgba(34,211,238,.08)}
+.chk.a{border-color:var(--accent);color:var(--accent);background:rgba(240,185,11,.1)}
+table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--dim);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid #1d232d;vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:hover td{background:var(--hover)}
+.up{color:var(--up)}.dn{color:var(--down)}.dim{color:var(--dim)}
+.feat{display:inline-flex;gap:3px}.feat b{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:.04em}
+.f-ob{background:rgba(76,141,255,.18);color:#8db4ff}.f-cvd{background:rgba(34,211,238,.16);color:var(--cyan)}.f-vp{background:rgba(139,92,246,.18);color:#b49bff}.f-oi{background:rgba(245,181,68,.16);color:var(--warn)}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:5px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.btn.p{border-color:var(--accent);color:var(--accent)}.btn.sm{padding:2px 7px;font-size:11px}.btn.r{border-color:rgba(246,70,93,.5);color:var(--down)}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{background:none;border:0;border-right:1px solid var(--line);color:var(--dim);padding:5px 11px;font:inherit;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;cursor:pointer}
+.seg button:last-child{border-right:0}.seg button.on{color:var(--accent);background:rgba(240,185,11,.13);box-shadow:inset 0 -2px 0 var(--accent)}
+.bar{height:6px;background:#252c37;border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--up)}
+.kpi{background:var(--panel2);border-radius:8px;padding:10px 12px}.kpi .l{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}.kpi .v{font-size:20px;font-weight:600;margin-top:2px}
+.hide{display:none}
+.callout{border-left:3px solid var(--cyan);background:rgba(34,211,238,.06);padding:8px 12px;border-radius:0 6px 6px 0;font-size:12px;margin-bottom:12px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.matrix{display:grid;grid-template-columns:210px repeat(15,1fr);gap:3px;font-size:10.5px}
+.matrix .h{color:var(--dim);text-align:center;padding:3px 0;font-weight:600;font-size:9.5px}
+.matrix .r{padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.matrix .c{text-align:center;padding:5px 0;border-radius:4px;font-variant-numeric:tabular-nums;cursor:pointer}
+.stars{color:var(--accent);letter-spacing:1px}
+.parity{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 18px;font-size:11.5px}
+.parity div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed #1d232d;padding:3px 0}
+.parity .w{color:var(--cyan);white-space:nowrap}
+.spark{height:34px;background:linear-gradient(180deg,rgba(46,189,133,.25),transparent);border-bottom:1px solid var(--up);border-radius:2px}
+.detail{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.eq{height:180px;background:repeating-linear-gradient(90deg,transparent 0 59px,#1d232d 59px 60px),repeating-linear-gradient(0deg,transparent 0 44px,#1d232d 44px 45px);position:relative;border-radius:6px}
+.eq:after{content:"";position:absolute;left:4%;right:4%;bottom:12%;height:70%;border-bottom:2px solid var(--up);border-left:0;clip-path:polygon(0 100%,10% 88%,20% 90%,30% 72%,40% 75%,50% 55%,60% 58%,70% 40%,80% 38%,90% 20%,100% 10%,100% 100%);background:rgba(46,189,133,.12)}
+.mo{display:grid;grid-template-columns:repeat(12,1fr);gap:3px}.mo i{display:block;height:22px;border-radius:3px;font-style:normal;font-size:9.5px;text-align:center;line-height:22px}
+kbd{font:inherit;font-size:10.5px;background:#252c37;border-radius:3px;padding:0 5px;color:var(--dim)}
+</style></head><body>
+<div class="app">
+  <div class="rail" title="terminal rail — the Enriched page gets its own icon"><i>≡</i><i>◔</i><i>⇅</i><i>△</i><i>▤</i><i class="on">◈</i><i>✦</i><i>◷</i><i>⚑</i><i>?</i></div>
+  <div>
+    <div class="top"><h1>Enriched strategies</h1><span class="pill c">terminal UI · full classic parity</span><span class="pill">20 base · 300 variants · 4 new families · 600 specs</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center"><span class="dim" style="font-size:11px">data: Binance bulk + MEXC funding</span><span class="pill g">synced 12 min ago</span><button class="btn sm">refresh</button></span></div>
+    <div class="wrap">
+      <div class="tabs">
+        <button class="on" onclick="tab(0,this)">Optimize</button><button onclick="tab(1,this)">Backtests <span class="cnt">312</span></button><button onclick="tab(2,this)">Feature matrix</button><button onclick="tab(3,this)">New strategies</button><button onclick="tab(4,this)">Data sources</button><button onclick="tab(5,this)" style="margin-left:auto;color:var(--cyan)">Parity map</button>
+      </div>
+
+<!-- ================================================================ OPTIMIZE ================================================================ -->
+<div id="T0">
+  <div class="card"><h3>Launch a search <button class="info">i</button><span class="mini">classic "Launch a search" — every field, plus the feature set</span></h3><div class="body">
+    <div class="row"><span class="l">name</span><input value="enr_sol3m_macdx_volXtrend9+ob+cvd" style="width:300px"><span class="l">base run</span><select><option>s3w_sol3m_macdx_volXtrend9 (holdout_best)</option><option>— none (new family) —</option></select><span class="l">features</span><span class="chk on">OB</span><span class="chk on">CVD</span><span class="chk">VP</span><span class="chk">OI</span></div>
+    <div class="row"><span class="l">strategy</span><select><option>macdx</option><option>v7</option><option>scalpx2</option><option>rocx</option><option>flowx (new)</option><option>poctrend (new)</option><option>oisqueeze (new)</option><option>absorb (new)</option></select>
+      <span class="l">mode</span><select><option>lev</option><option>spot</option></select><span class="l">symbol</span><select><option>SOL</option><option>HYPE</option><option>XRP</option><option>SUI</option><option>DOGE</option></select><span class="l">tf</span><select><option>3m</option><option>1m</option><option>5m</option></select>
+      <span class="l">method</span><select><option>volXtrend9</option><option>vol3</option><option>trend3</option></select><span class="l">algo</span><select><option>genetic</option><option>random</option><option>cadapt</option></select></div>
+    <div class="row"><span class="l">budget</span><select><option>total evals</option><option>minutes</option></select><input type="number" value="100000"><span class="l">procs</span><input type="number" value="10" style="width:60px"><span class="l">scoring</span><select><option>classic</option><option>worst_window</option><option>underwater</option></select><span class="chk">multi-scoring</span>
+      <span class="l">max DD</span><input type="number" value="0.5" style="width:60px"><span class="l">max hold (d)</span><input type="number" value="1" style="width:60px"><span class="l">gap mode</span><select><option>skip_contaminated</option><option>ignore</option></select><span class="chk">liq filter</span><span class="chk on">lev stops</span></div>
+    <div class="row"><span class="l">holdout</span><select><option>after date (hA)</option><option>alternating (hL)</option><option>between (hB)</option><option>outside (hO)</option><option>none (hN)</option></select><input type="date" value="2025-08-28"><span class="chk">multi-holdout</span><span class="l">train end</span><input type="date" value="2025-08-28"><span class="l">anchor</span><select><option>none</option><option>base genome</option></select><input type="number" value="0.5" style="width:60px" title="anchor strength">
+      <span class="l">lockbox</span><input placeholder="from date (optional)" style="width:140px"><span class="chk">sticky OOS</span><span class="l">stop score</span><input type="number" placeholder="—" style="width:70px"></div>
+    <div class="row"><span class="l">param space</span><select><option>sol_3m.ai.json (imported)</option><option>defaults</option></select><span class="seg"><button class="on">Imported</button><button>AI variant</button></span><button class="btn sm">edit space</button><button class="btn sm">AI generate</button><button class="btn sm">set as default</button><button class="btn sm">restore defaults</button>
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="btn">run &amp; preview</button><button class="btn p">Launch</button></span></div>
+    <div class="dim" style="font-size:11px">feature history for SOL: book depth from 2024-05-18 — the search window is clipped to it; the launch refuses a window the features cannot cover.</div>
+  </div></div>
+
+  <div class="g2">
+  <div class="card"><h3>Autonomous campaign <button class="info">i</button><span class="mini">classic — unchanged</span></h3><div class="body">
+    <div class="row"><input placeholder="campaign name" style="width:180px"><select><option>enriched corpus</option></select><button class="btn p">Start</button><button class="btn">Stop</button><span class="pill">idle</span></div>
+    <div class="dim" style="font-size:11px">status · matrix · report toggle, exactly as classic</div></div></div>
+  <div class="card"><h3>Remote workers <button class="info">i</button><span class="mini">classic — mini · MacBook · EC2</span></h3><div class="body">
+    <table><thead><tr><th>system</th><th>status</th><th>campaign(s)</th><th class="n">cores</th><th></th></tr></thead><tbody>
+    <tr><td>Mac mini</td><td class="up">RUNNING</td><td class="mono">enr_top20_0922</td><td class="n">8</td><td><button class="btn sm">pause</button></td></tr>
+    <tr><td>MacBook</td><td class="up">RUNNING</td><td class="mono">enr_top20_0922</td><td class="n">10</td><td><button class="btn sm">pause</button></td></tr>
+    <tr><td>AWS EC2</td><td class="dim">none</td><td class="dim">—</td><td class="n dim">—</td><td><button class="btn sm">rebuild fleet…</button></td></tr></tbody></table></div></div>
+  </div>
+
+  <div class="card"><h3>Gamut runner · enriched <button class="info">i</button><span class="mini">the classic chip matrix (pairs × strategies × modes × tfs × methods × scorings × max-hold × DD × holdouts) plus the two enriched axes: base set and feature combinations · campaigns land in <span class="mono">enr_*</span></span></h3><div class="body">
+    <div class="row"><span class="l">name</span><input value="enr_top20_0922" style="width:180px"><span class="l">base set</span><select><option>top per family × pair (20)</option><option>pick runs…</option><option>none — new families only</option></select><span class="l">families</span><span class="chk on">macdx</span><span class="chk on">v7</span><span class="chk on">scalpx2</span><span class="chk on">rocx</span><span class="chk on">flowx</span><span class="chk on">poctrend</span><span class="chk on">oisqueeze</span><span class="chk on">absorb</span></div>
+    <div class="row"><span class="l">features</span><span class="chk on">singles ×4</span><span class="chk on">pairs ×6</span><span class="chk on">triples ×4</span><span class="chk on">all four ×1</span><span class="dim" style="font-size:11px">= 15 combos per base</span></div>
+    <div class="row"><span class="l">pairs</span><span class="chk on">HYPE</span><span class="chk on">SOL</span><span class="chk on">XRP</span><span class="chk on">SUI</span><span class="chk on">DOGE</span><span class="chk">BTC</span><span class="chk">ETH</span><span class="l">modes</span><span class="chk on">lev</span><span class="chk on">spot</span><span class="l">tfs</span><span class="chk on">1m</span><span class="chk on">3m</span><span class="chk">5m</span></div>
+    <div class="row"><span class="l">methods</span><span class="chk on">vol3</span><span class="chk on">trend3</span><span class="chk on">volXtrend9</span><span class="l">algos</span><span class="chk on">genetic</span><span class="chk">cadapt</span><span class="l">scorings</span><span class="chk on">classic</span><span class="chk on">worst_window</span><span class="chk">underwater</span></div>
+    <div class="row"><span class="l">max hold</span><div class="chips"><span class="chk on">1d</span><span class="chk on">2.5d</span><span class="chk">7d</span><input placeholder="+ add" style="width:60px"></div><span class="l">max DD</span><div class="chips"><span class="chk on">0.5</span><input placeholder="+ add" style="width:60px"></div><span class="l">total</span><div class="chips"><span class="chk on">100k</span><input placeholder="+ add" style="width:60px"></div><span class="l">alt days</span><div class="chips"><span class="chk on">7</span><input placeholder="+ add" style="width:60px"></div></div>
+    <div class="row"><span class="l">holdouts</span><span class="chk on">after 2025-08</span><span class="chk on">alternating 7d</span><span class="chk on">outside 2024-11</span><span class="chk on">none</span><span class="chk">between…</span><span class="l">procs</span><input type="number" value="14" style="width:60px"><span class="chk on">lev stops</span><span class="l">fees</span><select><option>taker 0.08%</option><option>maker 0.06%</option></select><span class="l">funding</span><span class="chk on">modelled (MEXC 8h)</span></div>
+    <div class="row"><span class="pill">600 specs · est. 42 core-hours</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn">Build plan</button><button class="btn p">Start on mini</button><button class="btn">Start on MacBook</button><button class="btn">Stop</button></span></div>
+    <div class="bar" style="margin-top:6px"><i style="width:31%"></i></div><div class="dim" style="font-size:11px;margin-top:4px">184 / 600 · 2 workers · ETA 9.4h · <a style="color:var(--cyan)">progress page ↗</a></div>
+  </div></div>
+
+
+
+  <div class="card"><h3>Routers &amp; combos <button class="info">i</button><span class="mini">classic — components may mix classic and enriched runs</span></h3><div class="body">
+    <div class="row"><span class="seg"><button class="on">FCFS router</button><button>metax2 combine</button><button>router extend</button></span><input placeholder="router name" style="width:200px"><span class="l">fee mode</span><select><option>market (taker)</option><option>limit (maker)</option><option>manual %</option></select><input type="number" placeholder="0.08" style="width:70px"><span class="l">max DD</span><input type="number" value="0.5" style="width:60px"></div>
+    <div class="row"><input list="r" placeholder="type to filter runs…" value="enr_sol3m_macdx_volXtrend9+ob+cvd" style="width:290px"><input placeholder="type to filter runs…" value="enr_hype1m_v7_vol3+oi" style="width:290px"><input placeholder="type to filter runs…" style="width:290px"><button class="btn sm">+ input</button><button class="btn sm">pick from runs…</button></div>
+    <div class="row"><span class="dim" style="font-size:11px">2 components loaded from the Backtests tab · walk-forward + full merge published as <span class="mono">_fcfs_full</span> / <span class="mono">_fcfs_wf</span></span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn">Arm combine</button><button class="btn p">Build router</button></span></div>
+  </div></div>
+
+  <div class="card"><h3>Parameter space for macdx · SOL 3m <button class="info">i</button><span class="mini">classic editor — imported vs AI variant, per-regime menus, save / defaults</span></h3><div class="body">
+    <div class="row"><span class="seg"><button class="on">Imported</button><button>AI variant</button></span><select><option>sol_3m.ai.json</option></select><button class="btn sm">AI generate space</button><button class="btn sm">save</button><button class="btn sm">set as default</button><button class="btn sm">restore defaults</button><span class="pill a">AI</span></div>
+    <div class="g4">
+      <div class="kpi"><div class="l">tpL</div><div class="mono dim">0.005 – 0.10 · per regime</div></div><div class="kpi"><div class="l">slL</div><div class="mono dim">0.005 – 0.10 · per regime</div></div><div class="kpi"><div class="l">vMacd</div><div class="mono dim">menu 0,2,4,6,9</div></div><div class="kpi"><div class="l">lev</div><div class="mono dim">1.2 – 10</div></div>
+      <div class="kpi" style="border:1px solid rgba(34,211,238,.35)"><div class="l" style="color:var(--cyan)">obImb <span class="feat"><b class="f-ob">OB</b></span></div><div class="mono dim">−0.6 – 0.6 · gate</div></div><div class="kpi" style="border:1px solid rgba(34,211,238,.35)"><div class="l" style="color:var(--cyan)">cvdLen · cvdSlope <span class="feat"><b class="f-cvd">CVD</b></span></div><div class="mono dim">20–300 · 0–2σ</div></div><div class="kpi" style="border:1px solid rgba(34,211,238,.35)"><div class="l" style="color:var(--cyan)">vpLook · vpDist <span class="feat"><b class="f-vp">VP</b></span></div><div class="mono dim">100–600 · 0–1.5%</div></div><div class="kpi" style="border:1px solid rgba(34,211,238,.35)"><div class="l" style="color:var(--cyan)">oiWin · oiChg <span class="feat"><b class="f-oi">OI</b></span></div><div class="mono dim">6–48 bars · 0–8%</div></div>
+    </div><div class="dim" style="font-size:11px;margin-top:8px">feature parameters (cyan) appear only for the enabled features; the base genome's parameters are anchored, so a variant searches the feature gates around a known-good core.</div>
+  </div></div>
+
+  <div class="card"><h3>Jobs <button class="info">i</button><span class="mini">classic — progress, ETA, stop, dismiss, clear done · resume banner</span></h3><div class="body">
+    <table><thead><tr><th>job</th><th>kind</th><th>progress</th><th class="n">eta</th><th></th></tr></thead><tbody>
+    <tr><td class="mono">enr_sol3m_macdx_volXtrend9+ob+cvd</td><td>optimize</td><td><div class="bar" style="width:180px"><i style="width:62%"></i></div><span class="dim" style="font-size:11px">gen 62 · feasible 300 · best 0.0112</span></td><td class="n">7m</td><td><button class="btn sm r">stop</button></td></tr>
+    <tr><td class="mono">enr_hype1m_v7_vol3+oi_full</td><td>backtest</td><td><span class="up">done</span></td><td class="n">—</td><td><button class="btn sm">dismiss</button></td></tr></tbody></table>
+    <div class="row" style="margin-top:8px"><button class="btn sm">clear done</button></div></div></div>
+
+  <div class="card"><h3>Runs <button class="info">i</button><span class="mini">classic runs table — every row action · scoped to <span class="mono">enr_*</span> and the new families · <a style="color:var(--cyan)">load ALL runs (slow)</a></span></h3><div class="body">
+    <div class="row"><input placeholder="find run…" style="width:220px"><select><option>all pairs</option></select><select><option>all strategies</option></select><select><option>all families</option><option>bases only</option><option>variants only</option><option>new families only</option></select><span class="chk">clean only</span><span class="chk">running</span><span class="chk">marked best</span><span class="chk">rated</span><span class="l">features</span><span class="chk on">OB</span><span class="chk on">CVD</span><span class="chk">VP</span><span class="chk">OI</span></div>
+    <table><thead><tr><th></th><th>run</th><th>base</th><th>features</th><th>pair</th><th>strategy</th><th>opt</th><th class="n">growth/mo</th><th class="n">Δ base</th><th class="n">DD</th><th>holdout</th><th>backtests</th><th>rating</th><th>actions</th></tr></thead><tbody>
+    <tr><td>★</td><td class="mono">enr_sol3m_macdx_volXtrend9+ob+cvd <span class="pill g">clean</span></td><td class="dim mono">s3w_sol3m_macdx_volXtrend9</td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td>SOL 3m <span class="tag lev">lev</span></td><td>macdx · volXtrend9</td><td class="dim">gen · 100k · hA2508</td><td class="n up">+52.3%</td><td class="n up">+6.6</td><td class="n">41%</td><td><span class="pill g">passed</span></td><td><span class="pill">full</span><span class="pill">oosbest</span></td><td class="stars">★★★★☆</td><td><button class="btn sm">preview</button><button class="btn sm">story</button><button class="btn sm">backtest</button><button class="btn sm">top-10</button><button class="btn sm">adopt</button><button class="btn sm">🔀</button><button class="btn sm">rename</button><button class="btn sm r">delete</button></td></tr>
+    <tr><td></td><td class="mono">enr_sol3m_macdx_volXtrend9+cvd</td><td class="dim mono">s3w_sol3m_macdx_volXtrend9</td><td><span class="feat"><b class="f-cvd">CVD</b></span></td><td>SOL 3m <span class="tag lev">lev</span></td><td>macdx · volXtrend9</td><td class="dim">gen · 100k · hA2508</td><td class="n up">+49.1%</td><td class="n up">+3.4</td><td class="n">44%</td><td><span class="pill g">passed</span></td><td><span class="pill">full</span></td><td class="stars dim">☆☆☆☆☆</td><td><button class="btn sm">preview</button><button class="btn sm">story</button><button class="btn sm">backtest</button><button class="btn sm">top-10</button><button class="btn sm">adopt</button><button class="btn sm">🔀</button><button class="btn sm">rename</button><button class="btn sm r">delete</button></td></tr>
+    <tr><td></td><td class="mono">flowx_sui1m_absorb_v1 <span class="pill c">new family</span></td><td class="dim">—</td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td>SUI 1m <span class="tag lev">lev</span></td><td>flowx · vol3</td><td class="dim">gen · 100k · hL7</td><td class="n up">+27.7%</td><td class="n dim">—</td><td class="n">33%</td><td><span class="pill g">passed</span></td><td><span class="pill">full</span><span class="pill">oosbest</span></td><td class="stars dim">☆☆☆☆☆</td><td><button class="btn sm">preview</button><button class="btn sm">story</button><button class="btn sm">backtest</button><button class="btn sm">top-10</button><button class="btn sm">adopt</button><button class="btn sm">🔀</button><button class="btn sm">rename</button><button class="btn sm r">delete</button></td></tr>
+    </tbody></table>
+    <div class="row" style="margin-top:8px"><span class="dim" style="font-size:11px">preview → chart + stats panel · story → AI narrative · top-10 → crossfit rows · 🔀 → add to router builder · adopt → trader config (confirm-LIVE stays yours)</span></div>
+  </div></div>
+</div>
+
+<!-- ================================================================ BACKTESTS ================================================================ -->
+<div id="T1" class="hide">
+  <div class="card"><h3>Quick backtest <button class="info">i</button><span class="mini">classic — no optimizer, just the strategy, now with feature gates</span></h3><div class="body">
+    <div class="row"><input placeholder="name" style="width:200px"><select><option>flowx</option><option>macdx</option><option>v7</option></select><select><option>lev</option><option>spot</option></select><select><option>vol3</option></select><select><option>skip_contaminated</option></select><span class="chk on">OB</span><span class="chk on">CVD</span><span class="chk">VP</span><span class="chk">OI</span><button class="btn sm">edit params</button><button class="btn p">Run</button></div></div></div>
+
+  <div class="card"><h3>Filters <button class="info">i</button><span class="mini">every classic filter, plus base / features / combo size / Δ</span></h3><div class="body">
+    <div class="row"><select><option>all modes</option></select><select><option>any verdict</option></select><select><option>newest first</option></select><select><option>all pairs</option></select><select><option>all tfs</option></select><select><option>all strategies</option></select><select><option>any holdout</option></select><select><option>risk: any</option><option>lev · stopless</option><option>lev · with stops</option><option>spot</option></select><select><option>genome: any</option></select><select><option>routers: include</option><option>only</option><option>exclude</option></select><select><option>router of…</option></select><select><option>instance: any</option></select></div>
+    <div class="row"><span class="l">created</span><input type="date"><input type="date"><span class="l">max DD ≤</span><input type="number" placeholder="%" style="width:60px"><span class="l">max hold ≤</span><input type="number" placeholder="d" style="width:60px"><span class="l">win ≥</span><input type="number" placeholder="%" style="width:60px"><span class="chk">no liquidations</span><span class="chk">no negative</span><span class="chk">open position</span><span class="chk">✓ all holdouts</span><span class="chk">opened since…</span></div>
+    <div class="row"><span class="l">enriched</span><select><option>base: any</option></select><span class="chk on">OB</span><span class="chk on">CVD</span><span class="chk">VP</span><span class="chk">OI</span><select><option>combo: any size</option><option>1</option><option>2</option><option>3</option><option>4</option></select><span class="chk on">beats its base</span><span class="chk">new families</span><input placeholder="find name…" style="margin-left:auto;width:220px"><button class="btn">Search</button><button class="btn">Reset</button><span class="l">tz</span><select><option>local</option><option>UTC</option></select></div>
+  </div></div>
+
+  <div class="row"><span class="pill">312 matching of 64,584 indexed</span><span class="pill c">2 selected for router</span><button class="btn sm">→ build a router with these on Optimize</button><span class="pill">saved selection ▾</span><button class="btn sm">save selection</button><span class="pill">0 for combine</button><button class="btn sm">→ combine</button><button class="btn sm">re-run selected at current fees</button><button class="btn sm r">delete selected</button><span class="dim" style="font-size:11px;margin-left:auto">refresh in 40s · store v.1789952866</span></div>
+
+  <div class="card"><h3>Published backtests · enriched <button class="info">i</button><span class="mini">classic columns + base · features · Δ vs base · funding</span></h3>
+    <table><thead><tr><th></th><th>name</th><th>kind</th><th>strategy</th><th>mode</th><th>method</th><th>opt</th><th>base</th><th>features</th><th class="n">growth/mo</th><th class="n">Δ base</th><th class="n">total %</th><th class="n">total ×</th><th>liq?</th><th class="n">max DD</th><th class="n">stops</th><th class="n">trades</th><th class="n">win</th><th>OOS</th><th>fees</th><th>fund.</th><th>created</th><th>rating</th></tr></thead><tbody>
+    <tr><td>☑</td><td class="mono">enr_sol3m_macdx_volXtrend9+ob+cvd_full</td><td class="dim">full-history</td><td>macdx</td><td><span class="tag lev">lev</span> <span class="pill">9x</span> <span class="pill a">partial SL</span></td><td>volXtrend9</td><td class="dim">gen 100k hA2508</td><td class="dim mono">s3w_sol3m…</td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td class="n up">+52.3%</td><td class="n up">+6.6</td><td class="n up">+2,140%</td><td class="n">22.4</td><td>no</td><td class="n">41.2%</td><td class="n">8</td><td class="n">71</td><td class="n">61%</td><td><span class="pill g">P</span></td><td class="dim">0.08%<br><span style="font-size:10px">alt 0.06%</span></td><td>✓</td><td class="dim">09-22</td><td class="stars">★★★★☆</td></tr>
+    <tr><td>☑</td><td class="mono">enr_hype1m_v7_vol3+oi_oosbest_full</td><td class="dim">full-history</td><td>v7</td><td><span class="tag lev">lev</span> <span class="pill">3x</span> <span class="pill r">stopless</span></td><td>vol3</td><td class="dim">gen 100k hA2508</td><td class="dim mono">ghype_hype1m…</td><td><span class="feat"><b class="f-oi">OI</b></span></td><td class="n up">+38.8%</td><td class="n up">+2.9</td><td class="n up">+890%</td><td class="n">9.9</td><td>no</td><td class="n">29.5%</td><td class="n">0</td><td class="n">212</td><td class="n">58%</td><td><span class="pill g">P</span></td><td class="dim">0.08%</td><td>✓</td><td class="dim">09-22</td><td class="stars dim">☆☆☆☆☆</td></tr>
+    <tr><td>☐</td><td class="mono">enr_xrp1m_macdx_vol3+vp_full</td><td class="dim">full-history</td><td>macdx</td><td><span class="tag lev">lev</span> <span class="pill">10x</span> <span class="pill g">SL</span></td><td>vol3</td><td class="dim">gen 100k hL7</td><td class="dim mono">m1w_xrp1m…</td><td><span class="feat"><b class="f-vp">VP</b></span></td><td class="n up">+30.4%</td><td class="n dn">−1.8</td><td class="n up">+410%</td><td class="n">5.1</td><td>no</td><td class="n">47.9%</td><td class="n">14</td><td class="n">88</td><td class="n">55%</td><td><span class="pill g">P</span></td><td class="dim">0.08%</td><td>✓</td><td class="dim">09-22</td><td class="stars dim">☆☆☆☆☆</td></tr>
+    <tr><td>☐</td><td class="mono">flowx_sui1m_absorb_v1_full</td><td class="dim">full-history</td><td>flowx</td><td><span class="tag lev">lev</span> <span class="pill">5x</span> <span class="pill g">SL</span></td><td>vol3</td><td class="dim">gen 100k hL7</td><td class="dim">— new family</td><td><span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span></td><td class="n up">+27.7%</td><td class="n dim">—</td><td class="n up">+380%</td><td class="n">4.8</td><td>no</td><td class="n">33.0%</td><td class="n">21</td><td class="n">154</td><td class="n">57%</td><td><span class="pill g">P</span></td><td class="dim">0.08%</td><td>✓</td><td class="dim">09-22</td><td class="stars dim">☆☆☆☆☆</td></tr>
+    </tbody></table></div>
+
+  <div class="detail">
+    <div class="card"><h3>enr_sol3m_macdx_volXtrend9+ob+cvd_full <button class="info">i</button><span class="mini">equity (mark-to-market, log) · same detail panel as classic</span></h3><div class="body"><div class="eq"></div>
+      <div class="row" style="margin-top:10px"><span class="l">monthly</span></div><div class="mo"><i style="background:rgba(46,189,133,.35)">+8</i><i style="background:rgba(46,189,133,.2)">+3</i><i style="background:rgba(246,70,93,.3)">−4</i><i style="background:rgba(46,189,133,.5)">+12</i><i style="background:rgba(46,189,133,.3)">+6</i><i style="background:rgba(46,189,133,.2)">+2</i><i style="background:rgba(246,70,93,.2)">−1</i><i style="background:rgba(46,189,133,.4)">+9</i><i style="background:rgba(46,189,133,.35)">+7</i><i style="background:rgba(46,189,133,.25)">+4</i><i style="background:rgba(46,189,133,.5)">+11</i><i style="background:rgba(46,189,133,.3)">+5</i></div>
+      <div class="row" style="margin-top:10px"><span class="l">vs base</span><span class="dim" style="font-size:11px">overlay the base run's equity on the same chart</span><span class="chk on">show base</span><span class="chk">show all 15 variants</span></div></div></div>
+    <div class="card"><h3>Trades · MAE <button class="info">i</button><span class="mini">classic</span></h3><div class="body">
+      <div class="g2"><div class="kpi"><div class="l">trades</div><div class="v">71</div></div><div class="kpi"><div class="l">worst MAE</div><div class="v dn">−6.0%</div></div></div>
+      <div class="row" style="margin-top:8px"><span class="l">MAE basis</span><select><option>close</option><option>low/high</option></select><span class="l">tz</span><select><option>local</option></select></div>
+      <table><thead><tr><th>closed</th><th>side</th><th class="n">entry</th><th class="n">exit</th><th class="n">P&amp;L %</th><th>gate</th></tr></thead><tbody>
+      <tr><td class="dim">09-21 16:42</td><td><span class="tag">short</span></td><td class="n">1.5504</td><td class="n">1.5337</td><td class="n up">+1.08%</td><td><span class="feat"><b class="f-ob">OB −0.31</b><b class="f-cvd">CVD ↓</b></span></td></tr>
+      <tr><td class="dim">09-19 08:18</td><td><span class="tag">long</span></td><td class="n">92.49</td><td class="n">93.32</td><td class="n up">+0.89%</td><td><span class="feat"><b class="f-ob">OB +0.22</b><b class="f-cvd">CVD ↑</b></span></td></tr></tbody></table>
+      <div class="dim" style="font-size:11px;margin-top:6px">the <b>gate</b> column is new: the feature values at entry, so a trade can be traced back to the signal that allowed it. Gap-handling and open-position notes as classic.</div></div></div>
+  </div>
+</div>
+
+<!-- ================================================================ MATRIX ================================================================ -->
+<div id="T2" class="hide">
+  <div class="callout">One row per base run, one column per feature combination; each cell is growth/month <b>minus the base's</b>. Colour answers "which data helps" at a glance; click a cell to open that backtest below; click a row header to open the base.</div>
+  <div class="row"><span class="l">metric</span><span class="seg"><button class="on">Δ growth/mo</button><button>Δ max DD</button><button>Δ win %</button><button>OOS pass</button></span><span class="l">holdout</span><select><option>hA2508</option><option>hL7</option><option>hO2411</option><option>hN</option></select><span class="l">fees</span><select><option>taker</option><option>maker</option></select><span class="chk">only rows where every combo ran</span><button class="btn sm" style="margin-left:auto">export CSV</button></div>
+  <div class="card"><h3>Feature matrix <button class="info">i</button><span class="mini">green helps · red hurts · grey not run · 20 bases + 4 new families</span></h3><div class="body"><div class="matrix" id="mx"></div>
+    <div class="row" style="margin-top:10px"><span class="dim" style="font-size:11px">column totals: mean Δ per combo — the single most useful line on the page</span></div>
+    <div class="g4" style="margin-top:6px"><div class="kpi"><div class="l">best single feature</div><div class="v up">CVD +2.9</div></div><div class="kpi"><div class="l">best pair</div><div class="v up">OB+CVD +4.1</div></div><div class="kpi"><div class="l">most harmful</div><div class="v dn">VP alone −0.7</div></div><div class="kpi"><div class="l">all four vs best pair</div><div class="v dim">−1.2</div></div></div>
+  </div></div>
+</div>
+
+<!-- ================================================================ NEW STRATEGIES ================================================================ -->
+<div id="T3" class="hide">
+  <div class="g2">
+    <div class="card"><h3>flowx <span class="pill c">new</span><span class="mini">order-flow momentum</span></h3><div class="body">CVD slope and book imbalance must agree with price direction before entry; exit on CVD divergence or target. <span class="feat"><b class="f-ob">OB</b><b class="f-cvd">CVD</b></span> required · <span class="feat"><b class="f-oi">OI</b></span> optional filter.<div class="row" style="margin-top:8px"><span class="pill">5 pairs</span><span class="pill">15 ablations each</span><button class="btn sm" style="margin-left:auto">open param space</button><button class="btn sm">launch search</button></div></div></div>
+    <div class="card"><h3>poctrend <span class="pill c">new</span><span class="mini">value-area pullbacks</span></h3><div class="body">Trend filter; enter on pullbacks to the rolling POC / value-area edge, target the opposite edge. <span class="feat"><b class="f-vp">VP</b></span> required · <span class="feat"><b class="f-cvd">CVD</b></span> optional confirmation.<div class="row" style="margin-top:8px"><span class="pill">5 pairs</span><span class="pill">15 ablations each</span><button class="btn sm" style="margin-left:auto">open param space</button><button class="btn sm">launch search</button></div></div></div>
+    <div class="card"><h3>oisqueeze <span class="pill c">new</span><span class="mini">positioning breakouts</span></h3><div class="body">OI build-up during price compression → breakout in the direction the book leans; funding skew as a contrarian filter. <span class="feat"><b class="f-oi">OI</b><b class="f-ob">OB</b></span> required.<div class="row" style="margin-top:8px"><span class="pill">5 pairs</span><span class="pill">15 ablations each</span><button class="btn sm" style="margin-left:auto">open param space</button><button class="btn sm">launch search</button></div></div></div>
+    <div class="card"><h3>absorb <span class="pill c">new</span><span class="mini">absorption reversals</span></h3><div class="body">Heavy CVD against price with no follow-through — the book absorbing — then fade. <span class="feat"><b class="f-cvd">CVD</b><b class="f-ob">OB</b></span> required · <span class="feat"><b class="f-vp">VP</b></span> for targets.<div class="row" style="margin-top:8px"><span class="pill">5 pairs</span><span class="pill">15 ablations each</span><button class="btn sm" style="margin-left:auto">open param space</button><button class="btn sm">launch search</button></div></div></div>
+  </div>
+  <div class="card"><h3>Family status <span class="mini">searched at honest fees, through the same holdouts as the bases</span></h3>
+    <table><thead><tr><th>family</th><th>HYPE</th><th>SOL</th><th>XRP</th><th>SUI</th><th>DOGE</th><th class="n">best growth/mo</th><th>best run</th></tr></thead><tbody>
+    <tr><td>flowx</td><td><span class="pill g">15/15</span></td><td><span class="pill g">15/15</span></td><td><span class="pill a">9/15</span></td><td><span class="pill g">15/15</span></td><td><span class="pill">0/15</span></td><td class="n up">+27.7%</td><td class="mono dim">flowx_sui1m_absorb_v1</td></tr>
+    <tr><td>poctrend</td><td><span class="pill a">4/15</span></td><td><span class="pill">0/15</span></td><td><span class="pill">0/15</span></td><td><span class="pill">0/15</span></td><td><span class="pill">0/15</span></td><td class="n dim">—</td><td class="dim">—</td></tr></tbody></table></div>
+</div>
+
+<!-- ================================================================ DATA SOURCES ================================================================ -->
+<div id="T4" class="hide">
+  <div class="card"><h3>Data sources <button class="info">i</button><span class="mini">Binance USD-M bulk datasets aligned to MEXC candles by timestamp · MEXC funding-rate history</span></h3>
+    <table><thead><tr><th>pair</th><th>trades → CVD, VP</th><th>book depth ±1–5% (1m)</th><th>OI · long/short (5m)</th><th>MEXC funding (8h)</th><th>feature history</th><th>features built</th><th>status</th><th></th></tr></thead><tbody>
+    <tr><td>HYPE</td><td>2025-05-30 →</td><td>2025-05-30 →</td><td>2025-05-30 →</td><td>2025-05 →</td><td>16 months</td><td class="mono dim">1m · 3m</td><td><span class="pill g">synced</span></td><td><button class="btn sm">rebuild</button></td></tr>
+    <tr><td>SOL</td><td>2022-01 →</td><td>2024-05-18 →</td><td>2023-04 →</td><td>2023 →</td><td>28 months (book-limited)</td><td class="mono dim">1m · 3m</td><td><span class="pill g">synced</span></td><td><button class="btn sm">rebuild</button></td></tr>
+    <tr><td>XRP</td><td>2021-05 →</td><td>2024-05-17 →</td><td>2023-04 →</td><td>2023 →</td><td>28 months (book-limited)</td><td class="mono dim">1m · 3m</td><td><span class="pill g">synced</span></td><td><button class="btn sm">rebuild</button></td></tr>
+    <tr><td>SUI</td><td>2024-09-13 →</td><td>2024-09-13 →</td><td>2024-09-14 →</td><td>2024-09 →</td><td>24 months</td><td class="mono dim">1m · 3m</td><td><span class="pill g">synced</span></td><td><button class="btn sm">rebuild</button></td></tr>
+    <tr><td>DOGE</td><td>2021-11 →</td><td>2024-05-17 →</td><td>2023-04 →</td><td>2023 →</td><td>28 months (book-limited)</td><td class="mono dim">1m</td><td><span class="pill a">syncing 61%</span></td><td><button class="btn sm">rebuild</button></td></tr></tbody></table></div>
+  <div class="g3">
+    <div class="card"><h3>Feature definitions</h3><div class="body" style="font-size:12px"><b class="f-ob" style="padding:1px 5px;border-radius:4px">OB</b> bid/ask depth imbalance at ±1% and ±2%, plus spread · <b class="f-cvd" style="padding:1px 5px;border-radius:4px">CVD</b> true aggressor-signed cumulative delta, slope and divergence vs price · <b class="f-vp" style="padding:1px 5px;border-radius:4px">VP</b> rolling POC and value-area edges from tick volume at traded prices · <b class="f-oi" style="padding:1px 5px;border-radius:4px">OI</b> open-interest change over N bars, long/short ratio, funding skew.</div></div>
+    <div class="card"><h3>Sync</h3><div class="body"><div class="row"><span class="l">schedule</span><select><option>daily 03:00</option></select><button class="btn sm">sync now</button></div><div class="dim" style="font-size:11px">Binance daily zips are appended, features recomputed for the new day, engine caches cleared through update_data.py — the same rule as candles.</div></div></div>
+    <div class="card"><h3>Guards</h3><div class="body" style="font-size:12px">A run outside a feature's history is <b>refused</b>, not zero-filled. Features are joined by timestamp with a 1-bar lag so nothing looks ahead. Funding is charged at each 8h boundary a position is open, from MEXC's own rate.</div></div>
+  </div>
+</div>
+
+<!-- ================================================================ PARITY MAP ================================================================ -->
+<div id="T5" class="hide">
+  <div class="callout">Every feature on the classic Optimize and Backtests pages, and where it lives on this page. This is the checklist the build is held to.</div>
+  <div class="g2">
+    <div class="card"><h3>classic Optimize → here</h3><div class="body"><div class="parity" id="pOpt"></div></div></div>
+    <div class="card"><h3>classic Backtests → here</h3><div class="body"><div class="parity" id="pBt"></div></div></div>
+  </div>
+  <div class="card"><h3>only on this page</h3><div class="body"><div class="parity">
+    <div><span>base run + features + Δ vs base columns</span><span class="w">Optimize · Backtests</span></div><div><span>feature-combination axis in the gamut runner</span><span class="w">Optimize</span></div>
+    <div><span>feature matrix with column means and metric switch</span><span class="w">Matrix</span></div><div><span>gate column on trades (feature values at entry)</span><span class="w">Backtests detail</span></div>
+    <div><span>base-overlay on the equity chart</span><span class="w">Backtests detail</span></div><div><span>new-family status board</span><span class="w">New strategies</span></div>
+    <div><span>data coverage, sync, feature definitions, guards</span><span class="w">Data sources</span></div><div><span>funding modelled as a cost (column)</span><span class="w">Backtests</span></div>
+  </div></div></div>
+</div>
+
+    </div>
+  </div>
+</div>
+<script>
+function tab(i,btn){for(var k=0;k<6;k++)document.getElementById('T'+k).classList.toggle('hide',k!==i);[...btn.parentNode.children].forEach(function(b){b.classList.toggle('on',b===btn);});window.scrollTo(0,0);}
+var combos=['OB','CVD','VP','OI','OB+CVD','OB+VP','OB+OI','CVD+VP','CVD+OI','VP+OI','OB+CVD+VP','OB+CVD+OI','OB+VP+OI','CVD+VP+OI','all 4'];
+var rows=['macdx · SOL 3m','macdx · HYPE 1m','macdx · XRP 1m','v7 · HYPE 1m','v7 · SUI 3m','scalpx2 · DOGE 1m','scalpx2 · SOL 1m','rocx · XRP 3m','flowx · SUI 1m (new)','poctrend · HYPE 3m (new)'];
+var seed=11;function rnd(){seed=(seed*9301+49297)%233280;return seed/233280;}
+var mx=document.getElementById('mx');var h='<div></div>'+combos.map(function(c){return '<div class="h">'+c+'</div>';}).join('');
+var sums=combos.map(function(){return 0;});
+rows.forEach(function(r){h+='<div class="r">'+r+'</div>'+combos.map(function(c,j){var v=(rnd()*12-4);var na=rnd()<0.12;if(!na)sums[j]+=v;var bg=na?'#1b212a':(v>=0?'rgba(46,189,133,'+(0.12+Math.min(v,8)/8*0.5)+')':'rgba(246,70,93,'+(0.12+Math.min(-v,4)/4*0.5)+')');return '<div class="c" style="background:'+bg+'">'+(na?'<span class="dim">·</span>':(v>=0?'+':'')+v.toFixed(1))+'</div>';}).join('');});
+h+='<div class="r dim">mean Δ</div>'+sums.map(function(s){var v=s/rows.length;return '<div class="c" style="border-top:1px solid var(--line);color:'+(v>=0?'var(--up)':'var(--down)')+'">'+(v>=0?'+':'')+v.toFixed(1)+'</div>';}).join('');
+mx.innerHTML=h;
+var opt=[['Launch a search — all fields','Optimize · Launch'],['Autonomous campaign','Optimize'],['Gamut runner — chip matrix, holdouts, procs, start/stop/poll','Optimize · Gamut'],['Routers & combos — fcfsx, metax2, extend, run picker','Optimize · Routers'],['Parameter space — imported/AI, menus, save, defaults','Optimize · Param space'],['Jobs — progress, ETA, stop, dismiss, clear, resume banner','Optimize · Jobs'],['Remote workers — pause/resume/cores','Optimize · Workers'],['Runs — find, filters, load ALL','Optimize · Runs'],['Run actions — preview, story, backtest, top-10, adopt, 🔀, rename, rate, mark, delete','Optimize · Runs'],['Backtest preview panel + stats','Optimize · Runs › preview'],['Guide / docs links','info buttons']];
+var bt=[['Quick backtest (no optimizer)','Backtests · Quick'],['Filters — mode, verdict, sort, pair, tf, strategy, holdout','Backtests · Filters'],['Filters — risk, genome, routers, router-of, instance','Backtests · Filters'],['Filters — dates, max DD, max hold, win ≥, no-liq, no-neg, open-pos, ✓ holdouts','Backtests · Filters'],['Find by name · reset · timezone','Backtests · Filters'],['Published list — all columns incl. fees / fee_alt','Backtests · list'],['Router-builder selection, saved selections, → Optimize','Backtests · selection bar'],['Combine selection → Optimize','Backtests · selection bar'],['Re-run selected at current fees','Backtests · selection bar'],['Delete selected (with tombstones)','Backtests · selection bar'],['Detail — equity (MTM, log), monthly, trades, MAE basis','Backtests · detail'],['Ratings · marked best · open-position / gap notes','Backtests · list & detail']];
+
+document.getElementById('pOpt').innerHTML=opt.map(function(p){return '<div><span>'+p[0]+'</span><span class="w">'+p[1]+'</span></div>';}).join('');
+document.getElementById('pBt').innerHTML=bt.map(function(p){return '<div><span>'+p[0]+'</span><span class="w">'+p[1]+'</span></div>';}).join('');
+</script>
+</body></html>
