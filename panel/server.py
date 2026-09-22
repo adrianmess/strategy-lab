@@ -4201,7 +4201,7 @@ def _bt_verdict(name, kind):
     return "Train-best"
 
 
-_BTIDX_V = 2      # bump when the row schema changes (v2: enriched fields)
+_BTIDX_V = 3      # bump when the row schema changes (v3: enriched fields + fee)
 
 
 def _bt_index_build():
@@ -4260,7 +4260,8 @@ def _bt_index_build():
                 # enriched provenance (missing on classic entries)
                 features=obj.get("features") or [],
                 funding=bool(obj.get("funding")),
-                base_run=obj.get("base_run")))
+                base_run=obj.get("base_run"),
+                fee=obj.get("fee_per_side")))
         del s
         rows.sort(key=lambda r: (r.get("created") or ""), reverse=True)
         _BTIDX["rows"] = rows
@@ -6857,11 +6858,14 @@ def enriched_bases():
                    mode=r.get("mode"), method=r.get("method"),
                    growth=r.get("growth"), dd=r.get("dd"), win=r.get("win"),
                    verdict=r.get("verdict"), created=r.get("created"),
-                   oosbest=bool(pref))
+                   oosbest=bool(pref),
+                   # honest-fee entries first: anything costed before the
+                   # 2026-09-18 re-cost has no fee stamp and overstates
+                   fee=r.get("fee"), honest=r.get("fee") is not None)
         cells.setdefault(key, []).append(row)
     out = []
     for key, rows in cells.items():
-        rows.sort(key=lambda x: (-int(x["oosbest"]), -(x["growth"] or 0)))
+        rows.sort(key=lambda x: (-int(x["honest"]), -int(x["oosbest"]), -(x["growth"] or 0)))
         seen = set()
         for x in rows:
             if x["run"] in seen:

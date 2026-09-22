@@ -314,7 +314,7 @@ details>summary{cursor:pointer;color:var(--dim);font-size:11.5px;user-select:non
   <div class="card"><h3>Runs <button class="info" onclick="explain('runs')">i</button><span class="mini" id="runsNote"></span>
     <span class="right"><input id="runFind" placeholder="find run…" style="width:200px" oninput="renderRuns()">
       <select id="runScope" onchange="renderRuns()"><option value="enr">enriched only</option><option value="bases">bases of variants</option><option value="new">new families only</option><option value="all">all runs</option></select>
-      <select id="liqFilter" onchange="localStorage.liqFilter=this.value;renderRuns()"><option value="all">all</option><option value="trading">trading / running</option><option value="clean">clean (survived)</option><option value="liq">liquidated</option><option value="camp">campaign runs</option><option value="merged">merged</option><option value="gauntlet">✓ gauntlet</option><option value="nocamp">not campaign</option><option value="routers">routers</option><option value="norouters">no routers</option></select>
+      <select id="liqFilter" onchange="localStorage.enrLiqFilter=this.value;renderRuns()"><option value="all">all</option><option value="trading">trading / running</option><option value="clean">clean (survived)</option><option value="liq">liquidated</option><option value="camp">campaign runs</option><option value="merged">merged</option><option value="gauntlet">✓ gauntlet</option><option value="nocamp">not campaign</option><option value="routers">routers</option><option value="norouters">no routers</option></select>
       <span class="l">gate</span><span id="runFeatF" class="chips"></span>
       <select id="gapMode" title="gap handling for backtests launched from here"><option>skip_contaminated</option><option>skip_open</option></select>
       <a class="dim" id="runsAll" style="font-size:11px;cursor:pointer" onclick="RUNS_ALL=true;_runsHash='';refreshRuns()">load ALL runs (slow)</a></span></h3>
@@ -527,7 +527,7 @@ async function loadCoins(){
   ['symbol','rxSym','qbSym','dsCoin'].forEach(id=>{ const el=$(id); if(!el) return; const v=el.value; el.innerHTML=opts; if(v && [...el.options].some(o=>o.value===v)) el.value=v; });
   const saved = JSON.parse(localStorage.enrLaunch||'{}'); if(saved.symbol && [...$('symbol').options].some(o=>o.value===saved.symbol)) $('symbol').value=saved.symbol;
   const gm = JSON.parse(localStorage.enrGamut||'{}');
-  chipSet('gmPairs', COINS.map(c=>c.coin), gm.pairs||['sol','hype','xrp','sui','doge'].filter(c=>COINS.some(x=>x.coin===c)), {label:c=>c.toUpperCase()+(spotOnly(c)?'ˢ':''), onChange:gamutCount});
+  chipSet('gmPairs', COINS.map(c=>c.coin), (gm.pairs&&gm.pairs.length)?gm.pairs:['sol','hype','xrp','sui','doge'].filter(c=>COINS.some(x=>x.coin===c)), {label:c=>c.toUpperCase()+(spotOnly(c)?'ˢ':''), onChange:gamutCount});
   coverageNote();
 }
 
@@ -673,7 +673,7 @@ function gmSave(){ const o={baseFams:chipVals('gmBaseFams'), combos:chipVals('gm
 function gmBaseModeChanged(){ const m=$('gmBaseMode').value; $('gmPickRow').classList.toggle('hide', m==='none'); $('gmBaseIn').classList.toggle('hide', m!=='pick'); if(m==='top') gmLoadBases(); else gmRenderBases(); }
 async function gmLoadBases(){ if($('gmBaseMode').value!=='top') return gmRenderBases(); const fams=chipVals('gmBaseFams'), pairs=chipVals('gmPairs'); $('gmBaseNote').textContent='loading…';
   const j=await api('enriched/bases?families='+fams.join(',')+'&pairs='+pairs.join(',')+'&per='+(+$('gmPer').value||1)); GM_STORE_BASES=j.bases||[]; GM_BASES=GM_STORE_BASES.map(b=>b.run); gmRenderBases(); }
-function gmRenderBases(){ const m=$('gmBaseMode').value; const list = m==='none'?[]:GM_BASES; $('gmBaseChips').innerHTML=list.map((r,i)=>{ const b=GM_STORE_BASES.find(x=>x.run===r); return '<span class="chip" data-tip="'+escH(b?(stratName(b.strategy)+' · '+b.coin.toUpperCase()+' '+b.tf+'m · '+fp(b.growth)+'/mo · '+b.verdict):'picked')+'"><span class="mono">'+escH(r)+'</span>'+(b?' <span class="dim">'+fp(b.growth)+'</span>':'')+' <b onclick="GM_BASES.splice('+i+',1);gmRenderBases()">×</b></span>'; }).join('');
+function gmRenderBases(){ const m=$('gmBaseMode').value; const list = m==='none'?[]:GM_BASES; $('gmBaseChips').innerHTML=list.map((r,i)=>{ const b=GM_STORE_BASES.find(x=>x.run===r); return '<span class="chip" data-tip="'+escH(b?(stratName(b.strategy)+' · '+b.coin.toUpperCase()+' '+b.tf+'m · '+fp(b.growth)+'/mo · '+b.verdict+(b.honest?' · fee '+(100*b.fee).toFixed(2)+'%/side':' · NOT re-costed at honest fees — growth overstated')):'picked')+'"><span class="mono">'+escH(r)+'</span>'+(b?' <span class="'+(b.honest?'dim':'warn')+'">'+fp(b.growth)+(b.honest?'':' ⚠')+'</span>':'')+' <b onclick="GM_BASES.splice('+i+',1);gmRenderBases()">×</b></span>'; }).join('');
   $('gmBaseNote').textContent = m==='none' ? '' : (list.length+' base run'+(list.length===1?'':'s')+(m==='top'?' — best published per family × pair × chart (OOS-best preferred, no liquidation)':'')); gamutCount(); }
 function gmBaseAdd(){ const v=$('gmBaseIn').value.trim(); if(!v) return; if(!RUNS.some(r=>r.name===v)) return toast('unknown run '+v, true); if(!GM_BASES.includes(v)) GM_BASES.push(v); $('gmBaseIn').value=''; gmRenderBases(); }
 function gmCombos(){ const ks=chipVals('gmCombos'); const out=[]; const C=(arr,k)=>{ const res=[]; const rec=(s,c)=>{ if(c.length===k){res.push(c);return;} for(let i=s;i<arr.length;i++) rec(i+1,c.concat([arr[i]])); }; rec(0,[]); return res; }; for(let k=1;k<=4;k++) if(ks.includes('k'+k)) out.push(...C(FEATS,k)); return out; }
@@ -761,7 +761,7 @@ async function dismissJob(id){ await api('jobs/'+id+'/dismiss',{}); _jobsHash=''
 async function clearDoneJobs(){ const r=await api('jobs/clear_done',{}); toast('cleared '+(r.cleared||0)); _jobsHash=''; refreshJobs(); }
 /* =========================== runs table =========================== */
 let RUNS=[], RUNS_ALL=false, _runsHash='', sortKey='last_run', sortDir=-1, OPEN10=new Set(), JOBHIDE=new Set(), _runsTimer=null;
-$('liqFilter').value=localStorage.liqFilter||'all';
+$('liqFilter').value=localStorage.enrLiqFilter||'all';
 chipSet('runFeatF', FEATS, [], {label:f=>FEAT_LABEL[f], onChange:renderRuns});
 async function refreshRuns(){ clearTimeout(_runsTimer); let t; try{ t=await (await fetch('/api/runs2'+(RUNS_ALL?'?lim=0':''))).text(); }catch(e){ return; } const h=djb(t); if(h!==_runsHash){ _runsHash=h; try{ RUNS=JSON.parse(t); }catch(e){ return; } RUNS.forEach(deriveRun); fillCombine(); renderRuns(); }
   if(RUNS.some(r=>r.running)) _runsTimer=setTimeout(refreshRuns,5000); }
@@ -858,7 +858,7 @@ let TRADED=[], INSTRUNS=[], OOSMAP={}, GAUNT={}, RTRSAVED={}, RTRSEL=[], RTR_ONL
 let btSortKey=localStorage.enrBtSortKey||'created', btSortDir=+(localStorage.enrBtSortDir||-1), BT_CHART=null, _pfBusy=0;
 const tfNorm = t => { t=String(t==null?'3m':t); return /^\d+$/.test(t)?t+'m':t; };
 async function loadBT(quiet){ const scope=$('fScope').value; if(!quiet) $('btMatch').textContent='loading…';
-  if(scope==='all'){ const q=$('fFind').value.trim(); const j=await api('backtests_lite?limit=300'+(q?'&q='+encodeURIComponent(q):'')); BT=(j.rows||[]).map(r=>Object.assign({},r,{timeframe:r.tf, stats:{monthly_growth_pct:r.growth,total_mult:r.mult,maxdd_mtm:r.dd,n:r.n,win:r.win,liq:r.liq}, sl_class:r.sl, _lite:true})); $('btMatch').textContent=(j.state==='ready'?'':j.state+' · ')+BT.length+' of '+(j.total||0)+' (lite rows — switch scope to enriched for full detail)'; }
+  if(scope==='all'){ const q=$('fFind').value.trim(); const j=await api('backtests_lite?limit=300'+(q?'&q='+encodeURIComponent(q):'')); BT=(j.rows||[]).map(r=>Object.assign({},r,{timeframe:r.tf, stats:{monthly_growth_pct:r.growth,total_mult:r.mult,maxdd_mtm:r.dd,n:r.n,win:r.win,liq:r.liq}, sl_class:r.sl, _lite:true, detail:true})); $('btMatch').textContent=(j.state==='ready'?'':j.state+' · ')+BT.length+' of '+(j.total||0)+' (lite rows — switch scope to enriched for full detail)'; }
   else { const j=await api('enriched/backtests'); BT=j.rows||[]; BT_META=j.meta||{}; if(j.state==='building' && !BT.length){ $('btMatch').textContent='indexing the store… (retrying)'; setTimeout(()=>loadBT(true), 4000); } if(STOREV==null) STOREV=j.store_mt; }
   loadBtMeta(); $('tabBtN').textContent=BT.length; BTSEL=null; renderBT(); }
 function loadBtMeta(){ BT.forEach(e=>{ const m=BT_META[e.name]; if(m){ if(m.rating) e.rating=m.rating; else delete e.rating; if(m.best) e.best=true; else delete e.best; } else { delete e.rating; delete e.best; } }); }
