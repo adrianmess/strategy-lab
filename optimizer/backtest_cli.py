@@ -734,6 +734,7 @@ def run_single(cfg_path, oos_start=None, holdout_days=None, gap_mode="skip_conta
                     f"{_prevf or '-'} funding={_prevu or '0'} — run it in a fresh process")
         os.environ["LAB_FEATURES"] = _feats
         os.environ["LAB_FUNDING"] = _fund
+        os.environ["LAB_BASE_RUN"] = cfg.get("base_run") or ""
     cand = cfg.get("cand")
     if not cand:
         raise SystemExit("This run produced NO surviving candidate (see its report) — "
@@ -902,8 +903,16 @@ def build_entry(tr, eq, months, mdd, liq, curve, label_extra, open_positions=Non
             if _wf is not None else None)
     _fside = ("manual" if os.environ.get("LAB_FEE_OVERRIDE")
               else (os.environ.get("LAB_FEE_SIDE") or "taker").lower())
+    # enriched provenance: which feature gates / funding the sim ran with
+    # (run_single pins LAB_FEATURES / LAB_FUNDING / LAB_BASE_RUN from the
+    # config, so the entry records exactly what was simulated)
+    _feats = [f for f in (os.environ.get("LAB_FEATURES") or "").split(",") if f]
+    _enr = dict(features=_feats,
+                funding=(os.environ.get("LAB_FUNDING") == "1"))
+    if os.environ.get("LAB_BASE_RUN"):
+        _enr["base_run"] = os.environ["LAB_BASE_RUN"]
     return dict(fee_per_side=(float(_fee) if _fee is not None else None),
-                fee_side=_fside,
+                fee_side=_fside, **_enr,
                 stats=dict(months=months, final_eq=float(eq), total_mult=eq / 1000.0,
                            monthly_growth_pct=float((np.exp(g) - 1) * 100),
                            liq=bool(liq), maxdd_mtm=mdd, n=int(len(tr)),

@@ -4201,6 +4201,9 @@ def _bt_verdict(name, kind):
     return "Train-best"
 
 
+_BTIDX_V = 2      # bump when the row schema changes (v2: enriched fields)
+
+
 def _bt_index_build():
     """Lite index of dashboard/backtests.js.
 
@@ -4223,7 +4226,8 @@ def _bt_index_build():
         if os.path.exists(BT_INDEX_P):
             try:
                 doc = json.load(open(BT_INDEX_P))
-                if isinstance(doc, dict) and doc.get("src_mt") == mt:
+                if isinstance(doc, dict) and doc.get("src_mt") == mt \
+                        and doc.get("v") == _BTIDX_V:
                     _BTIDX["rows"] = doc["rows"]
                     _BTIDX["built"] = mt
                     return
@@ -4252,14 +4256,18 @@ def _bt_index_build():
                 dd=st.get("maxdd_mtm"), n=st.get("n"), win=st.get("win"),
                 liq=st.get("liq"), liq_ever=bool(obj.get("liq_ever")),
                 lev_x=obj.get("lev_x"), sl=obj.get("sl_class"),
-                last_open=obj.get("last_open")))
+                last_open=obj.get("last_open"),
+                # enriched provenance (missing on classic entries)
+                features=obj.get("features") or [],
+                funding=bool(obj.get("funding")),
+                base_run=obj.get("base_run")))
         del s
         rows.sort(key=lambda r: (r.get("created") or ""), reverse=True)
         _BTIDX["rows"] = rows
         _BTIDX["built"] = mt
         try:
             tmp = BT_INDEX_P + ".tmp"
-            json.dump(dict(src_mt=mt, rows=rows), open(tmp, "w"))
+            json.dump(dict(src_mt=mt, v=_BTIDX_V, rows=rows), open(tmp, "w"))
             os.replace(tmp, BT_INDEX_P)
         except Exception:
             pass
@@ -4452,10 +4460,22 @@ def job_backtest():
         qdir = os.path.join(OPT, "runs", "_backtest_tmp")
         os.makedirs(qdir, exist_ok=True)
         cfg = os.path.join(qdir, f"quick_{name}.json")
-        json.dump(dict(cand=d["cand"], strategy=d.get("strategy", "v7"),
-                       mode=d.get("mode", "lev"), method=d.get("method", "vol3"),
-                       kind="quick backtest (no optimizer)"),
-                  open(cfg, "w"))
+        qc = dict(cand=d["cand"], strategy=d.get("strategy", "v7"),
+                  mode=d.get("mode", "lev"), method=d.get("method", "vol3"),
+                  kind="quick backtest (no optimizer)")
+        # pair / timeframe / enriched provenance: backtest_cli pins the
+        # dataset and the feature frame from these (quick backtests used to
+        # be SOL 3m only)
+        if d.get("symbol"):
+            qc["pair"] = str(d["symbol"]).upper() + "_USDT"
+        if d.get("tf"):
+            qc["timeframe"] = f"{int(d['tf'])}m"
+        if d.get("features"):
+            qc["features"] = [f for f in (d["features"] if isinstance(d["features"], list)
+                                          else str(d["features"]).split(",")) if f]
+        if d.get("funding"):
+            qc["funding"] = True
+        json.dump(qc, open(cfg, "w"))
     else:
         cfg = d.get("config", "../adaptive_trader/research2/final_config_v6_lev_none.json")
     cmd = [sys.executable, "backtest_cli.py", "--config", cfg, "--name", name]
@@ -6643,10 +6663,24 @@ def gamut_start():
         except Exception:
             pass
     name = name or f"g{time.strftime('%m%d_%H%M')}"
-    for k in ("pairs", "strategies", "algos", "modes", "tfs", "methods",
-              "scorings", "max_dds", "max_holds", "holdouts", "totals"):
-        if not cfg.get(k):
-            return jsonify(error=f"select at least one option for '{k}'"), 400
+    enr = cfg.get("enriched")
+    if enr:
+        # enriched plan (gamut.build_plan_enriched): base runs x feature
+        # combos need no grid; the new-family grid needs the classic keys
+        if not (enr.get("base_runs") or enr.get("new_families")):
+            return jsonify(error="enriched: pick base runs and/or new families"), 400
+        if enr.get("new_families"):
+            for k in ("pairs", "algos", "modes", "tfs", "methods", "scorings",
+                      "max_dds", "max_holds", "holdouts"):
+                if not cfg.get(k):
+                    return jsonify(error=f"new families need at least one '{k}'"), 400
+        if not name.startswith("enr"):
+            name = "enr_" + name
+    else:
+        for k in ("pairs", "strategies", "algos", "modes", "tfs", "methods",
+                  "scorings", "max_dds", "max_holds", "holdouts", "totals"):
+            if not cfg.get(k):
+                return jsonify(error=f"select at least one option for '{k}'"), 400
     # never silently resume a DIFFERENT config under the same name
     base_name, n2 = name, 2
     while os.path.exists(os.path.join(OPT, "campaigns", f"gamut_{name}",
@@ -6671,6 +6705,309 @@ def gamut_start():
                    note=(None if runner == "host" else
                          "plan queued for the MacBook — its agent picks it "
                          "up within a minute (MacBook must be awake)"))
+
+
+# ---------------- enriched research (feature-gated / feature-native) ----------
+ENR_FEATURES = ("ob", "cvd", "vp", "oi")
+ENR_FAMILIES = ("flowx", "poctrend", "oisqueeze", "absorb")
+ENR_RESEARCH = os.path.join(REPO, "adaptive_trader", "research")
+ENR_FEAT_DIR = os.path.join(ENR_RESEARCH, "features")
+ENR_SYMBOL = {"sol": "SOLUSDT", "sui": "SUIUSDT", "hype": "HYPEUSDT",
+              "xrp": "XRPUSDT", "doge": "DOGEUSDT", "btc": "BTCUSDT",
+              "eth": "ETHUSDT"}
+
+
+def _enr_combos():
+    import itertools as _it
+    out = []
+    for k in range(1, 5):
+        out += ["_".join(c) for c in _it.combinations(ENR_FEATURES, k)]
+    return out
+
+
+@app.route("/enriched")
+def enriched_page():
+    """Enriched strategies — the terminal-styled research page for the
+    feature-gated variants and the feature-native families. Served beside
+    /terminal and the classic panel; the classic pages stay untouched."""
+    resp = send_from_directory(HERE, "enriched.html")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/api/enriched/status")
+def enriched_status():
+    """Data-source coverage per coin: raw Binance days built, per-tf feature
+    frames (rows covered, first/last), MEXC funding range, running builds."""
+    man = {}
+    try:
+        man = json.load(open(os.path.join(ENR_FEAT_DIR, "manifest.json")))
+    except Exception:
+        pass
+    coins = []
+    for coin in sorted(ENR_SYMBOL):
+        mc = (man.get("coins") or {}).get(coin) or {}
+        raw = os.path.join(ENR_FEAT_DIR, "raw", ENR_SYMBOL[coin])
+        days = []
+        if os.path.isdir(raw):
+            days = sorted(f[:10] for f in os.listdir(raw)
+                          if f.endswith(".parquet") and not f.endswith(".hist.parquet"))
+        fund = None
+        fp = os.path.join(ENR_RESEARCH, "data", f"funding_{coin}.json")
+        if os.path.exists(fp):
+            try:
+                f = json.load(open(fp))
+                if f:
+                    import datetime as _dt
+                    fund = dict(n=len(f),
+                                first=_dt.datetime.utcfromtimestamp(f[0][0] / 1000).strftime("%Y-%m-%d"),
+                                last=_dt.datetime.utcfromtimestamp(f[-1][0] / 1000).strftime("%Y-%m-%d"))
+            except Exception:
+                fund = None
+        cand = os.path.join(ENR_RESEARCH, "data", f"{coin}_3min.parquet")
+        coins.append(dict(coin=coin, symbol=ENR_SYMBOL[coin],
+                          has_candles=os.path.exists(cand),
+                          raw_days=len(days),
+                          raw_first=(days[0] if days else None),
+                          raw_last=(days[-1] if days else None),
+                          frames={k: v for k, v in mc.items() if k.startswith("tf")},
+                          funding=fund))
+    running = [dict(id=jid, name=j.get("name"), started=j.get("started"))
+               for jid, j in jobs.items()
+               if j.get("kind") == "enriched" and j["proc"].poll() is None]
+    return jsonify(coins=coins, features=list(ENR_FEATURES),
+                   families=list(ENR_FAMILIES), combos=_enr_combos(),
+                   running=running, feat_dir=ENR_FEAT_DIR)
+
+
+@app.route("/api/enriched/build", methods=["POST"])
+def enriched_build():
+    """Spawn a feature build (Binance bulk download + per-minute features +
+    per-tf frames) for one coin. Resumable: already-built days are skipped."""
+    d = request.get_json(force=True) or {}
+    coin = (d.get("coin") or "").lower()
+    if coin not in ENR_SYMBOL:
+        return jsonify(error=f"unknown coin '{coin}'"), 400
+    tfs = [str(int(t)) for t in (d.get("tfs") or [1, 3, 5]) if int(t) in (1, 3, 5)]
+    cmd = [sys.executable, "enriched_features.py", "build", "--coin", coin,
+           "--tf"] + tfs
+    if d.get("since"):
+        cmd += ["--since", str(d["since"])[:10]]
+    if d.get("force"):
+        cmd.append("--force")
+    for jid, j in jobs.items():
+        if j.get("kind") == "enriched" and j["proc"].poll() is None \
+                and j.get("name") == f"features_{coin}":
+            return jsonify(error=f"a build for {coin} is already running"), 409
+    return jsonify(id=spawn("enriched", f"features_{coin}", cmd, ENR_RESEARCH))
+
+
+def _enr_bt_rows():
+    """Lite backtest rows (scalars), triggering an index build if needed."""
+    p = os.path.join(DASH, "backtests.js")
+    try:
+        mt = os.path.getmtime(p)
+    except Exception:
+        return []
+    if _BTIDX["built"] < mt and not _BTIDX["building"]:
+        threading.Thread(target=_bt_index_build, daemon=True).start()
+    return _BTIDX["rows"] or []
+
+
+def _enr_run_of(name):
+    for suf in ("_oosbest_full", "_best_full", "_full", "_oosbest", "_best"):
+        if name.endswith(suf):
+            return name[:-len(suf)], suf
+    return name, ""
+
+
+@app.route("/api/enriched/bases")
+def enriched_bases():
+    """Candidate base runs: the best published (non-liquidated, OOS-best
+    preferred) backtest per strategy family x pair x tf, from the lite index.
+    ?families=macdx,v7 ?pairs=sol,hype ?per=1 (top N per cell)."""
+    fams = [x for x in (request.args.get("families") or "").lower().split(",") if x]
+    pairs = [x for x in (request.args.get("pairs") or "").lower().split(",") if x]
+    try:
+        per = max(1, min(10, int(request.args.get("per") or 1)))
+    except Exception:
+        per = 1
+    cells = {}
+    for r in _enr_bt_rows():
+        nm = r.get("name") or ""
+        if nm.startswith("enr_") or r.get("base_run") or r.get("features"):
+            continue                      # variants are never bases
+        st = (r.get("strategy") or "").lower()
+        if st in ENR_FAMILIES or st in ("metax", "metax2", "pairx", "fcfsx"):
+            continue
+        if fams and st not in fams:
+            continue
+        coin = ((r.get("pair") or "SOL_USDT").split("_")[0] or "").lower()
+        if pairs and coin not in pairs:
+            continue
+        if r.get("liq") or r.get("liq_ever") or r.get("growth") is None:
+            continue
+        run, suf = _enr_run_of(nm)
+        if not suf or suf in ("_oosbest", "_best"):
+            continue
+        tf = str(r.get("tf") or "3m").rstrip("m")
+        key = (st, coin, tf)
+        pref = 1 if suf == "_oosbest_full" else 0
+        row = dict(run=run, entry=nm, strategy=st, coin=coin, tf=tf,
+                   mode=r.get("mode"), method=r.get("method"),
+                   growth=r.get("growth"), dd=r.get("dd"), win=r.get("win"),
+                   verdict=r.get("verdict"), created=r.get("created"),
+                   oosbest=bool(pref))
+        cells.setdefault(key, []).append(row)
+    out = []
+    for key, rows in cells.items():
+        rows.sort(key=lambda x: (-int(x["oosbest"]), -(x["growth"] or 0)))
+        seen = set()
+        for x in rows:
+            if x["run"] in seen:
+                continue
+            seen.add(x["run"])
+            out.append(x)
+            if len(seen) >= per:
+                break
+    out.sort(key=lambda x: (x["strategy"], x["coin"], x["tf"], -(x["growth"] or 0)))
+    return jsonify(bases=out, n=len(out))
+
+
+_ENR_BT = {"mt": 0.0, "rows": [], "building": False}
+
+
+def _enr_bt_scope(obj):
+    nm = obj.get("name") or ""
+    return (nm.startswith("enr_") or bool(obj.get("features"))
+            or bool(obj.get("base_run"))
+            or (obj.get("strategy") or "").lower() in ENR_FAMILIES)
+
+
+def _enr_bt_build(mt):
+    """Slim list entries (no curves/trades — those live in bt_detail) for the
+    enriched scope, decoded one entry at a time from backtests.js."""
+    _ENR_BT["building"] = True
+    try:
+        p = os.path.join(DASH, "backtests.js")
+        s = open(p).read()
+        dec = json.JSONDecoder()
+        i = s.index("[") + 1
+        n = len(s)
+        rows = []
+        while True:
+            while i < n and s[i] in " \t\r\n,":
+                i += 1
+            if i >= n or s[i] == "]":
+                break
+            obj, i = dec.raw_decode(s, i)
+            if _enr_bt_scope(obj):
+                obj.pop("curve", None); obj.pop("trades", None)
+                obj.pop("config", None)
+                rows.append(obj)
+        del s
+        _ENR_BT["rows"] = rows
+        _ENR_BT["mt"] = mt
+    except Exception as e:
+        print(f"enriched bt list: {e}", flush=True)
+    finally:
+        _ENR_BT["building"] = False
+
+
+@app.route("/api/enriched/backtests")
+def enriched_backtests():
+    """Published backtests in the enriched scope (enr_* names, entries with
+    feature/base provenance, the new families) as FULL slim entries, so the
+    Enriched page can filter exactly like the classic page without loading
+    the 500MB store. Cached per backtests.js mtime; rebuilds in the
+    background and serves the previous list meanwhile."""
+    p = os.path.join(DASH, "backtests.js")
+    try:
+        mt = os.path.getmtime(p)
+    except Exception:
+        return jsonify(rows=[], state="no file", store_mt=None)
+    if _ENR_BT["mt"] != mt and not _ENR_BT["building"]:
+        threading.Thread(target=_enr_bt_build, args=(mt,), daemon=True).start()
+    rows = _ENR_BT["rows"]
+    meta = {}
+    try:
+        meta = json.load(open(os.path.join(DASH, "bt_meta.json")))
+    except Exception:
+        pass
+    return jsonify(rows=rows, meta=meta,
+                   state=("building" if _ENR_BT["building"] and not rows
+                          else "stale" if _ENR_BT["mt"] != mt else "ready"),
+                   store_mt=_ENR_BT["mt"])
+
+
+@app.route("/api/enriched/matrix")
+def enriched_matrix():
+    """Feature matrix: one row per base run, one column per feature combo,
+    cell = the variant's published backtest vs the base's. ?genome=oosbest|
+    train picks which published entry represents each run."""
+    genome = request.args.get("genome") or "oosbest"
+    rows = _enr_bt_rows()
+    by_run = {}
+    for r in rows:
+        run, suf = _enr_run_of(r.get("name") or "")
+        if suf not in ("_oosbest_full", "_full", "_best_full"):
+            continue
+        d = by_run.setdefault(run, {})
+        d[suf] = r
+
+    def pick(run):
+        d = by_run.get(run) or {}
+        if genome == "train":
+            return d.get("_full") or d.get("_best_full") or d.get("_oosbest_full")
+        return d.get("_oosbest_full") or d.get("_full") or d.get("_best_full")
+
+    combos = _enr_combos()
+    bases = {}
+    fam_rows = {}
+    for run, d in by_run.items():
+        r = pick(run)
+        if not r:
+            continue
+        st = (r.get("strategy") or "").lower()
+        if st in ENR_FAMILIES:
+            coin = ((r.get("pair") or "SOL_USDT").split("_")[0] or "").lower()
+            fr = fam_rows.setdefault(st, {}).setdefault(coin, dict(n=0, best=None))
+            fr["n"] += 1
+            if not r.get("liq") and r.get("growth") is not None and \
+                    (fr["best"] is None or r["growth"] > fr["best"]["growth"]):
+                fr["best"] = dict(run=run, entry=r["name"], growth=r["growth"],
+                                  dd=r.get("dd"), win=r.get("win"), tf=r.get("tf"))
+            continue
+        base = r.get("base_run")
+        feats = r.get("features") or []
+        if not base or not feats:
+            continue
+        combo = "_".join(f for f in ENR_FEATURES if f in feats)
+        b = bases.setdefault(base, dict(base=base, cells={}))
+        b["cells"][combo] = dict(run=run, entry=r["name"], growth=r.get("growth"),
+                                 dd=r.get("dd"), win=r.get("win"), liq=bool(r.get("liq")),
+                                 funding=bool(r.get("funding")), created=r.get("created"))
+    out = []
+    for base, b in bases.items():
+        br = pick(base)
+        b.update(strategy=(br or {}).get("strategy"), pair=(br or {}).get("pair"),
+                 tf=(br or {}).get("tf"), mode=(br or {}).get("mode"),
+                 base_growth=(br or {}).get("growth"), base_dd=(br or {}).get("dd"),
+                 base_win=(br or {}).get("win"), base_entry=(br or {}).get("name"))
+        for c in b["cells"].values():
+            if c["growth"] is not None and b["base_growth"] is not None:
+                c["delta"] = c["growth"] - b["base_growth"]
+        out.append(b)
+    out.sort(key=lambda b: (str(b.get("strategy")), str(b.get("pair")), b["base"]))
+    means = {}
+    for c in combos:
+        vals = [b["cells"][c]["delta"] for b in out
+                if c in b["cells"] and b["cells"][c].get("delta") is not None
+                and not b["cells"][c].get("liq")]
+        means[c] = (sum(vals) / len(vals)) if vals else None
+    return jsonify(combos=combos, rows=out, means=means,
+                   families={f: fam_rows.get(f, {}) for f in ENR_FAMILIES},
+                   genome=genome, indexed=len(rows))
 
 
 SYNC_LIMIT_P = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -7738,6 +8075,22 @@ def _opt2_cmd(d, name):
         cmd += ["--anchor", "defaults"]
     if d.get("anchor_strength"):
         cmd += ["--anchor-strength", str(d["anchor_strength"])]
+    # enriched search: feature gates (ob,cvd,vp,oi), funding cost, base-run
+    # provenance — the CLI refuses a pair/tf whose feature frame is missing
+    feats = d.get("features")
+    if isinstance(feats, (list, tuple)):
+        feats = ",".join(f for f in feats if f)
+    if feats:
+        cmd += ["--features", str(feats)]
+    if d.get("funding"):
+        cmd += ["--funding"]
+    if d.get("base_run"):
+        cmd += ["--base-run", os.path.basename(str(d["base_run"]))]
+    if d.get("space_file"):
+        sp = os.path.basename(str(d["space_file"]))
+        if re.fullmatch(r"[A-Za-z0-9_.\-]+\.json", sp):
+            cmd += ["--space", os.path.join("param_spaces", "variants", sp)
+                    if sp.endswith(".ai.json") else os.path.join("param_spaces", sp)]
     return cmd
 
 
@@ -8382,6 +8735,12 @@ def _runs2_scan():
                 # 2026-09-17; older runs have nothing and show "—")
                 e["fee_per_side"] = bc.get("fee_per_side")
                 e["fee_side"] = bc.get("fee_side") or bc.get("fee_mode")
+                # enriched provenance (feature gates searched, funding cost,
+                # the classic run this variant was derived from)
+                e["features"] = bc.get("features") or []
+                e["funding"] = bool(bc.get("funding"))
+                if bc.get("base_run"):
+                    e["base_run"] = bc.get("base_run")
                 fp = os.path.join(runs_dir, d, "backtest_flags.json")
                 if os.path.exists(fp):
                     try:

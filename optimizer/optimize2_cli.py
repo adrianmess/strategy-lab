@@ -142,6 +142,9 @@ def _apply_anchor(res, payload, space, strategy):
 
 def build_anchor_defaults(strategy, mode, R, space):
     """The strategy's stored live-default parameters as a candidate."""
+    if strategy in ("flowx", "poctrend", "oisqueeze", "absorb"):
+        from enriched_engine import defaults_enr
+        return defaults_enr(strategy, mode, R, space)
     if strategy in ("v7", "prime7"):
         from engine3 import DEFAULTS3
         base = dict(DEFAULTS3)

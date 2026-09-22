@@ -480,3 +480,33 @@ def build_P_enr(c, R):
             row.append(float(v[r] if isinstance(v, list) else v))
         rows.append(row)
     return np.array(rows, dtype=np.float64)
+
+
+def defaults_enr(fam, mode, R, space=None):
+    """A deterministic 'defaults' candidate: range midpoints, first menu
+    option, flags off — the quick-backtest / anchor starting point."""
+    s = space or space_section(fam)
+    cont = s.get("continuous") or {}
+    c = dict(strategy=fam)
+    for k in list(COMMON) + [FAMILIES[fam][slot][0] for slot in ("p1", "p2", "p3", "p4")]:
+        if k == "pad":
+            continue
+        rng = (cont.get(k) or {}).get("range")
+        if not rng:
+            kind, rng_, _ = COMMON.get(k, (None, None, None)) if k in COMMON else \
+                next(((kd, r, d) for kk, kd, r, d in FAMILIES[fam].values() if kk == k), (None, (0, 0), ""))
+            rng = rng_
+        mid = (float(rng[0]) + float(rng[1])) / 2.0
+        c[k] = [mid] * R
+    for slot in ("v1", "v2", "f1"):
+        k, kind, opts, _ = FAMILIES[fam][slot]
+        if k in ("pad", "f1"):
+            continue
+        if kind == "m":
+            c[k] = [float(opts[min(1, len(opts) - 1)])] * R
+        elif kind == "f":
+            c[k] = [0.0] * R
+    c["eL"] = [1.0] * R
+    c["eS"] = [1.0 if mode == "lev" else 0.0] * R
+    c["lev"] = [3.0 if mode == "lev" else 1.0] * R
+    return normalize_enr(c)
