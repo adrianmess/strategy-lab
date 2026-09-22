@@ -125,7 +125,7 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
 /* "was a bot running that day" — one plain line of text under the P&L,
    e.g. "bot off 5.1 h" / "2 bots off all day". Red by request; it never
    replaces or restyles the P&L figures themselves. */
-.cal .d .off{font-size:11px;color:var(--down)}
+.cal .d .off{font-size:11px;color:var(--blue)}
 .cal .d .n{font-size:11px;color:var(--dim)}
 .cal .d .v{font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
 .cal .d .v.up{color:var(--up)}.cal .d .v.dn{color:var(--down)}
@@ -1433,12 +1433,14 @@ function renderCalendar(ev, scopeTxt){
       // outage). One bot: say how long. Several: just the count — summing
       // hours across bots gives "34 h" in a 24 h day; the hover has details.
       var down = bots.filter(function(bt){ return bt.allDay || bt.offH >= 0.25; });
-      if(down.length === 1){
-        var bt = down[0];
-        offHtml = bt.allDay ? 'bot off all day'
-                : 'bot off ' + (bt.offH < 1 ? Math.round(bt.offH*60)+' min' : bt.offH.toFixed(1)+' h');
-      } else if(down.length > 1){
-        offHtml = down.every(function(bt){ return bt.allDay; }) ? 'bots off all day' : down.length + ' bots off';
+      // Adrian's wording (2026-09-21): "1 of 2 bots off" / "All bots off" /
+      // "All bots off all day". A restart blip under 15 min is not an
+      // outage. Hours live in the hover.
+      if(down.length){
+        if(down.length === bots.length)
+          offHtml = 'All bots off' + (down.every(function(bt){ return bt.allDay; }) ? ' all day' : '');
+        else
+          offHtml = down.length + ' of ' + bots.length + ' bots off';
       }
       tip = bots.map(function(bt){
         return bt.name + ': ' + (bt.notes.length ? bt.notes.join(', ') : 'ran all day') + (bt.dry ? ' (dry run)' : '');
@@ -1462,6 +1464,10 @@ function renderCalendar(ev, scopeTxt){
         h += '<span class="v '+dir+'">'+calMoney(b.pnl)+'</span>'+
              '<span class="c"><span class="'+dir+'" style="font-weight:600">'+p+'</span> &middot; '+trades+'</span>';
     }
+    else if(!(new Date(y, m, day) > now && day !== todayKey))
+      // a past day with nothing closed reads "0 trades" in the same place
+      // and style as a trading day, so an empty cell is never ambiguous
+      h += '<span class="v" style="visibility:hidden">&nbsp;</span><span class="c">0 trades</span>';
     if(offHtml) h += '<span class="off">'+offHtml+'</span>';
     h += '</div>';
   }
