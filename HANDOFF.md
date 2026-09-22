@@ -1,5 +1,72 @@
 # Strategy Lab — Session Handoff
-Updated: 2026-09-22 (honest-fee re-search COMPLETE, fleet torn down). Paste into a new session to resume. Keep this file updated as work progresses.
+Updated: 2026-09-22 (ENRICHED research built end-to-end; honest-fee re-search complete, fleet torn down). Paste into a new session to resume. Keep this file updated as work progresses.
+
+## BUILT 2026-09-22: ENRICHED strategies — order book · CVD · volume profile · OI + funding
+
+Adrian's ask: re-search the best classic runs with one or more of four
+microstructure data sources (every single, pair, triple and the quad = 15
+variants per base), plus at least four brand-new families that trade the
+data directly, on HYPE/SOL/XRP/SUI/DOGE, on their own terminal-styled page
+with everything the classic Optimize + Backtests pages have. All six phases
+are in; e2e verified on the mini (`enr_e2e_sol3m_macdx__ob_cvd`, 3k evals,
+both auto-backtests published with `features/funding/base_run` stamped and
+visible in the feature matrix). Page: **`/enriched`** (rail icon ◈ in the
+terminal UI). Everything is opt-in — with no features enabled every engine
+is byte-identical to before (`optimizer/tests_enriched/test_gates.py`).
+
+**Data layer** — `adaptive_trader/research/enriched_features.py`
+(`build --coin X --since 2024-05-17 --tf 1 3 5` · `assemble` · `funding` ·
+`status`). Binance USD-M bulk zips (aggTrades, bookDepth ±1..5 %, 5-min
+metrics/OI) → `research/features/raw/<SYM>/<day>.parquet` (per-minute) →
+`research/features/<coin>_<tf>min.parquet` aligned to the MEXC candle file
+(obi1/2/5, cvd, poc120/300/600, vah/val, oi, fund_settle/fund_rate) +
+`manifest.json`. MEXC funding history in `research/data/funding_<coin>.json`
+(only reaches back to ~2025-03; earlier bars charge 0). ~2 s/day/coin.
+Book depth starts 2024-05-17 (SOL/XRP/DOGE), 2024-09-13 (SUI), 2025-05-30
+(HYPE) — frames cannot reach further back. Builds also run as panel jobs
+from the Data sources tab (`/api/enriched/build`). Status 2026-09-22 12:30:
+SOL 1/3/5m complete and synced to the mini; SUI, DOGE, XRP, HYPE still
+building on the MacBook (`features/logs/build_<coin>.log`; xrp was re-run
+after a manifest race lost its bin_width — the manifest write is now
+flock'd). **Sync the finished frames + manifest to the mini's
+`research/features/` before launching anything there** (rsync; they are
+50–130 MB each and not in git).
+
+**Engine** — `research2/enriched.py`: `LAB_FEATURES=ob,cvd,vp,oi` and
+`LAB_FUNDING=1` (set by optimize2_cli `--features/--funding`, pinned by
+backtest_cli from the config); `attach()` adds `f_*` arrays to every cached
+pre at load (never pickled); per-regime gate params (`gObMin/gObLvl`,
+`gCvdZ/gCvdLen`, `gVpDist/gVpLook`, `gOiChg/gOiWin/gOiDir`) injected into the
+family's space; `gate_kwargs()` → `no_long/no_short` masks every core now
+accepts; `charge_funding()` subtracts MEXC funding per trade (perps).
+`research2/enriched_engine.py`: the four new families **flowx** (CVD-z
+cross + book agreement), **poctrend** (POC breakout held N bars),
+**oisqueeze** (OI up against price, breakout), **absorb** (one-sided flow
+that fails to make a new low, revert to POC) on one numba core; ranges in
+`param_space.json`; `/api/defaults` works for them.
+
+**Provenance** — `best_config.json`, `launch.json`, `/api/runs2` rows and
+every published backtest carry `features`, `funding`, `base_run`.
+Backtest names: `enr_<base>__ob_cvd` style (`+` is not filename-safe).
+
+**Gamut** — a config with an `"enriched"` block builds the plan
+(`gamut.build_plan_enriched`): base runs × combos (reconstructed from each
+base's own launch command, funding on) + new families across the classic
+grid with all four features. Same spec shape, so workers/progress/STOP work
+unchanged. `/api/enriched/bases` picks the best published run per family ×
+pair × tf (honest-fee entries first — a ⚠ on the page marks bases that
+were never re-costed). Nothing has been launched yet beyond the e2e test —
+the 37-base × 15 + 40 new-family plan (~600 specs, ~10 h at 14 procs by
+the classic rate) is one click on the Gamut card once the frames are synced.
+
+**Page** — `panel/enriched.html` (`/enriched`), server endpoints
+`/api/enriched/{status,build,bases,matrix,backtests}`; the classic pages
+are untouched. Tabs: Optimize (launch with base/features/funding, combine,
+campaign, workers, enriched gamut, routers, param space, jobs, preview,
+runs), Backtests (quick backtest per pair/tf, every classic filter + the
+enriched ones, selection bars, detail with base/variant overlay and a
+per-trade funding column), Feature matrix (Δ vs base per combo, means,
+CSV), New strategies, Data sources, Parity map (the checklist).
 
 ## DONE 2026-09-22: gamut_hfee_mh12 — the honest-fee re-search, fleet torn down
 

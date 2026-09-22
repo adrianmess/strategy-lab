@@ -112,6 +112,11 @@ overrides web rates, 0-fee promos and MX discounts:
   2026-09; check the data range first).
 - Published backtests: `dashboard/backtests.js` (append via flock; entries
   named `<run>_full`, `<run>_oosbest_full`, routers `*_fcfs_full/_fcfs_wf`).
+- ENRICHED research (2026-09-22): `/enriched` page; features in
+  `research/features/` (built by `research/enriched_features.py`, NOT in
+  git — rsync frames + `manifest.json` to the mini before launching there);
+  `LAB_FEATURES` / `LAB_FUNDING` env are the only switches, so a classic run
+  is byte-identical to before. Details in HANDOFF.md.
 - Market data refresh must go through
   `adaptive_trader/research/update_data.py` (it clears engine caches — stale
   caches silently simulate old windows).
