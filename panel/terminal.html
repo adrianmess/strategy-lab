@@ -769,36 +769,40 @@ function renderKpis(){
           INSTS.length + ' live', 0);
     return;
   }
-  var now = Date.now(), acct = acctFilter();
+  // same scope as the cumulative card: origin (countedEvents), account AND
+  // wallet (spot / futures / both) — the wallet select used to be ignored
+  // here (2026-09-22)
+  var now = Date.now(), acct = acctFilter(), mode = CUMMODE;
   var ev = countedEvents().filter(function(e){
-    return !acct || e.account === acct; });
+    return (!acct || e.account === acct) && (!mode || e.mode === mode); });
   function win(days){
     var lo = now - days * 86400000;
     var sel = ev.filter(function(e){ return e.t >= lo; });
     return {sum: sel.reduce(function(a,e){ return a + e.pnl; }, 0),
+            pos: sel.reduce(function(a,e){ return a + (isFinite(e.pct) ? e.pct : 0); }, 0),
             n: sel.length};
   }
   var w1 = win(1), w7 = win(7), w30 = win(30);
   var ex = allEvents().filter(function(e){
     return e.ignored && e.t >= now - 30 * 86400000
-        && (!acct || e.account === acct); }).length;
+        && (!acct || e.account === acct) && (!mode || e.mode === mode); }).length;
   var lbl = (ORIGIN ? ' · ' + ORIGIN + ' only' : '') +
-            (acct ? ' · ' + acct : '');
+            (acct ? ' · ' + acct : '') +
+            (mode ? ' · ' + (mode === 'lev' ? 'futures' : 'spot') + ' wallet' : '');
   var rvals = Object.keys(PNL_RESET).map(function(k){ return PNL_RESET[k]; });
   if(rvals.length)
     lbl += ' · fresh since ' + rvals.sort()[0].slice(5, 16);
   var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
-  var p1 = dietzPctSafe(d1, 1, acct), p7 = dietzPctSafe(d7, 7, acct),
-      p30 = dietzPctSafe(d30, 30, acct);
-  // an empty window shows a bare +0.00% (Adrian's call, 2026-09-21); the
-  // trade count in the subtitle says why
-  function val(d, p, w){ return fig(d, p.pct, p.approx); }
+  // % = the trades' % of position summed over the window — the same figure
+  // as the calendar and the history page (Adrian, 2026-09-22); an empty
+  // window shows a bare +0.00%, the trade count in the subtitle says why
+  function val(d, w){ return fig(d, w.pos, null); }
   document.getElementById('kpis').innerHTML =
-    kpi('Realized 24h', val(d1, p1, w1),
-        w1.n + ' trades · % on avg capital at risk' + lbl, d1, 'overview.kpis') +
-    kpi('Realized 7d', val(d7, p7, w7),
-        w7.n + ' trades · % on avg capital at risk' + lbl, d7, 'overview.kpis') +
-    kpi('Realized 30d', val(d30, p30, w30), w30.n + ' trades' +
+    kpi('Realized 24h', val(d1, w1),
+        w1.n + ' trades · % of position' + lbl, d1, 'overview.kpis') +
+    kpi('Realized 7d', val(d7, w7),
+        w7.n + ' trades · % of position' + lbl, d7, 'overview.kpis') +
+    kpi('Realized 30d', val(d30, w30), w30.n + ' trades · % of position' +
         (ex ? ' · ' + ex + ' excluded' : '') + lbl, d30, 'overview.kpis') +
     kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
@@ -1197,7 +1201,7 @@ var CALM = null;   // calendar month on screen {y, m}; null = the current month
 function setCumMode(v){
   CUMMODE = (v === 'spot' || v === 'lev') ? v : '';
   localStorage.setItem('slCumMode', CUMMODE);
-  renderChart();
+  renderChart(); renderKpis();
 }
 // equity denominator for a scope: one account or all, one wallet or both
 function scopeEquity(acct, mode){
