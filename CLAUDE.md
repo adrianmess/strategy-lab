@@ -115,7 +115,8 @@ overrides web rates, 0-fee promos and MX discounts:
 - Market data refresh must go through
   `adaptive_trader/research/update_data.py` (it clears engine caches — stale
   caches silently simulate old windows).
-- AWS EC2 fleet: torn down 2026-09-16 after gamut_gspot_newpairs +
-  gamut_gorig_mh12 completed (results verified on the mini first). Nothing
+- AWS EC2 fleet: torn down 2026-09-22 after gamut_hfee_mh12 (6,048 specs,
+  the honest-fee re-search) completed and was verified on the mini. Nothing
   billable remains — only the free `gamut-ssh` SG and `gamut-key` key pair
-  were kept for the next rebuild. Rebuild guide: `docs/EC2_OFFLOAD_RUNBOOK.md`.
+  were kept for the next rebuild. Rebuild guide: `docs/EC2_OFFLOAD_RUNBOOK.md`
+  (read the core-budget and launch-template lessons in it first).

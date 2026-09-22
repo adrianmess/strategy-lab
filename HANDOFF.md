@@ -1,7 +1,32 @@
 # Strategy Lab — Session Handoff
-Updated: 2026-09-19 (honest-fee re-search live on EC2). Paste into a new session to resume. Keep this file updated as work progresses.
+Updated: 2026-09-22 (honest-fee re-search COMPLETE, fleet torn down). Paste into a new session to resume. Keep this file updated as work progresses.
 
-## ACTIVE: gamut_hfee_mh12 — the honest-fee re-search (started 2026-09-19 ~01:30)
+## DONE 2026-09-22: gamut_hfee_mh12 — the honest-fee re-search, fleet torn down
+
+**6,048/6,048 specs on the mini** (6,047 from the fleet + MacBook; the last
+one, `hfee_mh12_btc1m_macdx_gen_s_volXtrend9_wo_d50_m1_hN`, failed on both
+boxes with a JSONDecodeError — a spot replacement left a truncated
+`pool2.json` that every retry tried to resume from — and was re-run fresh on
+the MacBook). ~2,600+ entries published to the Backtests page as
+`hfee_mh12_*`, all costed at the API schedule, all risk-classified.
+
+Torn down 2026-09-22 (verified afterwards — see "nothing billable" below):
+both spot fleets deleted with termination, both Elastic IPs released, AMI
+`ami-0ff0093f637438856` + snapshot deregistered/deleted, launch templates
+`gamut-hfee-A/-B` deleted, S3 bucket `gamut-sync-637309463295` emptied and
+removed (13.7GB of runs — all already on the mini, which was their source),
+IAM role + instance profile `gamut-box` deleted. Kept: `gamut-ssh` SG and
+`gamut-key` key pair (free). Also stopped: the mini's `offload_sync` loop,
+its `fleet_healthcheck` cron, the MacBook's worker + `mac_gamut_peer.sh`
+loop, and the twice-daily Claude fleet-review task. The `macbook` IAM user's
+access key was left in place (Adrian's call whether to keep it).
+
+Cost note: the campaign took ~3 days instead of ~1 because of the two
+core-budget incidents recorded below; the fixes (self-sizing boot scripts,
+launch-template v3, `fleet_healthcheck.sh`) are what make the next run
+cheap — read them before rebuilding.
+
+### (history) gamut_hfee_mh12 as it ran — started 2026-09-19 ~01:30
 
 The repair for the mis-selection described below: the whole gorig_mh12 grid
 (**6,048 specs**) re-searched at the fees the account actually pays.
