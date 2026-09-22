@@ -178,7 +178,7 @@ Explored because web fees are far cheaper, then dropped on ToS grounds: MEXC's R
 2. ~~Re-search a gamut campaign at honest fees~~ — RUNNING, see `gamut_hfee_mh12` at the top of this file.
 3. Spot **maker entries** — spot has resting TPs but `limit_entry` is futures-only. Spot maker/maker is a *zero* fee round trip, by far the best return on effort left.
 4. Time Machine exclusions + reboot on the mini.
-5. MEX 2 Lev is STOPPED. Before re-enabling maker/maker, raise `limit_entry_timeout_s` from 5s (Cascade uses 75s) — 5s on a 1m strategy sends almost every entry down the cancel path.
+5. ~~raise `limit_entry_timeout_s`~~ — Adrian decided the opposite on 2026-09-21: **5s is the default** (was 75) and MEX2 LEV - SL is set to 5. The post-only now rests at the touch, so a few seconds is the honest test; one attempt, then market. Both changes take effect on MEX2 LEV - SL's next restart (Adrian, confirm-LIVE).
 
 
 ## CLOSED: EC2 fleet #2 (2026-08-10 → 2026-08-15)
