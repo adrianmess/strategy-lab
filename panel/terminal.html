@@ -4055,7 +4055,7 @@ function renderCfg(){
         '<span>maker entries<span class="mini" style="display:block">post-only limit entries instead of taker market opens</span></span></label>'+
       '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:11px">'+
         '<div>' + lab('entry timeout s') +
-          '<input id="cLeTo" style="width:80px" placeholder="75" value="' +
+          '<input id="cLeTo" style="width:80px" placeholder="5" value="' +
           (c.limit_entry_timeout_s!=null?c.limit_entry_timeout_s:'') + '"></div>'+
         '<div>' + lab('on timeout') +
           '<select id="cLeChase"><option value="market"' +
@@ -4080,7 +4080,7 @@ function saveCfg(btn){
     execution: (v('cExec') === 'browser' ? 'browser' : 'api'),
     emergency_exit_adverse: em ? (+em/100) : null,
     resting_tp: ck('cRtp'), limit_entry: ck('cLimEnt'),
-    limit_entry_timeout_s: (+v('cLeTo') || 75),
+    limit_entry_timeout_s: (+v('cLeTo') || 5),
     limit_entry_on_timeout: v('cLeChase') === 'cancel' ? 'cancel' : 'market',
     limit_entry_offset_bps: (+v('cLeOff') || 0)
   };

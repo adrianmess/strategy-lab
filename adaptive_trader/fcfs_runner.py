@@ -557,7 +557,12 @@ def main_fcfs(cfg, live):
     le_on = bool(cfg.get("limit_entry")) and mode == "lev"
     if cfg.get("limit_entry") and mode != "lev":
         log.warning("limit_entry: spot not supported yet — market entries")
-    LE_TIMEOUT = float(cfg.get("limit_entry_timeout_s", 75))
+    # 5s by Adrian's call (2026-09-21, was 75): a maker entry that has not
+    # filled in a few seconds is a market that moved away, and waiting for it
+    # "could mean the difference between a loss and a gain". The price now
+    # rests AT the touch (book-anchored), so it fills when the market comes
+    # to us or it doesn't — one attempt, then market.
+    LE_TIMEOUT = float(cfg.get("limit_entry_timeout_s", 5))
     LE_CHASE = str(cfg.get("limit_entry_on_timeout", "market")).lower()
     LE_OFF = float(cfg.get("limit_entry_offset_bps", 0)) / 10000.0
     if le_on:
@@ -1346,7 +1351,10 @@ def main_fcfs(cfg, live):
                                  else (_pxn >= pe["limit_px"])):
                         _entry_filled(pe, pe["qty"], pe["limit_px"])
                         continue
-                elif now - float(pe.get("checked", 0)) > 10:
+                elif now - float(pe.get("checked", 0)) > 2:
+                    # poll every 2s while an entry is pending (was 10s — with a
+                    # 5s timeout that gate would have hidden a fill or a
+                    # post-only rejection for the entire window)
                     pe["checked"] = now
                     st_ = ex_for(pe["symbol"]).entry_state(pe["oid"],
                                                            pe["dir"])
