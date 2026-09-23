@@ -3493,6 +3493,20 @@ function tdTabHist(){
   return h+'<div class="mini" style="margin-top:6px">'+tdAcctLabel(TD.acct, TD.mkt)+
     ' &middot; cached ~30s <button class="btn sm" onclick="tdHistLoad(true)">&#8635;</button></div></div>';
 }
+function tdHeld(ms){
+  var m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if(m < 60) return m + 'm';
+  if(m < 1440) return Math.floor(m/60) + 'h ' + (m%60) + 'm';
+  return Math.floor(m/1440) + 'd ' + Math.floor((m%1440)/60) + 'h';
+}
+function tdOpened(p){
+  // real open time from the runner (opened_ms / opened_at); a late-join
+  // shows the virtual entry it picked up instead
+  var ms = p.opened_ms || (p.opened_at ? Date.parse(String(p.opened_at).replace(' ', 'T')) : null);
+  if(ms) return tdTime(ms).slice(0, 16) + ' <span class="dim">&middot; ' + tdHeld(ms) + '</span>';
+  if(p.mirror_entry_t) return '<span title="virtual entry (UTC bar) — real open time not recorded">' + p.mirror_entry_t + ' <span class="dim">(virtual)</span></span>';
+  return '&mdash;';
+}
 function renderTdBots(){
   // strategy-owned trades: each running bot's REAL position (with its
   // shadow/virtual origin, if adopted) + the router's current virtual trades
@@ -3508,7 +3522,7 @@ function renderTdBots(){
     if(!ps.length) return; // only REAL bot-opened trades here — no virtual-only rows
     var inner = '';
     inner += '<table class="tfit"><thead><tr>'+
-      '<th>symbol</th><th>side</th><th>source</th><th class="n">qty</th>'+
+      '<th>symbol</th><th>side</th><th>source</th><th title="when the real position was opened (local time) and how long it has been held">opened</th><th class="n">qty</th>'+
       '<th class="n">market entry</th>'+
       '<th class="n">now</th>'+
       '<th class="n" title="the trade\'s price move since open — the unleveraged P&amp;L %">price &Delta;</th>'+
@@ -3530,6 +3544,7 @@ function renderTdBots(){
         ? '<span class="tag" style="background:rgba(245,181,68,.13);color:var(--warn);box-shadow:inset 0 0 0 1px rgba(245,181,68,.45)" '+
           'title="picked up from an already-open shadow (virtual entry '+(p.mirror_entry_t||'?')+') via late-join">SHADOW LATE-JOIN</span>'
         : '<span class="tag b">BOT SIGNAL</span>')+'</td>'+
+      '<td class="mini" style="white-space:nowrap">'+tdOpened(p)+'</td>'+
       '<td class="n">'+(p.qty!=null?p.qty:'&mdash;')+'</td>'+
       '<td class="n">'+(p.entry_price?(+p.entry_price).toPrecision(6):'&mdash;')+'</td>'+
       '<td class="n">'+(px?(+px).toPrecision(6):'&mdash;')+'</td>'+
