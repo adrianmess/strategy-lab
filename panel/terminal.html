@@ -3017,6 +3017,9 @@ function tdBarTime(ms){
   return rows[lo].time;
 }
 function tdMarkersUpdate(){
+  try{ tdMarkersUpdate_(); }catch(e){ console.warn('markers', e); try{ TD.series.setMarkers([]); }catch(_){} }
+}
+function tdMarkersUpdate_(){
   if(!TD.series || !TD.rows || !TD.rows.length) return;
   if(!TD.ind.trades){ TD.series.setMarkers([]); TD.mkByIdx = {}; return; }
   var sym = TD.pair + '_USDT', wm = TD.mkt === 'fut' ? 'lev' : 'spot';
@@ -3155,6 +3158,16 @@ function tdKlines(){
     var c = TD.rows.map(function(r){ return r.close; });
     TD.emaData = {};
     TD_EMAS.forEach(function(n){ TD.emaData[n] = tdEma(c, n); });
+    if(fresh){
+      // pair / timeframe switch: drop the old pair's markers BEFORE the new
+      // candles land (marker times that no longer exist can wedge the
+      // renderer), and size the price axis to the new price level
+      try{ TD.series.setMarkers([]); }catch(e){}
+      var lastPx = TD.rows.length ? TD.rows[TD.rows.length - 1].close : 1;
+      var prec = lastPx >= 1000 ? 1 : lastPx >= 100 ? 2 : lastPx >= 1 ? 3 : lastPx >= 0.1 ? 4 : lastPx >= 0.01 ? 5 : 6;
+      TD.series.applyOptions({priceFormat:{type:'price', precision:prec, minMove:Math.pow(10, -prec)}});
+      TD.chart.priceScale('right').applyOptions({autoScale:true});
+    }
     TD.series.setData(TD.rows);
     if(TD.vol) TD.vol.setData(TD.rows.map(function(r){
       return {time:r.time, value:r.vol||0,
