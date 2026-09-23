@@ -3035,13 +3035,12 @@ function tdMarkersUpdate(){
     var to = tdBarTime(e.open_t);
     if(to != null) add({time: to, position: isL ? 'belowBar' : 'aboveBar',
       shape: isL ? 'arrowUp' : 'arrowDown', color: isL ? '#2ebd85' : '#f6465d', size: 1,
-      // short on-chart label; the full line lives in the hover legend
-      text: (isL ? 'L' : 'S') + lev, k: 0,
+      text: (isL ? 'Long' : 'Short') + lev + fpx(e.entry), k: 0,
       full: (isL ? 'Long' : 'Short') + lev + fpx(e.entry) + ' · ' + who + ' · opened ' + tdTime(e.open_t).slice(5, 16)});
     var tc = tdBarTime(e.t);
     if(tc != null) add({time: tc, position: isL ? 'aboveBar' : 'belowBar', shape: 'circle',
       color: up ? '#2ebd85' : '#f6465d', size: 1,
-      text: e.pct != null ? (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '%' : (up ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(0), k: 1,
+      text: 'Close' + fpx(e.exit) + ' ' + pnlTxt, k: 1,
       full: 'Close ' + (isL ? 'long' : 'short') + fpx(e.exit) + ' ' + pnlTxt + ' · ' + who + ' · closed ' + tdTime(e.t).slice(5, 16)});
   });
   var st = TD.state || {};
@@ -3050,28 +3049,34 @@ function tdMarkersUpdate(){
     var isL = p.side === 'long', to = tdBarTime(p.opened_ms);
     if(to == null) return;
     add({time: to, position: isL ? 'belowBar' : 'aboveBar', shape: isL ? 'arrowUp' : 'arrowDown',
-      color: '#f0b90b', size: 1.3, text: (isL ? 'L' : 'S') + (p.lev ? ' ' + p.lev + 'x' : '') + ' open', k: 0,
+      color: '#f0b90b', size: 1.3, text: (isL ? 'Long' : 'Short') + (p.lev ? ' ' + p.lev + 'x' : '') + fpx(p.avg) + ' · open', k: 0,
       full: (isL ? 'Long' : 'Short') + (p.lev ? ' ' + p.lev + 'x' : '') + fpx(p.avg) + ' · still open · ' + tdTime(p.opened_ms).slice(5, 16)});
   });
   ms.sort(function(a, b){ return a.time - b.time || a.k - b.k; });
   // hover legend: every marker's full line, by bar
   TD.mkByIdx = {};
   ms.forEach(function(m){ (TD.mkByIdx[m.idx] = TD.mkByIdx[m.idx] || []).push({color: m.color, full: m.full}); });
-  // de-clutter: on each side of the bars, a label is drawn only if it does
-  // not run into the previous drawn label at the current bar spacing;
-  // markers on the same bar and side are merged into one label. Re-run on
-  // zoom so labels come back when there is room (tdSyncRange).
+  // overlap handling (labels are centred on their bar and drawn at a fixed
+  // offset, so two labels on the same side within a label-width collide):
+  // a colliding label moves to the other side of the bars when that side is
+  // free there; if both sides are taken it is hidden — the hover legend
+  // still lists it. Re-run on zoom (tdSyncRange) as the spacing changes.
   var sp = 6;
   try{ sp = TD.chart.timeScale().options().barSpacing || 6; }catch(e){}
-  var out = [], lastBy = {aboveBar: null, belowBar: null};
-  ms.forEach(function(m){
-    var last = lastBy[m.position];
-    if(last && last.idx === m.idx){ last.text += ' | ' + m.text; last.shape = 'circle'; return; }
-    var needBars = Math.ceil((last ? last.text.length * 6.5 : 0) / sp) + 1;
-    var draw = !last || (m.idx - last.idx) >= needBars;
-    var mm = {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: draw ? m.text : '', idx: m.idx};
-    if(draw) lastBy[m.position] = mm;
-    out.push(mm);
+  var halfW = function(m){ return (m.text.length * 6.5 / 2) / sp; };   // in bars
+  var drawn = {aboveBar: [], belowBar: []};
+  var free = function(side, m){
+    return drawn[side].every(function(d){ return Math.abs(d.idx - m.idx) >= halfW(d) + halfW(m) + 1; });
+  };
+  var out = ms.map(function(m){
+    var mm = {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: m.text, idx: m.idx};
+    if(free(mm.position, mm)) drawn[mm.position].push(mm);
+    else {
+      var other = mm.position === 'aboveBar' ? 'belowBar' : 'aboveBar';
+      if(free(other, mm)){ mm.position = other; drawn[other].push(mm); }
+      else mm.text = '';
+    }
+    return mm;
   });
   TD.series.setMarkers(out.map(function(m){ return {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: m.text}; }));
 }
