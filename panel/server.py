@@ -3339,7 +3339,7 @@ def _spot_realized(sapi, symbols, since_ms):
                 o["fee"] += float(f.get("commission") or 0)
             o["time"] = max(o["time"], float(f.get("time") or 0))
         trades = sorted(orders.values(), key=lambda o: o["time"])
-        lots = []                      # [qty, price, fee_per_unit]
+        lots = []                      # [qty, price, fee_per_unit, buy_time]
         for t in trades:
             qty = t["qty"]
             px = (t["quote"] / qty) if qty else 0.0
@@ -3348,12 +3348,15 @@ def _spot_realized(sapi, symbols, since_ms):
             if not qty:
                 continue
             if t["isBuyer"]:
-                lots.append([qty, px, fee / qty if qty else 0.0])
+                lots.append([qty, px, fee / qty if qty else 0.0, ts])
                 continue
             need, pnl = qty, -fee            # the sell's own fee
             cost = 0.0                       # what the matched lots cost us
             entry_px, matched = 0.0, 0.0
+            open_t = None                    # first matched buy = position open
             while need > 1e-12 and lots:
+                if open_t is None:
+                    open_t = lots[0][3]
                 take = min(need, lots[0][0])
                 pnl += take * (px - lots[0][1]) - take * lots[0][2]
                 cost += take * lots[0][1] + take * lots[0][2]
@@ -3371,7 +3374,7 @@ def _spot_realized(sapi, symbols, since_ms):
                 # spot has no P&L field, so the percent is the return on what
                 # the matched lots actually cost — the spot equivalent of
                 # MEXC's profitRatio
-                events.append(dict(t=ts, symbol=sym, realized=pnl,
+                events.append(dict(t=ts, open_t=open_t, symbol=sym, realized=pnl,
                                    id="s:" + str(t.get("oid")),
                                    pct=round(100 * pnl / cost, 4) if cost else None,
                                    entry=round(entry_px / matched, 8) if matched else None,
@@ -3401,6 +3404,8 @@ def _futures_realized(fapi, since_ms):
                 # estimate). im is zeroed once the margin is released, so it
                 # cannot be used as a denominator after the fact.
                 events.append(dict(t=ts, symbol=r.get("symbol"),
+                                   # position open (chart markers)
+                                   open_t=float(r.get("createTime") or 0) or None,
                                    realized=float(r.get("realised") or 0),
                                    id="f:" + str(r.get("positionId")
                                                  or f"{r.get('symbol')}@{int(ts)}"),

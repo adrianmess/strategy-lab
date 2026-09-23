@@ -1155,6 +1155,7 @@ function loadPnl(){
       try{ localStorage.setItem('slPnlSnap',
         JSON.stringify({events:d.events, at:Date.now()})); }catch(e){}
       renderChart(); renderDaily(); renderKpis(); renderHistory(); renderRisk();
+      if(typeof tdMarkersUpdate === 'function') tdMarkersUpdate();
     }
   }).catch(function(){});
 }
@@ -1166,7 +1167,7 @@ function allEvents(){
         return (p.account || st.api_account) === s.account
             && (p.mode || st.mode) === s.mode;
       });
-      return {t:s.t, pnl:s.realized, pct:s.pct, entry:s.entry, exit:s.exit,
+      return {t:s.t, open_t:s.open_t, pnl:s.realized, pct:s.pct, entry:s.entry, exit:s.exit,
               side:s.side, lev:s.lev, symbol:s.symbol,
               inst:(inst ? inst.id : 'x:' + s.account + ':' + s.mode),
               id:s.id, ignored:!!s.ignored, reason:s.reason,
@@ -2694,6 +2695,7 @@ var TD = {pair:(localStorage.getItem('tdPair')||'BTC'), tf:'15m', mkt:'fut', acc
           rows:[], sub:{}, hcache:{}, allPos:null, allT:0,
           emaData:{}, emaS:null, vol:null, timeIdx:{}, legendEl:null};
 if(!('ema' in TD.ind)) TD.ind.ema = true;   // EMA overlay on by default
+if(!('trades' in TD.ind)) TD.ind.trades = true;   // entry/exit markers on by default
 var TD_EMAS = [5, 10, 30, 60];
 var TD_EMA_COLORS = {5:'#f0b90b', 10:'#2ebd85', 30:'#4c8dff', 60:'#8b5cf6'};
 // instant paint: restore the last known positions/balances snapshot so the
@@ -2996,6 +2998,55 @@ function tdIndUpdate(){
   } else tdDropSub('BB');
   var r = TD.chart && TD.chart.timeScale().getVisibleLogicalRange();
   if(r) tdSyncRange('main', r);
+  tdMarkersUpdate();
+}
+// ---- entry / exit markers (TradingView-style) ---------------------------
+// Closed positions come from /api/pnl_events (all accounts x markets, 30d,
+// with open_t); open ones from the trade state. Each is snapped to the bar
+// that contains it, so markers survive a timeframe switch.
+function tdBarTime(ms){
+  if(!ms || !TD.rows || !TD.rows.length) return null;
+  var t = ms / 1000 + tdTzOffSec(ms / 1000);
+  var rows = TD.rows, lo = 0, hi = rows.length - 1;
+  if(t < rows[0].time) return null;
+  while(lo < hi){ var mid = (lo + hi + 1) >> 1; if(rows[mid].time <= t) lo = mid; else hi = mid - 1; }
+  return rows[lo].time;
+}
+function tdMarkersUpdate(){
+  if(!TD.series || !TD.rows || !TD.rows.length) return;
+  if(!TD.ind.trades){ TD.series.setMarkers([]); return; }
+  var sym = TD.pair + '_USDT', wm = TD.mkt === 'fut' ? 'lev' : 'spot';
+  var px = function(v){ return v == null ? '' : ' @' + tdFmtPx(+v); };
+  var ms = [];
+  allEvents().forEach(function(e){
+    if(e.symbol !== sym || e.mode !== wm) return;
+    if(!TD.posAll && e.account !== TD.acct) return;
+    var isL = e.side !== 'SHORT';
+    var who = (e.origin === 'bot' ? (e.name || 'bot') : 'manual') + (TD.posAll ? ' · ' + e.account : '');
+    var to = tdBarTime(e.open_t);
+    if(to != null) ms.push({time: to, position: isL ? 'belowBar' : 'aboveBar',
+      shape: isL ? 'arrowUp' : 'arrowDown', color: isL ? '#2ebd85' : '#f6465d', size: 1,
+      text: (isL ? 'Long' : 'Short') + (e.lev > 1 ? ' ' + e.lev + 'x' : '') + px(e.entry), _k: 0, _tip: who});
+    var tc = tdBarTime(e.t);
+    if(tc != null){
+      var up = (e.pnl != null ? e.pnl : e.realized) >= 0, v = e.pnl != null ? e.pnl : e.realized;
+      ms.push({time: tc, position: isL ? 'aboveBar' : 'belowBar', shape: 'circle',
+        color: up ? '#2ebd85' : '#f6465d', size: 1,
+        text: 'Close' + px(e.exit) + ' ' + (up ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(2) +
+              (e.pct != null ? ' (' + (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '%)' : ''), _k: 1, _tip: who});
+    }
+  });
+  // still-open futures positions on this account (open time from the state)
+  var st = TD.state || {};
+  if(TD.mkt === 'fut') (st.positions || []).forEach(function(p){
+    if(p.symbol !== sym || !p.opened_ms) return;
+    var isL = p.side === 'long', to = tdBarTime(p.opened_ms);
+    if(to == null) return;
+    ms.push({time: to, position: isL ? 'belowBar' : 'aboveBar', shape: isL ? 'arrowUp' : 'arrowDown',
+      color: '#f0b90b', size: 1.3, text: (isL ? 'Long' : 'Short') + (p.lev ? ' ' + p.lev + 'x' : '') + px(p.avg) + ' · open', _k: 0});
+  });
+  ms.sort(function(a, b){ return a.time - b.time || a._k - b._k; });
+  TD.series.setMarkers(ms.map(function(m){ return {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: m.text}; }));
 }
 function tdIndToggle(k){
   TD.ind[k] = !TD.ind[k];
@@ -3013,12 +3064,13 @@ function tdRefreshChips(){
   var iw = document.getElementById('tdInds');
   if(iw){
     iw.innerHTML = '';
-    [['ema','EMA'],['macd','MACD'],['rsi','RSI'],['bb','BB %B']].forEach(function(x){
+    [['ema','EMA'],['macd','MACD'],['rsi','RSI'],['bb','BB %B'],['trades','Trades']].forEach(function(x){
       var b = document.createElement('button');
       b.className = 'btn sm'; b.style.borderRadius = '20px';
       if(TD.ind[x[0]]){ b.style.borderColor = 'var(--violet)'; b.style.color = 'var(--violet)'; }
       b.textContent = x[1];
       b.title = x[0]==='ema' ? 'toggle EMA 5/10/30/60 overlay on the chart'
+              : x[0]==='trades' ? 'toggle entry / exit markers for this pair, account and market (closed positions from the last 30 days + open positions)'
                              : 'toggle ' + x[1] + ' pane under the chart';
       b.onclick = function(){ tdIndToggle(x[0]); };
       iw.appendChild(b); iw.append(' ');
@@ -3103,6 +3155,7 @@ function tdApply(d){
         '</b> holds a '+TD.pair+' position — manual orders on that account change the STRATEGY\'S position.</div>'
       : '';
     tdKeepInputs(function(){ tdPanel(); renderTdPos(); });
+    tdMarkersUpdate();
 }
 function tdState(){
   var k = tdKey();
