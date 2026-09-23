@@ -2832,7 +2832,9 @@ function tdInit(){
       ? TD.timeIdx[p.time] : TD.rows.length - 1;
     tdLegendShow(i);
   });
-  TD.chart.timeScale().subscribeVisibleLogicalRangeChange(function(r){ tdSyncRange('main', r); });
+  TD.chart.timeScale().subscribeVisibleLogicalRangeChange(function(r){ tdSyncRange('main', r);
+    // bar spacing changed on zoom: re-decide which marker labels fit
+    clearTimeout(TD._mkT); TD._mkT = setTimeout(tdMarkersUpdate, 150); });
   new ResizeObserver(function(){
     if(!el.clientWidth) return;
     TD.chart.applyOptions({width:el.clientWidth});
@@ -2949,6 +2951,8 @@ function tdLegendShow(i){
       return '<span style="color:'+TD_EMA_COLORS[n]+'">EMA '+n+' '+
         tdFmtPx((TD.emaData[n]||[])[i])+'</span>';
     }).join(' &nbsp;')+'</div>';
+  var mk = (TD.mkByIdx || {})[i];
+  if(mk) h += mk.map(function(m){ return '<div style="color:'+m.color+'">&#9679; '+m.full+'</div>'; }).join('');
   el.innerHTML = h;
 }
 function tdIndUpdate(){
@@ -3014,39 +3018,62 @@ function tdBarTime(ms){
 }
 function tdMarkersUpdate(){
   if(!TD.series || !TD.rows || !TD.rows.length) return;
-  if(!TD.ind.trades){ TD.series.setMarkers([]); return; }
+  if(!TD.ind.trades){ TD.series.setMarkers([]); TD.mkByIdx = {}; return; }
   var sym = TD.pair + '_USDT', wm = TD.mkt === 'fut' ? 'lev' : 'spot';
-  var px = function(v){ return v == null ? '' : ' @' + tdFmtPx(+v); };
+  var fpx = function(v){ return v == null ? '' : ' @' + tdFmtPx(+v); };
   var ms = [];
+  function add(m){ m.idx = TD.timeIdx[m.time]; ms.push(m); }
   allEvents().forEach(function(e){
     if(e.symbol !== sym || e.mode !== wm) return;
     if(!TD.posAll && e.account !== TD.acct) return;
     var isL = e.side !== 'SHORT';
     var who = (e.origin === 'bot' ? (e.name || 'bot') : 'manual') + (TD.posAll ? ' · ' + e.account : '');
+    var lev = e.lev > 1 ? ' ' + e.lev + 'x' : '';
+    var v = e.pnl != null ? e.pnl : e.realized, up = (v || 0) >= 0;
+    var pnlTxt = (up ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(2) +
+                 (e.pct != null ? ' (' + (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '%)' : '');
     var to = tdBarTime(e.open_t);
-    if(to != null) ms.push({time: to, position: isL ? 'belowBar' : 'aboveBar',
+    if(to != null) add({time: to, position: isL ? 'belowBar' : 'aboveBar',
       shape: isL ? 'arrowUp' : 'arrowDown', color: isL ? '#2ebd85' : '#f6465d', size: 1,
-      text: (isL ? 'Long' : 'Short') + (e.lev > 1 ? ' ' + e.lev + 'x' : '') + px(e.entry), _k: 0, _tip: who});
+      // short on-chart label; the full line lives in the hover legend
+      text: (isL ? 'L' : 'S') + lev, k: 0,
+      full: (isL ? 'Long' : 'Short') + lev + fpx(e.entry) + ' · ' + who + ' · opened ' + tdTime(e.open_t).slice(5, 16)});
     var tc = tdBarTime(e.t);
-    if(tc != null){
-      var up = (e.pnl != null ? e.pnl : e.realized) >= 0, v = e.pnl != null ? e.pnl : e.realized;
-      ms.push({time: tc, position: isL ? 'aboveBar' : 'belowBar', shape: 'circle',
-        color: up ? '#2ebd85' : '#f6465d', size: 1,
-        text: 'Close' + px(e.exit) + ' ' + (up ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(2) +
-              (e.pct != null ? ' (' + (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '%)' : ''), _k: 1, _tip: who});
-    }
+    if(tc != null) add({time: tc, position: isL ? 'aboveBar' : 'belowBar', shape: 'circle',
+      color: up ? '#2ebd85' : '#f6465d', size: 1,
+      text: e.pct != null ? (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '%' : (up ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(0), k: 1,
+      full: 'Close ' + (isL ? 'long' : 'short') + fpx(e.exit) + ' ' + pnlTxt + ' · ' + who + ' · closed ' + tdTime(e.t).slice(5, 16)});
   });
-  // still-open futures positions on this account (open time from the state)
   var st = TD.state || {};
   if(TD.mkt === 'fut') (st.positions || []).forEach(function(p){
     if(p.symbol !== sym || !p.opened_ms) return;
     var isL = p.side === 'long', to = tdBarTime(p.opened_ms);
     if(to == null) return;
-    ms.push({time: to, position: isL ? 'belowBar' : 'aboveBar', shape: isL ? 'arrowUp' : 'arrowDown',
-      color: '#f0b90b', size: 1.3, text: (isL ? 'Long' : 'Short') + (p.lev ? ' ' + p.lev + 'x' : '') + px(p.avg) + ' · open', _k: 0});
+    add({time: to, position: isL ? 'belowBar' : 'aboveBar', shape: isL ? 'arrowUp' : 'arrowDown',
+      color: '#f0b90b', size: 1.3, text: (isL ? 'L' : 'S') + (p.lev ? ' ' + p.lev + 'x' : '') + ' open', k: 0,
+      full: (isL ? 'Long' : 'Short') + (p.lev ? ' ' + p.lev + 'x' : '') + fpx(p.avg) + ' · still open · ' + tdTime(p.opened_ms).slice(5, 16)});
   });
-  ms.sort(function(a, b){ return a.time - b.time || a._k - b._k; });
-  TD.series.setMarkers(ms.map(function(m){ return {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: m.text}; }));
+  ms.sort(function(a, b){ return a.time - b.time || a.k - b.k; });
+  // hover legend: every marker's full line, by bar
+  TD.mkByIdx = {};
+  ms.forEach(function(m){ (TD.mkByIdx[m.idx] = TD.mkByIdx[m.idx] || []).push({color: m.color, full: m.full}); });
+  // de-clutter: on each side of the bars, a label is drawn only if it does
+  // not run into the previous drawn label at the current bar spacing;
+  // markers on the same bar and side are merged into one label. Re-run on
+  // zoom so labels come back when there is room (tdSyncRange).
+  var sp = 6;
+  try{ sp = TD.chart.timeScale().options().barSpacing || 6; }catch(e){}
+  var out = [], lastBy = {aboveBar: null, belowBar: null};
+  ms.forEach(function(m){
+    var last = lastBy[m.position];
+    if(last && last.idx === m.idx){ last.text += ' | ' + m.text; last.shape = 'circle'; return; }
+    var needBars = Math.ceil((last ? last.text.length * 6.5 : 0) / sp) + 1;
+    var draw = !last || (m.idx - last.idx) >= needBars;
+    var mm = {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: draw ? m.text : '', idx: m.idx};
+    if(draw) lastBy[m.position] = mm;
+    out.push(mm);
+  });
+  TD.series.setMarkers(out.map(function(m){ return {time: m.time, position: m.position, shape: m.shape, color: m.color, size: m.size, text: m.text}; }));
 }
 function tdIndToggle(k){
   TD.ind[k] = !TD.ind[k];
