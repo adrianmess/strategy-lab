@@ -3259,6 +3259,26 @@ def oos_map():
         ob = _v(((st.get("holdout_best") or {}).get("holdout")))
         if tb or ob:
             out[d_] = dict(tb=tb, ob=ob)
+    # Published <run>_HOLDOUT / <run>_oosbest_HOLDOUT entries (the bulk
+    # holdout-test, /api/backtests/holdout_selected) fill a verdict the run
+    # itself never produced — hN legs have no holdout of their own — so the
+    # "own OOS" pill and the ✓-all-holdouts filter see the genome as tested.
+    try:
+        for r in (_BTIDX.get("rows") or []):
+            n = r.get("name") or ""
+            if not n.endswith("_HOLDOUT"):
+                continue
+            rn, slot = n[:-8], "tb"
+            if rn.endswith("_oosbest"):
+                rn, slot = rn[:-8], "ob"
+            v = ("L" if r.get("liq")
+                 else ("P" if (r.get("growth") or 0) > 0 else "N"))
+            cur = out.setdefault(rn, dict(tb=None, ob=None))
+            if not cur.get(slot):
+                cur[slot] = v
+                cur[slot + "_from"] = n
+    except Exception:
+        pass
     return jsonify(out)
 
 
@@ -5327,6 +5347,109 @@ def bt_rerun_router():
                  "--hub", "http://localhost:8800"] + fee_args, REPO)
     return jsonify(ok=True, id=jid, n=len(items),
                    entries=[i["name"] for i in items], missing=missing)
+
+
+def _holdout_window(genome):
+    """The out-of-sample window for one genome, from the run's own settings:
+    alternating layouts -> holdout_days; 'after date' layouts -> train_end;
+    everything else (hN, hB, hBtw, hOut) -> from the day the run was
+    GENERATED, since no candle after that could have been in its training
+    data. Returns (oos_start | None, holdout_days | None, how)."""
+    g = genome or {}
+    hd = g.get("holdout_days")
+    try:
+        if hd and float(hd) > 0:
+            return None, float(hd), f"alternating {hd}-day blocks"
+    except (TypeError, ValueError):
+        pass
+    te = g.get("train_end")
+    if te and str(te) not in ("None", ""):
+        return str(te)[:10], None, f"after train end {str(te)[:10]}"
+    gen = str(g.get("generated") or "")[:10]
+    if gen:
+        return gen, None, f"since the run was generated ({gen})"
+    return None, None, ""
+
+
+@app.route("/api/backtests/holdout_selected", methods=["POST"])
+def bt_holdout_selected():
+    """Holdout-test the genomes of published entries, in bulk, in one worker
+    job: {"names": [entry, ...]}. Each entry's OWN genome is simulated on
+    its out-of-sample window only (see _holdout_window) and published as
+    <run>_HOLDOUT (or <run>_oosbest_HOLDOUT), kind 'from <date>' /
+    'alternating', so the Backtests page reads it as an OOS entry and the
+    source entry's "own OOS" pill picks it up. Adrian's ask (2026-09-25):
+    the hN legs of passed gauntlet families were never holdout-tested."""
+    d = request.get_json(force=True) or {}
+    names = [str(n) for n in (d.get("names") or []) if n]
+    if not names:
+        return jsonify(error="need a names list"), 400
+    p = os.path.join(REPO, "dashboard", "backtests.js")
+    txt = open(p).read()
+    entries = json.JSONDecoder().raw_decode(
+        txt[txt.index("=") + 1:].lstrip())[0]
+    by = {x.get("name"): x for x in entries}
+    del txt, entries
+    items, missing, windows = [], [], {}
+    for nm in names:
+        e = by.get(nm)
+        it = _rerun_item(e) if e else None
+        if not it:
+            missing.append(nm)
+            continue
+        base, run = nm, nm
+        for s in ("_oosbest_full", "_best_full", "_full"):
+            if nm.endswith(s):
+                run = nm[:-len(s)]
+                base = run + ("_oosbest" if s == "_oosbest_full" else "")
+                break
+        # holdout_best_config.json carries no run-level settings (train_end,
+        # holdout_days, generated) — read them off the sibling best_config
+        win_src = dict(it["genome"])
+        if not (win_src.get("generated") or win_src.get("train_end")
+                or win_src.get("holdout_days")):
+            try:
+                sib = json.load(open(os.path.join(OPT, "runs", run,
+                                                  "best_config.json")))
+                for k in ("generated", "train_end", "holdout_days"):
+                    win_src.setdefault(k, sib.get(k))
+            except Exception:
+                pass
+        oos, hd, how = _holdout_window(win_src)
+        if not oos and not hd:
+            missing.append(nm)
+            continue
+        it["name"] = base + "_HOLDOUT"
+        it["source_entry"] = nm
+        it["kind"] = None            # the worker keeps run_single's OOS kind
+        if oos:
+            it["oos_start"] = oos
+        if hd:
+            it["holdout_days"] = hd
+        items.append(it)
+        windows[nm] = how
+    _seen = set()
+    items = [it for it in items
+             if it["name"] not in _seen and not _seen.add(it["name"])]
+    if not items:
+        return jsonify(error="none of the selected entries has a genome "
+                             "with a holdout window", missing=missing), 404
+    sd = os.path.join(REPO, "dashboard", "bt_refresh")
+    os.makedirs(sd, exist_ok=True)
+    shard = os.path.join(sd,
+                         f"ho_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
+    json.dump(items, open(shard, "w"))
+    fee_args = _fee_override_args(d)
+    jid = spawn("backtest",
+                f"holdout-test {len(items)} genomes on their own OOS windows"
+                + (f" @fee {fee_args[1]}/side" if fee_args else ""),
+                [sys.executable,
+                 os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
+                 "--shard", shard, "--procs", str(int(d.get("procs") or 4)),
+                 "--hub", "http://localhost:8800"] + fee_args, REPO)
+    return jsonify(ok=True, id=jid, n=len(items),
+                   entries=[i["name"] for i in items], windows=windows,
+                   missing=missing)
 
 
 _BT_KICK = threading.Event()

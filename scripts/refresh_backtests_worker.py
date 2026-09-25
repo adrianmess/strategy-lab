@@ -83,7 +83,13 @@ def run_one(path, hub):
             os.environ.setdefault("LAB_FEE_OVERRIDE", repr(float(_fee)))
     except (TypeError, ValueError):
         pass
-    e = BT.run_single(cfgp)
+    # holdout-only items (panel /api/backtests/holdout_selected): simulate
+    # the genome on its out-of-sample window only, either from a date or on
+    # alternating day blocks — run_single stamps the OOS `kind` itself
+    _oos = it.get("oos_start") or None
+    _hd = it.get("holdout_days") or None
+    e = BT.run_single(cfgp, _oos, holdout_days=_hd) if (_oos or _hd) \
+        else BT.run_single(cfgp)
 
     # ---- second pass at the OTHER side of the book ----------------------
     # Every run_single_* does `from wf2 import ... FUT_COMM, SPOT_COMM`
@@ -124,7 +130,8 @@ def run_one(path, hub):
     entry = dict(
         name=it["name"], pair=it["pair"], timeframe=it["timeframe"],
         mode=it["mode"], method=it.get("method") or e.get("method"),
-        kind=it.get("kind"), opt=it.get("opt"),
+        kind=it.get("kind") or e.get("kind"), opt=it.get("opt"),
+        source_entry=it.get("source_entry"),
         strategy=e.get("strategy"), config=e.get("config"),
         stats=e.get("stats"), monthly=e.get("monthly"),
         # carry the fee basis through, or the re-costed entry lands back on
