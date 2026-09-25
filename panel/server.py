@@ -4341,6 +4341,36 @@ def backtests_lite():
         rows = [r for r in rows if r["verdict"] == verdict]
     if mode:
         rows = [r for r in rows if r.get("mode") == mode]
+    if request.args.get("nooos"):
+        # "family ✓ but own genome never holdout-tested": the entry's run
+        # belongs to a fully-passed gauntlet family (>=3 judged legs) and
+        # neither the run nor a published <run>_HOLDOUT gives ITS genome a
+        # verdict. Mirrors enriched.html's pill; server-side so the whole
+        # 67k-row store can be sifted, not the 300 the page loads.
+        with app.test_request_context("/api/gauntlet"):
+            gaunt = gauntlet_api().get_json() or {}
+        with app.test_request_context("/api/oos_map"):
+            om = oos_map().get_json() or {}
+        _SUF = ("_oosbest_full", "_oosbest", "_full", "_best_full", "_best")
+
+        def _nooos(r):
+            n = r.get("name") or ""
+            k = str(r.get("kind") or "")
+            if (k.startswith(("from ", "alternating", "original, from"))
+                    or "walk-forward" in k or "causal" in k.lower()):
+                return False                # it IS an OOS entry
+            rn, ob = n, False
+            for s in _SUF:
+                if n.endswith(s):
+                    rn, ob = n[:-len(s)], s in ("_oosbest_full", "_oosbest")
+                    break
+            g = gaunt.get(rn)
+            if not (g and g.get("full") and (g.get("have") or 0) >= 3
+                    and g.get("passed") == g.get("have")):
+                return False
+            v = (om.get(rn) or {}).get("ob" if ob else "tb")
+            return not v
+        rows = [r for r in rows if _nooos(r)]
     total = len(rows)
     # default NEWEST FIRST: sorting by growth buried freshly published runs
     # hundreds of rows deep ("my campaign's runs aren't appearing")
@@ -4351,8 +4381,12 @@ def backtests_lite():
     else:
         rows = sorted(rows, key=lambda r: str(r.get("created") or ""),
                       reverse=True)
+    # limit=all lifts the 300-row cap (the enriched Backtests page's "every
+    # entry" scope showed only 300 of 67k — the bulk holdout-test needs to
+    # see every candidate); rows are ~0.5KB each, so narrow with mode/q/nooos
     try:
-        lim = max(1, min(300, int(request.args.get("limit") or 60)))
+        _l = request.args.get("limit") or "60"
+        lim = (len(rows) or 1) if _l == "all" else max(1, min(300, int(_l)))
     except Exception:
         lim = 60
     return jsonify(rows=rows[:lim], total=total,
