@@ -58,6 +58,9 @@ button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
   font-size:9px;line-height:11px;cursor:pointer;padding:0;flex:none;font-style:italic;font-family:Georgia,serif}
 .info:hover{color:var(--cyan);border-color:var(--cyan)}
 .wrap{padding:14px 18px;max-width:1700px;display:flex;flex-direction:column;gap:14px}
+/* the Backtests section grows with the viewport up to the width at which its
+   table no longer scrolls sideways (btFitWidth sets --bt-fit after each render) */
+#T-backtests{max-width:var(--bt-fit,none)}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);position:sticky;top:46px;background:var(--bg);z-index:4;padding:0 18px}
 .tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 14px;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
 .tabs button.on{color:var(--fg);border-bottom-color:var(--accent)}
@@ -498,7 +501,7 @@ function cycleTheme(){ const t=localStorage.slTheme||'dark'; applyTheme(THEMES[(
 applyTheme(localStorage.slTheme||'dark');
 /* ---- tabs (hash routed) ---- */
 let TAB='optimize';
-function showTab(t){ TAB=t; ['optimize','backtests','matrix','families','data','parity'].forEach(k=>$('T-'+k).classList.toggle('hide',k!==t)); [...$('tabs').children].forEach(b=>b.classList.toggle('on',b.dataset.t===t)); if(location.hash.slice(1)!==t) history.replaceState(null,'','#'+t);
+function showTab(t){ TAB=t; ['optimize','backtests','matrix','families','data','parity'].forEach(k=>$('T-'+k).classList.toggle('hide',k!==t)); if(t==='backtests') requestAnimationFrame(btFitWidth); [...$('tabs').children].forEach(b=>b.classList.toggle('on',b.dataset.t===t)); if(location.hash.slice(1)!==t) history.replaceState(null,'','#'+t);
   if(t==='matrix') loadMatrix(); if(t==='families') renderFamilies(); if(t==='data') loadStatus(); if(t==='backtests' && !BT.length) loadBT(); }
 $('tabs').addEventListener('click', ev=>{ const b=ev.target.closest('button'); if(b) showTab(b.dataset.t); });
 /* ---- explainers ---- */
@@ -888,6 +891,7 @@ const FILTER_IDS=['fMode','fVerdict','fPair','fTf','fStrat','fGenome','fHold','f
 const FILTER_CHK=['fNoLiq','fGaunt','fBeats','fNewFam','fFunding'];
 function saveBtFilters(){ const o={}; FILTER_IDS.forEach(id=>o[id]=$(id).value); FILTER_CHK.forEach(id=>o[id]=$(id).checked); o.feats=chipVals('fFeats'); localStorage.enrBtFilters=JSON.stringify(o); BTSEL=null; renderBT(); }
 (function initBtFilters(){ const o=JSON.parse(localStorage.enrBtFilters||'{}'); FILTER_IDS.forEach(id=>{ if(o[id]!=null){ $(id).value=o[id]; if($(id).value!==o[id]) $(id)._want=o[id]; } }); FILTER_CHK.forEach(id=>{ if(o[id]!=null) $(id).checked=!!o[id]; }); chipSet('fFeats', FEATS, o.feats||[], {label:f=>FEAT_LABEL[f], onChange:saveBtFilters}); [...FILTER_IDS,...FILTER_CHK].forEach(id=>{ if(id!=='fScope') $(id).addEventListener('change', saveBtFilters); }); $('fMode').addEventListener('change', ()=>{ if($('fScope').value!=='enr') loadBT(); }); $('fRouters').addEventListener('change', ()=>{BTSEL=null;renderBT();}); $('tzSel').value=localStorage.btTz||'utc'; $('tzSel').addEventListener('change',()=>{ localStorage.btTz=$('tzSel').value; if(BTSEL!=null) renderTrades(BT[BTSEL]); }); $('rrFeePct').value=localStorage.btRrFee||''; $('rrFeePct').addEventListener('change',()=>localStorage.btRrFee=$('rrFeePct').value); $('rrRunner').value=localStorage.btRrRunner||'mini'; $('rrRunner').addEventListener('change',()=>{ localStorage.btRrRunner=$('rrRunner').value; rrProcsFill(); }); $('rrProcs').addEventListener('change',()=>localStorage['btRrProcs_'+rrRunner()]=$('rrProcs').value); rrProcsFill(); $('maeTh').addEventListener('input',()=>{ if(BTSEL!=null) renderTrades(BT[BTSEL]); }); $('maeBasis').addEventListener('change',()=>{ if(BTSEL!=null) renderTrades(BT[BTSEL]); }); })();
+window.addEventListener('resize', ()=>{ if(!$('T-backtests').classList.contains('hide')) btFitWidth(); });
 function btScopeChanged(){ saveBtFilters(); loadBT(); }
 function resetFilters(){ localStorage.removeItem('enrBtFilters'); location.reload(); }
 document.querySelector('#bt thead').addEventListener('click', ev=>{ const th=ev.target.closest('th[data-k]'); if(!th) return; const k=th.dataset.k; if(btSortKey===k) btSortDir=-btSortDir; else { btSortKey=k; btSortDir=-1; } localStorage.enrBtSortKey=btSortKey; localStorage.enrBtSortDir=btSortDir; renderBT(); });
@@ -919,10 +923,20 @@ function btFilterOrder(){ const g=id=>$(id).value; const strats=new Set(), pairs
   const rOf=[...new Set(BT.filter(e=>ROUTERS.includes(e.strategy)).map(e=>rtrSrcRun(e.name)))].sort(); const rs=$('fRtrOf'); const rcur=rs.value; if(rs._sig!==rOf.join('|')){ rs._sig=rOf.join('|'); rs.innerHTML='<option value="">router of…</option>'+rOf.map(r=>'<option value="'+escH(r)+'">'+escH(r)+'</option>').join(''); rs.value=rcur; }
   idx.sort((a,b)=>{ const x=colval(BT[a],btSortKey), y=colval(BT[b],btSortKey); if(typeof x==='string'||typeof y==='string') return btSortDir*String(x==null?'':x).localeCompare(String(y==null?'':y)); return btSortDir*((x==null?-1e18:x)-(y==null?-1e18:y)); }); return idx; }
 const btVerdict = e => { const n=e.name||'', k=(e.kind||'').toLowerCase(); if(n.endsWith('_fcfs_wf')||k.includes('walk-forward')) return 'Honest'; if(n.endsWith('_fcfs_full')||n.endsWith('_router_full')) return 'Optimistic'; if(n.endsWith('_oosbest_full')||n.endsWith('_oosbest')) return 'Passed'; return 'Train-best'; };
+// Backtests section width (Adrian, 2026-09-25): fill the screen, but never
+// wider than the table needs — the cap is the table's natural width plus the
+// card/section padding, so on a wide monitor the horizontal scrollbar goes
+// away and on a narrow one the section simply spans the window.
+function btFitWidth(){ const tbl=$('bt'), wrap=$('btWrap'), sec=$('T-backtests'); if(!tbl||!wrap||!sec||!tbl.offsetWidth) return;   // hidden tab: a 0 measurement would cap the section at nothing
+  const card=wrap.closest('.card'); const secCS=getComputedStyle(sec), cardCS=card?getComputedStyle(card):null, wrapCS=getComputedStyle(wrap);
+  const pad=parseFloat(secCS.paddingLeft)+parseFloat(secCS.paddingRight)+(cardCS?parseFloat(cardCS.borderLeftWidth)+parseFloat(cardCS.borderRightWidth):0)+parseFloat(wrapCS.paddingLeft||0)+parseFloat(wrapCS.paddingRight||0);
+  const need=Math.ceil(tbl.scrollWidth+pad+18);   // +18: room for a classic (non-overlay) vertical scrollbar in the .scroll box const cur=sec.style.getPropertyValue('--bt-fit');
+  if(cur!==need+'px') sec.style.setProperty('--bt-fit', need+'px'); }
 function renderBT(){ ORDER=btFilterOrder(); const sig=ORDER.length+'|'+ORDER[0]+'|'+ORDER[ORDER.length-1]+'|'+btSortKey+btSortDir; if(sig!==_orderSig){ _orderSig=sig; RENDER_N=50; }
   document.querySelectorAll('#bt th[data-k]').forEach(th=>th.classList.toggle('s',th.dataset.k===btSortKey)); $('btSortNote').textContent='sorted by '+btSortKey+(btSortDir<0?' ↓':' ↑'); const hidden=BT.length-ORDER.length; $('fCount').textContent='showing '+ORDER.length+' of '+BT.length+(hidden>0?' — '+hidden+' hidden by filters':''); $('btMatch').textContent=ORDER.length+' matching of '+BT.length+' in scope';
   let shown=ORDER.slice(0,RENDER_N); if(BTSEL!=null&&!shown.includes(BTSEL)) shown=[BTSEL].concat(shown);
   $('btBody').innerHTML=shown.map(i=>btRow(BT[i],i)).join('')+(ORDER.length>RENDER_N?'<tr><td colspan="24" class="dim" style="text-align:center;cursor:pointer" onclick="growRows()">showing '+Math.min(RENDER_N,ORDER.length)+' of '+ORDER.length+' — click or scroll for more</td></tr>':'');
+  requestAnimationFrame(btFitWidth);
   if(BTSEL!=null) renderDetail(BT[BTSEL]); else $('btDetail').style.display='none'; rtrRender(); updateBars(); prefetchTick(); }
 function growRows(){ RENDER_N+=25; renderBT(); }
 let _scrollLock=false; $('btWrap').addEventListener('scroll', ()=>{ const w=$('btWrap'); if(_scrollLock||w.scrollTop+w.clientHeight<w.scrollHeight-400) return; if(RENDER_N>=ORDER.length) return; _scrollLock=true; setTimeout(()=>_scrollLock=false,250); growRows(); });
