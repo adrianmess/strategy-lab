@@ -1353,6 +1353,11 @@ NON_POSITION_ASSETS = {"MX", "USDT", "USDC", "USD"}
 # "MX_USDT closed 520.366 @ 1.8287" while the tokens sat in the account.
 _MANUAL_GONE = {}
 _GONE_STREAK = 2
+# spot dust never becomes a close candidate. The holdings list drops rows
+# under $1.00, so a leftover 10.3 DOGE (= $1.0003) flickered in and out of
+# the list with every $0.00001 tick and fired "DOGE_USDT closed" four times
+# in a day (2026-09-24/25) with no position anywhere.
+_MANUAL_MIN_VALUE = 5.0
 
 
 def _manual_close_alert(prev, cur):
@@ -1390,6 +1395,9 @@ def _manual_close_alert(prev, cur):
     # is the snapshot the row was already missing from.
     for k, r in keys(prev).items():
         if k not in cur_all:
+            if (r.get("market") == "spot"
+                    and float(r.get("value") or 0) < _MANUAL_MIN_VALUE):
+                continue                   # dust, not a position
             _MANUAL_GONE.setdefault(k, {"n": 0, "row": r})
     for k in list(_MANUAL_GONE):
         if k in cur_all:
