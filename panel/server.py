@@ -1390,6 +1390,11 @@ def _manual_close_alert(prev, cur):
     # is the snapshot the row was already missing from.
     for k, r in keys(prev).items():
         if k not in cur_all:
+            # what the page shows as dust is not a position — it must not
+            # alert when it drifts below the $1 listing line and back
+            # (10.3 DOGE = $1.0003 fired "DOGE_USDT closed" 4x, 2026-09-24/25)
+            if r.get("market") == "spot" and is_dust(r.get("value")):
+                continue
             _MANUAL_GONE.setdefault(k, {"n": 0, "row": r})
     for k in list(_MANUAL_GONE):
         if k in cur_all:
@@ -2364,12 +2369,22 @@ def deposit_history():
 
 
 _DUST_CACHE = {"t": 0.0, "d": None}
+# ONE definition of "dust": a spot balance worth less than this many USDT.
+# It is what the terminal's dust chip lists, what the kill-switch planner
+# skips, and what the manual-close watcher ignores — if the page calls a
+# holding dust, nothing else may treat it as a position.
+DUST_MAX_VALUE = 5.0
+
+
+def is_dust(value):
+    return float(value or 0) < DUST_MAX_VALUE
 
 
 @app.route("/api/dust")
 def api_dust():
-    """Small spot balances on both accounts (each worth < 5 USDT): the stuff
-    the kill-switch planner skips as dust. Cached 120s. ?refresh=1 busts it."""
+    """Small spot balances on both accounts (each worth < DUST_MAX_VALUE
+    USDT): the stuff the kill-switch planner skips as dust. Cached 120s.
+    ?refresh=1 busts it."""
     if (_DUST_CACHE["d"] is not None and
             time.time() - _DUST_CACHE["t"] < 120 and
             not request.args.get("refresh")):
@@ -2391,7 +2406,7 @@ def api_dust():
                 except Exception:
                     px = 0.0
                 val = qty * px
-                if val >= 5.0:          # not dust — a real holding
+                if not is_dust(val):    # a real holding
                     continue
                 rows.append(dict(account=acct, asset=a, qty=qty,
                                  value=round(val, 4),
