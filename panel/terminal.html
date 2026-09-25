@@ -773,13 +773,16 @@ function renderKpis(){
   // wallet (spot / futures / both) — the wallet select used to be ignored
   // here (2026-09-22)
   var now = Date.now(), acct = acctFilter(), mode = CUMMODE;
+  _SCOPE_OPEN = {};    // equity / flows may have moved since the last render
   var ev = countedEvents().filter(function(e){
     return (!acct || e.account === acct) && (!mode || e.mode === mode); });
   function win(days){
     var lo = now - days * 86400000;
     var sel = ev.filter(function(e){ return e.t >= lo; });
     return {sum: sel.reduce(function(a,e){ return a + e.pnl; }, 0),
-            pos: sel.reduce(function(a,e){ return a + (isFinite(e.pct) ? e.pct : 0); }, 0),
+            // % of the scope's equity at trade time, summed (see scopePct)
+            pos: sel.reduce(function(a,e){ var p = scopePct(e, acct, mode);
+                                           return a + (p == null ? 0 : p); }, 0),
             n: sel.length};
   }
   var w1 = win(1), w7 = win(7), w30 = win(30);
@@ -793,16 +796,17 @@ function renderKpis(){
   if(rvals.length)
     lbl += ' · fresh since ' + rvals.sort()[0].slice(5, 16);
   var d1 = w1.sum, d7 = w7.sum, d30 = w30.sum;
-  // % = the trades' % of position summed over the window — the same figure
-  // as the calendar and the history page (Adrian, 2026-09-22); an empty
-  // window shows a bare +0.00%, the trade count in the subtitle says why
+  // % = each trade's return on the scope's equity at the time, summed over
+  // the window — the same figure as the calendar and the history page
+  // (Adrian, 2026-09-25); an empty window shows a bare +0.00%, the trade
+  // count in the subtitle says why
   function val(d, w){ return fig(d, w.pos, null); }
   document.getElementById('kpis').innerHTML =
     kpi('Realized 24h', val(d1, w1),
-        w1.n + ' trades · % of position' + lbl, d1, 'overview.kpis') +
+        w1.n + ' trades · % of equity' + lbl, d1, 'overview.kpis') +
     kpi('Realized 7d', val(d7, w7),
-        w7.n + ' trades · % of position' + lbl, d7, 'overview.kpis') +
-    kpi('Realized 30d', val(d30, w30), w30.n + ' trades · % of position' +
+        w7.n + ' trades · % of equity' + lbl, d7, 'overview.kpis') +
+    kpi('Realized 30d', val(d30, w30), w30.n + ' trades · % of equity' +
         (ex ? ' · ' + ex + ' excluded' : '') + lbl, d30, 'overview.kpis') +
     kpi('Equity', EQ.total ? amt('$' + EQ.total.toFixed(2)) : '…',
         INSTS.filter(function(x){return x.trader_live;}).length + ' of ' +
@@ -1343,6 +1347,44 @@ function acctPct(e){
   var st = _ACCT_OPEN[key][_dkey(new Date(e.t))];
   return (st != null && st > 0) ? 100 * e.pnl / st : null;
 }
+// ---- "% of equity" (Adrian, 2026-09-25): a trade's P&L as a return on the
+// equity the VIEW'S SCOPE had when the trade was made — not on the position
+// size (the old "% of position" summed 5x ROEs into an 18.96% day on a
+// $4,967 book that had made 5.1%). Scope = the view's account filter
+// ('' = all accounts combined) and wallet filter ('' = spot + futures), so
+// the same trade reads differently in "mexc2 · spot" than in "all", by
+// design — each view is a return on the money that view is looking at.
+// The equity at trade time is reconstructed the way the Daily card does it:
+// walk today's balance backwards through EVERY realized event on the
+// exchange in that scope (both origins, excluded trades too — the money
+// moved either way) and every deposit / withdrawal / transfer, to the
+// balance the scope opened that day with. Summing a day's trades therefore
+// reproduces the calendar cell, and a day is judged only against money it
+// had at the time. Same caveat as the Daily card: money that left without a
+// recorded flow makes older openings read high.
+var _SCOPE_OPEN = {};
+function scopePct(e, acct, mode){
+  if(e.pnl == null || !isFinite(e.pnl)) return null;
+  acct = acct || ''; mode = (mode === 'lev' || mode === 'spot') ? mode : '';
+  var key = acct + '|' + mode;
+  var c = _SCOPE_OPEN[key];
+  if(!c || e.t < c.from){
+    var mine = allEvents().filter(function(x){
+      return (!acct || x.account === acct) && (!mode || x.mode === mode); });
+    var from = e.t;
+    mine.forEach(function(x){ if(x.t < from) from = x.t; });
+    c = _SCOPE_OPEN[key] = {from: from, open: dayOpenings(mine, acct, from, mode)};
+  }
+  var st = c.open[_dkey(new Date(e.t))];
+  return (st != null && st > 0) ? 100 * e.pnl / st : null;
+}
+function scopeLabel(acct, mode){
+  return (acct || 'all accounts') + ' · ' +
+         (mode === 'lev' ? 'futures' : mode === 'spot' ? 'spot' : 'spot + futures');
+}
+function posPctTxt(e){
+  return e.pct == null ? '' : (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '% of position';
+}
 // ---- bot uptime for the calendar ("was it running that day?") ----------
 // /api/trader_uptime reconstructs each instance's running windows from its
 // stdout log (start banners + 'stopped by user'; a start with no stop means
@@ -1408,19 +1450,23 @@ function renderCalendar(ev, scopeTxt){
   var mo = document.getElementById('calMonth');
   if(mo) mo.textContent = new Date(y, m, 1).toLocaleString(undefined, {month:'long', year:'numeric'});
   var byDay = {}, tot = 0, n = 0, greenDays = 0, redDays = 0;
+  _SCOPE_OPEN = {};    // equity / flows may have moved since the last render
   ev.forEach(function(e){
     var d = new Date(e.t);
     if(d.getFullYear() !== y || d.getMonth() !== m) return;
     var k = d.getDate();
     var b = byDay[k] || (byDay[k] = {pnl:0, n:0, pos:null});
     b.pnl += e.pnl; b.n++; tot += e.pnl; n++;
-    if(e.pct != null && isFinite(e.pct)) b.pos = (b.pos || 0) + e.pct;
+    // the day's % = each trade's return on the scope's equity at the time,
+    // summed (see scopePct) — i.e. the day's P&L on the balance it opened with
+    var p = scopePct(e, acctScope, modeScope);
+    if(p != null) b.pos = (b.pos || 0) + p;
   });
   var open = calOpenings(ev, acctFilter(), y, m);
   var first = new Date(y, m, 1).getDay();
   var days = new Date(y, m + 1, 0).getDate();
   var todayKey = (y === now.getFullYear() && m === now.getMonth()) ? now.getDate() : -1;
-  var monthPos = 0, twrOk = false;   // month = sum of the days' % of position
+  var monthPos = 0, twrOk = false;   // month = sum of the days' % of equity
   var h = '<div class="cal">';
   ['S','M','T','W','T','F','S'].forEach(function(s){ h += '<div class="dow">'+s+'</div>'; });
   for(var i = 0; i < first; i++) h += '<div class="d blank"></div>';
@@ -1455,10 +1501,10 @@ function renderCalendar(ev, scopeTxt){
     }
     h += '<div class="'+cls+'"'+(tip ? ' title="'+tip.replace(/"/g,'&quot;')+'"' : '')+'><span class="n">'+day+'</span>';
     if(b){
-      // Adrian (2026-09-22): every day's % is the trades' % OF POSITION
-      // (entry -> exit, summed over the day's closes) — the same figure the
-      // history page shows per trade — never % of account balance. The
-      // opening-balance reconstruction stays for the hover only.
+      // Adrian (2026-09-25): every day's % is the day's realized P&L as a
+      // return on the equity the calendar's scope opened that day with —
+      // the sum of the trades' scopePct, the same figure the history page
+      // shows per trade (it replaced "% of position", 2026-09-22 → 09-25)
       var pct = b.pos;
       if(pct != null){ monthPos += pct; twrOk = true; }
       var dir = b.pnl >= 0 ? 'up' : 'dn';
@@ -1487,7 +1533,7 @@ function renderCalendar(ev, scopeTxt){
   else if(DISPLAY === 'money' || mp == null) totTxt = '<b style="'+totCls+'">'+calMoney(tot)+'</b>';
   else totTxt = '<b style="'+totCls+'">'+calMoney(tot)+'</b> / <b style="'+totCls+'">'+mp+'</b>';
   h += '<div class="mini" style="margin-top:8px">'+totTxt+
-       '<span title="every % is the trades\' % of position (entry → exit) summed for the day; the month is the sum of the days"> this month</span> &middot; '+
+       '<span title="every % is the day\'s realized P&amp;L as a return on the equity this scope ('+scopeLabel(acctScope, modeScope)+') opened the day with — each trade on the equity at the time, summed; the month is the sum of the days"> this month</span> &middot; '+
        n+' close'+(n === 1 ? '' : 's')+' &middot; '+greenDays+' green / '+redDays+' red day'+(redDays === 1 ? '' : 's')+
        ' &middot; '+scopeTxt+'</div>';
   document.getElementById('bigchart').innerHTML = h;
@@ -1945,22 +1991,29 @@ function renderHistory(){
   var net = live.reduce(function(a,e){ return a+e.pnl; }, 0);
   var wins = live.filter(function(e){ return e.pnl > 0; }).length;
   _ACCT_OPEN = null;   // equity/flows may have moved since the last render
-  var withPct = live.filter(function(e){ return e.pct != null; });
-  var avg = withPct.length
-    ? withPct.reduce(function(a,e){ return a+e.pct; }, 0) / withPct.length : null;
+  _SCOPE_OPEN = {};
+  // the % column follows this page's own filter: one instance selected ->
+  // return on that account's wallet, "All accounts" -> on total equity
+  var hScope = fi ? _instScope(fi) : {account: '', mode: ''};
+  if(fi && !hScope.account && rows.length){ hScope = {account: rows[0].account, mode: rows[0].mode}; }
+  var hAcct = hScope.account || '', hMode = fi ? (hScope.mode || '') : '';
+  var eqPcts = live.map(function(e){ return scopePct(e, hAcct, hMode); })
+                   .filter(function(p){ return p != null; });
+  var avg = eqPcts.length
+    ? eqPcts.reduce(function(a,p){ return a+p; }, 0) / eqPcts.length : null;
   var ignNet = rows.filter(function(e){ return e.ignored; })
                    .reduce(function(a,e){ return a+e.pnl; }, 0);
   document.getElementById('hCount').innerHTML = live.length + ' closes &middot; net ' +
     '<b class="'+cls(net)+'">'+amt(money(net))+'</b>' +
     (live.length ? ' &middot; ' + Math.round(100*wins/live.length) + '% win' : '') +
-    (avg == null ? '' : ' &middot; <span title="mean of the per-trade P&amp;L % column — each trade on its own position size">avg/trade <b class="'+cls(avg)+'">' +
+    (avg == null ? '' : ' &middot; <span title="mean of the per-trade P&amp;L % column — each trade as a return on the equity of '+scopeLabel(hAcct, hMode)+' at the time">avg/trade <b class="'+cls(avg)+'">' +
       (avg>=0?'+':'') + avg.toFixed(2) + '%</b></span>') +
     (nIgn ? ' &middot; <span class="warn">' + nIgn + ' excluded (' + money(ignNet) +
       ' not counted)</span>' : '');
   document.getElementById('hist').innerHTML = rows.length
     ? '<table><thead><tr><th>Closed</th><th>Instance</th><th>Origin</th><th>Symbol</th><th>Side</th>'+
       '<th class="n">Entry</th><th class="n">Exit</th>'+
-      '<th class="n" title="each trade\'s return on its own position size (entry → exit, net of fees). Hover a value to also see it as a share of the account\'s balance that day.">P&amp;L % <span class="mini" style="font-weight:400">of position</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
+      '<th class="n" title="each trade\'s realized P&amp;L as a return on the equity of '+scopeLabel(hAcct, hMode)+' when the trade was made (the balance that scope opened the day with). Hover a value to see the trade\'s own entry → exit return (of position) and its share of its wallet.">P&amp;L % <span class="mini" style="font-weight:400">of equity</span></th><th class="n">Realized</th><th></th></tr></thead><tbody>'+
       rows.map(function(e){
         var px = function(v){ return v == null ? '—' : (+v).toPrecision(6); };
         var ig = e.ignored;
@@ -1986,14 +2039,19 @@ function renderHistory(){
             (e.lev && e.lev > 1 ? ' '+e.lev+'x' : '')+'</span>' : '')+'</td>'+
           '<td class="n">'+px(e.entry)+'</td><td class="n">'+px(e.exit)+'</td>'+
           (function(){
-            // shown: the trade's own entry → exit return (of position).
-            // hover: the same P&L as a share of the account's opening
-            // balance that day — the calendar's basis — for cross-reference
+            // shown: the trade's return on the page scope's equity at the
+            // time (scopePct — the calendar's basis, so a day's rows sum to
+            // its cell). hover: the trade's own entry → exit return (of
+            // position) and its share of its own wallet, for cross-reference
+            var sp = ig ? null : scopePct(e, hAcct, hMode);
             var ap = ig ? null : acctPct(e);
-            return '<td class="n '+(ig?'dim':(e.pct==null?'dim':cls(e.pct)))+'" style="font-weight:600'+
+            var tip = [posPctTxt(e),
+                       ap == null ? '' : (ap>=0?'+':'')+ap.toFixed(2)+'% of the '+(e.mode==='lev'?'futures':'spot')+' wallet\'s opening balance that day']
+                      .filter(Boolean).join(' · ');
+            return '<td class="n '+(ig?'dim':(sp==null?'dim':cls(sp)))+'" style="font-weight:600'+
               (ig?';text-decoration:line-through':'')+'"'+
-              (ap==null ? '' : ' title="'+(ap>=0?'+':'')+ap.toFixed(2)+'% of the '+(e.mode==='lev'?'futures':'spot')+' wallet\'s opening balance that day"')+'>'+
-              (e.pct==null?'—':(e.pct>=0?'+':'')+e.pct.toFixed(2)+'%')+'</td>';
+              (tip ? ' title="'+tip.replace(/"/g,'&quot;')+'"' : '')+'>'+
+              (sp==null?'—':(sp>=0?'+':'')+sp.toFixed(2)+'%')+'</td>';
           })()+
           '<td class="n '+(ig?'dim':cls(e.pnl))+'"'+(ig?' style="text-decoration:line-through"':'')+'>'+
             amt(money(e.pnl))+'</td>'+
@@ -3026,6 +3084,11 @@ function tdMarkersUpdate_(){
   var fpx = function(v){ return v == null ? '' : ' @' + tdFmtPx(+v); };
   var ms = [];
   function add(m){ m.idx = TD.timeIdx[m.time]; ms.push(m); }
+  _SCOPE_OPEN = {};
+  // marker %: return on the equity of the chart's scope (this account's
+  // wallet, or all accounts' when "all" is on) at the time — same basis as
+  // every other view (2026-09-25)
+  var mAcct = TD.posAll ? '' : TD.acct;
   allEvents().forEach(function(e){
     if(e.symbol !== sym || e.mode !== wm) return;
     if(!TD.posAll && e.account !== TD.acct) return;
@@ -3033,8 +3096,9 @@ function tdMarkersUpdate_(){
     var who = (e.origin === 'bot' ? (e.name || 'bot') : 'manual') + (TD.posAll ? ' · ' + e.account : '');
     var lev = e.lev > 1 ? ' ' + e.lev + 'x' : '';
     var v = e.pnl != null ? e.pnl : e.realized, up = (v || 0) >= 0;
+    var sp = scopePct(e, mAcct, wm);
     var pnlTxt = (up ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(2) +
-                 (e.pct != null ? ' (' + (e.pct >= 0 ? '+' : '') + (+e.pct).toFixed(2) + '%)' : '');
+                 (sp != null ? ' (' + (sp >= 0 ? '+' : '') + sp.toFixed(2) + '%)' : '');
     var to = tdBarTime(e.open_t);
     if(to != null) add({time: to, position: isL ? 'belowBar' : 'aboveBar',
       shape: isL ? 'arrowUp' : 'arrowDown', color: isL ? '#2ebd85' : '#f6465d', size: 1,
