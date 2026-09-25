@@ -422,7 +422,14 @@ class MexcSpotAPI:
         # 30s recvWindow: proxy round-trips (Tokyo egress) exceed the 5s default
         params["recvWindow"] = 30000
         params["timestamp"] = int(time.time() * 1000)
-        qs = "&".join(f"{k}={params[k]}" for k in params)
+        # URL-encode BEFORE signing: MEXC verifies the HMAC over the encoded
+        # query, so any value needing escaping must be signed escaped. The
+        # raw join worked only because symbols/numbers never need it; the
+        # multi-asset dust convert (asset=SUI,DOGE,XRP,BTC) was rejected with
+        # 700002 "Signature for this request is not valid" (2026-09-25)
+        # while the single-asset one on the other account went through.
+        from urllib.parse import urlencode
+        qs = urlencode(params)
         sig = hmac.new(self.sk.encode(), qs.encode(), hashlib.sha256).hexdigest()
         url = f"{BASE}{path}?{qs}&signature={sig}"
         # GET/DELETE are idempotent -> may be resent on a read timeout;
