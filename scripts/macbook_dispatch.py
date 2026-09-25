@@ -65,6 +65,35 @@ def rsync(src, dst, timeout=1800):
                    check=True, timeout=timeout)
 
 
+def sync_data():
+    """Mirror the mini's market data (the single source of truth — the
+    panel's 'update data' only ever refreshes the mini). Incremental, so
+    seconds after the first copy. If any candle file changed, the local
+    engine caches are wiped the same way update_data.py does it: those
+    caches are keyed on indicator settings, not on the data, so a stale
+    one would silently simulate the OLD window (the 2026-08-12 lesson) —
+    for a holdout test that covers the newest six weeks that is fatal."""
+    r = f"{REMOTE}:strategy-lab"
+    data = os.path.join(REPO, "adaptive_trader", "research", "data")
+    os.makedirs(data, exist_ok=True)
+    out = subprocess.run(["rsync", "-azi", "--timeout=120", "-e", SSH,
+                          f"{r}/adaptive_trader/research/data/", data + "/"],
+                         check=True, timeout=1800, capture_output=True,
+                         text=True).stdout
+    changed = [l for l in out.splitlines() if l[:1] in ">c" and
+               l.split()[-1].endswith((".parquet", ".csv", ".json"))]
+    if changed:
+        print(f"data sync: {len(changed)} files changed — clearing engine "
+              f"caches", flush=True)
+        sys.path.insert(0, os.path.join(REPO, "adaptive_trader", "research"))
+        try:
+            import update_data
+            update_data.clear_caches()
+        except Exception as e:
+            print(f"cache clear failed: {e}", flush=True)
+    return len(changed)
+
+
 def sync_inputs(job):
     """Pull whatever this search reads from the mini. Data sync is
     incremental — cheap after the first full copy."""
@@ -72,9 +101,7 @@ def sync_inputs(job):
     rsync(f"{r}/optimizer/param_space.json", f"{OPT}/param_space.json")
     os.makedirs(f"{OPT}/param_spaces", exist_ok=True)
     rsync(f"{r}/optimizer/param_spaces/", f"{OPT}/param_spaces/")
-    data = os.path.join(REPO, "adaptive_trader", "research", "data")
-    os.makedirs(data, exist_ok=True)
-    rsync(f"{r}/adaptive_trader/research/data/", data + "/")
+    sync_data()
     # resume/merge sources must exist locally too
     rf = (job.get("args") and _argval(job["args"], "--resume-from")) or ""
     for src in [s.strip() for s in rf.split(",") if s.strip()]:
@@ -185,6 +212,83 @@ def run_job(job):
                                    f"optimizer/runs/{name}")
 
 
+def run_bt_job(job):
+    """A backtest shard (Backtests page: re-run at current fees, or
+    holdout-test selected genomes, with run on = MacBook). Same worker the
+    mini would run; it submits every finished entry straight to the hub, so
+    nothing needs syncing back. Resumable: the shard's .done list survives
+    a restart and the worker skips what it already published."""
+    jid, name = job["id"], job["name"]
+    print(f"claimed backtest shard {jid}: {name}", flush=True)
+    report(jid, "running", note="syncing market data from the mini")
+    try:
+        n_changed = sync_data()
+        shard = os.path.join(REPO, job["shard"])
+        os.makedirs(os.path.dirname(shard), exist_ok=True)
+        rsync(f"{REMOTE}:strategy-lab/{job['shard']}", shard)
+        rsync(f"{REMOTE}:strategy-lab/adaptive_trader/fees.json",
+              os.path.join(REPO, "adaptive_trader", "fees.json"))
+    except Exception as e:
+        report(jid, "failed", note=f"input sync failed: {e}")
+        return
+    try:
+        total = len(json.load(open(shard)))
+    except Exception:
+        total = 0
+    procs = int(job.get("procs") or PROCS)
+    cmd = ["caffeinate", "-i", PY,
+           os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
+           "--shard", shard, "--procs", str(procs), "--hub", HUB]
+    if job.get("fee"):
+        cmd += ["--fee", str(job["fee"])]
+    env = dict(os.environ, PANEL_KEY=CFG["panel_key"],
+               PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin")
+    log_p = shard + ".macbook.log"
+    t0 = time.time()
+    with open(log_p, "a") as log:
+        log.write(f"\n=== {time.strftime('%F %T')} worker={WORKER} "
+                  f"procs={procs} data_changed={n_changed}\n"
+                  f"=== {' '.join(cmd)}\n")
+        log.flush()
+        proc = subprocess.Popen(cmd, cwd=REPO, env=env,
+                                stdout=log, stderr=subprocess.STDOUT)
+    stop = threading.Event()
+    done_f = shard + ".done"
+
+    def n_done():
+        try:
+            return len(open(done_f).read().split())
+        except Exception:
+            return 0
+
+    def heartbeat():
+        while not stop.wait(45):
+            report(jid, "running",
+                   note=f"{n_done()}/{total} published · "
+                        f"{(time.time() - t0) / 60:.0f}m on {WORKER}",
+                   progress=f"{n_done()}/{total}")
+
+    hb = threading.Thread(target=heartbeat, daemon=True)
+    hb.start()
+    rc = proc.wait()
+    stop.set()
+    nd = n_done()
+    if rc != 0 or nd < total:
+        tail = ""
+        try:
+            tail = open(log_p, "rb").read()[-600:].decode("utf-8", "replace")
+        except Exception:
+            pass
+        report(jid, "failed",
+               note=f"exit {rc}, {nd}/{total} published — re-submit the same "
+                    f"selection to resume: {tail[-250:]}")
+        return
+    report(jid, "done",
+           note=f"{nd}/{total} published in {(time.time() - t0) / 60:.0f}m "
+                f"on {WORKER} ({procs} procs)")
+    print(f"done {jid}: {name}", flush=True)
+
+
 def main():
     print(f"strategy-lab worker '{WORKER}' polling {HUB} "
           f"(procs={PROCS})", flush=True)
@@ -195,7 +299,10 @@ def main():
                          cores=PROCS))
             job = r.get("job")
             if job:
-                run_job(job)
+                if job.get("kind") == "backtest":
+                    run_bt_job(job)
+                else:
+                    run_job(job)
                 continue          # drain the queue before sleeping
         except Exception as e:
             print(f"poll: {e}", flush=True)

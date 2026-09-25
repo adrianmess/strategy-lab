@@ -5371,10 +5371,14 @@ def bt_rerun_router():
                          f"rtr_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
     json.dump(items, open(shard, "w"))
     fee_args = _fee_override_args(d)
-    jid = spawn("backtest",
-                f"re-run router {label}: {len(items)} component backtests "
-                "on current data"
-                + (f" @fee {fee_args[1]}/side" if fee_args else ""),
+    desc = (f"re-run router {label}: {len(items)} component backtests "
+            "on current data"
+            + (f" @fee {fee_args[1]}/side" if fee_args else ""))
+    if (d.get("runner") or "mini") == "macbook":
+        rid = _remote_enqueue_bt(shard, desc, fee_args)
+        return jsonify(ok=True, id=rid, remote=True, n=len(items),
+                       entries=[i["name"] for i in items], missing=missing)
+    jid = spawn("backtest", desc,
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
                  "--shard", shard, "--procs", "4",
@@ -5474,9 +5478,14 @@ def bt_holdout_selected():
                          f"ho_{int(time.time())}_{uuid.uuid4().hex[:4]}.json")
     json.dump(items, open(shard, "w"))
     fee_args = _fee_override_args(d)
-    jid = spawn("backtest",
-                f"holdout-test {len(items)} genomes on their own OOS windows"
-                + (f" @fee {fee_args[1]}/side" if fee_args else ""),
+    desc = (f"holdout-test {len(items)} genomes on their own OOS windows"
+            + (f" @fee {fee_args[1]}/side" if fee_args else ""))
+    if (d.get("runner") or "mini") == "macbook":
+        rid = _remote_enqueue_bt(shard, desc, fee_args)
+        return jsonify(ok=True, id=rid, remote=True, n=len(items),
+                       entries=[i["name"] for i in items], windows=windows,
+                       missing=missing)
+    jid = spawn("backtest", desc,
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
                  "--shard", shard, "--procs", str(int(d.get("procs") or 4)),
@@ -8401,6 +8410,25 @@ def _remote_enqueue(name, d, where):
     return job["id"]
 
 
+def _remote_enqueue_bt(shard, label, fee_args, procs=None):
+    """Queue a backtest shard (re-run / holdout-test) for the MacBook peer
+    instead of spawning refresh_backtests_worker here. The shard stays on
+    the mini; the dispatcher rsyncs it (and the market data) down, runs the
+    same worker, and the worker submits results back to /api/backtests/submit
+    exactly as a local run would (2026-09-25)."""
+    job = dict(id=uuid.uuid4().hex[:10], name=label, where="macbook",
+               kind="backtest",
+               shard=os.path.relpath(shard, REPO), fee=(fee_args or [None])[-1]
+               if fee_args else None, procs=procs,
+               status="queued", worker=None,
+               at=time.strftime("%Y-%m-%d %H:%M:%S"))
+    with _RJOBS_LOCK:
+        js = _rjobs_load()
+        js.append(job)
+        _rjobs_save(js[-200:])
+    return job["id"]
+
+
 @app.route("/api/remote/status")
 def remote_status():
     now = time.time()
@@ -8429,7 +8457,8 @@ def remote_poll():
                 _rjobs_save(js)
                 return jsonify(job={k: j.get(k) for k in
                                     ("id", "name", "args", "seed_cand",
-                                     "anchor_cand")})
+                                     "anchor_cand", "kind", "shard", "fee",
+                                     "procs")})
     return jsonify(job=None)
 
 
