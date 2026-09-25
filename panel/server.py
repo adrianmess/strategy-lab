@@ -5374,16 +5374,18 @@ def bt_rerun_router():
     desc = (f"re-run router {label}: {len(items)} component backtests "
             "on current data"
             + (f" @fee {fee_args[1]}/side" if fee_args else ""))
-    if (d.get("runner") or "mini") == "macbook":
-        rid = _remote_enqueue_bt(shard, desc, fee_args)
-        return jsonify(ok=True, id=rid, remote=True, n=len(items),
+    runner = d.get("runner") or "mini"
+    procs = _bt_procs(d, runner)
+    if runner == "macbook":
+        rid = _remote_enqueue_bt(shard, desc, fee_args, procs)
+        return jsonify(ok=True, id=rid, remote=True, n=len(items), procs=procs,
                        entries=[i["name"] for i in items], missing=missing)
-    jid = spawn("backtest", desc,
+    jid = spawn("backtest", desc + f" ({procs} procs)",
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
-                 "--shard", shard, "--procs", "4",
+                 "--shard", shard, "--procs", str(procs),
                  "--hub", "http://localhost:8800"] + fee_args, REPO)
-    return jsonify(ok=True, id=jid, n=len(items),
+    return jsonify(ok=True, id=jid, n=len(items), procs=procs,
                    entries=[i["name"] for i in items], missing=missing)
 
 
@@ -5480,17 +5482,19 @@ def bt_holdout_selected():
     fee_args = _fee_override_args(d)
     desc = (f"holdout-test {len(items)} genomes on their own OOS windows"
             + (f" @fee {fee_args[1]}/side" if fee_args else ""))
-    if (d.get("runner") or "mini") == "macbook":
-        rid = _remote_enqueue_bt(shard, desc, fee_args)
-        return jsonify(ok=True, id=rid, remote=True, n=len(items),
+    runner = d.get("runner") or "mini"
+    procs = _bt_procs(d, runner)
+    if runner == "macbook":
+        rid = _remote_enqueue_bt(shard, desc, fee_args, procs)
+        return jsonify(ok=True, id=rid, remote=True, n=len(items), procs=procs,
                        entries=[i["name"] for i in items], windows=windows,
                        missing=missing)
-    jid = spawn("backtest", desc,
+    jid = spawn("backtest", desc + f" ({procs} procs)",
                 [sys.executable,
                  os.path.join(REPO, "scripts", "refresh_backtests_worker.py"),
-                 "--shard", shard, "--procs", str(int(d.get("procs") or 4)),
+                 "--shard", shard, "--procs", str(procs),
                  "--hub", "http://localhost:8800"] + fee_args, REPO)
-    return jsonify(ok=True, id=jid, n=len(items),
+    return jsonify(ok=True, id=jid, n=len(items), procs=procs,
                    entries=[i["name"] for i in items], windows=windows,
                    missing=missing)
 
@@ -8410,6 +8414,21 @@ def _remote_enqueue(name, d, where):
     return job["id"]
 
 
+def _bt_procs(d, runner):
+    """Worker processes for a backtest batch, clamped to what the runner can
+    spare: the mini keeps 4 cores for the traders + panel; the MacBook's cap
+    is whatever its worker last reported (its configured procs)."""
+    try:
+        want = int(d.get("procs") or 0)
+    except (TypeError, ValueError):
+        want = 0
+    if runner == "macbook":
+        cap = int((_RWORKERS.get("macbook") or {}).get("cores") or 14)
+        return max(1, min(cap, want or cap))
+    cap = max(1, (os.cpu_count() or 8) - 4)
+    return max(1, min(cap, want or 4))
+
+
 def _remote_enqueue_bt(shard, label, fee_args, procs=None):
     """Queue a backtest shard (re-run / holdout-test) for the MacBook peer
     instead of spawning refresh_backtests_worker here. The shard stays on
@@ -8434,9 +8453,15 @@ def remote_status():
     now = time.time()
     with _RJOBS_LOCK:
         js = _rjobs_load()
+    # the mini's own budget: it also hosts the live traders and this panel,
+    # so a backtest batch here may take at most cores-4 (the Backtests bar's
+    # procs picker reads these caps per runner)
+    mini_cores = os.cpu_count() or 8
     return jsonify(
         workers={k: dict(v, ago=round(now - v["at"]))
                  for k, v in _RWORKERS.items()},
+        mini=dict(cores=mini_cores, max_procs=max(1, mini_cores - 4),
+                  default_procs=4),
         jobs=[{k: j.get(k) for k in ("id", "name", "where", "status",
                                      "worker", "at", "note", "progress")}
               for j in js[-30:]])
